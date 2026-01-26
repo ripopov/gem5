@@ -34,8 +34,11 @@ Guidance for Codex and other AI agents working in this gem5 repository.
 ## Branching and commits
 - Upstream development targets `develop`; avoid making changes directly on
   `stable`. Use feature branches.
-- Commit headers use component tags from `MAINTAINERS.yaml` and keep the first
-  line within 65 characters; body lines within 72 characters.
+- Commit headers use component tags from `MAINTAINERS.yaml` (comma-separated if
+  multiple), followed by a colon and a short title; keep the first line within
+  65 characters.
+- Add a blank line after the header, then optional body text with lines within
+  72 characters.
 
 ## Agent workflow tips
 - Prefer small, focused edits and avoid touching unrelated files.
