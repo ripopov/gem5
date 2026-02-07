@@ -4,6 +4,11 @@
         "ext",
         "tests"
     ],
+    "python.analysis.ignore": [
+        "**/SConstruct",
+        "**/SConscript",
+        "**/SConsopts"
+    ],
     "githubPullRequests.overrideDefaultBranch": "develop",
     "githubPullRequests.pushBranch": "always",
     "githubPullRequests.queries": [
@@ -40,5 +45,6 @@
             "label": "[gem5] All open Issues",
             "query": "state:open repo:${owner}/${repository} sort:updated-desc"
         }
-    ]
+    ],
+    "cmake.ignoreCMakeListsMissing": true
 }
