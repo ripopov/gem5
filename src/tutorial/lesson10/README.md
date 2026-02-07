@@ -1,4 +1,4 @@
-# Lesson 10: Capstone Hybrid Simulator
+# Lesson 10: Debug, Stats, and Probes
 
 ## Status
 
@@ -6,7 +6,7 @@ Placeholder. Content will be authored in a later change.
 
 ## Planned scope
 
-1. Assemble a full hybrid C++/Python simulator flow.
-2. Validate correctness with targeted tests and metrics.
-3. Measure performance and identify optimization opportunities.
-4. Package the simulator setup for reproducible sharing.
+1. Debug flags and trace-driven diagnosis.
+2. Statistics organization, dump timing, and post-processing.
+3. Probe points and observability hooks.
+4. Building a repeatable debug workflow for model validation.

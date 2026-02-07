@@ -1,4 +1,4 @@
-# Lesson 6: Python Config and Run Loop
+# Lesson 6: C++/Python Bridge
 
 ## Status
 
@@ -6,7 +6,7 @@ Placeholder. Content will be authored in a later change.
 
 ## Planned scope
 
-1. Constructing simulation object graphs in Python.
-2. Run-loop control and exit events.
-3. Configuration composition and reuse.
-4. Script structure for reproducible experiments.
+1. Exposing C++ SimObjects to Python.
+2. Parameter mapping and defaults.
+3. Build-time and runtime registration paths.
+4. Mixed-language debugging basics.

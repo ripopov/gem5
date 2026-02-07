@@ -38,8 +38,17 @@ Run a single test case:
 
 ## Where to find lesson code
 
-- Lesson 1 source: `src/tutorial/lesson01/`
-- Lesson 2 source: `src/tutorial/lesson02/`
+- Lesson 1 source: `src/tutorial/lesson01/` (C++ Simulation Kernel)
+- Lesson 2 source: `src/tutorial/lesson02/` (C++ SimObject Anatomy)
+- Lesson 3 source: `src/tutorial/lesson03/` (C++ Memory and Ports)
+- Lesson 4 source: `src/tutorial/lesson04/` (C++ Clock Domains)
+- Lesson 5 source: `src/tutorial/lesson05/` (C++ Timing and CPU Hooks)
+- Lesson 6 source: `src/tutorial/lesson06/` (C++/Python Bridge)
+- Lesson 7 source: `src/tutorial/lesson07/` (Python Config and Run Loop)
+- Lesson 8 source: `src/tutorial/lesson08/` (gem5 Stdlib Composition)
+- Lesson 9 source: `src/tutorial/lesson09/` (Workloads and Checkpoints)
+- Lesson 10 source: `src/tutorial/lesson10/` (Debug, Stats, and Probes)
+- Lesson 11 source: `src/tutorial/lesson11/` (Capstone Hybrid Simulator)
 - Lesson docs (source-adjacent): `src/tutorial/`
 - Rendered docs wrappers (Sphinx): `docs/tutorial/`
 
