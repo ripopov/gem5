@@ -101,6 +101,7 @@ pipeline model, and it focuses on the compute path.
 The model uses GPU terminology consistently across code and configuration.
 The table below summarizes key terms in the gem5 AMDGPU context.
 
+```text
 +----------------------+------------------------------------------------------+
 | Term                 | Meaning in the gem5 AMDGPU model                      |
 +----------------------+------------------------------------------------------+
@@ -121,6 +122,7 @@ The table below summarizes key terms in the gem5 AMDGPU context.
 | VMID/PASID           | GPU virtual memory identifiers for process context.  |
 | Waitcnt              | Barrier on outstanding memory operations.            |
 +----------------------+------------------------------------------------------+
+```
 
 ### 1.3 Design Philosophy
 
@@ -321,8 +323,8 @@ memory and the host system (`src/gpu-compute/shader.hh`).
 ```
 
 Key topology parameters are set in `GPU.py` and in prebuilt GPU
-compositions such as `ViperShader` (`src/python/gem5/components/
-/devices/gpus/viper_shader.py`):
+compositions such as `ViperShader`
+(`src/python/gem5/components/devices/gpus/viper_shader.py`):
 
 - `num_SIMDs`: SIMD count per CU (default 4 in `GPU.py`).
 - `n_wf`: wavefront slots per SIMD (default 10 in `GPU.py`, often
@@ -385,14 +387,16 @@ The stage boundaries align with the model's internal resource checks:
 
 ### 5.3 Backpressure, WaitClass Resources, and Buses
 
-Many CU resources are modeled as `WaitClass` instances (`src/gpu-compute/
-misc.hh`). A `WaitClass` tracks when a resource will next become available
+Many CU resources are modeled as `WaitClass` instances
+(`src/gpu-compute/misc.hh`). A `WaitClass` tracks when a resource will next
+become available
 and enforces multi-cycle occupancy. These resources are checked by the
 schedule stage before dispatch and by memory pipelines before completing
 returns.
 
 Key `WaitClass` resources include:
 
+```text
 +--------------------------+------------------------------------------+
 | Resource                 | Purpose                                  |
 +--------------------------+------------------------------------------+
@@ -408,6 +412,7 @@ Key `WaitClass` resources include:
 | `scalarMemToSrfBus`      | Scalar mem -> SRF writeback bus          |
 | `srfToScalarMemPipeBus`  | SRF -> scalar mem pipe bus               |
 +--------------------------+------------------------------------------+
+```
 
 The `issue_period` parameter introduces an additional spacing constraint
 for issuing instructions from a given SIMD, modeling the cadence of a real
@@ -427,6 +432,7 @@ resource allocations (`src/gpu-compute/wavefront.hh`).
 
 The `Wavefront::status_e` enumeration defines the high-level lifecycle:
 
+```text
 +-------------------+--------------------------------------------------+
 | State             | Meaning                                          |
 +-------------------+--------------------------------------------------+
@@ -438,6 +444,7 @@ The `Wavefront::status_e` enumeration defines the high-level lifecycle:
 | S_WAITCNT         | Waiting for outstanding memory ops to complete.  |
 | S_BARRIER         | Waiting at a barrier.                            |
 +-------------------+--------------------------------------------------+
+```
 
 ### 6.2 Workgroup Allocation
 
@@ -575,6 +582,7 @@ target (`src/gpu-compute/scoreboard_check_stage.hh`).
 wavefront as ready (`src/gpu-compute/scoreboard_check_stage.cc`). The most
 important gating conditions are:
 
+```text
 +----------------------+-----------------------------------------------------+
 | Condition            | Meaning                                             |
 +----------------------+-----------------------------------------------------+
@@ -587,6 +595,7 @@ important gating conditions are:
 | NRDY_MATRIX_CORE     | MFMA unit busy (matrix core occupancy).             |
 | INST_RDY             | All checks passed; wavefront is ready.              |
 +----------------------+-----------------------------------------------------+
+```
 
 The check is conservative: any failure leaves the wavefront unready for
 this cycle.
@@ -701,6 +710,7 @@ use of execution resources (`src/gpu-compute/exec_stage.hh`).
 
 Execution resources are defined in `ComputeUnit` and grouped as:
 
+```text
 +--------------------------+------------------------------------------+
 | Resource                 | Modeled by                               |
 +--------------------------+------------------------------------------+
@@ -710,6 +720,7 @@ Execution resources are defined in `ComputeUnit` and grouped as:
 | Vector Local Mem Pipe    | `vectorSharedMemUnit`                    |
 | Scalar Mem Pipe          | `scalarMemUnit`                          |
 +--------------------------+------------------------------------------+
+```
 
 The number of each resource is parameterized in `GPU.py` (e.g.,
 `num_global_mem_pipes`, `num_shared_mem_pipes`, `num_scalar_mem_pipes`).
@@ -953,10 +964,10 @@ system.
 ### 16.1 Coalescer Token Model
 
 Each vector memory instruction can require a token from the coalescer
-before issuing (`GPUDynInst::needsToken()` and `GPUStaticInst::
-coalescerTokenCount()`). Tokens are managed per CU by `TokenManager`
-and acquired in the schedule stage before dispatch. This provides a
-simple but effective model of coalescer capacity.
+before issuing (`GPUDynInst::needsToken()` and
+`GPUStaticInst::coalescerTokenCount()`). Tokens are managed per CU by
+`TokenManager` and acquired in the schedule stage before dispatch. This
+provides a simple but effective model of coalescer capacity.
 
 ### 16.2 Outstanding Request Limits
 
@@ -1068,8 +1079,8 @@ protocol (`CoherenceProtocol.GPU_VIPER`).
 
 The VIPER cache hierarchy is composed of:
 
-- TCP: GPU L1 data cache (`src/python/gem5/components/cachehierarchies/
-  ruby/caches/viper/tcp.py`).
+- TCP: GPU L1 data cache
+  (`src/python/gem5/components/cachehierarchies/ruby/caches/viper/tcp.py`).
 - SQC: GPU instruction cache (`.../viper/sqc.py`).
 - Scalar cache: scalar data cache.
 - TCC: GPU L2 cache (`.../viper/tcc.py`).
@@ -1378,6 +1389,7 @@ progress for long runs.
 The most effective analyses combine a small number of statistics that map
 directly to pipeline stages. The table below provides a quick correlation:
 
+```text
 +--------------------+---------------------------------------------+
 | Pipeline phase     | Representative stats                         |
 +--------------------+---------------------------------------------+
@@ -1388,6 +1400,7 @@ directly to pipeline stages. The table below provides a quick correlation:
 | Global memory      | `GlobalMemPipeline.loadVrfBankConflictCycles`|
 | Translation        | `TLB.*` and `Coalescer.queuingCycles`        |
 +--------------------+---------------------------------------------+
+```
 
 In practice, large changes in application performance typically align with
 one or two of these phases. When a phase shows persistent stalls, the next
@@ -1619,6 +1632,7 @@ Wavefront -> Schedule -> Exec -> LocalMemPipeline -> LDS
 
 ### D.1 Compute Unit Defaults (from GPU.py)
 
+```text
 +------------------------------+----------------------+----------------------+
 | Parameter                    | Default              | Meaning              |
 +------------------------------+----------------------+----------------------+
@@ -1645,9 +1659,11 @@ Wavefront -> Schedule -> Exec -> LocalMemPipeline -> LDS
 | max_wave_requests            | 64                   | Per-WF vmem limit    |
 | max_cu_tokens                | 4                    | Coalescer tokens     |
 +------------------------------+----------------------+----------------------+
+```
 
 ### D.2 Shader Defaults (from GPU.py)
 
+```text
 +----------------------------+----------------------+----------------------+
 | Parameter                  | Default              | Meaning              |
 +----------------------------+----------------------+----------------------+
@@ -1658,9 +1674,11 @@ Wavefront -> Schedule -> Exec -> LocalMemPipeline -> LDS
 | globalmem                  | 64KiB                | Global mem size      |
 | progress_interval          | 0                    | Progress logging     |
 +----------------------------+----------------------+----------------------+
+```
 
 ### D.3 TLB Defaults (ViperShader example)
 
+```text
 +----------------------------+----------------------+----------------------+
 | Parameter                  | Example default      | Meaning              |
 +----------------------------+----------------------+----------------------+
@@ -1671,11 +1689,13 @@ Wavefront -> Schedule -> Exec -> LocalMemPipeline -> LDS
 | missLatency2               | 750                  | Miss latency stage 2 |
 | maxOutstandingReqs         | 64                   | Outstanding reqs     |
 +----------------------------+----------------------+----------------------+
+```
 
 ---
 
 ## Appendix E: Glossary and Acronyms
 
+```text
 +------------------+---------------------------------------------------------+
 | Term             | Definition                                              |
 +------------------+---------------------------------------------------------+
@@ -1693,6 +1713,7 @@ Wavefront -> Schedule -> Exec -> LocalMemPipeline -> LDS
 | VMID/PASID       | Virtual memory identifiers.                             |
 | WF               | Wavefront.                                              |
 +------------------+---------------------------------------------------------+
+```
 
 ---
 
@@ -1968,6 +1989,7 @@ MI300X, and MI355X classes in
 
 ### J.1 Compute and Cache Configuration
 
+```text
 +------------------+-----------+-----------+-----------+
 | Parameter        | MI210     | MI300X    | MI355X    |
 +------------------+-----------+-----------+-----------+
@@ -1984,9 +2006,11 @@ MI300X, and MI355X classes in
 | tcc_count        | 8         | 16        | 16        |
 | cache_line_size  | 64        | 64        | 64        |
 +------------------+-----------+-----------+-----------+
+```
 
 ### J.2 Device Identification
 
+```text
 +------------------+-----------+-----------+-----------+
 | Field            | MI210     | MI300X    | MI355X    |
 +------------------+-----------+-----------+-----------+
@@ -1994,6 +2018,7 @@ MI300X, and MI355X classes in
 | DeviceID         | 0x740F    | 0x74A1    | 0x75A0    |
 | SubsystemID      | 0x0C34    | 0x0C34    | 0x0C34    |
 +------------------+-----------+-----------+-----------+
+```
 
 These prebuilt configurations also instantiate SDMA engines and PM4
 processors with device-specific MMIO ranges. They serve as practical
@@ -2008,6 +2033,7 @@ AMDGPU model.
 
 ### K.1 Debug Flags
 
+```text
 +-------------------+---------------------------------------------+
 | Flag              | Typical Use                                 |
 +-------------------+---------------------------------------------+
@@ -2022,9 +2048,11 @@ AMDGPU model.
 | GPUWgLatency      | Workgroup latency tracking                   |
 | GPUTrace          | Detailed instruction tracing                 |
 +-------------------+---------------------------------------------+
+```
 
 ### K.2 Key Statistics to Watch
 
+```text
 +---------------------------+-------------------------------------------+
 | Statistic                 | Why it Matters                            |
 +---------------------------+-------------------------------------------+
@@ -2036,6 +2064,7 @@ AMDGPU model.
 | TLB.localTLBMissRate      | Translation efficiency                     |
 | Coalescer.queuingCycles   | Translation congestion                     |
 +---------------------------+-------------------------------------------+
+```
 
 ---
 
@@ -2051,6 +2080,7 @@ by showing how control, data, and stalls flow in time.
 The walkthrough uses a simplified but representative configuration that
 matches common defaults in `src/gpu-compute/GPU.py`.
 
+```text
 +-----------------------------+-------------------------------------------+
 | Assumed item                | Value / reference                          |
 +-----------------------------+-------------------------------------------+
@@ -2063,6 +2093,7 @@ matches common defaults in `src/gpu-compute/GPU.py`.
 | IB capacity per wavefront   | 13 insts (`Wavefront.max_ib_size`)         |
 | Execution policy            | Oldest-first (`ComputeUnit.execPolicy`)    |
 +-----------------------------+-------------------------------------------+
+```
 
 The concrete control logic appears in these stage classes:
 
@@ -2077,6 +2108,7 @@ The following sequence is representative of a compute kernel inner loop
 and includes a vector ALU op, a vector load, a waitcnt barrier, and a
 dependent vector ALU op.
 
+```text
 +------+-------------------+-------------------------+-----------------------+
 | Step | Instruction class | Primary operands        | Notes                 |
 +------+-------------------+-------------------------+-----------------------+
@@ -2085,6 +2117,7 @@ dependent vector ALU op.
 | C    | WAITCNT            | -                       | Wait for VMEM         |
 | D    | VALU              | VGPR (from B) -> VGPR    | Dependent on load     |
 +------+-------------------+-------------------------+-----------------------+
+```
 
 This sequence is a useful probe because it triggers operand collection,
 memory pipeline injection, and synchronization behavior without requiring
@@ -2183,6 +2216,7 @@ Instruction classes are determined by `GPUStaticInstFlags`. These flags
 drive pipeline routing and hazard checks. The table below summarizes the
 most important categories.
 
+```text
 +--------------------+-------------------------------+---------------------+
 | Category           | Key flags                     | Pipeline impact     |
 +--------------------+-------------------------------+---------------------+
@@ -2196,6 +2230,7 @@ most important categories.
 | Waitcnt / sleep    | `Waitcnt`, `Sleep`             | Scoreboard stall    |
 | End of kernel      | `EndOfKernel`                  | Wavefront retire    |
 +--------------------+-------------------------------+---------------------+
+```
 
 The pipeline uses these flags rather than opcode strings, which ensures
 that architectural behavior is driven by ISA semantics rather than by
@@ -2208,6 +2243,7 @@ static flags.
 Operands are described by `OperandInfo` and the GPU ISA register encoding.
 The semantics are:
 
+```text
 +---------------------+-----------------------------------------------+
 | Operand kind         | Semantics in gem5                            |
 +---------------------+-----------------------------------------------+
@@ -2218,6 +2254,7 @@ The semantics are:
 | EXEC                 | Execution mask register                       |
 | FLAT/SCRATCH         | Flat or scratch address register              |
 +---------------------+-----------------------------------------------+
+```
 
 `OperandInfo` carries flags such as `SCALAR_REG`, `VECTOR_REG`, `IMMEDIATE`,
 `VCC`, and `EXEC`. The flags determine RF access counts and scoreboard
@@ -2233,6 +2270,7 @@ mapping rules are captured by `OperandInfo::sizeInDWords` and
 register indices, and then to physical registers once the wavefront has
 been allocated a register region.
 
+```text
 +----------------------+-------------------------------+--------------------+
 | Operand size         | Dwords                        | RF registers used  |
 +----------------------+-------------------------------+--------------------+
@@ -2242,6 +2280,7 @@ been allocated a register region.
 | 64-bit vector        | 2 per lane                    | 2 VGPRs            |
 | 128-bit vector       | 4 per lane                    | 4 VGPRs            |
 +----------------------+-------------------------------+--------------------+
+```
 
 The operand size directly drives RF read and write bandwidth demands in
 `ScheduleStage` and `ExecStage`.
@@ -2406,6 +2445,7 @@ quick reference for performance modeling and sensitivity analysis.
 The `ComputeUnit` SimObject in `src/gpu-compute/GPU.py` provides the
 following parameters that directly affect memory timing and queueing.
 
+```text
 +------------------------------+-----------+-----------------------------+
 | Parameter                    | Default   | Meaning                     |
 +------------------------------+-----------+-----------------------------+
@@ -2425,6 +2465,7 @@ following parameters that directly affect memory timing and queueing.
 | `vrf_to_coalescer_bus_width` | 64 bytes  | VRF->coalescer bandwidth    |
 | `coalescer_to_vrf_bus_width` | 64 bytes  | Coalescer->VRF bandwidth    |
 +------------------------------+-----------+-----------------------------+
+```
 
 These parameters feed the queueing and timing behavior in the global,
 local, and scalar memory pipelines. The pipeline implementations live in
@@ -2438,6 +2479,7 @@ The GPU TLB and coalescer defaults are defined in
 `src/arch/amdgpu/vega/VegaGPUTLB.py`. These values control translation
 latency and the effectiveness of address coalescing.
 
+```text
 +--------------------------+-----------+--------------------------------+
 | Parameter                | Default   | Meaning                        |
 +--------------------------+-----------+--------------------------------+
@@ -2449,7 +2491,9 @@ latency and the effectiveness of address coalescing.
 | `VegaGPUTLB.maxOutstandingReqs` | 64 | Max outstanding translations   |
 | `VegaGPUTLB.allocationPolicy`   | True | Allocate on access           |
 +--------------------------+-----------+--------------------------------+
+```
 
+```text
 +-------------------------------+-----------+----------------------------+
 | Coalescer parameter           | Default   | Meaning                    |
 +-------------------------------+-----------+----------------------------+
@@ -2460,10 +2504,12 @@ latency and the effectiveness of address coalescing.
 | `VegaTLBCoalescer.coalescingWindow` | 1   | Coalesce window (ticks)    |
 | `VegaTLBCoalescer.disableCoalescing` | False | Disable coalescing     |
 +-------------------------------+-----------+----------------------------+
+```
 
 The page-table walker and page walk cache are configured in
 `VegaPagetableWalker`:
 
+```text
 +---------------------------------+-----------+--------------------------+
 | Parameter                       | Default   | Meaning                  |
 +---------------------------------+-----------+--------------------------+
@@ -2472,6 +2518,7 @@ The page-table walker and page walk cache are configured in
 | `pwc_replacement_policy`        | LRU       | Replacement policy       |
 | `pwc_indexing_policy`           | GPU PWC   | GPU-specific indexing    |
 +---------------------------------+-----------+--------------------------+
+```
 
 ### O.3 Interpretation Notes
 
@@ -2561,6 +2608,7 @@ allocate resources to additional workgroups.
 The following statistics and debug flags are helpful for validating the
 end-to-end behavior:
 
+```text
 +----------------------------+--------------------------------------------+
 | Signal                     | Why it matters                             |
 +----------------------------+--------------------------------------------+
@@ -2572,6 +2620,7 @@ end-to-end behavior:
 | `Coalescer.queuingCycles`  | Translation queueing                        |
 | `GlobalMemPipeline.loadVrfBankConflictCycles` | VRF/LDS contention |
 +----------------------------+--------------------------------------------+
+```
 
 The debug flags `GPUDisp`, `GPUFetch`, `GPUVRF`, and `GPUMem` provide
 cycle-level traces that can be used to corroborate pipeline behavior.
@@ -2590,6 +2639,7 @@ through `WFBarrier` state and wavefront wait counters.
 Workgroup-level barriers consume explicit resources in the CU. These
 resources are finite and can therefore limit workgroup residency.
 
+```text
 +------------------------------+-------------------------------------------+
 | Field / parameter            | Purpose                                   |
 +------------------------------+-------------------------------------------+
@@ -2599,6 +2649,7 @@ resources are finite and can therefore limit workgroup residency.
 | `WFBarrier::maxBarrierCnt()`    | WFs participating in this barrier     |
 | `WFBarrier::InvalidID`          | Sentinel for "no barrier"             |
 +------------------------------+-------------------------------------------+
+```
 
 A workgroup that contains more than one wavefront is assigned a barrier
 slot when it is dispatched (`ComputeUnit::dispWorkgroup`). Each wavefront
@@ -2634,6 +2685,7 @@ Waitcnt instructions depend on wavefront-local counters that track in-flight
 memory operations. The counters live in `Wavefront` and are incremented by
 the memory pipelines when operations are issued.
 
+```text
 +--------------------------------+-----------------------------------------+
 | Counter / set                  | Meaning                                 |
 +--------------------------------+-----------------------------------------+
@@ -2654,6 +2706,7 @@ the memory pipelines when operations are issued.
 | `lgkmIssued`                   | Set of LDS/GM ops for waitcnt           |
 | `expIssued`                    | Export ops for waitcnt                  |
 +--------------------------------+-----------------------------------------+
+```
 
 When a waitcnt instruction reaches the scoreboard, it consults these
 counters and sets to decide whether the wavefront can proceed. This keeps
@@ -2697,6 +2750,7 @@ and are helpful for diagnosing why wavefronts are not issuing.
 The scoreboard evaluates each wavefront and assigns one of the following
 readiness categories (`ScoreboardCheckStage::nonrdytype_e`).
 
+```text
 +------------------------+----------------------------------------------+
 | Readiness code         | Meaning                                      |
 +------------------------+----------------------------------------------+
@@ -2711,6 +2765,7 @@ readiness categories (`ScoreboardCheckStage::nonrdytype_e`).
 | `NRDY_MATRIX_CORE`     | Matrix core unit not ready                  |
 | `INST_RDY`             | Wavefront ready to schedule                 |
 +------------------------+----------------------------------------------+
+```
 
 These categories are mutually exclusive for a given wavefront in a given
 cycle. The `stallCycles` vector in the scoreboard stats is indexed by this
@@ -2722,6 +2777,7 @@ Once a wavefront is ready, the schedule stage determines whether the
 execution resource can accept it. The high-level non-ready reasons are
 enumerated in `ScheduleStage::SchNonRdyType`.
 
+```text
 +-------------------------------+--------------------------------------------+
 | Schedule non-ready code       | Meaning                                    |
 +-------------------------------+--------------------------------------------+
@@ -2745,6 +2801,7 @@ enumerated in `ScheduleStage::SchNonRdyType`.
 | `SCH_FLAT_MEM_FIFO_NRDY`      | Flat mem FIFO full                         |
 | `SCH_RDY`                     | Ready for dispatch                         |
 +-------------------------------+--------------------------------------------+
+```
 
 ### R.3 Operand Readiness vs. RF Access
 
@@ -2754,6 +2811,7 @@ cycle. These checks have their own taxonomies.
 
 Operand readiness (`ScheduleStage::schopdnonrdytype_e`):
 
+```text
 +---------------------------+-------------------------------------------+
 | Code                      | Meaning                                   |
 +---------------------------+-------------------------------------------+
@@ -2761,9 +2819,11 @@ Operand readiness (`ScheduleStage::schopdnonrdytype_e`):
 | `SCH_SRF_OPD_NRDY`        | SRF operand not ready                     |
 | `SCH_RF_OPD_NRDY`         | Generic RF operand not ready              |
 +---------------------------+-------------------------------------------+
+```
 
 RF access readiness (`ScheduleStage::schrfaccessnonrdytype_e`):
 
+```text
 +------------------------------+------------------------------------------+
 | Code                         | Meaning                                  |
 +------------------------------+------------------------------------------+
@@ -2773,6 +2833,7 @@ RF access readiness (`ScheduleStage::schrfaccessnonrdytype_e`):
 | `SCH_SRF_WR_ACCESS_NRDY`     | SRF write port conflict                  |
 | `SCH_RF_ACCESS_NRDY`         | Generic RF access conflict               |
 +------------------------------+------------------------------------------+
+```
 
 These categories are exposed via schedule-stage statistics such as
 `rfAccessStalls` and are critical for understanding RF bottlenecks.
@@ -2795,6 +2856,7 @@ but limited by a specific execution resource.
 
 The following mapping is often useful:
 
+```text
 +------------------------------+-------------------------------------------+
 | Symptom                      | Likely cause                               |
 +------------------------------+-------------------------------------------+
@@ -2804,6 +2866,7 @@ The following mapping is often useful:
 | High `SCH_VRF_RD_ACCESS_NRDY` | VRF bandwidth limit                      |
 | High `ExecStage.numCyclesWithNoIssue` | Global pipeline starvation       |
 +------------------------------+-------------------------------------------+
+```
 
 This taxonomy is especially valuable when tuning parameters in Appendix T.
 
@@ -2834,6 +2897,7 @@ vector traffic.
 The VIPER cache hierarchy is assembled in
 `src/python/gem5/prebuilt/viper/gpu_cache_hierarchy.py`:
 
+```text
 +----------------------+---------------------------------------------+
 | Cache / controller   | Role                                        |
 +----------------------+---------------------------------------------+
@@ -2843,6 +2907,7 @@ The VIPER cache hierarchy is assembled in
 | TCC                  | GPU L2 cache (shared across all CUs)        |
 | Directory            | Coherence directory for GPU caches          |
 +----------------------+---------------------------------------------+
+```
 
 One TCP is created per CU, while SQC and scalar caches are shared across
 `cu_per_sqc` CUs. The TCC count is configurable and determines the number
@@ -2914,6 +2979,7 @@ architecture or to perform sensitivity analysis.
 
 ### T.1 Parameter Groups
 
+```text
 +-------------------------------+-------------------------------------------+
 | Group                         | Examples                                  |
 +-------------------------------+-------------------------------------------+
@@ -2926,6 +2992,7 @@ architecture or to perform sensitivity analysis.
 | Queue sizes                   | `global_mem_queue_size`, `scalar_mem_queue_size` |
 | Coalescing                    | `max_cu_tokens`, `coalescingWindow`       |
 +-------------------------------+-------------------------------------------+
+```
 
 ### T.2 Calibration Steps
 
@@ -2991,6 +3058,7 @@ can be matched against expected behavior or hardware measurements.
 
 ### U.1 Microbenchmark Categories
 
+```text
 +------------------------------+-------------------------------------------+
 | Category                     | Primary bottleneck                        |
 +------------------------------+-------------------------------------------+
@@ -3001,6 +3069,7 @@ can be matched against expected behavior or hardware measurements.
 | Barrier-heavy kernel         | Barrier slots and waitcnt behavior        |
 | Mixed compute/memory         | Scheduler balance and latency hiding      |
 +------------------------------+-------------------------------------------+
+```
 
 ### U.2 Recommended Signals
 
@@ -3016,6 +3085,7 @@ than full-application traces.
 
 ### U.3 Example Validation Matrix
 
+```text
 +------------------------------+-----------------------------+--------------------+
 | Microbenchmark               | Expected trend              | Key stats          |
 +------------------------------+-----------------------------+--------------------+
@@ -3025,6 +3095,7 @@ than full-application traces.
 | LDS ping-pong                | Local mem pipe utilization  | `LocalMemPipeline` |
 | Barrier in tight loop        | Low WLP, high barrier waits | `Scoreboard` stats |
 +------------------------------+-----------------------------+--------------------+
+```
 
 ### U.4 Validation Workflow
 
@@ -3085,6 +3156,7 @@ dispatch and execution.
 The dispatch packet provides dynamic launch parameters, most of which are
 directly embedded into the queue entry.
 
+```text
 +----------------------------+-------------------------------------------+
 | Field                      | Usage in gem5                             |
 +----------------------------+-------------------------------------------+
@@ -3096,6 +3168,7 @@ directly embedded into the queue entry.
 | `completion_signal`        | Host-visible completion signal            |
 | `kernel_object`            | Pointer to code object / kernel descriptor|
 +----------------------------+-------------------------------------------+
+```
 
 The queue entry also tracks the host packet address and code address, which
 are used for traceability and debugging.
@@ -3106,6 +3179,7 @@ The kernel code descriptor (`AMDKernelCode` in `kernel_code.hh`) provides
 static metadata that influences resource allocation and initial register
 state. The most performance-critical fields are:
 
+```text
 +------------------------------------+-----------------------------------------+
 | Field                              | Effect                                  |
 +------------------------------------+-----------------------------------------+
@@ -3118,6 +3192,7 @@ state. The most performance-critical fields are:
 | `enable_vgpr_workitem_id`          | Enable VGPR work-item IDs               |
 | `enable_sgpr_*` flags              | Enable specific SGPR initializations    |
 +------------------------------------+-----------------------------------------+
+```
 
 ### V.4 Register Count Derivation
 
@@ -3141,6 +3216,7 @@ enumerations to define the ordering of these initial values.
 
 Scalar initialization fields include:
 
+```text
 +---------------------------+-------------------------------------------+
 | Field                     | Meaning                                   |
 +---------------------------+-------------------------------------------+
@@ -3155,6 +3231,7 @@ Scalar initialization fields include:
 | `WorkgroupInfo`           | Workgroup info metadata                   |
 | `PrivSegWaveByteOffset`   | Private segment wave offset               |
 +---------------------------+-------------------------------------------+
+```
 
 Vector initialization fields include `WorkitemIdX/Y/Z`, which populate per-
 lane work-item IDs in VGPRs.
@@ -3260,12 +3337,14 @@ is reselected quickly or delayed until later cycles.
 
 The choice of policy influences observed behavior:
 
+```text
 +----------------------+--------------------------------------------+
 | Policy               | Typical effects                            |
 +----------------------+--------------------------------------------+
 | Oldest-first         | Strong forward progress, lower tail latency|
 | Round-robin          | Fairness, smoother utilization, less bias  |
 +----------------------+--------------------------------------------+
+```
 
 In workloads with irregular memory access, oldest-first tends to keep
 long-stalled wavefronts moving once they become ready. In compute-heavy
@@ -3438,6 +3517,7 @@ contention can be observed via `LocalMemPipeline.loadVrfBankConflictCycles`.
 The following qualitative patterns are useful when interpreting LDS
 statistics:
 
+```text
 +-------------------------+-------------------------------------------+
 | Access pattern          | Expected behavior                          |
 +-------------------------+-------------------------------------------+
@@ -3446,6 +3526,7 @@ statistics:
 | Random per lane         | High conflict variability                  |
 | Broadcast (same address)| Maximum bank conflicts                     |
 +-------------------------+-------------------------------------------+
+```
 
 ### Y.6 Performance Considerations
 
@@ -3472,6 +3553,7 @@ virtual memory in gem5.
 
 The translation stack is composed of three main elements:
 
+```text
 +----------------------------+-------------------------------------------+
 | Component                  | Role                                      |
 +----------------------------+-------------------------------------------+
@@ -3479,6 +3561,7 @@ The translation stack is composed of three main elements:
 | `VegaGPUTLB`               | Performs translation lookup               |
 | `VegaPagetableWalker`      | Walks page tables on miss                 |
 +----------------------------+-------------------------------------------+
+```
 
 These components are instantiated in `VegaGPUTLB.py` and connected to CU
 ports via `translation_port`, `sqc_tlb_port`, and `scalar_tlb_port`.
@@ -3658,6 +3741,7 @@ kernel metadata is collected, and how completion signals are delivered.
 
 The dispatch path is built from several interacting components:
 
+```text
 +---------------------------+-------------------------------------------+
 | Component                 | Primary responsibility                    |
 +---------------------------+-------------------------------------------+
@@ -3667,6 +3751,7 @@ The dispatch path is built from several interacting components:
 | `HSAQueueEntry`           | Encapsulates dispatch metadata            |
 | `GPUComputeDriver`        | Connects software runtime and device      |
 +---------------------------+-------------------------------------------+
+```
 
 `GPUCommandProcessor` is a `DmaVirtDevice` that issues DMA reads to fetch
 queue descriptors (MQDs), dispatch packets, and kernel code descriptors.
@@ -3748,6 +3833,7 @@ important latency metrics and how they are derived.
 `GPUDynInst::profileRoundTripTime` records timestamps at key points in the
 memory pipeline. The hop IDs are defined in `InstMemoryHop`:
 
+```text
 +-------------------+---------------------------------------------+
 | Hop               | Meaning                                     |
 +-------------------+---------------------------------------------+
@@ -3757,6 +3843,7 @@ memory pipeline. The hop IDs are defined in `InstMemoryHop`:
 | `GMEnqueue`       | Enqueued in global memory pipe              |
 | `Complete`        | Completion and writeback                    |
 +-------------------+---------------------------------------------+
+```
 
 `Shader::sampleInstRoundTrip` converts these timestamps into distributions
 such as `initToCoalesceLatency`, `rubyNetworkLatency`, `gmEnqueueLatency`,
@@ -3792,6 +3879,7 @@ coalescing and shared-memory access patterns.
 
 The following debug flags are frequently used in GPU performance analysis:
 
+```text
 +------------------+----------------------------------------------+
 | Debug flag       | Typical use                                  |
 +------------------+----------------------------------------------+
@@ -3803,6 +3891,7 @@ The following debug flags are frequently used in GPU performance analysis:
 | `GPULDS`         | LDS accesses and bank conflicts              |
 | `GPUCommandProc` | CP queue processing and dispatch events      |
 +------------------+----------------------------------------------+
+```
 
 These traces are verbose and should be enabled selectively, but they provide
 precise timing evidence when validating model behavior.
