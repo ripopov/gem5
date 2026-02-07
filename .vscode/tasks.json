@@ -94,6 +94,21 @@
             "problemMatcher": [
                 "$gcc"
             ]
+        },
+        {
+            "label": "tutorial: build lesson05 debug (NULL)",
+            "type": "process",
+            "command": "scons",
+            "args": [
+                "build/NULL/tutorial/lesson05_clocked_objects.test.debug"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": "build",
+            "problemMatcher": [
+                "$gcc"
+            ]
         }
     ],
     "inputs": [

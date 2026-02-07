@@ -10,7 +10,7 @@ The end goal is a small but complete simulator stack:
 - Python configuration and orchestration,
 - reproducible runs, stats, and debugging workflows.
 
-Lessons 1-4 have complete code examples right now. Lessons 5-13 are
+Lessons 1-5 have complete code examples right now. Lessons 6-13 are
 scaffolded and their code examples will be added next.
 
 ## Learning path
@@ -56,7 +56,7 @@ Phase 2 (`C++ + Python`):
 2. Lesson 2 code: `src/tutorial/lesson02/` (implemented)
 3. Lesson 3 code: `src/tutorial/lesson03/` (implemented)
 4. Lesson 4 code: `src/tutorial/lesson04/` (implemented)
-5. Lesson 5 code: `src/tutorial/lesson05/` (planned)
+5. Lesson 5 code: `src/tutorial/lesson05/` (implemented)
 6. Lesson 6 code: `src/tutorial/lesson06/` (planned)
 7. Lesson 7 code: `src/tutorial/lesson07/` (planned)
 8. Lesson 8 code: `src/tutorial/lesson08/` (planned)

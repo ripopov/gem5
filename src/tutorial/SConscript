@@ -27,6 +27,11 @@ SimObject(
     sim_objects=["TutorialMemoryBridge"],
 )
 
+SimObject(
+    "lesson05/TutorialClockedObjectDemo.py",
+    sim_objects=["TutorialClockedObjectDemo"],
+)
+
 GTest(
     "lesson03_memory_ports.test",
     "lesson03/memory_ports.test.cc",
@@ -53,5 +58,20 @@ GTest(
     "lesson04/stat_stubs.cc",
     "../sim/clock_domain.cc",
     "../sim/voltage_domain.cc",
+    with_tag("gem5 simobject"),
+)
+
+GTest(
+    "lesson05_clocked_objects.test",
+    "lesson05/clocked_objects.test.cc",
+    "lesson05/clocked_objects.cc",
+    "../base/statistics.cc",
+    "../base/stats/info.cc",
+    "../base/types.cc",
+    "lesson04/stat_stubs.cc",
+    "lesson05/power_model_stubs.cc",
+    "../sim/clock_domain.cc",
+    "../sim/voltage_domain.cc",
+    "../sim/clocked_object.cc",
     with_tag("gem5 simobject"),
 )
