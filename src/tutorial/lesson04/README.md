@@ -51,6 +51,110 @@ Run one test case:
   --gtest_filter=ClockDomainsTest.DvfsChangesPeriodsAndPropagatesToDerivedClock
 ```
 
+## Time, ticks, clocks, and periods
+
+This section is the core vocabulary for timing in gem5.
+
+### 1) Simulation time vs wall-clock time
+
+gem5 tracks two very different notions of time:
+
+- **Wall-clock time**: real elapsed host time (seconds on your workstation).
+- **Simulation time**: modeled hardware time inside gem5.
+
+When we say "tick 1000" in this lesson, we mean simulation time, not real
+execution time on your host CPU.
+
+### 2) Tick: gem5's global base time unit
+
+A `Tick` is the smallest unit on gem5's global simulation timeline
+(`src/base/types.hh`). Events are scheduled at absolute tick values on an
+`EventQueue`.
+
+In `src/sim/core.cc`, gem5's default global frequency is initialized to
+`1e12` ticks/second, so by default:
+
+- `1 tick = 1 ps`
+- `1000 ticks = 1 ns`
+- `1,000,000 ticks = 1 us`
+
+Every clock domain, object, and event still references this *same* global tick
+axis. Clock domains do not create separate time axes; they create separate
+cycle interpretations over that one axis.
+
+### 3) Clock and clock period
+
+For a clocked component, two equivalent views exist:
+
+- **Frequency** (cycles/second), e.g., 2 GHz.
+- **Period** (time/cycle), e.g., 0.5 ns.
+
+gem5 stores clock-domain timing primarily as **period in ticks**:
+
+- `clockPeriod()` returns ticks per cycle.
+- Smaller period means faster clock.
+
+Given global ticks-per-second `Tps = sim_clock::Frequency`:
+
+```text
+frequency_hz = Tps / clock_period_ticks
+clock_period_ticks = Tps / frequency_hz
+```
+
+With default `Tps = 1e12`:
+
+- 2 GHz -> period = `1e12 / 2e9 = 500` ticks
+- 1 GHz -> period = `1e12 / 1e9 = 1000` ticks
+
+This is why Lesson 4 uses 500-tick and 1000-tick periods.
+
+### 4) Cycles are domain-local, ticks are global
+
+`Cycles` (`src/base/types.hh`) is a type-safe wrapper for cycle counts. A
+cycle value only has meaning relative to a specific clock period/domain.
+
+`Clocked` helpers (`src/sim/clocked_object.hh`) bridge the two spaces:
+
+- `clockEdge(Cycles n)`: absolute tick for a future cycle boundary.
+- `curCycle()`: cycle index aligned to current/next edge in this domain.
+- `cyclesToTicks(c)`: convert cycle count to tick delta.
+- `ticksToCycles(t)`: convert tick delta to cycles with ceil behavior.
+
+Important nuance: `curCycle()` and `clockEdge()` align to the next edge if
+`curTick()` is in the middle of a cycle. So these APIs intentionally snap
+forward to edge-aligned semantics.
+
+### 5) Multi-clock-domain intuition
+
+Assume:
+
+- source domain period = 500 ticks,
+- derived domain period = 1000 ticks.
+
+At global tick 750:
+
+- source domain is between edges at 500 and 1000,
+- derived domain is between edges at 0 and 1000.
+
+Both domains return `clockEdge() == 1000`, but:
+
+- source `nextCycle() == 1500`,
+- derived `nextCycle() == 2000`.
+
+Same global time, different local cycle progression.
+
+### 6) What changes during DVFS
+
+When `SrcClockDomain::perfLevel(...)` changes:
+
+1. the source domain selects a new clock period,
+2. voltage-domain performance level may adjust,
+3. derived domains recompute their periods from parent period and divider,
+4. registered clocked members receive `updateClockPeriod()` callbacks.
+
+The key idea: simulation time remains one global tick timeline, while cycle
+mapping per domain is updated.
+
 ## Why this lesson exists
 
 Lesson 1 showed that gem5 uses a global `Tick` timeline and an event queue.
