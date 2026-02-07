@@ -3,9 +3,21 @@
 
 Import("*")
 
+SimObject(
+    "lesson02/TutorialLifecycle.py",
+    sim_objects=["TutorialLifecycleDemo"],
+)
+
 GTest(
     "lesson01_event_timeline.test",
     "lesson01/event_timeline.test.cc",
     "lesson01/event_timeline.cc",
     with_tag("gem5 events"),
+)
+
+GTest(
+    "lesson02_simobject_lifecycle.test",
+    "lesson02/simobject_lifecycle.test.cc",
+    "lesson02/simobject_lifecycle.cc",
+    with_tag("gem5 simobject"),
 )

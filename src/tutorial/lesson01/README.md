@@ -30,19 +30,19 @@ The goal is to make four ideas concrete:
 Build the lesson test binary:
 
 ```bash
-scons build/NULL/tutorial/lesson01_event_timeline.test.opt
+scons build/NULL/tutorial/lesson01_event_timeline.test.debug
 ```
 
 Run the binary:
 
 ```bash
-./build/NULL/tutorial/lesson01_event_timeline.test.opt
+./build/NULL/tutorial/lesson01_event_timeline.test.debug
 ```
 
 Run only this lesson's test case:
 
 ```bash
-./build/NULL/tutorial/lesson01_event_timeline.test.opt \
+./build/NULL/tutorial/lesson01_event_timeline.test.debug \
   --gtest_filter=EventTimelineTest.ProcessesCallbacksByTickThenPriority
 ```
 

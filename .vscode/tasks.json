@@ -49,6 +49,21 @@
             "problemMatcher": [
                 "$gcc"
             ]
+        },
+        {
+            "label": "tutorial: build lesson02 debug (NULL)",
+            "type": "process",
+            "command": "scons",
+            "args": [
+                "build/NULL/tutorial/lesson02_simobject_lifecycle.test.debug"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": "build",
+            "problemMatcher": [
+                "$gcc"
+            ]
         }
     ],
     "inputs": [

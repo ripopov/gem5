@@ -26,17 +26,21 @@ Guidance for Codex and other AI agents working in this gem5 repository.
 - Integrate new tutorial examples into SCons via `src/tutorial/SConscript`.
 - Validate tutorial changes by building and running the smallest relevant
   tutorial test target (prefer `build/NULL/...` when possible).
+- For tutorial work, always use debug binaries (`*.debug`) by default.
+- Do not use optimized (`*.opt`) tutorial targets unless explicitly requested.
 
 ## Build commands
 - Full optimized build (all ISAs): `scons build/ALL/gem5.opt`
 - Unit tests binary: `scons build/ALL/unittests.opt`
 - NULL ISA unit tests: `scons build/NULL/unittests.opt`
+- Tutorial lesson tests (debug, preferred): `scons build/NULL/tutorial/<lesson>.test.debug`
 
 ## Test commands
 - Quick system tests (from `tests/`): `./main.py run`
 - Python unit tests (after `gem5.opt` build): `./build/ALL/gem5.opt tests/run_pyunit.py`
 - Run a single C++ test binary: `./build/ALL/base/bitunion.test.opt`
 - List gtest cases: `./build/ALL/base/bitunion.test.opt --gtest_list_tests`
+- Run a tutorial lesson test (debug, preferred): `./build/NULL/tutorial/<lesson>.test.debug`
 
 ## Style and formatting
 - C/C++: 4-space indents, no tabs, 79-char lines, brace style per
