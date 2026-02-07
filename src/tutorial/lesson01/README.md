@@ -1,58 +1,215 @@
 # Lesson 1: C++ Simulation Kernel Fundamentals
 
-This lesson is implemented as a real C++ example in the source tree. The
-markdown explains how to build and inspect that code.
+This lesson is a small, runnable C++ example that introduces gem5's event
+kernel by using real APIs from `src/sim/eventq.hh`.
 
-## Example files
+The goal is to make three ideas concrete:
 
-- `src/tutorial/lesson01/event_timeline.hh`
-- `src/tutorial/lesson01/event_timeline.cc`
-- `src/tutorial/lesson01/event_timeline.test.cc`
-- Build integration: `src/tutorial/SConscript`
+1. gem5 time is modeled in `Tick` units.
+2. Work is performed by scheduling `Event`s onto an `EventQueue`.
+3. If two events have the same `Tick`, priority decides order.
 
-## What this example demonstrates
+## Source map
 
-1. Scheduling events on a gem5 `EventQueue`.
-2. Tick-based ordering (`tick=3` runs before `tick=7`).
-3. Priority ordering when multiple events share the same tick.
-4. Event self-rescheduling to create a callback chain.
+- Lesson API and state:
+  `src/tutorial/lesson01/event_timeline.hh`
+- Lesson behavior and scheduling:
+  `src/tutorial/lesson01/event_timeline.cc`
+- Unit test and event queue setup:
+  `src/tutorial/lesson01/event_timeline.test.cc`
+- Build integration for this lesson test:
+  `src/tutorial/SConscript`
+- Sphinx wrapper page that includes this file:
+  `docs/tutorial/lesson-01-cpp-simulation-kernel.md`
 
 ## Build and run
 
-Build only the tutorial test binary:
+Build the lesson test binary:
 
 ```bash
 scons build/NULL/tutorial/lesson01_event_timeline.test.opt
 ```
 
-Run it:
+Run the binary:
 
 ```bash
 ./build/NULL/tutorial/lesson01_event_timeline.test.opt
 ```
 
-Optional: run only this test case:
+Run only this lesson's test case:
 
 ```bash
 ./build/NULL/tutorial/lesson01_event_timeline.test.opt \
   --gtest_filter=EventTimelineTest.ProcessesCallbacksByTickThenPriority
 ```
 
-## How to read the code
+## Mental model: event execution timeline
 
-1. Open `src/tutorial/lesson01/event_timeline.hh`.
-: This file defines `EventTimeline`, a tiny event-driven component used for the
-lesson.
-2. Open `src/tutorial/lesson01/event_timeline.cc`.
-: This file shows the event scheduling logic and detailed comments around
-callback ordering.
-3. Open `src/tutorial/lesson01/event_timeline.test.cc`.
-: This file executes the component and asserts the exact event trace and final
-tick.
+`prime()` schedules one bootstrap callback at tick 3. That callback then
+schedules three callbacks at tick 7 with different priorities. One of those
+callbacks self-reschedules twice more.
 
-## Expected behavior
+```text
+Time (Tick) ---> 3 ------------------- 7 ----------- 9 ----------- 11
 
-The test validates this exact callback sequence:
+At tick 3:
+  bootstrap
+    schedules for tick 7:
+      high_priority   (EventBase::Delayed_Writeback_Pri = -1)
+      default_priority(EventBase::Default_Pri = 0)
+      low_priority    (EventBase::Progress_Event_Pri = 95)
+
+At tick 7:
+  high_priority -> default_priority -> low_priority
+                                     \
+                                      reschedule low_priority at tick 9
+
+At tick 9:
+  low_priority
+    reschedule low_priority at tick 11
+
+At tick 11:
+  low_priority
+```
+
+gem5 ordering rule from `sim/eventq.hh` is:
+
+- Earlier `when()` (tick) runs first.
+- For equal `when()`, lower numeric priority runs first.
+  Example: `-1` runs before `0`, and `0` runs before `95`.
+
+## Event flow diagram
+
+```mermaid
+flowchart TD
+    A["prime"] --> B["schedule bootstrap at tick 3"]
+    B --> C["run to completion loop"]
+    C --> D["service one event"]
+    D --> E["bootstrap callback at tick 3"]
+    E --> F["schedule high default low at tick 7"]
+    F --> G["high priority callback at tick 7"]
+    G --> H["default priority callback at tick 7"]
+    H --> I["low priority callback at tick 7"]
+    I --> J["schedule low callback at tick 9"]
+    J --> K["low priority callback at tick 9"]
+    K --> L["schedule low callback at tick 11"]
+    L --> M["low priority callback at tick 11"]
+    M --> N["queue empty loop exits"]
+```
+
+## gem5 APIs used in this lesson
+
+### 1) `EventQueue` (`src/sim/eventq.hh`)
+
+Used API surface:
+
+- `schedule(Event*, Tick when)`: enqueue work at an absolute tick.
+  `when` must be `>= getCurTick()`.
+- `empty()`: check if the queue has pending events.
+- `serviceOne()`: pop and execute exactly one scheduled event.
+- `getCurTick()`: query queue-local current tick (used in the test).
+
+Behavior this lesson relies on:
+
+- `serviceOne()` advances queue time to the event's tick before calling
+  `event->process()`.
+- Event sorting is by `(when, priority)`.
+
+### 2) `EventManager` (`src/sim/eventq.hh`)
+
+`EventTimeline` inherits `EventManager`, which holds an `EventQueue*` and
+provides convenience overloads:
+
+- `schedule(Event&, Tick)`
+- `deschedule(Event&)`
+- `reschedule(Event&, Tick, bool always = false)`
+
+That is why lesson code can call `schedule(bootstrapEvent, 3)` directly inside
+`EventTimeline` methods.
+
+### 3) `EventFunctionWrapper` (`src/sim/eventq.hh`)
+
+Each callback event in the lesson is an `EventFunctionWrapper`:
+
+- wraps a `std::function<void(void)>` callback,
+- has a debug-friendly event name,
+- can set a priority via constructor argument.
+
+Lesson instances:
+
+- `bootstrapEvent`: default priority.
+- `highPriorityEvent`: `EventBase::Delayed_Writeback_Pri` (`-1`).
+- `defaultPriorityEvent`: `EventBase::Default_Pri` (`0`).
+- `lowPriorityPulseEvent`: `EventBase::Progress_Event_Pri` (`95`).
+
+### 4) `curTick()` (`src/sim/cur_tick.hh`)
+
+`appendTrace()` uses `curTick()` to record the exact simulation tick where each
+callback executes:
+
+- trace format: `tick=<n> label=<callback-label>`.
+
+`curTick()` resolves through thread-local state set by `curEventQueue(...)`.
+In this lesson, the test installs a dedicated queue as the current one.
+
+### 5) `curEventQueue(...)` (`src/sim/eventq.hh`)
+
+The test fixture calls:
+
+- `savedQueue = curEventQueue();`
+- `curEventQueue(&queue);` in `SetUp()`
+- `curEventQueue(savedQueue);` in `TearDown()`
+
+This keeps the test isolated and ensures `curTick()` refers to the fixture's
+queue.
+
+## Lesson code walkthrough
+
+### Header (`event_timeline.hh`)
+
+`EventTimeline` owns:
+
+- trace state: `eventTrace`, `callbackCount`, `pulseCount`
+- four `EventFunctionWrapper` event objects
+
+Public methods:
+
+- `prime()`: seed the first event.
+- `runToCompletion()`: drain the queue with `serviceOne()`.
+- read-only accessors: `trace()`, `callbacksExecuted()`.
+
+Private callbacks model phases of a tiny timeline:
+
+- `onBootstrap()`
+- `onHighPriorityPhase()`
+- `onDefaultPriorityPhase()`
+- `onLowPriorityPulse()`
+
+### Implementation (`event_timeline.cc`)
+
+1. Constructor wires each event wrapper to a member callback.
+2. `prime()` schedules bootstrap at tick 3.
+3. `onBootstrap()` appends trace, then schedules three events at tick 7.
+4. `onLowPriorityPulse()` appends trace and self-reschedules twice:
+   ticks 9 and 11.
+5. `runToCompletion()` executes one event at a time until queue is empty.
+
+Important detail:
+
+- `schedule(..., 7)` is absolute tick scheduling.
+- `schedule(..., curTick() + 2)` is relative-by-calculation.
+
+## Test walkthrough
+
+`EventTimelineTest.ProcessesCallbacksByTickThenPriority` validates:
+
+1. queue is non-empty after `prime()`,
+2. queue is empty after `runToCompletion()`,
+3. final queue tick is `11`,
+4. callbacks executed is `6`,
+5. full trace lines match expected order exactly.
+
+Expected trace:
 
 1. `tick=3 label=bootstrap`
 2. `tick=7 label=high-priority-phase`
@@ -61,5 +218,11 @@ The test validates this exact callback sequence:
 5. `tick=9 label=low-priority-pulse`
 6. `tick=11 label=low-priority-pulse`
 
-This is the concrete baseline for later lessons that introduce SimObjects and
-Python configuration.
+## Why this lesson matters for later lessons
+
+Everything in later lessons (SimObjects, ports, timing, Python-configured
+systems) still runs on this same event kernel:
+
+- model behavior becomes event callbacks,
+- simulation time advances by processing events,
+- deterministic ordering depends on tick and priority choices.
