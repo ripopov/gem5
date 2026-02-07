@@ -1,3 +1,12 @@
-# Tutorial Lesson 02 Source
+# Lesson 2: C++ SimObject Anatomy
 
-This directory is reserved for the Lesson 02 working example code.
+## Status
+
+Placeholder. Content will be authored in a later change.
+
+## Planned scope
+
+1. SimObject lifecycle and ownership.
+2. Params structures and configuration boundaries.
+3. Initialization, startup, drain/resume hooks.
+4. Minimal custom SimObject implementation plan.

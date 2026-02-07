@@ -37,7 +37,8 @@ Run a single test case:
 ## Where to find lesson code
 
 - Lesson 1 source: `src/tutorial/lesson01/`
-- Lesson docs: `docs/tutorial/`
+- Lesson docs (source-adjacent): `src/tutorial/`
+- Rendered docs wrappers (Sphinx): `docs/tutorial/`
 
 As additional lessons are implemented, their test targets will be added to
 `src/tutorial/SConscript`.

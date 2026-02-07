@@ -33,16 +33,16 @@ Phase 2 (`C++ + Python`):
 
 ## Lesson index
 
-1. [Lesson 1: C++ Simulation Kernel](lesson-01-cpp-simulation-kernel/README.md)
-2. [Lesson 2: C++ SimObject Anatomy](lesson-02-cpp-simobject-anatomy/README.md)
-3. [Lesson 3: C++ Memory and Ports](lesson-03-cpp-memory-and-ports/README.md)
-4. [Lesson 4: C++ Timing and CPU Hooks](lesson-04-cpp-timing-and-cpu-hooks/README.md)
-5. [Lesson 5: C++/Python Bridge](lesson-05-cpp-python-bridge/README.md)
-6. [Lesson 6: Python Config and Run Loop](lesson-06-python-config-and-run/README.md)
-7. [Lesson 7: gem5 Stdlib Composition](lesson-07-stdlib-composition/README.md)
-8. [Lesson 8: Workloads and Checkpoints](lesson-08-workloads-and-checkpoints/README.md)
-9. [Lesson 9: Debug, Stats, and Probes](lesson-09-debug-stats-and-probes/README.md)
-10. [Lesson 10: Capstone Hybrid Simulator](lesson-10-capstone-hybrid-simulator/README.md)
+1. Lesson 1: C++ Simulation Kernel (`src/tutorial/lesson01/README.md`)
+2. Lesson 2: C++ SimObject Anatomy (`src/tutorial/lesson02/README.md`)
+3. Lesson 3: C++ Memory and Ports (`src/tutorial/lesson03/README.md`)
+4. Lesson 4: C++ Timing and CPU Hooks (`src/tutorial/lesson04/README.md`)
+5. Lesson 5: C++/Python Bridge (`src/tutorial/lesson05/README.md`)
+6. Lesson 6: Python Config and Run Loop (`src/tutorial/lesson06/README.md`)
+7. Lesson 7: gem5 Stdlib Composition (`src/tutorial/lesson07/README.md`)
+8. Lesson 8: Workloads and Checkpoints (`src/tutorial/lesson08/README.md`)
+9. Lesson 9: Debug, Stats, and Probes (`src/tutorial/lesson09/README.md`)
+10. Lesson 10: Capstone Hybrid Simulator (`src/tutorial/lesson10/README.md`)
 
 ## Source example map
 
@@ -56,19 +56,3 @@ Phase 2 (`C++ + Python`):
 8. Lesson 8 code: `src/tutorial/lesson08/` (planned)
 9. Lesson 9 code: `src/tutorial/lesson09/` (planned)
 10. Lesson 10 code: `src/tutorial/lesson10/` (planned)
-
-```{toctree}
-:maxdepth: 2
-:caption: Lessons
-
-lesson-01-cpp-simulation-kernel/README
-lesson-02-cpp-simobject-anatomy/README
-lesson-03-cpp-memory-and-ports/README
-lesson-04-cpp-timing-and-cpu-hooks/README
-lesson-05-cpp-python-bridge/README
-lesson-06-python-config-and-run/README
-lesson-07-stdlib-composition/README
-lesson-08-workloads-and-checkpoints/README
-lesson-09-debug-stats-and-probes/README
-lesson-10-capstone-hybrid-simulator/README
-```

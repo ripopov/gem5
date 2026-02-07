@@ -5,4 +5,4 @@ gem5 Documentation
    :maxdepth: 2
    :caption: Tutorials
 
-   tutorial/README
+   tutorial/index

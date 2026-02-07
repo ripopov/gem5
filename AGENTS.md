@@ -18,7 +18,8 @@ Guidance for Codex and other AI agents working in this gem5 repository.
 ## Current focus: Tutorials
 - We are actively building a code-first tutorial track.
 - Tutorial source examples live in `src/tutorial/`.
-- Tutorial lesson documentation lives in `docs/tutorial/`.
+- Tutorial lesson documentation lives with source in `src/tutorial/`.
+- Sphinx wrapper pages for tutorials live in `docs/tutorial/`.
 - Top-level tutorial runbook is `TUTORIAL.md`.
 - When working on lessons, prioritize runnable C++/Python examples first, then
   update Markdown to explain the implemented code.

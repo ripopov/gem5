@@ -1,3 +1,12 @@
-# Tutorial Lesson 04 Source
+# Lesson 4: C++ Timing and CPU Hooks
 
-This directory is reserved for the Lesson 04 working example code.
+## Status
+
+Placeholder. Content will be authored in a later change.
+
+## Planned scope
+
+1. Clock domains and cycle/tick conversion.
+2. Timing-model correctness requirements.
+3. CPU model touch points for custom components.
+4. Latency modeling patterns.

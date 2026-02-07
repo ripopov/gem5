@@ -37,5 +37,7 @@ cd _build/html
 python3 -m http.server 8000
 ```
 
-Tutorial docs are in `docs/tutorial/`, with the top-level course page at
-`docs/tutorial/README.md`.
+Tutorial lesson READMEs are source-adjacent in `src/tutorial/`, with the
+top-level course page at `src/tutorial/README.md`.
+Sphinx wrapper pages for rendering are in `docs/tutorial/`, with
+`docs/tutorial/index.md` as the docs entry page.

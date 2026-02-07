@@ -1,3 +1,12 @@
-# Tutorial Lesson 09 Source
+# Lesson 9: Debug, Stats, and Probes
 
-This directory is reserved for the Lesson 09 working example code.
+## Status
+
+Placeholder. Content will be authored in a later change.
+
+## Planned scope
+
+1. Debug flags and trace-driven diagnosis.
+2. Statistics organization, dump timing, and post-processing.
+3. Probe points and observability hooks.
+4. Building a repeatable debug workflow for model validation.
