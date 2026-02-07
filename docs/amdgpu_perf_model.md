@@ -102,26 +102,26 @@ The model uses GPU terminology consistently across code and configuration.
 The table below summarizes key terms in the gem5 AMDGPU context.
 
 ```text
-+----------------------+------------------------------------------------------+
-| Term                 | Meaning in the gem5 AMDGPU model                      |
-+----------------------+------------------------------------------------------+
-| Work-item            | A single SIMD lane of a kernel; one logical thread.   |
-| Wavefront (WF)       | The SIMD execution unit (default 64 work-items).      |
-| Workgroup (WG)       | A collection of wavefronts that share LDS.            |
-| SIMD                 | A vector lane group inside a compute unit.            |
-| Compute Unit (CU)    | The core pipeline entity executing wavefronts.        |
-| Shader               | A GPU instance containing multiple CUs.              |
-| VALU/SALU            | Vector/scalar ALU resources inside a CU.             |
-| LDS                  | Local Data Share, per-WG shared memory.              |
-| VRF/SRF              | Vector/Scalar Register Files.                        |
-| SQC/TCP/TCC          | I-cache, L1 data cache, and L2 cache in VIPER.        |
-| AQL packet           | HSA packet describing a kernel dispatch.             |
-| MQD/HQD              | Queue descriptor structures in HSA runtime.          |
-| Doorbell             | Memory-mapped write that signals queue activity.      |
-| TLB coalescer        | Front-end that merges translation requests.           |
-| VMID/PASID           | GPU virtual memory identifiers for process context.  |
-| Waitcnt              | Barrier on outstanding memory operations.            |
-+----------------------+------------------------------------------------------+
++-------------------+-----------------------------------------------------+
+| Term              | Meaning in the gem5 AMDGPU model                    |
++-------------------+-----------------------------------------------------+
+| Work-item         | A single SIMD lane of a kernel; one logical thread. |
+| Wavefront (WF)    | The SIMD execution unit (default 64 work-items).    |
+| Workgroup (WG)    | A collection of wavefronts that share LDS.          |
+| SIMD              | A vector lane group inside a compute unit.          |
+| Compute Unit (CU) | The core pipeline entity executing wavefronts.      |
+| Shader            | A GPU instance containing multiple CUs.             |
+| VALU/SALU         | Vector/scalar ALU resources inside a CU.            |
+| LDS               | Local Data Share, per-WG shared memory.             |
+| VRF/SRF           | Vector/Scalar Register Files.                       |
+| SQC/TCP/TCC       | I-cache, L1 data cache, and L2 cache in VIPER.      |
+| AQL packet        | HSA packet describing a kernel dispatch.            |
+| MQD/HQD           | Queue descriptor structures in HSA runtime.         |
+| Doorbell          | Memory-mapped write that signals queue activity.    |
+| TLB coalescer     | Front-end that merges translation requests.         |
+| VMID/PASID        | GPU virtual memory identifiers for process context. |
+| Waitcnt           | Barrier on outstanding memory operations.           |
++-------------------+-----------------------------------------------------+
 ```
 
 ### 1.3 Design Philosophy
@@ -302,13 +302,13 @@ instance. It aggregates compute units, dispatch logic, and interfaces to
 memory and the host system (`src/gpu-compute/shader.hh`).
 
 ```
-+---------------------------------------------------------+
-| Shader (GPU instance)                                   |
-|  - GPUCommandProcessor                                  |
-|  - GPUDispatcher                                        |
-|  - AMDGPUSystemHub (host DMA)                           |
-|  - CUs[0..N-1]                                          |
-+----------------------+----------------------------------+
++------------------------------+
+| Shader (GPU instance)        |
+| - GPUCommandProcessor        |
+| - GPUDispatcher              |
+| - AMDGPUSystemHub (host DMA) |
+| - CUs[0..N-1]                |
++------------------------------+
                        |
                        | multiple Compute Units
                        v
@@ -397,21 +397,21 @@ returns.
 Key `WaitClass` resources include:
 
 ```text
-+--------------------------+------------------------------------------+
-| Resource                 | Purpose                                  |
-+--------------------------+------------------------------------------+
-| `vectorALUs[i]`          | Vector ALU pipelines                     |
-| `scalarALUs[i]`          | Scalar ALU pipelines                     |
-| `vectorGlobalMemUnit`    | Global memory issue slot                 |
-| `vectorSharedMemUnit`    | Local memory issue slot                  |
-| `scalarMemUnit`          | Scalar memory issue slot                 |
-| `glbMemToVrfBus`         | Global mem -> VRF writeback bus          |
-| `vrfToGlobalMemPipeBus`  | VRF -> global mem pipe bus               |
-| `locMemToVrfBus`         | Local mem -> VRF writeback bus           |
-| `vrfToLocalMemPipeBus`   | VRF -> local mem pipe bus                |
-| `scalarMemToSrfBus`      | Scalar mem -> SRF writeback bus          |
-| `srfToScalarMemPipeBus`  | SRF -> scalar mem pipe bus               |
-+--------------------------+------------------------------------------+
++-------------------------+---------------------------------+
+| Resource                | Purpose                         |
++-------------------------+---------------------------------+
+| `vectorALUs[i]`         | Vector ALU pipelines            |
+| `scalarALUs[i]`         | Scalar ALU pipelines            |
+| `vectorGlobalMemUnit`   | Global memory issue slot        |
+| `vectorSharedMemUnit`   | Local memory issue slot         |
+| `scalarMemUnit`         | Scalar memory issue slot        |
+| `glbMemToVrfBus`        | Global mem -> VRF writeback bus |
+| `vrfToGlobalMemPipeBus` | VRF -> global mem pipe bus      |
+| `locMemToVrfBus`        | Local mem -> VRF writeback bus  |
+| `vrfToLocalMemPipeBus`  | VRF -> local mem pipe bus       |
+| `scalarMemToSrfBus`     | Scalar mem -> SRF writeback bus |
+| `srfToScalarMemPipeBus` | SRF -> scalar mem pipe bus      |
++-------------------------+---------------------------------+
 ```
 
 The `issue_period` parameter introduces an additional spacing constraint
@@ -433,17 +433,17 @@ resource allocations (`src/gpu-compute/wavefront.hh`).
 The `Wavefront::status_e` enumeration defines the high-level lifecycle:
 
 ```text
-+-------------------+--------------------------------------------------+
-| State             | Meaning                                          |
-+-------------------+--------------------------------------------------+
-| S_STOPPED         | Wavefront stalled or inactive.                   |
-| S_RETURNING       | Wavefront returning from a kernel.               |
-| S_RUNNING         | Normal execution.                                |
-| S_STALLED         | Temporarily stalled (e.g., hazards).             |
-| S_STALLED_SLEEP   | Sleeping state (e.g., s_sleep).                  |
-| S_WAITCNT         | Waiting for outstanding memory ops to complete.  |
-| S_BARRIER         | Waiting at a barrier.                            |
-+-------------------+--------------------------------------------------+
++-----------------+-------------------------------------------------+
+| State           | Meaning                                         |
++-----------------+-------------------------------------------------+
+| S_STOPPED       | Wavefront stalled or inactive.                  |
+| S_RETURNING     | Wavefront returning from a kernel.              |
+| S_RUNNING       | Normal execution.                               |
+| S_STALLED       | Temporarily stalled (e.g., hazards).            |
+| S_STALLED_SLEEP | Sleeping state (e.g., s_sleep).                 |
+| S_WAITCNT       | Waiting for outstanding memory ops to complete. |
+| S_BARRIER       | Waiting at a barrier.                           |
++-----------------+-------------------------------------------------+
 ```
 
 ### 6.2 Workgroup Allocation
@@ -583,18 +583,18 @@ wavefront as ready (`src/gpu-compute/scoreboard_check_stage.cc`). The most
 important gating conditions are:
 
 ```text
-+----------------------+-----------------------------------------------------+
-| Condition            | Meaning                                             |
-+----------------------+-----------------------------------------------------+
-| NRDY_IB_EMPTY        | Instruction buffer is empty.                        |
-| NRDY_WAIT_CNT        | Outstanding memory operations not complete.         |
-| NRDY_BARRIER_WAIT    | Wavefront is blocked at a barrier.                  |
-| NRDY_VGPR_NRDY       | Vector operands not ready in VRF.                   |
-| NRDY_SGPR_NRDY       | Scalar operands not ready in SRF.                   |
-| NRDY_SLEEP           | Wavefront in sleep state.                           |
-| NRDY_MATRIX_CORE     | MFMA unit busy (matrix core occupancy).             |
-| INST_RDY             | All checks passed; wavefront is ready.              |
-+----------------------+-----------------------------------------------------+
++-------------------+---------------------------------------------+
+| Condition         | Meaning                                     |
++-------------------+---------------------------------------------+
+| NRDY_IB_EMPTY     | Instruction buffer is empty.                |
+| NRDY_WAIT_CNT     | Outstanding memory operations not complete. |
+| NRDY_BARRIER_WAIT | Wavefront is blocked at a barrier.          |
+| NRDY_VGPR_NRDY    | Vector operands not ready in VRF.           |
+| NRDY_SGPR_NRDY    | Scalar operands not ready in SRF.           |
+| NRDY_SLEEP        | Wavefront in sleep state.                   |
+| NRDY_MATRIX_CORE  | MFMA unit busy (matrix core occupancy).     |
+| INST_RDY          | All checks passed; wavefront is ready.      |
++-------------------+---------------------------------------------+
 ```
 
 The check is conservative: any failure leaves the wavefront unready for
@@ -711,15 +711,15 @@ use of execution resources (`src/gpu-compute/exec_stage.hh`).
 Execution resources are defined in `ComputeUnit` and grouped as:
 
 ```text
-+--------------------------+------------------------------------------+
-| Resource                 | Modeled by                               |
-+--------------------------+------------------------------------------+
-| Vector ALU(s)            | `vectorALUs` and `WaitClass`             |
-| Scalar ALU(s)            | `scalarALUs` and `WaitClass`             |
-| Vector Global Mem Pipe   | `vectorGlobalMemUnit`                    |
-| Vector Local Mem Pipe    | `vectorSharedMemUnit`                    |
-| Scalar Mem Pipe          | `scalarMemUnit`                          |
-+--------------------------+------------------------------------------+
++------------------------+------------------------------+
+| Resource               | Modeled by                   |
++------------------------+------------------------------+
+| Vector ALU(s)          | `vectorALUs` and `WaitClass` |
+| Scalar ALU(s)          | `scalarALUs` and `WaitClass` |
+| Vector Global Mem Pipe | `vectorGlobalMemUnit`        |
+| Vector Local Mem Pipe  | `vectorSharedMemUnit`        |
+| Scalar Mem Pipe        | `scalarMemUnit`              |
++------------------------+------------------------------+
 ```
 
 The number of each resource is parameterized in `GPU.py` (e.g.,
@@ -1390,16 +1390,16 @@ The most effective analyses combine a small number of statistics that map
 directly to pipeline stages. The table below provides a quick correlation:
 
 ```text
-+--------------------+---------------------------------------------+
-| Pipeline phase     | Representative stats                         |
-+--------------------+---------------------------------------------+
-| Fetch              | `FetchStage.instFetchInstReturned`           |
-| Scoreboard         | `ScoreboardCheckStage.stallCycles`           |
-| Schedule/RF access | `ScheduleStage.rfAccessStalls`               |
-| Execute            | `ExecStage.numCyclesWithInstrIssued`         |
-| Global memory      | `GlobalMemPipeline.loadVrfBankConflictCycles`|
-| Translation        | `TLB.*` and `Coalescer.queuingCycles`        |
-+--------------------+---------------------------------------------+
++--------------------+-----------------------------------------------+
+| Pipeline phase     | Representative stats                          |
++--------------------+-----------------------------------------------+
+| Fetch              | `FetchStage.instFetchInstReturned`            |
+| Scoreboard         | `ScoreboardCheckStage.stallCycles`            |
+| Schedule/RF access | `ScheduleStage.rfAccessStalls`                |
+| Execute            | `ExecStage.numCyclesWithInstrIssued`          |
+| Global memory      | `GlobalMemPipeline.loadVrfBankConflictCycles` |
+| Translation        | `TLB.*` and `Coalescer.queuingCycles`         |
++--------------------+-----------------------------------------------+
 ```
 
 In practice, large changes in application performance typically align with
@@ -1633,62 +1633,62 @@ Wavefront -> Schedule -> Exec -> LocalMemPipeline -> LDS
 ### D.1 Compute Unit Defaults (from GPU.py)
 
 ```text
-+------------------------------+----------------------+----------------------+
-| Parameter                    | Default              | Meaning              |
-+------------------------------+----------------------+----------------------+
-| wf_size                      | 64                   | Wavefront size       |
-| num_SIMDs                    | 4                    | SIMDs per CU         |
-| n_wf                         | 10                   | WFs per SIMD         |
-| simd_width                   | 16                   | Lanes per SIMD       |
-| issue_period                 | 4                    | Issue spacing        |
-| operand_network_length       | 1                    | Operand network      |
-| spbypass_pipe_length         | 4                    | SP bypass latency    |
-| dpbypass_pipe_length         | 4                    | DP bypass latency    |
-| scalar_pipe_length           | 1                    | Scalar ALU stages    |
-| rfc_pipe_length              | 2                    | RFC latency          |
-| num_global_mem_pipes         | 1                    | GM pipelines         |
-| num_shared_mem_pipes         | 1                    | LM pipelines         |
-| num_scalar_mem_pipes         | 1                    | Scalar mem pipes     |
-| mem_req_latency              | 50                   | Vector req latency   |
-| mem_resp_latency             | 50                   | Vector resp latency  |
-| scalar_mem_req_latency       | 50                   | Scalar req latency   |
-| scalar_mem_resp_latency      | 50                   | Scalar resp latency  |
-| global_mem_queue_size        | 256                  | GM queue entries     |
-| local_mem_queue_size         | 256                  | LM queue entries     |
-| scalar_mem_queue_size        | 32                   | Scalar queue entries |
-| max_wave_requests            | 64                   | Per-WF vmem limit    |
-| max_cu_tokens                | 4                    | Coalescer tokens     |
-+------------------------------+----------------------+----------------------+
++-------------------------+---------+----------------------+
+| Parameter               | Default | Meaning              |
++-------------------------+---------+----------------------+
+| wf_size                 | 64      | Wavefront size       |
+| num_SIMDs               | 4       | SIMDs per CU         |
+| n_wf                    | 10      | WFs per SIMD         |
+| simd_width              | 16      | Lanes per SIMD       |
+| issue_period            | 4       | Issue spacing        |
+| operand_network_length  | 1       | Operand network      |
+| spbypass_pipe_length    | 4       | SP bypass latency    |
+| dpbypass_pipe_length    | 4       | DP bypass latency    |
+| scalar_pipe_length      | 1       | Scalar ALU stages    |
+| rfc_pipe_length         | 2       | RFC latency          |
+| num_global_mem_pipes    | 1       | GM pipelines         |
+| num_shared_mem_pipes    | 1       | LM pipelines         |
+| num_scalar_mem_pipes    | 1       | Scalar mem pipes     |
+| mem_req_latency         | 50      | Vector req latency   |
+| mem_resp_latency        | 50      | Vector resp latency  |
+| scalar_mem_req_latency  | 50      | Scalar req latency   |
+| scalar_mem_resp_latency | 50      | Scalar resp latency  |
+| global_mem_queue_size   | 256     | GM queue entries     |
+| local_mem_queue_size    | 256     | LM queue entries     |
+| scalar_mem_queue_size   | 32      | Scalar queue entries |
+| max_wave_requests       | 64      | Per-WF vmem limit    |
+| max_cu_tokens           | 4       | Coalescer tokens     |
++-------------------------+---------+----------------------+
 ```
 
 ### D.2 Shader Defaults (from GPU.py)
 
 ```text
-+----------------------------+----------------------+----------------------+
-| Parameter                  | Default              | Meaning              |
-+----------------------------+----------------------+----------------------+
-| n_wf                       | 10                   | WFs per SIMD         |
-| cu_per_sqc                 | 4                    | CUs per SQC          |
-| impl_kern_launch_acq       | True                 | Insert acquire       |
-| impl_kern_end_rel          | False                | Insert release       |
-| globalmem                  | 64KiB                | Global mem size      |
-| progress_interval          | 0                    | Progress logging     |
-+----------------------------+----------------------+----------------------+
++----------------------+---------+------------------+
+| Parameter            | Default | Meaning          |
++----------------------+---------+------------------+
+| n_wf                 | 10      | WFs per SIMD     |
+| cu_per_sqc           | 4       | CUs per SQC      |
+| impl_kern_launch_acq | True    | Insert acquire   |
+| impl_kern_end_rel    | False   | Insert release   |
+| globalmem            | 64KiB   | Global mem size  |
+| progress_interval    | 0       | Progress logging |
++----------------------+---------+------------------+
 ```
 
 ### D.3 TLB Defaults (ViperShader example)
 
 ```text
-+----------------------------+----------------------+----------------------+
-| Parameter                  | Example default      | Meaning              |
-+----------------------------+----------------------+----------------------+
-| size                       | 64                   | TLB entries          |
-| assoc                      | 64                   | Associativity        |
-| hitLatency                 | 1                    | Hit cycles           |
-| missLatency1               | 750                  | Miss latency stage 1 |
-| missLatency2               | 750                  | Miss latency stage 2 |
-| maxOutstandingReqs         | 64                   | Outstanding reqs     |
-+----------------------------+----------------------+----------------------+
++--------------------+-----------------+----------------------+
+| Parameter          | Example default | Meaning              |
++--------------------+-----------------+----------------------+
+| size               | 64              | TLB entries          |
+| assoc              | 64              | Associativity        |
+| hitLatency         | 1               | Hit cycles           |
+| missLatency1       | 750             | Miss latency stage 1 |
+| missLatency2       | 750             | Miss latency stage 2 |
+| maxOutstandingReqs | 64              | Outstanding reqs     |
++--------------------+-----------------+----------------------+
 ```
 
 ---
@@ -1696,23 +1696,23 @@ Wavefront -> Schedule -> Exec -> LocalMemPipeline -> LDS
 ## Appendix E: Glossary and Acronyms
 
 ```text
-+------------------+---------------------------------------------------------+
-| Term             | Definition                                              |
-+------------------+---------------------------------------------------------+
-| AQL              | AMD Queueing Language packet format for HSA.            |
-| CU               | Compute Unit.                                           |
-| GFX              | GPU ISA version (gfx900, gfx90a, gfx942, etc.).          |
-| HSA              | Heterogeneous System Architecture.                      |
-| IB               | Instruction Buffer per wavefront.                       |
-| LDS              | Local Data Share (shared memory).                       |
-| MQD/HQD          | Memory/Hardware queue descriptor.                       |
-| SALU/VALU        | Scalar/Vector ALU.                                      |
-| SQC/TCP/TCC      | I-cache / L1 data cache / L2 cache in VIPER.            |
-| TLB              | Translation Lookaside Buffer.                           |
-| VF               | Vector Function (in code, often refers to vector ops).  |
-| VMID/PASID       | Virtual memory identifiers.                             |
-| WF               | Wavefront.                                              |
-+------------------+---------------------------------------------------------+
++-------------+--------------------------------------------------------+
+| Term        | Definition                                             |
++-------------+--------------------------------------------------------+
+| AQL         | AMD Queueing Language packet format for HSA.           |
+| CU          | Compute Unit.                                          |
+| GFX         | GPU ISA version (gfx900, gfx90a, gfx942, etc.).        |
+| HSA         | Heterogeneous System Architecture.                     |
+| IB          | Instruction Buffer per wavefront.                      |
+| LDS         | Local Data Share (shared memory).                      |
+| MQD/HQD     | Memory/Hardware queue descriptor.                      |
+| SALU/VALU   | Scalar/Vector ALU.                                     |
+| SQC/TCP/TCC | I-cache / L1 data cache / L2 cache in VIPER.           |
+| TLB         | Translation Lookaside Buffer.                          |
+| VF          | Vector Function (in code, often refers to vector ops). |
+| VMID/PASID  | Virtual memory identifiers.                            |
+| WF          | Wavefront.                                             |
++-------------+--------------------------------------------------------+
 ```
 
 ---
@@ -1990,34 +1990,34 @@ MI300X, and MI355X classes in
 ### J.1 Compute and Cache Configuration
 
 ```text
-+------------------+-----------+-----------+-----------+
-| Parameter        | MI210     | MI300X    | MI355X    |
-+------------------+-----------+-----------+-----------+
-| num_cus          | 32        | 40        | 40        |
-| cu_per_sqc       | 4         | 4         | 4         |
-| tcp_size         | 16 KiB    | 16 KiB    | 16 KiB    |
-| tcp_assoc        | 16        | 16        | 16        |
-| sqc_size         | 32 KiB    | 32 KiB    | 32 KiB    |
-| sqc_assoc        | 8         | 8         | 8         |
-| scalar_size      | 32 KiB    | 32 KiB    | 32 KiB    |
-| scalar_assoc     | 8         | 8         | 8         |
-| tcc_size         | 256 KiB   | 256 KiB   | 256 KiB   |
-| tcc_assoc        | 16        | 16        | 16        |
-| tcc_count        | 8         | 16        | 16        |
-| cache_line_size  | 64        | 64        | 64        |
-+------------------+-----------+-----------+-----------+
++-----------------+---------+---------+---------+
+| Parameter       | MI210   | MI300X  | MI355X  |
++-----------------+---------+---------+---------+
+| num_cus         | 32      | 40      | 40      |
+| cu_per_sqc      | 4       | 4       | 4       |
+| tcp_size        | 16 KiB  | 16 KiB  | 16 KiB  |
+| tcp_assoc       | 16      | 16      | 16      |
+| sqc_size        | 32 KiB  | 32 KiB  | 32 KiB  |
+| sqc_assoc       | 8       | 8       | 8       |
+| scalar_size     | 32 KiB  | 32 KiB  | 32 KiB  |
+| scalar_assoc    | 8       | 8       | 8       |
+| tcc_size        | 256 KiB | 256 KiB | 256 KiB |
+| tcc_assoc       | 16      | 16      | 16      |
+| tcc_count       | 8       | 16      | 16      |
+| cache_line_size | 64      | 64      | 64      |
++-----------------+---------+---------+---------+
 ```
 
 ### J.2 Device Identification
 
 ```text
-+------------------+-----------+-----------+-----------+
-| Field            | MI210     | MI300X    | MI355X    |
-+------------------+-----------+-----------+-----------+
-| device_name      | MI200     | MI300X    | MI300X    |
-| DeviceID         | 0x740F    | 0x74A1    | 0x75A0    |
-| SubsystemID      | 0x0C34    | 0x0C34    | 0x0C34    |
-+------------------+-----------+-----------+-----------+
++-------------+--------+--------+--------+
+| Field       | MI210  | MI300X | MI355X |
++-------------+--------+--------+--------+
+| device_name | MI200  | MI300X | MI300X |
+| DeviceID    | 0x740F | 0x74A1 | 0x75A0 |
+| SubsystemID | 0x0C34 | 0x0C34 | 0x0C34 |
++-------------+--------+--------+--------+
 ```
 
 These prebuilt configurations also instantiate SDMA engines and PM4
@@ -2034,36 +2034,36 @@ AMDGPU model.
 ### K.1 Debug Flags
 
 ```text
-+-------------------+---------------------------------------------+
-| Flag              | Typical Use                                 |
-+-------------------+---------------------------------------------+
-| GPUFetch          | Fetch and decode tracing                    |
-| GPUExec           | Execution and scoreboard events             |
-| GPUSched          | Scheduling, schList/dispatchList decisions  |
-| GPUMem            | Memory pipeline activity                    |
-| GPUCoalescer      | Coalescer token and request tracking         |
-| GPUTLB            | TLB accesses and translation results         |
-| GPUPrefetch       | Prefetch generation                          |
-| GPUDisp           | Workgroup dispatch events                    |
-| GPUWgLatency      | Workgroup latency tracking                   |
-| GPUTrace          | Detailed instruction tracing                 |
-+-------------------+---------------------------------------------+
++--------------+--------------------------------------------+
+| Flag         | Typical Use                                |
++--------------+--------------------------------------------+
+| GPUFetch     | Fetch and decode tracing                   |
+| GPUExec      | Execution and scoreboard events            |
+| GPUSched     | Scheduling, schList/dispatchList decisions |
+| GPUMem       | Memory pipeline activity                   |
+| GPUCoalescer | Coalescer token and request tracking       |
+| GPUTLB       | TLB accesses and translation results       |
+| GPUPrefetch  | Prefetch generation                        |
+| GPUDisp      | Workgroup dispatch events                  |
+| GPUWgLatency | Workgroup latency tracking                 |
+| GPUTrace     | Detailed instruction tracing               |
++--------------+--------------------------------------------+
 ```
 
 ### K.2 Key Statistics to Watch
 
 ```text
-+---------------------------+-------------------------------------------+
-| Statistic                 | Why it Matters                            |
-+---------------------------+-------------------------------------------+
-| CU.totalCycles            | Overall CU activity                        |
-| CU.waveLevelParallelism   | Occupancy across wavefronts                |
-| ScheduleStage.rfAccessStalls| RF bottleneck indicator                   |
-| ExecStage.numCyclesWithNoIssue| Execution idle cycles                  |
-| GlobalMemPipeline.loadVrfBankConflictCycles| LDS/VRF contention        |
-| TLB.localTLBMissRate      | Translation efficiency                     |
-| Coalescer.queuingCycles   | Translation congestion                     |
-+---------------------------+-------------------------------------------+
++---------------------------------------------+-----------------------------+
+| Statistic                                   | Why it Matters              |
++---------------------------------------------+-----------------------------+
+| CU.totalCycles                              | Overall CU activity         |
+| CU.waveLevelParallelism                     | Occupancy across wavefronts |
+| ScheduleStage.rfAccessStalls                | RF bottleneck indicator     |
+| ExecStage.numCyclesWithNoIssue              | Execution idle cycles       |
+| GlobalMemPipeline.loadVrfBankConflictCycles | LDS/VRF contention          |
+| TLB.localTLBMissRate                        | Translation efficiency      |
+| Coalescer.queuingCycles                     | Translation congestion      |
++---------------------------------------------+-----------------------------+
 ```
 
 ---
@@ -2081,18 +2081,18 @@ The walkthrough uses a simplified but representative configuration that
 matches common defaults in `src/gpu-compute/GPU.py`.
 
 ```text
-+-----------------------------+-------------------------------------------+
-| Assumed item                | Value / reference                          |
-+-----------------------------+-------------------------------------------+
-| Wavefront size              | 64 lanes (`ComputeUnit.wf_size`)           |
-| SIMD width                  | 16 lanes (`ComputeUnit.simd_width`)        |
-| Wavefront slots per SIMD    | 10 (`ComputeUnit.n_wf`)                    |
-| Global mem pipes per CU     | 1 (`ComputeUnit.num_global_mem_pipes`)     |
-| Local mem pipes per CU      | 1 (`ComputeUnit.num_shared_mem_pipes`)     |
-| Scalar mem pipes per CU     | 1 (`ComputeUnit.num_scalar_mem_pipes`)     |
-| IB capacity per wavefront   | 13 insts (`Wavefront.max_ib_size`)         |
-| Execution policy            | Oldest-first (`ComputeUnit.execPolicy`)    |
-+-----------------------------+-------------------------------------------+
++---------------------------+-----------------------------------------+
+| Assumed item              | Value / reference                       |
++---------------------------+-----------------------------------------+
+| Wavefront size            | 64 lanes (`ComputeUnit.wf_size`)        |
+| SIMD width                | 16 lanes (`ComputeUnit.simd_width`)     |
+| Wavefront slots per SIMD  | 10 (`ComputeUnit.n_wf`)                 |
+| Global mem pipes per CU   | 1 (`ComputeUnit.num_global_mem_pipes`)  |
+| Local mem pipes per CU    | 1 (`ComputeUnit.num_shared_mem_pipes`)  |
+| Scalar mem pipes per CU   | 1 (`ComputeUnit.num_scalar_mem_pipes`)  |
+| IB capacity per wavefront | 13 insts (`Wavefront.max_ib_size`)      |
+| Execution policy          | Oldest-first (`ComputeUnit.execPolicy`) |
++---------------------------+-----------------------------------------+
 ```
 
 The concrete control logic appears in these stage classes:
@@ -2109,14 +2109,14 @@ and includes a vector ALU op, a vector load, a waitcnt barrier, and a
 dependent vector ALU op.
 
 ```text
-+------+-------------------+-------------------------+-----------------------+
-| Step | Instruction class | Primary operands        | Notes                 |
-+------+-------------------+-------------------------+-----------------------+
-| A    | VALU              | VGPR, VGPR -> VGPR       | Pure ALU              |
-| B    | VMEM load          | VGPR addr -> VGPR       | Global memory load    |
-| C    | WAITCNT            | -                       | Wait for VMEM         |
-| D    | VALU              | VGPR (from B) -> VGPR    | Dependent on load     |
-+------+-------------------+-------------------------+-----------------------+
++------+-------------------+-----------------------+--------------------+
+| Step | Instruction class | Primary operands      | Notes              |
++------+-------------------+-----------------------+--------------------+
+| A    | VALU              | VGPR, VGPR -> VGPR    | Pure ALU           |
+| B    | VMEM load         | VGPR addr -> VGPR     | Global memory load |
+| C    | WAITCNT           | -                     | Wait for VMEM      |
+| D    | VALU              | VGPR (from B) -> VGPR | Dependent on load  |
++------+-------------------+-----------------------+--------------------+
 ```
 
 This sequence is a useful probe because it triggers operand collection,
@@ -2217,19 +2217,19 @@ drive pipeline routing and hazard checks. The table below summarizes the
 most important categories.
 
 ```text
-+--------------------+-------------------------------+---------------------+
-| Category           | Key flags                     | Pipeline impact     |
-+--------------------+-------------------------------+---------------------+
-| Vector ALU         | `ALU`, not `Scalar`            | VALU issue path     |
-| Scalar ALU         | `ALU`, `Scalar`                | SALU issue path     |
-| Vector memory      | `MemoryRef`, not `Scalar`      | Global/Local mem    |
-| Scalar memory      | `MemoryRef`, `Scalar`          | Scalar mem pipe     |
-| Flat memory        | `Flat`, `MemoryRef`            | Flat path routing   |
-| Branch             | `Branch` or `CondBranch`       | Control flow logic  |
-| Barrier / sync     | `MemBarrier`, `MemSync`        | Scoreboard stall    |
-| Waitcnt / sleep    | `Waitcnt`, `Sleep`             | Scoreboard stall    |
-| End of kernel      | `EndOfKernel`                  | Wavefront retire    |
-+--------------------+-------------------------------+---------------------+
++-----------------+---------------------------+--------------------+
+| Category        | Key flags                 | Pipeline impact    |
++-----------------+---------------------------+--------------------+
+| Vector ALU      | `ALU`, not `Scalar`       | VALU issue path    |
+| Scalar ALU      | `ALU`, `Scalar`           | SALU issue path    |
+| Vector memory   | `MemoryRef`, not `Scalar` | Global/Local mem   |
+| Scalar memory   | `MemoryRef`, `Scalar`     | Scalar mem pipe    |
+| Flat memory     | `Flat`, `MemoryRef`       | Flat path routing  |
+| Branch          | `Branch` or `CondBranch`  | Control flow logic |
+| Barrier / sync  | `MemBarrier`, `MemSync`   | Scoreboard stall   |
+| Waitcnt / sleep | `Waitcnt`, `Sleep`        | Scoreboard stall   |
+| End of kernel   | `EndOfKernel`             | Wavefront retire   |
++-----------------+---------------------------+--------------------+
 ```
 
 The pipeline uses these flags rather than opcode strings, which ensures
@@ -2244,16 +2244,16 @@ Operands are described by `OperandInfo` and the GPU ISA register encoding.
 The semantics are:
 
 ```text
-+---------------------+-----------------------------------------------+
-| Operand kind         | Semantics in gem5                            |
-+---------------------+-----------------------------------------------+
-| SGPR operand         | Scalar register, shared by wavefront          |
-| VGPR operand         | Vector register, per-lane values              |
-| Immediate            | Literal or constant (no RF access)            |
-| VCC                  | Condition code vector register                |
-| EXEC                 | Execution mask register                       |
-| FLAT/SCRATCH         | Flat or scratch address register              |
-+---------------------+-----------------------------------------------+
++--------------+--------------------------------------+
+| Operand kind | Semantics in gem5                    |
++--------------+--------------------------------------+
+| SGPR operand | Scalar register, shared by wavefront |
+| VGPR operand | Vector register, per-lane values     |
+| Immediate    | Literal or constant (no RF access)   |
+| VCC          | Condition code vector register       |
+| EXEC         | Execution mask register              |
+| FLAT/SCRATCH | Flat or scratch address register     |
++--------------+--------------------------------------+
 ```
 
 `OperandInfo` carries flags such as `SCALAR_REG`, `VECTOR_REG`, `IMMEDIATE`,
@@ -2271,15 +2271,15 @@ register indices, and then to physical registers once the wavefront has
 been allocated a register region.
 
 ```text
-+----------------------+-------------------------------+--------------------+
-| Operand size         | Dwords                        | RF registers used  |
-+----------------------+-------------------------------+--------------------+
-| 32-bit scalar        | 1                             | 1 SGPR             |
-| 32-bit vector        | 1 per lane                    | 1 VGPR             |
-| 64-bit scalar        | 2                             | 2 SGPRs            |
-| 64-bit vector        | 2 per lane                    | 2 VGPRs            |
-| 128-bit vector       | 4 per lane                    | 4 VGPRs            |
-+----------------------+-------------------------------+--------------------+
++----------------+------------+-------------------+
+| Operand size   | Dwords     | RF registers used |
++----------------+------------+-------------------+
+| 32-bit scalar  | 1          | 1 SGPR            |
+| 32-bit vector  | 1 per lane | 1 VGPR            |
+| 64-bit scalar  | 2          | 2 SGPRs           |
+| 64-bit vector  | 2 per lane | 2 VGPRs           |
+| 128-bit vector | 4 per lane | 4 VGPRs           |
++----------------+------------+-------------------+
 ```
 
 The operand size directly drives RF read and write bandwidth demands in
@@ -2446,25 +2446,25 @@ The `ComputeUnit` SimObject in `src/gpu-compute/GPU.py` provides the
 following parameters that directly affect memory timing and queueing.
 
 ```text
-+------------------------------+-----------+-----------------------------+
-| Parameter                    | Default   | Meaning                     |
-+------------------------------+-----------+-----------------------------+
-| `mem_req_latency`            | 50        | CU->L1/TCP request latency  |
-| `mem_resp_latency`           | 50        | L1/TCP->CU response latency |
-| `scalar_mem_req_latency`     | 50        | Scalar req latency          |
-| `scalar_mem_resp_latency`    | 50        | Scalar resp latency         |
-| `memtime_latency`            | 41        | Scalar memtime op latency   |
-| `global_mem_queue_size`      | 256       | Global mem pipe queues      |
-| `local_mem_queue_size`       | 256       | Local mem pipe queues       |
-| `scalar_mem_queue_size`      | 32        | Scalar mem pipe queues      |
-| `max_wave_requests`          | 64        | Per-wave outstanding reqs   |
-| `max_cu_tokens`              | 4         | Coalescer token limit       |
-| `vrf_gm_bus_latency`         | 1         | VRF->global mem bus delay   |
-| `vrf_lm_bus_latency`         | 1         | VRF->local mem bus delay    |
-| `srf_scm_bus_latency`        | 1         | SRF->scalar mem bus delay   |
-| `vrf_to_coalescer_bus_width` | 64 bytes  | VRF->coalescer bandwidth    |
-| `coalescer_to_vrf_bus_width` | 64 bytes  | Coalescer->VRF bandwidth    |
-+------------------------------+-----------+-----------------------------+
++------------------------------+----------+-----------------------------+
+| Parameter                    | Default  | Meaning                     |
++------------------------------+----------+-----------------------------+
+| `mem_req_latency`            | 50       | CU->L1/TCP request latency  |
+| `mem_resp_latency`           | 50       | L1/TCP->CU response latency |
+| `scalar_mem_req_latency`     | 50       | Scalar req latency          |
+| `scalar_mem_resp_latency`    | 50       | Scalar resp latency         |
+| `memtime_latency`            | 41       | Scalar memtime op latency   |
+| `global_mem_queue_size`      | 256      | Global mem pipe queues      |
+| `local_mem_queue_size`       | 256      | Local mem pipe queues       |
+| `scalar_mem_queue_size`      | 32       | Scalar mem pipe queues      |
+| `max_wave_requests`          | 64       | Per-wave outstanding reqs   |
+| `max_cu_tokens`              | 4        | Coalescer token limit       |
+| `vrf_gm_bus_latency`         | 1        | VRF->global mem bus delay   |
+| `vrf_lm_bus_latency`         | 1        | VRF->local mem bus delay    |
+| `srf_scm_bus_latency`        | 1        | SRF->scalar mem bus delay   |
+| `vrf_to_coalescer_bus_width` | 64 bytes | VRF->coalescer bandwidth    |
+| `coalescer_to_vrf_bus_width` | 64 bytes | Coalescer->VRF bandwidth    |
++------------------------------+----------+-----------------------------+
 ```
 
 These parameters feed the queueing and timing behavior in the global,
@@ -2480,44 +2480,44 @@ The GPU TLB and coalescer defaults are defined in
 latency and the effectiveness of address coalescing.
 
 ```text
-+--------------------------+-----------+--------------------------------+
-| Parameter                | Default   | Meaning                        |
-+--------------------------+-----------+--------------------------------+
-| `VegaGPUTLB.size`        | 64        | Entries in the TLB             |
-| `VegaGPUTLB.assoc`       | 64        | TLB associativity              |
-| `VegaGPUTLB.hitLatency`  | 2         | Hit latency (cycles)           |
-| `VegaGPUTLB.missLatency1`| 5         | Miss stage 1 latency           |
-| `VegaGPUTLB.missLatency2`| 100       | Miss stage 2 latency           |
-| `VegaGPUTLB.maxOutstandingReqs` | 64 | Max outstanding translations   |
-| `VegaGPUTLB.allocationPolicy`   | True | Allocate on access           |
-+--------------------------+-----------+--------------------------------+
++---------------------------------+---------+------------------------------+
+| Parameter                       | Default | Meaning                      |
++---------------------------------+---------+------------------------------+
+| `VegaGPUTLB.size`               | 64      | Entries in the TLB           |
+| `VegaGPUTLB.assoc`              | 64      | TLB associativity            |
+| `VegaGPUTLB.hitLatency`         | 2       | Hit latency (cycles)         |
+| `VegaGPUTLB.missLatency1`       | 5       | Miss stage 1 latency         |
+| `VegaGPUTLB.missLatency2`       | 100     | Miss stage 2 latency         |
+| `VegaGPUTLB.maxOutstandingReqs` | 64      | Max outstanding translations |
+| `VegaGPUTLB.allocationPolicy`   | True    | Allocate on access           |
++---------------------------------+---------+------------------------------+
 ```
 
 ```text
-+-------------------------------+-----------+----------------------------+
-| Coalescer parameter           | Default   | Meaning                    |
-+-------------------------------+-----------+----------------------------+
-| `VegaTLBCoalescer.tlb_level`  | 64        | Level identifier           |
-| `VegaTLBCoalescer.default_pgSize` | 2MiB  | Default coalesce page size |
-| `VegaTLBCoalescer.maxDownstream` | 64     | Downstream limit           |
-| `VegaTLBCoalescer.probesPerCycle` | 2     | TLB probes per cycle       |
-| `VegaTLBCoalescer.coalescingWindow` | 1   | Coalesce window (ticks)    |
-| `VegaTLBCoalescer.disableCoalescing` | False | Disable coalescing     |
-+-------------------------------+-----------+----------------------------+
++--------------------------------------+---------+----------------------------+
+| Coalescer parameter                  | Default | Meaning                    |
++--------------------------------------+---------+----------------------------+
+| `VegaTLBCoalescer.tlb_level`         | 64      | Level identifier           |
+| `VegaTLBCoalescer.default_pgSize`    | 2MiB    | Default coalesce page size |
+| `VegaTLBCoalescer.maxDownstream`     | 64      | Downstream limit           |
+| `VegaTLBCoalescer.probesPerCycle`    | 2       | TLB probes per cycle       |
+| `VegaTLBCoalescer.coalescingWindow`  | 1       | Coalesce window (ticks)    |
+| `VegaTLBCoalescer.disableCoalescing` | False   | Disable coalescing         |
++--------------------------------------+---------+----------------------------+
 ```
 
 The page-table walker and page walk cache are configured in
 `VegaPagetableWalker`:
 
 ```text
-+---------------------------------+-----------+--------------------------+
-| Parameter                       | Default   | Meaning                  |
-+---------------------------------+-----------+--------------------------+
-| `page_walk_cache_entries`       | 64        | PWC entries              |
-| `enable_pwc`                    | True      | Enable page walk cache   |
-| `pwc_replacement_policy`        | LRU       | Replacement policy       |
-| `pwc_indexing_policy`           | GPU PWC   | GPU-specific indexing    |
-+---------------------------------+-----------+--------------------------+
++---------------------------+---------+------------------------+
+| Parameter                 | Default | Meaning                |
++---------------------------+---------+------------------------+
+| `page_walk_cache_entries` | 64      | PWC entries            |
+| `enable_pwc`              | True    | Enable page walk cache |
+| `pwc_replacement_policy`  | LRU     | Replacement policy     |
+| `pwc_indexing_policy`     | GPU PWC | GPU-specific indexing  |
++---------------------------+---------+------------------------+
 ```
 
 ### O.3 Interpretation Notes
@@ -2609,17 +2609,17 @@ The following statistics and debug flags are helpful for validating the
 end-to-end behavior:
 
 ```text
-+----------------------------+--------------------------------------------+
-| Signal                     | Why it matters                             |
-+----------------------------+--------------------------------------------+
-| `CU.totalCycles`           | Active CU time                             |
-| `CU.waveLevelParallelism`  | Occupancy and latency hiding               |
-| `ScheduleStage.rfAccessStalls` | RF bandwidth bottlenecks              |
-| `ExecStage.numCyclesWithNoIssue` | Issue starvation                   |
-| `TLB.localTLBMissRate`     | Translation pressure                       |
-| `Coalescer.queuingCycles`  | Translation queueing                        |
-| `GlobalMemPipeline.loadVrfBankConflictCycles` | VRF/LDS contention |
-+----------------------------+--------------------------------------------+
++-----------------------------------------------+------------------------------+
+| Signal                                        | Why it matters               |
++-----------------------------------------------+------------------------------+
+| `CU.totalCycles`                              | Active CU time               |
+| `CU.waveLevelParallelism`                     | Occupancy and latency hiding |
+| `ScheduleStage.rfAccessStalls`                | RF bandwidth bottlenecks     |
+| `ExecStage.numCyclesWithNoIssue`              | Issue starvation             |
+| `TLB.localTLBMissRate`                        | Translation pressure         |
+| `Coalescer.queuingCycles`                     | Translation queueing         |
+| `GlobalMemPipeline.loadVrfBankConflictCycles` | VRF/LDS contention           |
++-----------------------------------------------+------------------------------+
 ```
 
 The debug flags `GPUDisp`, `GPUFetch`, `GPUVRF`, and `GPUMem` provide
@@ -2640,15 +2640,15 @@ Workgroup-level barriers consume explicit resources in the CU. These
 resources are finite and can therefore limit workgroup residency.
 
 ```text
-+------------------------------+-------------------------------------------+
-| Field / parameter            | Purpose                                   |
-+------------------------------+-------------------------------------------+
-| `ComputeUnit.num_barrier_slots` | Total barrier slots per CU            |
-| `ComputeUnit.wfBarrierSlots[]`  | Vector of `WFBarrier` entries         |
-| `WFBarrier::numAtBarrier()`     | WFs that have reached the barrier     |
-| `WFBarrier::maxBarrierCnt()`    | WFs participating in this barrier     |
-| `WFBarrier::InvalidID`          | Sentinel for "no barrier"             |
-+------------------------------+-------------------------------------------+
++---------------------------------+-----------------------------------+
+| Field / parameter               | Purpose                           |
++---------------------------------+-----------------------------------+
+| `ComputeUnit.num_barrier_slots` | Total barrier slots per CU        |
+| `ComputeUnit.wfBarrierSlots[]`  | Vector of `WFBarrier` entries     |
+| `WFBarrier::numAtBarrier()`     | WFs that have reached the barrier |
+| `WFBarrier::maxBarrierCnt()`    | WFs participating in this barrier |
+| `WFBarrier::InvalidID`          | Sentinel for "no barrier"         |
++---------------------------------+-----------------------------------+
 ```
 
 A workgroup that contains more than one wavefront is assigned a barrier
@@ -2686,26 +2686,26 @@ memory operations. The counters live in `Wavefront` and are incremented by
 the memory pipelines when operations are issued.
 
 ```text
-+--------------------------------+-----------------------------------------+
-| Counter / set                  | Meaning                                 |
-+--------------------------------+-----------------------------------------+
-| `outstandingReqs`              | Total outstanding memory operations     |
-| `outstandingReqsWrGm`          | Global memory writes in flight          |
-| `outstandingReqsRdGm`          | Global memory reads in flight           |
-| `outstandingReqsWrLm`          | LDS writes in flight                    |
-| `outstandingReqsRdLm`          | LDS reads in flight                     |
-| `scalarOutstandingReqsWrGm`    | Scalar memory writes in flight          |
-| `scalarOutstandingReqsRdGm`    | Scalar memory reads in flight           |
-| `wrGmReqsInPipe`               | Global write requests currently in pipe |
-| `rdGmReqsInPipe`               | Global read requests currently in pipe  |
-| `wrLmReqsInPipe`               | LDS write requests currently in pipe    |
-| `rdLmReqsInPipe`               | LDS read requests currently in pipe     |
-| `scalarWrGmReqsInPipe`         | Scalar writes in scalar mem pipe        |
-| `scalarRdGmReqsInPipe`         | Scalar reads in scalar mem pipe         |
-| `vmemIssued`                   | Set of issued VMEM ops for waitcnt      |
-| `lgkmIssued`                   | Set of LDS/GM ops for waitcnt           |
-| `expIssued`                    | Export ops for waitcnt                  |
-+--------------------------------+-----------------------------------------+
++-----------------------------+-----------------------------------------+
+| Counter / set               | Meaning                                 |
++-----------------------------+-----------------------------------------+
+| `outstandingReqs`           | Total outstanding memory operations     |
+| `outstandingReqsWrGm`       | Global memory writes in flight          |
+| `outstandingReqsRdGm`       | Global memory reads in flight           |
+| `outstandingReqsWrLm`       | LDS writes in flight                    |
+| `outstandingReqsRdLm`       | LDS reads in flight                     |
+| `scalarOutstandingReqsWrGm` | Scalar memory writes in flight          |
+| `scalarOutstandingReqsRdGm` | Scalar memory reads in flight           |
+| `wrGmReqsInPipe`            | Global write requests currently in pipe |
+| `rdGmReqsInPipe`            | Global read requests currently in pipe  |
+| `wrLmReqsInPipe`            | LDS write requests currently in pipe    |
+| `rdLmReqsInPipe`            | LDS read requests currently in pipe     |
+| `scalarWrGmReqsInPipe`      | Scalar writes in scalar mem pipe        |
+| `scalarRdGmReqsInPipe`      | Scalar reads in scalar mem pipe         |
+| `vmemIssued`                | Set of issued VMEM ops for waitcnt      |
+| `lgkmIssued`                | Set of LDS/GM ops for waitcnt           |
+| `expIssued`                 | Export ops for waitcnt                  |
++-----------------------------+-----------------------------------------+
 ```
 
 When a waitcnt instruction reaches the scoreboard, it consults these
@@ -2751,20 +2751,20 @@ The scoreboard evaluates each wavefront and assigns one of the following
 readiness categories (`ScoreboardCheckStage::nonrdytype_e`).
 
 ```text
-+------------------------+----------------------------------------------+
-| Readiness code         | Meaning                                      |
-+------------------------+----------------------------------------------+
-| `NRDY_ILLEGAL`         | Illegal or unsupported instruction state    |
-| `NRDY_WF_STOP`         | Wavefront not active (stopped)              |
-| `NRDY_IB_EMPTY`        | Instruction buffer empty                    |
-| `NRDY_WAIT_CNT`        | Waitcnt conditions not satisfied            |
-| `NRDY_SLEEP`           | Wavefront in sleep state                    |
-| `NRDY_BARRIER_WAIT`    | Waiting at a barrier                        |
-| `NRDY_VGPR_NRDY`       | Vector register operands not ready          |
-| `NRDY_SGPR_NRDY`       | Scalar register operands not ready          |
-| `NRDY_MATRIX_CORE`     | Matrix core unit not ready                  |
-| `INST_RDY`             | Wavefront ready to schedule                 |
-+------------------------+----------------------------------------------+
++---------------------+------------------------------------------+
+| Readiness code      | Meaning                                  |
++---------------------+------------------------------------------+
+| `NRDY_ILLEGAL`      | Illegal or unsupported instruction state |
+| `NRDY_WF_STOP`      | Wavefront not active (stopped)           |
+| `NRDY_IB_EMPTY`     | Instruction buffer empty                 |
+| `NRDY_WAIT_CNT`     | Waitcnt conditions not satisfied         |
+| `NRDY_SLEEP`        | Wavefront in sleep state                 |
+| `NRDY_BARRIER_WAIT` | Waiting at a barrier                     |
+| `NRDY_VGPR_NRDY`    | Vector register operands not ready       |
+| `NRDY_SGPR_NRDY`    | Scalar register operands not ready       |
+| `NRDY_MATRIX_CORE`  | Matrix core unit not ready               |
+| `INST_RDY`          | Wavefront ready to schedule              |
++---------------------+------------------------------------------+
 ```
 
 These categories are mutually exclusive for a given wavefront in a given
@@ -2778,29 +2778,29 @@ execution resource can accept it. The high-level non-ready reasons are
 enumerated in `ScheduleStage::SchNonRdyType`.
 
 ```text
-+-------------------------------+--------------------------------------------+
-| Schedule non-ready code       | Meaning                                    |
-+-------------------------------+--------------------------------------------+
-| `SCH_SCALAR_ALU_NRDY`         | Scalar ALU not available                   |
-| `SCH_VECTOR_ALU_NRDY`         | Vector ALU not available                   |
-| `SCH_VECTOR_MEM_ISSUE_NRDY`   | Global mem issue resources unavailable     |
-| `SCH_VECTOR_MEM_BUS_BUSY_NRDY`| Global mem bus busy                        |
-| `SCH_VECTOR_MEM_COALESCER_NRDY`| Coalescer unavailable                     |
-| `SCH_VECTOR_MEM_REQS_NRDY`    | Per-wave req limit reached                 |
-| `SCH_CEDE_SIMD_NRDY`          | SIMD ceded or blocked                      |
-| `SCH_SCALAR_MEM_ISSUE_NRDY`   | Scalar mem issue resources unavailable     |
-| `SCH_SCALAR_MEM_BUS_BUSY_NRDY`| Scalar mem bus busy                        |
-| `SCH_SCALAR_MEM_FIFO_NRDY`    | Scalar mem FIFO full                       |
-| `SCH_LOCAL_MEM_ISSUE_NRDY`    | Local mem issue resources unavailable      |
-| `SCH_LOCAL_MEM_BUS_BUSY_NRDY` | Local mem bus busy                         |
-| `SCH_LOCAL_MEM_FIFO_NRDY`     | Local mem FIFO full                        |
-| `SCH_FLAT_MEM_ISSUE_NRDY`     | Flat mem issue resources unavailable       |
-| `SCH_FLAT_MEM_BUS_BUSY_NRDY`  | Flat mem bus busy                          |
-| `SCH_FLAT_MEM_COALESCER_NRDY` | Flat mem coalescer unavailable             |
-| `SCH_FLAT_MEM_REQS_NRDY`      | Flat mem per-wave req limit reached        |
-| `SCH_FLAT_MEM_FIFO_NRDY`      | Flat mem FIFO full                         |
-| `SCH_RDY`                     | Ready for dispatch                         |
-+-------------------------------+--------------------------------------------+
++---------------------------------+----------------------------------------+
+| Schedule non-ready code         | Meaning                                |
++---------------------------------+----------------------------------------+
+| `SCH_SCALAR_ALU_NRDY`           | Scalar ALU not available               |
+| `SCH_VECTOR_ALU_NRDY`           | Vector ALU not available               |
+| `SCH_VECTOR_MEM_ISSUE_NRDY`     | Global mem issue resources unavailable |
+| `SCH_VECTOR_MEM_BUS_BUSY_NRDY`  | Global mem bus busy                    |
+| `SCH_VECTOR_MEM_COALESCER_NRDY` | Coalescer unavailable                  |
+| `SCH_VECTOR_MEM_REQS_NRDY`      | Per-wave req limit reached             |
+| `SCH_CEDE_SIMD_NRDY`            | SIMD ceded or blocked                  |
+| `SCH_SCALAR_MEM_ISSUE_NRDY`     | Scalar mem issue resources unavailable |
+| `SCH_SCALAR_MEM_BUS_BUSY_NRDY`  | Scalar mem bus busy                    |
+| `SCH_SCALAR_MEM_FIFO_NRDY`      | Scalar mem FIFO full                   |
+| `SCH_LOCAL_MEM_ISSUE_NRDY`      | Local mem issue resources unavailable  |
+| `SCH_LOCAL_MEM_BUS_BUSY_NRDY`   | Local mem bus busy                     |
+| `SCH_LOCAL_MEM_FIFO_NRDY`       | Local mem FIFO full                    |
+| `SCH_FLAT_MEM_ISSUE_NRDY`       | Flat mem issue resources unavailable   |
+| `SCH_FLAT_MEM_BUS_BUSY_NRDY`    | Flat mem bus busy                      |
+| `SCH_FLAT_MEM_COALESCER_NRDY`   | Flat mem coalescer unavailable         |
+| `SCH_FLAT_MEM_REQS_NRDY`        | Flat mem per-wave req limit reached    |
+| `SCH_FLAT_MEM_FIFO_NRDY`        | Flat mem FIFO full                     |
+| `SCH_RDY`                       | Ready for dispatch                     |
++---------------------------------+----------------------------------------+
 ```
 
 ### R.3 Operand Readiness vs. RF Access
@@ -2812,27 +2812,27 @@ cycle. These checks have their own taxonomies.
 Operand readiness (`ScheduleStage::schopdnonrdytype_e`):
 
 ```text
-+---------------------------+-------------------------------------------+
-| Code                      | Meaning                                   |
-+---------------------------+-------------------------------------------+
-| `SCH_VRF_OPD_NRDY`        | VRF operand not ready                     |
-| `SCH_SRF_OPD_NRDY`        | SRF operand not ready                     |
-| `SCH_RF_OPD_NRDY`         | Generic RF operand not ready              |
-+---------------------------+-------------------------------------------+
++--------------------+------------------------------+
+| Code               | Meaning                      |
++--------------------+------------------------------+
+| `SCH_VRF_OPD_NRDY` | VRF operand not ready        |
+| `SCH_SRF_OPD_NRDY` | SRF operand not ready        |
+| `SCH_RF_OPD_NRDY`  | Generic RF operand not ready |
++--------------------+------------------------------+
 ```
 
 RF access readiness (`ScheduleStage::schrfaccessnonrdytype_e`):
 
 ```text
-+------------------------------+------------------------------------------+
-| Code                         | Meaning                                  |
-+------------------------------+------------------------------------------+
-| `SCH_VRF_RD_ACCESS_NRDY`     | VRF read port conflict                   |
-| `SCH_VRF_WR_ACCESS_NRDY`     | VRF write port conflict                  |
-| `SCH_SRF_RD_ACCESS_NRDY`     | SRF read port conflict                   |
-| `SCH_SRF_WR_ACCESS_NRDY`     | SRF write port conflict                  |
-| `SCH_RF_ACCESS_NRDY`         | Generic RF access conflict               |
-+------------------------------+------------------------------------------+
++--------------------------+----------------------------+
+| Code                     | Meaning                    |
++--------------------------+----------------------------+
+| `SCH_VRF_RD_ACCESS_NRDY` | VRF read port conflict     |
+| `SCH_VRF_WR_ACCESS_NRDY` | VRF write port conflict    |
+| `SCH_SRF_RD_ACCESS_NRDY` | SRF read port conflict     |
+| `SCH_SRF_WR_ACCESS_NRDY` | SRF write port conflict    |
+| `SCH_RF_ACCESS_NRDY`     | Generic RF access conflict |
++--------------------------+----------------------------+
 ```
 
 These categories are exposed via schedule-stage statistics such as
@@ -2857,15 +2857,15 @@ but limited by a specific execution resource.
 The following mapping is often useful:
 
 ```text
-+------------------------------+-------------------------------------------+
-| Symptom                      | Likely cause                               |
-+------------------------------+-------------------------------------------+
-| High `NRDY_IB_EMPTY`         | Instruction fetch bottleneck              |
-| High `NRDY_WAIT_CNT`         | Memory latency or insufficient occupancy  |
-| High `SCH_VECTOR_MEM_FIFO_NRDY` | Global mem queue saturation            |
-| High `SCH_VRF_RD_ACCESS_NRDY` | VRF bandwidth limit                      |
-| High `ExecStage.numCyclesWithNoIssue` | Global pipeline starvation       |
-+------------------------------+-------------------------------------------+
++---------------------------------------+------------------------------------------+
+| Symptom                               | Likely cause                             |
++---------------------------------------+------------------------------------------+
+| High `NRDY_IB_EMPTY`                  | Instruction fetch bottleneck             |
+| High `NRDY_WAIT_CNT`                  | Memory latency or insufficient occupancy |
+| High `SCH_VECTOR_MEM_FIFO_NRDY`       | Global mem queue saturation              |
+| High `SCH_VRF_RD_ACCESS_NRDY`         | VRF bandwidth limit                      |
+| High `ExecStage.numCyclesWithNoIssue` | Global pipeline starvation               |
++---------------------------------------+------------------------------------------+
 ```
 
 This taxonomy is especially valuable when tuning parameters in Appendix T.
@@ -2898,15 +2898,15 @@ The VIPER cache hierarchy is assembled in
 `src/python/gem5/prebuilt/viper/gpu_cache_hierarchy.py`:
 
 ```text
-+----------------------+---------------------------------------------+
-| Cache / controller   | Role                                        |
-+----------------------+---------------------------------------------+
-| TCP                  | Per-CU vector L1 data cache                 |
-| SQC                  | Instruction cache shared across CUs         |
-| Scalar               | Scalar data cache shared across CUs         |
-| TCC                  | GPU L2 cache (shared across all CUs)        |
-| Directory            | Coherence directory for GPU caches          |
-+----------------------+---------------------------------------------+
++--------------------+--------------------------------------+
+| Cache / controller | Role                                 |
++--------------------+--------------------------------------+
+| TCP                | Per-CU vector L1 data cache          |
+| SQC                | Instruction cache shared across CUs  |
+| Scalar             | Scalar data cache shared across CUs  |
+| TCC                | GPU L2 cache (shared across all CUs) |
+| Directory          | Coherence directory for GPU caches   |
++--------------------+--------------------------------------+
 ```
 
 One TCP is created per CU, while SQC and scalar caches are shared across
@@ -2932,20 +2932,56 @@ virtual networks. The number of virtual networks is important for deadlock
 avoidance and for modeling separate traffic classes for requests and
 responses.
 
-### S.5 Cache and TLB Connections (Diagram)
+### S.5 Cache and TLB Connections (Diagrams)
 
-```
-          +---------------------+
-          |     Compute Unit    |
-          |                     |
-  sqc_port|--> SQC ----> TCC ----+--> memory
-scalar_port|--> Scalar -> TCC ---+
-memory_port|--> VIPERCoalescer -> TCP -> TCC
-translation_port --> TLB coalescer -> GPUTLB -> walker
+The cache wiring below reflects `ViperGPUCacheHierarchy` in
+`src/python/gem5/prebuilt/viper/gpu_cache_hierarchy.py`. The translation
+path reflects `ViperShader` in
+`src/python/gem5/components/devices/gpus/viper_shader.py`, where each CU
+has its own L1 I/Scalar/Vector TLBs that feed shared L2/L3 TLBs and a
+page-table walker.
+
+Cache path (VIPER Ruby, simplified):
+
+```text
+  (per CU) memory_port(s)  -->  VIPERCoalescer  -->  TCP (L1 vector) -----+
+  (cu_per_sqc shared) sqc_port    -->  SQC (L1 I$) -----------------------+
+  (cu_per_sqc shared) scalar_port -->  Scalar (L1 scalar) ----------------+
+                                                                          |
+                                                                          v
+                                                               Ruby network
+                                                                          |
+                                                                          v
+                                                                   TCC (L2)
+                                                                          |
+                                                                          v
+                                                           Directory/Memory
 ```
 
-This diagram omits the Ruby network and directory controllers for clarity,
-but these are present in the default VIPER hierarchy.
+The `gmTokenPort` connects directly to the `VIPERCoalescer` (see
+`gpu_cache_hierarchy.py`) to enforce token-based backpressure and is not
+shown above.
+
+TLB path (VegaGPUTLB hierarchy, simplified):
+
+```text
+  sqc_tlb_port     -->  L1 I-TLB coalescer  -->  L1 I-TLB ------------+
+  scalar_tlb_port  -->  L1 scalar coalescer -->  L1 scalar TLB -------+
+  translation_port -->  L1 vector coalescer -->  L1 vector TLB -------+
+                                                                      |
+                                                                      v
+                                                L2 coalescer --> L2 TLB
+                                                                      |
+                                                                      v
+                                                L3 coalescer --> L3 TLB
+                                                                      |
+                                                                      v
+                                                page-table walker (DMA)
+```
+
+These diagrams omit internal Ruby routers and show shared blocks once.
+The actual VIPER system includes directory and DMA controllers, and the
+page-table walker reaches memory via the GPU DMA path.
 
 ### S.6 Invalidation and Flush Behavior
 
@@ -2980,18 +3016,18 @@ architecture or to perform sensitivity analysis.
 ### T.1 Parameter Groups
 
 ```text
-+-------------------------------+-------------------------------------------+
-| Group                         | Examples                                  |
-+-------------------------------+-------------------------------------------+
-| Fetch and decode              | `operand_network_length`, `rfc_pipe_length` |
-| ALU pipeline                  | `spbypass_pipe_length`, `dpbypass_pipe_length` |
-| Issue cadence                 | `issue_period`, `scalar_pipe_length`      |
-| Memory request/response       | `mem_req_latency`, `mem_resp_latency`     |
-| Scalar memory                 | `scalar_mem_req_latency`, `scalar_mem_resp_latency` |
-| TLB and translation           | `VegaGPUTLB.hitLatency`, `missLatency1/2` |
-| Queue sizes                   | `global_mem_queue_size`, `scalar_mem_queue_size` |
-| Coalescing                    | `max_cu_tokens`, `coalescingWindow`       |
-+-------------------------------+-------------------------------------------+
++-------------------------+-----------------------------------------------------+
+| Group                   | Examples                                            |
++-------------------------+-----------------------------------------------------+
+| Fetch and decode        | `operand_network_length`, `rfc_pipe_length`         |
+| ALU pipeline            | `spbypass_pipe_length`, `dpbypass_pipe_length`      |
+| Issue cadence           | `issue_period`, `scalar_pipe_length`                |
+| Memory request/response | `mem_req_latency`, `mem_resp_latency`               |
+| Scalar memory           | `scalar_mem_req_latency`, `scalar_mem_resp_latency` |
+| TLB and translation     | `VegaGPUTLB.hitLatency`, `missLatency1/2`           |
+| Queue sizes             | `global_mem_queue_size`, `scalar_mem_queue_size`    |
+| Coalescing              | `max_cu_tokens`, `coalescingWindow`                 |
++-------------------------+-----------------------------------------------------+
 ```
 
 ### T.2 Calibration Steps
@@ -3059,16 +3095,16 @@ can be matched against expected behavior or hardware measurements.
 ### U.1 Microbenchmark Categories
 
 ```text
-+------------------------------+-------------------------------------------+
-| Category                     | Primary bottleneck                        |
-+------------------------------+-------------------------------------------+
-| ALU-only kernel              | VALU/SALU issue and bypass latency        |
-| Vector load streaming        | Global memory bandwidth                   |
-| Vector load strided          | Coalescer and TLB behavior                |
-| LDS read/write               | LDS bank conflicts and local mem pipe     |
-| Barrier-heavy kernel         | Barrier slots and waitcnt behavior        |
-| Mixed compute/memory         | Scheduler balance and latency hiding      |
-+------------------------------+-------------------------------------------+
++-----------------------+---------------------------------------+
+| Category              | Primary bottleneck                    |
++-----------------------+---------------------------------------+
+| ALU-only kernel       | VALU/SALU issue and bypass latency    |
+| Vector load streaming | Global memory bandwidth               |
+| Vector load strided   | Coalescer and TLB behavior            |
+| LDS read/write        | LDS bank conflicts and local mem pipe |
+| Barrier-heavy kernel  | Barrier slots and waitcnt behavior    |
+| Mixed compute/memory  | Scheduler balance and latency hiding  |
++-----------------------+---------------------------------------+
 ```
 
 ### U.2 Recommended Signals
@@ -3086,15 +3122,15 @@ than full-application traces.
 ### U.3 Example Validation Matrix
 
 ```text
-+------------------------------+-----------------------------+--------------------+
-| Microbenchmark               | Expected trend              | Key stats          |
-+------------------------------+-----------------------------+--------------------+
-| ALU-only, short loop         | Near-peak issue rate        | `ExecStage` stats  |
-| Load-only, contiguous        | Coalesced bandwidth         | `GlobalMemPipeline` |
-| Load-only, page stride       | High TLB miss rate          | `TLB.*` stats      |
-| LDS ping-pong                | Local mem pipe utilization  | `LocalMemPipeline` |
-| Barrier in tight loop        | Low WLP, high barrier waits | `Scoreboard` stats |
-+------------------------------+-----------------------------+--------------------+
++------------------------+-----------------------------+---------------------+
+| Microbenchmark         | Expected trend              | Key stats           |
++------------------------+-----------------------------+---------------------+
+| ALU-only, short loop   | Near-peak issue rate        | `ExecStage` stats   |
+| Load-only, contiguous  | Coalesced bandwidth         | `GlobalMemPipeline` |
+| Load-only, page stride | High TLB miss rate          | `TLB.*` stats       |
+| LDS ping-pong          | Local mem pipe utilization  | `LocalMemPipeline`  |
+| Barrier in tight loop  | Low WLP, high barrier waits | `Scoreboard` stats  |
++------------------------+-----------------------------+---------------------+
 ```
 
 ### U.4 Validation Workflow
@@ -3157,17 +3193,17 @@ The dispatch packet provides dynamic launch parameters, most of which are
 directly embedded into the queue entry.
 
 ```text
-+----------------------------+-------------------------------------------+
-| Field                      | Usage in gem5                             |
-+----------------------------+-------------------------------------------+
-| `workgroup_size_x/y/z`     | Workgroup dimensions                      |
-| `grid_size_x/y/z`          | Grid dimensions (total work-items)        |
-| `group_segment_size`       | LDS bytes reserved per workgroup          |
-| `private_segment_size`     | Per-work-item private memory              |
-| `kernarg_address`          | Kernel argument base pointer              |
-| `completion_signal`        | Host-visible completion signal            |
-| `kernel_object`            | Pointer to code object / kernel descriptor|
-+----------------------------+-------------------------------------------+
++------------------------+--------------------------------------------+
+| Field                  | Usage in gem5                              |
++------------------------+--------------------------------------------+
+| `workgroup_size_x/y/z` | Workgroup dimensions                       |
+| `grid_size_x/y/z`      | Grid dimensions (total work-items)         |
+| `group_segment_size`   | LDS bytes reserved per workgroup           |
+| `private_segment_size` | Per-work-item private memory               |
+| `kernarg_address`      | Kernel argument base pointer               |
+| `completion_signal`    | Host-visible completion signal             |
+| `kernel_object`        | Pointer to code object / kernel descriptor |
++------------------------+--------------------------------------------+
 ```
 
 The queue entry also tracks the host packet address and code address, which
@@ -3180,18 +3216,18 @@ static metadata that influences resource allocation and initial register
 state. The most performance-critical fields are:
 
 ```text
-+------------------------------------+-----------------------------------------+
-| Field                              | Effect                                  |
-+------------------------------------+-----------------------------------------+
-| `granulated_workitem_vgpr_count`   | VGPR usage per work-item                |
-| `granulated_wavefront_sgpr_count`  | SGPR usage per wavefront                |
-| `granulated_lds_size`              | Static LDS usage granularity            |
-| `kernarg_size`                     | Size of kernel argument block           |
-| `kernarg_preload_spec_length`      | SGPR preload length                     |
-| `kernarg_preload_spec_offset`      | SGPR preload offset                     |
-| `enable_vgpr_workitem_id`          | Enable VGPR work-item IDs               |
-| `enable_sgpr_*` flags              | Enable specific SGPR initializations    |
-+------------------------------------+-----------------------------------------+
++-----------------------------------+--------------------------------------+
+| Field                             | Effect                               |
++-----------------------------------+--------------------------------------+
+| `granulated_workitem_vgpr_count`  | VGPR usage per work-item             |
+| `granulated_wavefront_sgpr_count` | SGPR usage per wavefront             |
+| `granulated_lds_size`             | Static LDS usage granularity         |
+| `kernarg_size`                    | Size of kernel argument block        |
+| `kernarg_preload_spec_length`     | SGPR preload length                  |
+| `kernarg_preload_spec_offset`     | SGPR preload offset                  |
+| `enable_vgpr_workitem_id`         | Enable VGPR work-item IDs            |
+| `enable_sgpr_*` flags             | Enable specific SGPR initializations |
++-----------------------------------+--------------------------------------+
 ```
 
 ### V.4 Register Count Derivation
@@ -3217,20 +3253,20 @@ enumerations to define the ordering of these initial values.
 Scalar initialization fields include:
 
 ```text
-+---------------------------+-------------------------------------------+
-| Field                     | Meaning                                   |
-+---------------------------+-------------------------------------------+
-| `PrivateSegBuf`           | Private segment buffer pointer            |
-| `DispatchPtr`             | Dispatch packet pointer                   |
-| `QueuePtr`                | HSA queue pointer                         |
-| `KernargSegPtr`           | Kernel argument segment pointer           |
-| `DispatchId`              | Dispatch identifier                       |
-| `FlatScratchInit`         | Flat scratch initialization               |
-| `PrivateSegSize`          | Private segment size                      |
-| `WorkgroupIdX/Y/Z`        | Workgroup IDs                             |
-| `WorkgroupInfo`           | Workgroup info metadata                   |
-| `PrivSegWaveByteOffset`   | Private segment wave offset               |
-+---------------------------+-------------------------------------------+
++-------------------------+---------------------------------+
+| Field                   | Meaning                         |
++-------------------------+---------------------------------+
+| `PrivateSegBuf`         | Private segment buffer pointer  |
+| `DispatchPtr`           | Dispatch packet pointer         |
+| `QueuePtr`              | HSA queue pointer               |
+| `KernargSegPtr`         | Kernel argument segment pointer |
+| `DispatchId`            | Dispatch identifier             |
+| `FlatScratchInit`       | Flat scratch initialization     |
+| `PrivateSegSize`        | Private segment size            |
+| `WorkgroupIdX/Y/Z`      | Workgroup IDs                   |
+| `WorkgroupInfo`         | Workgroup info metadata         |
+| `PrivSegWaveByteOffset` | Private segment wave offset     |
++-------------------------+---------------------------------+
 ```
 
 Vector initialization fields include `WorkitemIdX/Y/Z`, which populate per-
@@ -3338,12 +3374,12 @@ is reselected quickly or delayed until later cycles.
 The choice of policy influences observed behavior:
 
 ```text
-+----------------------+--------------------------------------------+
-| Policy               | Typical effects                            |
-+----------------------+--------------------------------------------+
-| Oldest-first         | Strong forward progress, lower tail latency|
-| Round-robin          | Fairness, smoother utilization, less bias  |
-+----------------------+--------------------------------------------+
++--------------+---------------------------------------------+
+| Policy       | Typical effects                             |
++--------------+---------------------------------------------+
+| Oldest-first | Strong forward progress, lower tail latency |
+| Round-robin  | Fairness, smoother utilization, less bias   |
++--------------+---------------------------------------------+
 ```
 
 In workloads with irregular memory access, oldest-first tends to keep
@@ -3518,14 +3554,14 @@ The following qualitative patterns are useful when interpreting LDS
 statistics:
 
 ```text
-+-------------------------+-------------------------------------------+
-| Access pattern          | Expected behavior                          |
-+-------------------------+-------------------------------------------+
-| Unit-stride per lane    | Minimal bank conflicts                     |
-| Stride = power-of-two   | Potential bank conflicts depending on bank |
-| Random per lane         | High conflict variability                  |
-| Broadcast (same address)| Maximum bank conflicts                     |
-+-------------------------+-------------------------------------------+
++--------------------------+--------------------------------------------+
+| Access pattern           | Expected behavior                          |
++--------------------------+--------------------------------------------+
+| Unit-stride per lane     | Minimal bank conflicts                     |
+| Stride = power-of-two    | Potential bank conflicts depending on bank |
+| Random per lane          | High conflict variability                  |
+| Broadcast (same address) | Maximum bank conflicts                     |
++--------------------------+--------------------------------------------+
 ```
 
 ### Y.6 Performance Considerations
@@ -3554,13 +3590,13 @@ virtual memory in gem5.
 The translation stack is composed of three main elements:
 
 ```text
-+----------------------------+-------------------------------------------+
-| Component                  | Role                                      |
-+----------------------------+-------------------------------------------+
-| `VegaTLBCoalescer`         | Coalesces per-lane translation requests   |
-| `VegaGPUTLB`               | Performs translation lookup               |
-| `VegaPagetableWalker`      | Walks page tables on miss                 |
-+----------------------------+-------------------------------------------+
++-----------------------+-----------------------------------------+
+| Component             | Role                                    |
++-----------------------+-----------------------------------------+
+| `VegaTLBCoalescer`    | Coalesces per-lane translation requests |
+| `VegaGPUTLB`          | Performs translation lookup             |
+| `VegaPagetableWalker` | Walks page tables on miss               |
++-----------------------+-----------------------------------------+
 ```
 
 These components are instantiated in `VegaGPUTLB.py` and connected to CU
@@ -3742,15 +3778,15 @@ kernel metadata is collected, and how completion signals are delivered.
 The dispatch path is built from several interacting components:
 
 ```text
-+---------------------------+-------------------------------------------+
-| Component                 | Primary responsibility                    |
-+---------------------------+-------------------------------------------+
-| `HSAPacketProcessor`      | Parses AQL packets from HSA queues        |
-| `GPUCommandProcessor`     | Performs DMA reads and dispatch setup     |
-| `GPUDispatcher`           | Maps workgroups to CUs                    |
-| `HSAQueueEntry`           | Encapsulates dispatch metadata            |
-| `GPUComputeDriver`        | Connects software runtime and device      |
-+---------------------------+-------------------------------------------+
++-----------------------+---------------------------------------+
+| Component             | Primary responsibility                |
++-----------------------+---------------------------------------+
+| `HSAPacketProcessor`  | Parses AQL packets from HSA queues    |
+| `GPUCommandProcessor` | Performs DMA reads and dispatch setup |
+| `GPUDispatcher`       | Maps workgroups to CUs                |
+| `HSAQueueEntry`       | Encapsulates dispatch metadata        |
+| `GPUComputeDriver`    | Connects software runtime and device  |
++-----------------------+---------------------------------------+
 ```
 
 `GPUCommandProcessor` is a `DmaVirtDevice` that issues DMA reads to fetch
@@ -3834,15 +3870,15 @@ important latency metrics and how they are derived.
 memory pipeline. The hop IDs are defined in `InstMemoryHop`:
 
 ```text
-+-------------------+---------------------------------------------+
-| Hop               | Meaning                                     |
-+-------------------+---------------------------------------------+
-| `Initiate`        | Memory instruction issued                   |
-| `CoalsrSend`      | Sent to coalescer                           |
-| `CoalsrRecv`      | Coalescer response                          |
-| `GMEnqueue`       | Enqueued in global memory pipe              |
-| `Complete`        | Completion and writeback                    |
-+-------------------+---------------------------------------------+
++--------------+--------------------------------+
+| Hop          | Meaning                        |
++--------------+--------------------------------+
+| `Initiate`   | Memory instruction issued      |
+| `CoalsrSend` | Sent to coalescer              |
+| `CoalsrRecv` | Coalescer response             |
+| `GMEnqueue`  | Enqueued in global memory pipe |
+| `Complete`   | Completion and writeback       |
++--------------+--------------------------------+
 ```
 
 `Shader::sampleInstRoundTrip` converts these timestamps into distributions
@@ -3880,17 +3916,17 @@ coalescing and shared-memory access patterns.
 The following debug flags are frequently used in GPU performance analysis:
 
 ```text
-+------------------+----------------------------------------------+
-| Debug flag       | Typical use                                  |
-+------------------+----------------------------------------------+
-| `GPUDisp`        | Workgroup and wavefront dispatch tracing     |
-| `GPUFetch`       | Instruction fetch and IB activity            |
-| `GPUMem`         | Memory pipeline events and returns           |
-| `GPUCoalescer`   | Coalescer token and queueing behavior        |
-| `GPUVRF`         | Vector register file reads/writes            |
-| `GPULDS`         | LDS accesses and bank conflicts              |
-| `GPUCommandProc` | CP queue processing and dispatch events      |
-+------------------+----------------------------------------------+
++------------------+------------------------------------------+
+| Debug flag       | Typical use                              |
++------------------+------------------------------------------+
+| `GPUDisp`        | Workgroup and wavefront dispatch tracing |
+| `GPUFetch`       | Instruction fetch and IB activity        |
+| `GPUMem`         | Memory pipeline events and returns       |
+| `GPUCoalescer`   | Coalescer token and queueing behavior    |
+| `GPUVRF`         | Vector register file reads/writes        |
+| `GPULDS`         | LDS accesses and bank conflicts          |
+| `GPUCommandProc` | CP queue processing and dispatch events  |
++------------------+------------------------------------------+
 ```
 
 These traces are verbose and should be enabled selectively, but they provide
