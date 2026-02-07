@@ -120,7 +120,7 @@ instantiated as a direct member of the `CPU` object:
 ### 2.2 Execution Order Within a Cycle
 
 Each simulated cycle, the CPU's `tick()` method
-([cpu.cc](src/cpu/o3/cpu.cc)) calls stage ticks in strict order:
+([cpu.cc:368](../src/cpu/o3/cpu.cc#L368)) calls stage ticks in strict order:
 
 ```
 1. BAC.tick()       Branch prediction / fetch target generation
@@ -132,7 +132,7 @@ Each simulated cycle, the CPU's `tick()` method
 ```
 
 After all stages tick, the CPU advances all inter-stage time buffers
-([cpu.cc](src/cpu/o3/cpu.cc)), making data written this cycle
+([cpu.cc:392](../src/cpu/o3/cpu.cc#L392)), making data written this cycle
 visible to downstream consumers after the configured latency.
 
 ### 2.3 Pipeline Width
@@ -144,7 +144,7 @@ MaxWidth   = 16  (maximum instructions per cycle in any stage)
 MaxThreads = 4   (maximum simultaneous hardware threads)
 ```
 
-These constants are defined in [limits.hh](src/cpu/o3/limits.hh) and control the
+These constants are defined in [limits.hh:49](../src/cpu/o3/limits.hh#L49) and control the
 static sizing of arrays in communication structures.
 
 ### 2.4 Conceptual Pipeline Timing
@@ -172,7 +172,7 @@ calling `BAC::updatePC()`; BAC does not independently run ahead.
 ## 3. Dynamic Instructions: The Unit of Work
 
 Every instruction flowing through the O3 pipeline is represented by a `DynInst` object
-([dyn_inst.hh](src/cpu/o3/dyn_inst.hh), [dyn_inst.cc](src/cpu/o3/dyn_inst.cc)),
+([dyn_inst.hh:75](../src/cpu/o3/dyn_inst.hh#L75), [dyn_inst.cc:56](../src/cpu/o3/dyn_inst.cc#L56)),
 which is the central data structure of the model. A `DynInst` wraps a `StaticInst` (the
 decoded, ISA-level instruction) with all the dynamic, per-instance state needed to track
 it through the pipeline.
@@ -209,7 +209,7 @@ management for partial writes.
 ### 3.3 Register Operand Storage
 
 To minimize heap allocation overhead, `DynInst` uses a custom `operator new`
-([dyn_inst.cc](src/cpu/o3/dyn_inst.cc)) that allocates a single
+([dyn_inst.cc:137](../src/cpu/o3/dyn_inst.cc#L137)) that allocates a single
 contiguous buffer containing the `DynInst` object itself plus trailing arrays for:
 
 - Flattened architectural destination register IDs
@@ -224,14 +224,14 @@ This single-allocation strategy improves cache locality and reduces allocator pr
 
 The field `readyRegs` counts how many source registers have been marked ready. When a
 source register's producing instruction completes writeback, the IQ calls
-`markSrcRegReady()` ([dyn_inst.cc](src/cpu/o3/dyn_inst.cc)),
+`markSrcRegReady()` ([dyn_inst.cc:305](../src/cpu/o3/dyn_inst.cc#L305)),
 which increments `readyRegs`. When `readyRegs` equals the total number of source registers,
 the instruction is marked `CanIssue` and becomes eligible for scheduling.
 
 ### 3.5 Branch Prediction Data
 
 Each `DynInst` stores the predicted next PC (`predPC`). The `mispredicted()` method
-([dyn_inst.hh](src/cpu/o3/dyn_inst.hh)) computes the actual next PC
+([dyn_inst.hh:534](../src/cpu/o3/dyn_inst.hh#L534)) computes the actual next PC
 by calling `staticInst->advancePC()` and compares it against `predPC`. If they differ,
 the branch predictor was wrong, and a squash is initiated.
 
@@ -255,7 +255,7 @@ iterators into the load queue and store queue.
 
 Instructions that write to miscellaneous (control/status) registers are recorded for
 commit-time application via `updateMiscRegs()`
-([dyn_inst.hh](src/cpu/o3/dyn_inst.hh)).
+([dyn_inst.hh:1105](../src/cpu/o3/dyn_inst.hh#L1105)).
 For non-serializing misc registers on non-speculative instructions, the model may also
 apply the write immediately in `setMiscRegOperand()` while still keeping the deferred
 commit-time record.
@@ -301,7 +301,7 @@ Each structure carries up to `MaxWidth` (16) instruction pointers and a `size` c
 
 All backward communication (squash signals, stall signals, resource availability counts)
 flows through a single shared `TimeBuffer<TimeStruct>`
-([comm.hh](src/cpu/o3/comm.hh)). This structure contains per-stage
+([comm.hh:113](../src/cpu/o3/comm.hh#L113)). This structure contains per-stage
 sub-structures:
 
 ```
@@ -340,7 +340,7 @@ This models the time between instruction selection and functional unit dispatch.
 
 ## 5. Branch Address Calculation (BAC)
 
-The BAC stage ([bac.hh](src/cpu/o3/bac.hh), [bac.cc](src/cpu/o3/bac.cc)) is the
+The BAC stage ([bac.hh:91](../src/cpu/o3/bac.hh#L91), [bac.cc:77](../src/cpu/o3/bac.cc#L77)) is the
 interface between the branch predictor and the rest of the pipeline. It operates in one
 of two modes depending on the `decoupledFrontEnd` configuration parameter.
 
@@ -368,7 +368,7 @@ which calls `BPU::update()` and `BPU::squash()` respectively.
 
 In decoupled mode, the BAC runs ahead of fetch, acting as an independent prediction
 engine that populates the Fetch Target Queue (FTQ). Each cycle, `generateFetchTargets()`
-([bac.cc](src/cpu/o3/bac.cc)) performs the following:
+([bac.cc:585](../src/cpu/o3/bac.cc#L585)) performs the following:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -395,7 +395,7 @@ engine that populates the Fetch Target Queue (FTQ). Each cycle, `generateFetchTa
 
 In decoupled mode, when Fetch actually pre-decodes an instruction and discovers it is
 a branch, it calls `BAC::updatePreDecode()`
-([bac.cc](src/cpu/o3/bac.cc)) to reconcile the fetch-time decode
+([bac.cc:764](../src/cpu/o3/bac.cc#L764)) to reconcile the fetch-time decode
 with the earlier BAC prediction. This handles cases such as:
 
 - The BTB correctly predicted the branch location (most common case -- simply transfers
@@ -408,7 +408,7 @@ with the earlier BAC prediction. This handles cases such as:
 
 When a squash occurs (from commit, decode, or fetch), the BAC must undo speculative
 branch predictor state. The method `squashBpuHistories()`
-([bac.cc](src/cpu/o3/bac.cc)) iterates the FTQ backwards and calls
+([bac.cc:464](../src/cpu/o3/bac.cc#L464)) iterates the FTQ backwards and calls
 `BPU::squashHistory()` for each FetchTarget that has an attached predictor history,
 reverting the predictor to its pre-speculation state.
 
@@ -435,7 +435,7 @@ reverting the predictor to its pre-speculation state.
 
 ## 6. Fetch Target Queue (FTQ)
 
-The FTQ ([ftq.hh](src/cpu/o3/ftq.hh), [ftq.cc](src/cpu/o3/ftq.cc)) is the bridge
+The FTQ ([ftq.hh:226](../src/cpu/o3/ftq.hh#L226), [ftq.cc:86](../src/cpu/o3/ftq.cc#L86)) is the bridge
 between the BAC and the Fetch stage in decoupled front-end mode. It is a per-thread
 FIFO of `FetchTarget` objects.
 
@@ -503,7 +503,7 @@ does not stall on FTQ head readiness.
 
 ## 7. Fetch Stage
 
-The Fetch stage ([fetch.hh](src/cpu/o3/fetch.hh), [fetch.cc](src/cpu/o3/fetch.cc))
+The Fetch stage ([fetch.hh:82](../src/cpu/o3/fetch.hh#L82), [fetch.cc:115](../src/cpu/o3/fetch.cc#L115))
 is one of the largest stages and handles instruction
 retrieval from the instruction cache, pre-decoding, macro-op expansion, and branch
 prediction coordination.
@@ -566,7 +566,7 @@ Fetch maintains independent state for each hardware thread:
 
 ### 7.4 The Fetch Algorithm
 
-The `tick()` method ([fetch.cc](src/cpu/o3/fetch.cc)) orchestrates
+The `tick()` method ([fetch.cc:821](../src/cpu/o3/fetch.cc#L821)) orchestrates
 each cycle:
 
 **Step 1: Check backward signals.**
@@ -588,7 +588,7 @@ SMT bandwidth sharing.
 
 ### 7.5 The Core Fetch Loop
 
-The `fetch()` method ([fetch.cc](src/cpu/o3/fetch.cc)) is the
+The `fetch()` method ([fetch.cc:1058](../src/cpu/o3/fetch.cc#L1058)) is the
 heart of the stage. For the selected thread:
 
 **Phase 1: Thread selection.** The SMT fetch policy selects which thread to service.
@@ -645,7 +645,7 @@ The fetch stage communicates with the instruction cache through an `IcachePort`
 
 ### 7.7 Squash Handling
 
-The `doSquash()` method ([fetch.cc](src/cpu/o3/fetch.cc)):
+The `doSquash()` method ([fetch.cc:710](../src/cpu/o3/fetch.cc#L710)):
 
 1. Sets the PC to the squash target address.
 2. Resets the fetch offset and macro-op state.
@@ -679,7 +679,7 @@ The `doSquash()` method ([fetch.cc](src/cpu/o3/fetch.cc)):
 
 ## 8. Decode Stage
 
-The Decode stage ([decode.hh](src/cpu/o3/decode.hh), [decode.cc](src/cpu/o3/decode.cc))
+The Decode stage ([decode.hh:70](../src/cpu/o3/decode.hh#L70), [decode.cc:84](../src/cpu/o3/decode.cc#L84))
 is perhaps the most misnamed stage in the pipeline. Instructions arriving here are
 **already decoded** -- the `StaticInst` was created during fetch. The Decode stage
 serves three purposes:
@@ -691,7 +691,7 @@ serves three purposes:
 ### 8.1 Early Branch Resolution
 
 The most important functional contribution of the decode stage is checking direct
-branch targets ([decode.cc](src/cpu/o3/decode.cc)):
+branch targets ([decode.cc:722](../src/cpu/o3/decode.cc#L722)):
 
 ```
 For each instruction passing through decode:
@@ -711,7 +711,7 @@ Indirect branches (register-based targets) can only be resolved at execute.
 
 ### 8.2 Decode Processing Loop
 
-The `decodeInsts()` method ([decode.cc](src/cpu/o3/decode.cc))
+The `decodeInsts()` method ([decode.cc:636](../src/cpu/o3/decode.cc#L636))
 processes instructions from either the input queue or the skid buffer:
 
 ```
@@ -760,7 +760,7 @@ fetch to stall.
 
 ## 9. Rename Stage
 
-The Rename stage ([rename.hh](src/cpu/o3/rename.hh), [rename.cc](src/cpu/o3/rename.cc))
+The Rename stage ([rename.hh:78](../src/cpu/o3/rename.hh#L78), [rename.cc:82](../src/cpu/o3/rename.cc#L82))
 performs register renaming -- the key transformation that enables out-of-order execution.
 By mapping architectural (logical) register names to physical register names, it
 eliminates false dependencies (WAR and WAW hazards) while preserving true dependencies
@@ -769,7 +769,7 @@ eliminates false dependencies (WAR and WAW hazards) while preserving true depend
 ### 9.1 The Rename Algorithm
 
 For each instruction, `renameInsts()`
-([rename.cc](src/cpu/o3/rename.cc)) performs:
+([rename.cc:535](../src/cpu/o3/rename.cc#L535)) performs:
 
 ```
 For each instruction (up to renameWidth per cycle):
@@ -823,12 +823,12 @@ recent rename at the front:
 The history buffer serves two purposes:
 
 **On commit** (`removeFromHistory()`,
-[rename.cc](src/cpu/o3/rename.cc)): The **old** physical register
+[rename.cc:991](../src/cpu/o3/rename.cc#L991)): The **old** physical register
 (`prevPhysReg`) is returned to the free list. The new mapping is now architecturally
 permanent.
 
 **On squash** (`doSquash()`,
-[rename.cc](src/cpu/o3/rename.cc)): The **new** physical register
+[rename.cc:934](../src/cpu/o3/rename.cc#L934)): The **new** physical register
 (`newPhysReg`) is returned (via deferred freeing), and the rename map is restored to
 point at `prevPhysReg`.
 
@@ -852,9 +852,9 @@ might still be reading these registers (because instructions from different thre
 share the physical register file).
 
 Instead, squashed registers are placed in `freeingInProgress[tid]`
-([rename.cc](src/cpu/o3/rename.cc)). They are actually freed only after
+([rename.cc:1366](../src/cpu/o3/rename.cc#L1366)). They are actually freed only after
 commit confirms that the ROB has finished squashing
-([rename.cc](src/cpu/o3/rename.cc)).
+([rename.cc:1366](../src/cpu/o3/rename.cc#L1366)).
 
 ### 9.4 Serialization Protocol
 
@@ -906,11 +906,11 @@ round-trip confirmation from downstream stages.
 
 The renaming infrastructure consists of two layers:
 
-**`SimpleRenameMap`** ([rename_map.hh](src/cpu/o3/rename_map.hh)):
+**`SimpleRenameMap`** ([rename_map.hh:71](../src/cpu/o3/rename_map.hh#L71)):
 A per-register-class mapping table. Internally, it is a vector indexed by architectural
 register number, storing the current physical register pointer.
 
-**`UnifiedRenameMap`** ([rename_map.hh](src/cpu/o3/rename_map.hh)):
+**`UnifiedRenameMap`** ([rename_map.hh:168](../src/cpu/o3/rename_map.hh#L168)):
 Wraps one `SimpleRenameMap` per register class (integer, floating-point, vector, vector
 element, predicate, matrix, condition code). It dispatches rename/lookup operations to
 the appropriate per-class map.
@@ -936,17 +936,17 @@ fixed physical register mappings obtained from the register file.
 
 ### 10.3 The Free List
 
-**`SimpleFreeList`** ([free_list.hh](src/cpu/o3/free_list.hh)):
+**`SimpleFreeList`** ([free_list.hh:71](../src/cpu/o3/free_list.hh#L71)):
 A FIFO queue of physical register pointers for a single register class. `getReg()` pops
 from the front (allocation), `addReg()` pushes to the back (deallocation).
 
-**`UnifiedFreeList`** ([free_list.hh](src/cpu/o3/free_list.hh)):
+**`UnifiedFreeList`** ([free_list.hh:124](../src/cpu/o3/free_list.hh#L124)):
 Wraps one `SimpleFreeList` per register class. Initialized by the physical register file,
 which populates each free list with all available physical registers at startup.
 
 ### 10.4 The Scoreboard
 
-The scoreboard ([scoreboard.hh](src/cpu/o3/scoreboard.hh)) is a flat boolean vector
+The scoreboard ([scoreboard.hh:66](../src/cpu/o3/scoreboard.hh#L66)) is a flat boolean vector
 indexed by physical register flat index:
 
 ```
@@ -978,7 +978,7 @@ The CPU maintains **two** rename maps per thread:
 
 ## 11. Issue/Execute/Writeback (IEW) Stage
 
-The IEW stage ([iew.hh](src/cpu/o3/iew.hh), [iew.cc](src/cpu/o3/iew.cc)) is the
+The IEW stage ([iew.hh:87](../src/cpu/o3/iew.hh#L87), [iew.cc:77](../src/cpu/o3/iew.cc#L77)) is the
 widest and most complex stage in the pipeline. It combines three sub-functions that
 would be separate stages in a deeper pipeline:
 
@@ -1008,7 +1008,7 @@ would be separate stages in a deeper pipeline:
 ### 11.1 Dispatch
 
 The `dispatchInsts()` method
-([iew.cc](src/cpu/o3/iew.cc)) takes renamed instructions from
+([iew.cc:881](../src/cpu/o3/iew.cc#L881)) takes renamed instructions from
 the rename queue (or skid buffer) and inserts them into the appropriate structures:
 
 ```
@@ -1037,7 +1037,7 @@ For each instruction (up to dispatchWidth per cycle):
 ### 11.2 Execute
 
 The `executeInsts()` method
-([iew.cc](src/cpu/o3/iew.cc)) runs instructions that were
+([iew.cc:1138](../src/cpu/o3/iew.cc#L1138)) runs instructions that were
 scheduled by the IQ in a previous cycle:
 
 ```
@@ -1066,7 +1066,7 @@ For each instruction delivered via issueToExecQueue:
 ### 11.3 Writeback
 
 The `writebackInsts()` method
-([iew.cc](src/cpu/o3/iew.cc)) processes completed instructions:
+([iew.cc:1380](../src/cpu/o3/iew.cc#L1380)) processes completed instructions:
 
 ```
 For each completed instruction (up to wbWidth per cycle):
@@ -1081,7 +1081,7 @@ For each completed instruction (up to wbWidth per cycle):
 
 ### 11.4 Writeback Bandwidth Management
 
-When `instToCommit()` ([iew.cc](src/cpu/o3/iew.cc)) sends a
+When `instToCommit()` ([iew.cc:593](../src/cpu/o3/iew.cc#L593)) sends a
 completed instruction to the commit queue, it manages bandwidth by tracking slot
 occupancy:
 
@@ -1099,13 +1099,13 @@ finishing simultaneously) are spread across multiple cycles in the commit queue.
 IEW can initiate squashes for two reasons:
 
 **Branch misprediction** (`squashDueToBranch()`,
-[iew.cc](src/cpu/o3/iew.cc)):
+[iew.cc:473](../src/cpu/o3/iew.cc#L473)):
 - The mispredicting instruction itself is NOT squashed (it executed correctly, just
   predicted the wrong direction).
 - `includeSquashInst = false`.
 
 **Memory ordering violation** (`squashDueToMemOrder()`,
-[iew.cc](src/cpu/o3/iew.cc)):
+[iew.cc:497](../src/cpu/o3/iew.cc#L497)):
 - The violating instruction IS included in the squash (it must be re-executed).
 - `includeSquashInst = true`.
 - Memory violations take priority over branch mispredictions for the same instruction.
@@ -1133,8 +1133,8 @@ Within a single cycle, IEW operations execute in this order:
 
 ## 12. Instruction Queue (IQ)
 
-The Instruction Queue ([inst_queue.hh](src/cpu/o3/inst_queue.hh),
-[inst_queue.cc](src/cpu/o3/inst_queue.cc)) is the scheduler at the heart of the
+The Instruction Queue ([inst_queue.hh:178](../src/cpu/o3/inst_queue.hh#L178),
+[inst_queue.cc:223](../src/cpu/o3/inst_queue.cc#L223)) is the scheduler at the heart of the
 out-of-order engine. It tracks instruction dependencies, determines when instructions
 are ready to execute, and selects which ready instructions to issue to functional units.
 
@@ -1150,7 +1150,7 @@ The IQ has a two-level design:
 ### 12.2 Dependency Graph
 
 The core data structure for tracking register dependencies is an array of singly-linked
-lists ([dep_graph.hh](src/cpu/o3/dep_graph.hh)), sized to the number of physical
+lists ([dep_graph.hh:77](../src/cpu/o3/dep_graph.hh#L77)), sized to the number of physical
 registers:
 
 ```
@@ -1182,7 +1182,7 @@ When an instruction completes execution:
 ### 12.3 The Scheduling Algorithm
 
 The `scheduleReadyInsts()` method
-([inst_queue.cc](src/cpu/o3/inst_queue.cc)) uses an
+([inst_queue.cc:849](../src/cpu/o3/inst_queue.cc#L849)) uses an
 **oldest-first, cross-class** scheduling policy:
 
 ```
@@ -1265,7 +1265,7 @@ Three special lists manage memory instruction lifecycle:
 ### 12.6 Squash Handling
 
 When a squash occurs, `doSquash()`
-([inst_queue.cc](src/cpu/o3/inst_queue.cc)) walks the per-thread
+([inst_queue.cc:1310](../src/cpu/o3/inst_queue.cc#L1310)) walks the per-thread
 instruction list from the tail backwards:
 
 1. For each instruction younger than the squash point:
@@ -1293,8 +1293,8 @@ ready in the rename scoreboard but the IQ hasn't yet processed the wakeup signal
 
 ## 13. Load/Store Queue (LSQ)
 
-The LSQ ([lsq.hh](src/cpu/o3/lsq.hh), [lsq.cc](src/cpu/o3/lsq.cc),
-[lsq_unit.hh](src/cpu/o3/lsq_unit.hh), [lsq_unit.cc](src/cpu/o3/lsq_unit.cc))
+The LSQ ([lsq.hh:76](../src/cpu/o3/lsq.hh#L76), [lsq.cc:110](../src/cpu/o3/lsq.cc#L110),
+[lsq_unit.hh:88](../src/cpu/o3/lsq_unit.hh#L88), [lsq_unit.cc:191](../src/cpu/o3/lsq_unit.cc#L191))
 handles all memory operations, enforcing memory ordering, implementing store-to-load
 forwarding, and managing the interface to the data cache.
 
@@ -1344,7 +1344,7 @@ Each store queue entry (`SQEntry`) extends the base entry with:
 ### 13.3 Store-to-Load Forwarding
 
 When a load executes, the `read()` method
-([lsq_unit.cc](src/cpu/o3/lsq_unit.cc)) scans the store queue
+([lsq_unit.cc:1340](../src/cpu/o3/lsq_unit.cc#L1340)) scans the store queue
 for potential forwarding:
 
 ```
@@ -1378,7 +1378,7 @@ For each older store (from youngest to oldest, down to storeWBIt):
 ### 13.4 Memory Ordering Violation Detection
 
 After both loads and stores execute, the `checkViolations()` method
-([lsq_unit.cc](src/cpu/o3/lsq_unit.cc)) checks for ordering
+([lsq_unit.cc:526](../src/cpu/o3/lsq_unit.cc#L526)) checks for ordering
 violations:
 
 ```
@@ -1395,7 +1395,7 @@ When a STORE executes and computes its address:
 
 Stores are written to the memory system only after they are committed. The
 `writebackStores()` method
-([lsq_unit.cc](src/cpu/o3/lsq_unit.cc)) iterates from `storeWBIt`
+([lsq_unit.cc:812](../src/cpu/o3/lsq_unit.cc#L812)) iterates from `storeWBIt`
 forward:
 
 ```
@@ -1417,7 +1417,7 @@ to the memory system at any time.
 ### 13.6 External Snoop Handling
 
 When an external invalidation (cache coherence snoop) arrives, `checkSnoop()`
-([lsq_unit.cc](src/cpu/o3/lsq_unit.cc)) scans the load queue:
+([lsq_unit.cc:443](../src/cpu/o3/lsq_unit.cc#L443)) scans the load queue:
 
 - Loads whose addresses match the invalidated address may have read stale data.
 - Under TSO, all subsequent loads after a snooped load are also marked for squash.
@@ -1426,7 +1426,7 @@ When an external invalidation (cache coherence snoop) arrives, `checkSnoop()`
 ### 13.7 Split (Unaligned) Operations
 
 The LSQ supports memory accesses that cross cache-line boundaries through the
-`SplitDataRequest` class ([lsq.hh](src/cpu/o3/lsq.hh)):
+`SplitDataRequest` class ([lsq.hh:644](../src/cpu/o3/lsq.hh#L644)):
 
 1. The access is split into a prefix fragment (unaligned head), zero or more aligned
    middle fragments, and a suffix fragment.
@@ -1438,8 +1438,8 @@ The LSQ supports memory accesses that cross cache-line boundaries through the
 
 ## 14. Functional Unit Pool
 
-The FU Pool ([fu_pool.hh](src/cpu/o3/fu_pool.hh),
-[fu_pool.cc](src/cpu/o3/fu_pool.cc)) manages the simulated processor's functional
+The FU Pool ([fu_pool.hh:75](../src/cpu/o3/fu_pool.hh#L75),
+[fu_pool.cc:85](../src/cpu/o3/fu_pool.cc#L85)) manages the simulated processor's functional
 units -- the hardware that actually performs arithmetic, logic, and other operations.
 
 ### 14.1 Organization
@@ -1501,7 +1501,7 @@ This ensures that an FU freed on cycle N is available for scheduling on cycle N+
 
 ## 15. Reorder Buffer (ROB)
 
-The ROB ([rob.hh](src/cpu/o3/rob.hh), [rob.cc](src/cpu/o3/rob.cc)) maintains
+The ROB ([rob.hh:71](../src/cpu/o3/rob.hh#L71), [rob.cc:58](../src/cpu/o3/rob.cc#L58)) maintains
 program order by holding all in-flight instructions from rename to commit. It is the
 structure that enables precise exceptions in an out-of-order processor.
 
@@ -1546,7 +1546,7 @@ and O(1) removal at the head.
 ### 15.3 Instruction Insertion
 
 When the commit stage calls `insertInst()`
-([rob.cc](src/cpu/o3/rob.cc)):
+([rob.cc:193](../src/cpu/o3/rob.cc#L193)):
 
 1. The instruction is appended to `instList[tid]` with `push_back()`.
 2. If this is the first instruction in the entire ROB, the global `head` is set.
@@ -1557,7 +1557,7 @@ When the commit stage calls `insertInst()`
 ### 15.4 Instruction Retirement
 
 When `retireHead()` is called
-([rob.cc](src/cpu/o3/rob.cc)):
+([rob.cc:230](../src/cpu/o3/rob.cc#L230)):
 
 1. The head instruction is extracted from the thread's list.
 2. It must be `readyToCommit()` (assertion).
@@ -1569,7 +1569,7 @@ When `retireHead()` is called
 
 ROB squashing may take multiple cycles, bounded by the configurable `squashWidth`
 parameter. The `doSquash()` method
-([rob.cc](src/cpu/o3/rob.cc)) uses a persistent per-thread iterator
+([rob.cc:300](../src/cpu/o3/rob.cc#L300)) uses a persistent per-thread iterator
 (`squashIt[tid]`) to remember where it left off:
 
 ```
@@ -1591,15 +1591,15 @@ drain through the ROB head during the commit stage's normal retirement loop.
 
 ## 16. Commit Stage
 
-The Commit stage ([commit.hh](src/cpu/o3/commit.hh),
-[commit.cc](src/cpu/o3/commit.cc)) is the final pipeline stage. It retires
+The Commit stage ([commit.hh:91](../src/cpu/o3/commit.hh#L91),
+[commit.cc:104](../src/cpu/o3/commit.cc#L104)) is the final pipeline stage. It retires
 instructions in strict program order from the ROB head, making speculative results
 architecturally visible.
 
 ### 16.1 The Commit Loop
 
 The `commitInsts()` method
-([commit.cc](src/cpu/o3/commit.cc)) is the core retirement loop:
+([commit.cc:899](../src/cpu/o3/commit.cc#L899)) is the core retirement loop:
 
 ```
 While num_committed < commitWidth:
@@ -1624,7 +1624,7 @@ While num_committed < commitWidth:
 ### 16.2 commitHead() -- The Three Cases
 
 The `commitHead()` method
-([commit.cc](src/cpu/o3/commit.cc)) handles three cases:
+([commit.cc:1111](../src/cpu/o3/commit.cc#L1111)) handles three cases:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -1695,7 +1695,7 @@ Interrupt Flow:
 
 At commit time, for each destination register of the committed instruction, the
 **committed rename map** is updated
-([commit.cc](src/cpu/o3/commit.cc)):
+([commit.cc:1263](../src/cpu/o3/commit.cc#L1263)):
 
 ```
 For each destination register:
@@ -1940,8 +1940,8 @@ same set before executing.
 
 ### 18.4 Integration with Memory Dependence Unit
 
-The `MemDepUnit` ([mem_dep_unit.hh](src/cpu/o3/mem_dep_unit.hh),
-[mem_dep_unit.cc](src/cpu/o3/mem_dep_unit.cc)) wraps the Store Set predictor and
+The `MemDepUnit` ([mem_dep_unit.hh:90](../src/cpu/o3/mem_dep_unit.hh#L90),
+[mem_dep_unit.cc:56](../src/cpu/o3/mem_dep_unit.cc#L56)) wraps the Store Set predictor and
 manages per-instruction memory dependency tracking:
 
 - Each memory instruction gets a `MemDepEntry` that tracks: whether its registers are
@@ -2018,7 +2018,7 @@ policies:
 ### 19.4 Per-Thread Fetch Queues
 
 A critical SMT design choice is the use of per-thread fetch queues
-([fetch.hh](src/cpu/o3/fetch.hh)). Without per-thread queues, a stalled
+([fetch.hh:508](../src/cpu/o3/fetch.hh#L508)). Without per-thread queues, a stalled
 thread's instructions would create head-of-line blocking for other threads. The
 per-thread design allows each thread to buffer independently, and the drain-to-decode
 logic interleaves across threads with a random starting point for fairness.
@@ -2158,7 +2158,7 @@ FTQ:      ppFTQInsert (fetch target inserted), ppFTQRemove (fetch target removed
 
 The `O3PipeView` tracing facility uses per-instruction tick stamps to generate pipeline
 diagrams. Each instruction's destructor
-([dyn_inst.cc](src/cpu/o3/dyn_inst.cc)) emits a trace record with
+([dyn_inst.cc:199](../src/cpu/o3/dyn_inst.cc#L199)) emits a trace record with
 its timestamps through each stage, enabling offline reconstruction of the pipeline state.
 
 ---
@@ -2168,7 +2168,7 @@ its timestamps through each stage, enabling offline reconstruction of the pipeli
 ### 22.1 Key Parameters
 
 The O3CPU is configured through Python SimObject parameters defined in
-[BaseO3CPU.py](src/cpu/o3/BaseO3CPU.py):
+[BaseO3CPU.py:56](../src/cpu/o3/BaseO3CPU.py#L56):
 
 ```
 Pipeline Width Parameters:
@@ -2267,13 +2267,13 @@ of functional unit descriptions, each specifying:
 - The operation latency per class
 - Whether it is pipelined
 
-The [FuncUnitConfig.py](src/cpu/o3/FuncUnitConfig.py) file provides default functional
+The [FuncUnitConfig.py:45](../src/cpu/o3/FuncUnitConfig.py#L45) file provides default functional
 unit configurations that can be overridden in simulation scripts.
 
 ### 22.4 Debug Flags
 
 The O3-specific debug flags declared in
-[SConscript](src/cpu/o3/SConscript) are:
+[SConscript:76](../src/cpu/o3/SConscript#L76) are:
 
 ```
 O3CPU        General CPU-level messages
