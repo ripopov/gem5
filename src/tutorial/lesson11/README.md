@@ -1,4 +1,4 @@
-# Lesson 11: Capstone Hybrid Simulator
+# Lesson 11: Workloads and Checkpoints
 
 ## Status
 
@@ -6,7 +6,7 @@ Placeholder. Content will be authored in a later change.
 
 ## Planned scope
 
-1. Assemble a full hybrid C++/Python simulator flow.
-2. Validate correctness with targeted tests and metrics.
-3. Measure performance and identify optimization opportunities.
-4. Package the simulator setup for reproducible sharing.
+1. Selecting and parameterizing workloads.
+2. Resource acquisition and reproducibility.
+3. Creating, restoring, and validating checkpoints.
+4. Experiment design for iterative simulator development.

@@ -42,13 +42,15 @@ Run a single test case:
 - Lesson 2 source: `src/tutorial/lesson02/` (C++ SimObject Anatomy)
 - Lesson 3 source: `src/tutorial/lesson03/` (C++ Memory and Ports)
 - Lesson 4 source: `src/tutorial/lesson04/` (C++ Clock Domains)
-- Lesson 5 source: `src/tutorial/lesson05/` (C++ Timing and CPU Hooks)
-- Lesson 6 source: `src/tutorial/lesson06/` (C++/Python Bridge)
-- Lesson 7 source: `src/tutorial/lesson07/` (Python Config and Run Loop)
-- Lesson 8 source: `src/tutorial/lesson08/` (gem5 Stdlib Composition)
-- Lesson 9 source: `src/tutorial/lesson09/` (Workloads and Checkpoints)
-- Lesson 10 source: `src/tutorial/lesson10/` (Debug, Stats, and Probes)
-- Lesson 11 source: `src/tutorial/lesson11/` (Capstone Hybrid Simulator)
+- Lesson 5 source: `src/tutorial/lesson05/` (C++ Stats, Debug Flags, and Logging)
+- Lesson 6 source: `src/tutorial/lesson06/` (C++ Timing and CPU Hooks)
+- Lesson 7 source: `src/tutorial/lesson07/` (C++ Serialization and Checkpointing)
+- Lesson 8 source: `src/tutorial/lesson08/` (C++/Python Bridge)
+- Lesson 9 source: `src/tutorial/lesson09/` (Python Config and Run Loop)
+- Lesson 10 source: `src/tutorial/lesson10/` (gem5 Stdlib Composition)
+- Lesson 11 source: `src/tutorial/lesson11/` (Workloads and Checkpoints)
+- Lesson 12 source: `src/tutorial/lesson12/` (Probe Points and Observability)
+- Lesson 13 source: `src/tutorial/lesson13/` (Capstone Hybrid Simulator)
 - Lesson docs (source-adjacent): `src/tutorial/`
 - Rendered docs wrappers (Sphinx): `docs/tutorial/`
 

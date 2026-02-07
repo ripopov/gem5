@@ -1,4 +1,4 @@
-# Lesson 9: Workloads and Checkpoints
+# Lesson 9: Python Config and Run Loop
 
 ## Status
 
@@ -6,7 +6,7 @@ Placeholder. Content will be authored in a later change.
 
 ## Planned scope
 
-1. Selecting and parameterizing workloads.
-2. Resource acquisition and reproducibility.
-3. Creating, restoring, and validating checkpoints.
-4. Experiment design for iterative simulator development.
+1. Constructing simulation object graphs in Python.
+2. Run-loop control and exit events.
+3. Configuration composition and reuse.
+4. Script structure for reproducible experiments.

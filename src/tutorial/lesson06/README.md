@@ -1,4 +1,4 @@
-# Lesson 6: C++/Python Bridge
+# Lesson 6: C++ Timing and CPU Hooks
 
 ## Status
 
@@ -6,7 +6,7 @@ Placeholder. Content will be authored in a later change.
 
 ## Planned scope
 
-1. Exposing C++ SimObjects to Python.
-2. Parameter mapping and defaults.
-3. Build-time and runtime registration paths.
-4. Mixed-language debugging basics.
+1. Timing-model correctness requirements.
+2. CPU model touch points for custom components.
+3. Latency modeling patterns.
+4. Integrating clocked components into timing-accurate simulations.

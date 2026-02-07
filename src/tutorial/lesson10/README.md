@@ -1,4 +1,4 @@
-# Lesson 10: Debug, Stats, and Probes
+# Lesson 10: gem5 Stdlib Composition
 
 ## Status
 
@@ -6,7 +6,7 @@ Placeholder. Content will be authored in a later change.
 
 ## Planned scope
 
-1. Debug flags and trace-driven diagnosis.
-2. Statistics organization, dump timing, and post-processing.
-3. Probe points and observability hooks.
-4. Building a repeatable debug workflow for model validation.
+1. Boards, processors, cache hierarchies, and memory objects.
+2. Composition patterns in the standard library.
+3. Integrating custom C++ objects into stdlib-based systems.
+4. Configuration validation and constraints.
