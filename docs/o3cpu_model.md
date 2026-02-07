@@ -514,14 +514,14 @@ prediction coordination.
                               ┌──────────────────────────────┐
                               │          Fetch Stage         │
                               │                              │
-I-Cache ◀──────────────▶      │  ┌─────────┐  ┌──────────┐  │
-(IcachePort)                  │  │  Fetch  │  │  Fetch   │  │
-                              │  │ Buffer  │─▶│  Queue   │──┼──▶ To Decode
-ITLB ◀──────────────────▶     │  │ (bytes) │  │ (insts)  │  │
-(FetchTranslation)            │  └─────────┘  └──────────┘  │
+I-Cache ◀──────────────▶      │  ┌─────────┐  ┌──────────┐   │
+(IcachePort)                  │  │  Fetch  │  │  Fetch   │   │
+                              │  │ Buffer  │─▶│  Queue   │───┼──▶ To Decode
+ITLB ◀──────────────────▶     │  │ (bytes) │  │ (insts)  │   │
+(FetchTranslation)            │  └─────────┘  └──────────┘   │
 BAC/FTQ ◀──────────────▶      │        ▲                     │
                               │        │ ISA Decoder         │
-                              └────────┼─────────────────────┘
+                              └────────┼────────────────────┘
                                        │
                                  fetchCacheLine()
                                  finishTranslation()
@@ -600,23 +600,23 @@ data for the current PC. If not, initiates a new I-cache access:
 
 ```
 fetchCacheLine(vaddr) ──▶ ITLB translation ──▶ finishTranslation()
-                                                      │
-                                        ┌─────────────┼──────────────┐
-                                        ▼             ▼              ▼
-                                    No fault       TLB fault    No system memory
-                                        │              │              │
-                                        ▼              ▼              ▼
-                              sendTimingReq()    Build NOP    NoGoodAddr status
-                                   to I-cache    carrying fault
-                                        │
-                           ┌────────────┼────────────┐
-                           ▼                         ▼
-                       Success                   Failure
-                   IcacheWaitResponse         IcacheWaitRetry
-                           │                    (retry later)
-                           ▼
-                processCacheCompletion()
-                   (copy data to fetchBuffer)
+                                              │
+                           ┌──────────────────┼───────────────────┐
+                           ▼                  ▼                   ▼
+                       No fault           TLB fault         No system memory
+                           │                  │                   │
+                           ▼                  ▼                   ▼
+                 sendTimingReq()        Build NOP         NoGoodAddr status
+                      to I-cache        carrying fault
+                           │
+                 ┌─────────┼─────────┐
+                 ▼                   ▼
+              Success             Failure
+          IcacheWaitResponse   IcacheWaitRetry
+                 │               (retry later)
+                 ▼
+        processCacheCompletion()
+           (copy data to fetchBuffer)
 ```
 
 **Phase 4: Instruction decode loop.** While bandwidth and queue capacity permit:
@@ -885,17 +885,17 @@ round-trip confirmation from downstream stages.
 ### 9.6 Stall Conditions Summary
 
 ```
-┌────────────────────────────────────────────────────────────┐
-│ Condition              │ Source              │ Resolution  │
-├────────────────────────────────────────────────────────────┤
-│ ROB full               │ Commit reporting    │ Commit frees│
-│ IQ full                │ IEW reporting       │ IEW frees   │
-│ LQ full                │ IEW reporting       │ Load commits│
-│ SQ full               │ IEW reporting       │ Store commits│
-│ No free phys registers │ Free list empty     │ Commit frees│
-│ IEW stall signal       │ IEW blocking        │ IEW unblocks│
-│ Serialize stall        │ Instruction flag    │ ROB drains  │
-└────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│ Condition              │ Source              │ Resolution   │
+├─────────────────────────────────────────────────────────────┤
+│ ROB full               │ Commit reporting    │ Commit frees │
+│ IQ full                │ IEW reporting       │ IEW frees    │
+│ LQ full                │ IEW reporting       │ Load commits │
+│ SQ full                │ IEW reporting       │ Store commits│
+│ No free phys registers │ Free list empty     │ Commit frees │
+│ IEW stall signal       │ IEW blocking        │ IEW unblocks │
+│ Serialize stall        │ Instruction flag    │ ROB drains   │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -1979,27 +1979,27 @@ SMT support is pervasive throughout the design.
 Each stage that must select among threads has its own policy:
 
 ```
-┌──────────┬──────────────────────────────────────────────────────┐
-│ Stage    │ Policies Available                                   │
-├──────────┼──────────────────────────────────────────────────────┤
-│ Fetch    │ RoundRobin, IQCount, LSQCount, Branch                │
-│          │ (configurable via SMTFetchPolicy)                    │
-├──────────┼──────────────────────────────────────────────────────┤
-│ Decode   │ No separate SMT policy object                        │
-│          │ Iterates active threads; decodeWidth shared globally │
-├──────────┼──────────────────────────────────────────────────────┤
-│ Rename   │ No separate SMT policy object                        │
-│          │ Width shared globally across per-thread input queues │
-├──────────┼──────────────────────────────────────────────────────┤
-│ IEW      │ Width shared across threads                          │
-│ (dispatch) │                                                    │
-├──────────┼──────────────────────────────────────────────────────┤
-│ IEW      │ Oldest-first across all threads (by seqNum)          │
-│ (issue)  │                                                      │
-├──────────┼──────────────────────────────────────────────────────┤
-│ Commit   │ RoundRobin or OldestReady                            │
-│          │ (configurable via CommitPolicy)                      │
-└──────────┴──────────────────────────────────────────────────────┘
+┌───────────┬──────────────────────────────────────────────────────┐
+│ Stage     │ Policies Available                                   │
+├───────────┼──────────────────────────────────────────────────────┤
+│ Fetch     │ RoundRobin, IQCount, LSQCount, Branch                │
+│           │ (configurable via SMTFetchPolicy)                    │
+├───────────┼──────────────────────────────────────────────────────┤
+│ Decode    │ No separate SMT policy object                        │
+│           │ Iterates active threads; decodeWidth shared globally │
+├───────────┼──────────────────────────────────────────────────────┤
+│ Rename    │ No separate SMT policy object                        │
+│           │ Width shared globally across per-thread input queues │
+├───────────┼──────────────────────────────────────────────────────┤
+│ IEW       │ Width shared across threads                          │
+│ (dispatch)│                                                      │
+├───────────┼──────────────────────────────────────────────────────┤
+│ IEW       │ Oldest-first across all threads (by seqNum)          │
+│ (issue)   │                                                      │
+├───────────┼──────────────────────────────────────────────────────┤
+│ Commit    │ RoundRobin or OldestReady                            │
+│           │ (configurable via CommitPolicy)                      │
+└───────────┴──────────────────────────────────────────────────────┘
 ```
 
 ### 19.3 Resource Sharing Policies
@@ -2314,9 +2314,9 @@ O3CPUAll     Compound flag enabling:
                     │     │                           readHead()/popHead()     │
                     │     │                           (decoupled mode)         │
                     │     │                                   ▼                │
-  I-Cache ◀────────│  ┌───────┐  FetchStruct  ┌────────┐  DecodeStruct         │
+   I-Cache ◀────────│  ┌───────┐  FetchStruct  ┌────────┐  DecodeStruct        │
                     │  │ Fetch │──────────────▶│ Decode │──────────────▶       │
-  ITLB ◀───────────│  └───────┘  (fetchQueue)  └────────┘  (decodeQueue)        │
+   ITLB ◀───────────│  └───────┘  (fetchQueue)  └────────┘  (decodeQueue)      │
                     │                                           │              │
                     │                                    RenameStruct          │
                     │                                    (renameQueue)         │
@@ -2325,11 +2325,11 @@ O3CPUAll     Compound flag enabling:
                     │                           ┌──────────────────────────┐   │
                     │                           │          IEW             │   │
                     │                           │                          │   │
-                    │                           │  Dispatch ──▶ IQ ──▶    │    │
-                    │                           │              │    ├─▶FU │    │
-  D-Cache ◀────────│                           │              │    └─▶LSQ│   │
-                    │                           │              │          │    │
-                    │                           │  Writeback ◀─┘          │    │
+                    │                           │  Dispatch ──▶ IQ ──▶     │   │
+                    │                           │              │    ├─▶FU  │   │
+   D-Cache ◀────────│                           │              │    └─▶LSQ │   │
+                    │                           │              │           │   │
+                    │                           │  Writeback ◀─┘           │   │
                     │                           └──────────┬───────────────┘   │
                     │                                      │                   │
                     │                               IEWStruct                  │
