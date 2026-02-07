@@ -796,12 +796,13 @@ follows:
 - **Lesson 4 (Clock Domains)**: `ClockedObject` inherits `SimObject` and
   uses the same port infrastructure, but converts between cycle and tick
   units for latency.
-- **Lesson 6 (Timing and CPU Hooks)**: CPU models use `RequestPort` to
+- **Lesson 8 (Timing and CPU Hooks)**: CPU models use `RequestPort` to
   issue instruction fetches and data accesses through the memory hierarchy.
-- **Lessons 8-9 (Python Config)**: port connections declared in Python
+- **Lessons 10-11 (Python Integration + Config)**: port connections declared
+  in Python
   (`system.cpu.port = system.bus.cpu_side`) invoke `getPort()` and `bind()`
   under the hood.
-- **Lesson 13 (Capstone)**: the full simulator wires CPUs, caches, buses,
+- **Lesson 14 (Capstone)**: the full simulator wires CPUs, caches, buses,
   and memory together using the exact same port protocol.
 
 Every component you build from now on will have ports. The request/response

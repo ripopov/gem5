@@ -1,4 +1,4 @@
-# Lesson 12: Workloads and Checkpoints
+# Lesson 12: gem5 Stdlib Composition
 
 ## Status
 
@@ -6,7 +6,7 @@ Placeholder. Content will be authored in a later change.
 
 ## Planned scope
 
-1. Selecting and parameterizing workloads.
-2. Resource acquisition and reproducibility.
-3. Creating, restoring, and validating checkpoints.
-4. Experiment design for iterative simulator development.
+1. Boards, processors, cache hierarchies, and memory objects.
+2. Composition patterns in the standard library.
+3. Integrating custom C++ objects into stdlib-based systems.
+4. Configuration validation and constraints.

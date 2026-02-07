@@ -49,14 +49,15 @@ Run a single test case:
 - Lesson 3 source: `src/tutorial/lesson03/` (C++ Memory and Ports)
 - Lesson 4 source: `src/tutorial/lesson04/` (C++ Clock Domains)
 - Lesson 5 source: `src/tutorial/lesson05/` (C++ ClockedObjects)
-- Lesson 6 source: `src/tutorial/lesson06/` (C++ Stats, Debug Flags, and Logging)
-- Lesson 7 source: `src/tutorial/lesson07/` (C++ Timing and CPU Hooks)
-- Lesson 8 source: `src/tutorial/lesson08/` (C++ Serialization and Checkpointing)
-- Lesson 9 source: `src/tutorial/lesson09/` (C++/Python Bridge)
-- Lesson 10 source: `src/tutorial/lesson10/` (Python Config and Run Loop)
-- Lesson 11 source: `src/tutorial/lesson11/` (gem5 Stdlib Composition)
-- Lesson 12 source: `src/tutorial/lesson12/` (Workloads and Checkpoints)
-- Lesson 13 source: `src/tutorial/lesson13/` (Capstone + Probes/Observability)
+- Lesson 6 source: `src/tutorial/lesson06/` (C++ Hierarchical Modeling)
+- Lesson 7 source: `src/tutorial/lesson07/` (C++ Stats, Debug Flags, and Logging)
+- Lesson 8 source: `src/tutorial/lesson08/` (C++ Timing and CPU Hooks)
+- Lesson 9 source: `src/tutorial/lesson09/` (C++ Serialization and Checkpointing)
+- Lesson 10 source: `src/tutorial/lesson10/` (C++/Python Bridge)
+- Lesson 11 source: `src/tutorial/lesson11/` (Python Config and Run Loop)
+- Lesson 12 source: `src/tutorial/lesson12/` (gem5 Stdlib Composition)
+- Lesson 13 source: `src/tutorial/lesson13/` (Workloads and Checkpoints)
+- Lesson 14 source: `src/tutorial/lesson14/` (Capstone + Probes/Observability)
 - Lesson docs (source-adjacent): `src/tutorial/`
 - Rendered docs wrappers (Sphinx): `docs/tutorial/`
 

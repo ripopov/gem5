@@ -27,7 +27,7 @@ The goal is to make four ideas concrete:
 - Build integration:
   `src/tutorial/SConscript`
 - Sphinx wrapper page including this file:
-  `docs/tutorial/lesson-05-cpp-python-bridge.md`
+  `docs/tutorial/lesson-05-cpp-clocked-objects.md`
 
 ## Build and run
 

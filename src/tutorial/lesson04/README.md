@@ -22,7 +22,7 @@ The goal is to make four ideas concrete:
 - Build integration:
   `src/tutorial/SConscript`
 - Sphinx wrapper page including this file:
-  `docs/tutorial/lesson-04-cpp-timing-and-cpu-hooks.md`
+  `docs/tutorial/lesson-04-cpp-clock-domains.md`
 
 ## Build and run
 

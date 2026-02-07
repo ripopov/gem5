@@ -1,61 +1,38 @@
-# Lesson 6: C++ Stats, Debug Flags, and Logging
+# Lesson 6: C++ Hierarchical Modeling
 
-This lesson covers gem5's three core observability systems: the statistics
-framework, debug-flag-controlled tracing, and structured logging.
+This lesson introduces hierarchical modeling in gem5: building a larger
+component by composing multiple smaller `ClockedObject` instances with clear
+responsibilities and interfaces.
 
-The goal is to make four ideas concrete:
+## Core vocabulary
 
-1. The statistics framework (`statistics::Scalar`, `Vector`, `Distribution`)
-   lets every component collect and report quantitative data.
-2. Debug flags and `DPRINTF` provide selective, per-component trace output
-   that can be toggled at runtime.
-3. Logging functions (`panic`, `fatal`, `warn`, `inform`) give structured
-   severity levels for error handling and diagnostics.
-4. Stats are organized hierarchically through `statistics::Group`, mirroring
-   the SimObject tree.
+- **Hierarchy**: a parent object composed of child objects with explicit roles.
+- **Composition boundary**: the interface (methods, ports, or events) between
+  parent and child behavior.
+- **Local clock semantics**: each child follows a clock domain, but all events
+  still execute on the shared global tick timeline.
+- **Aggregation logic**: parent-level policy that coordinates child-level
+  mechanisms.
+
+## Problem statement
+
+As simulator models grow, a single "everything in one class" `ClockedObject`
+quickly becomes hard to understand, test, and extend. Timing behavior, state
+management, and communication logic get tightly coupled in one place.
+
+The challenge is to design a hierarchy of clocked components that:
+
+1. Splits behavior into meaningful child objects (pipeline stages, schedulers,
+   queues, controllers, etc.).
+2. Preserves clear clock-domain semantics across parent and children.
+3. Defines explicit interfaces for coordination instead of hidden shared state.
+4. Supports incremental testing at both unit and integration levels.
+5. Scales to realistic system complexity without becoming brittle.
+
+This lesson will focus on turning that design problem into a repeatable
+modeling approach for gem5.
 
 ## Status
 
-Placeholder. Code examples will be authored in a later change.
-
-## Planned scope
-
-1. Defining scalar, vector, and distribution statistics on a SimObject.
-2. Registering stats with `statistics::Group` and the naming hierarchy.
-3. Declaring a `debug::SimpleFlag` and using `DPRINTF` / `DPRINTFS`.
-4. Using `panic()`, `fatal()`, `warn()`, and `inform()` correctly.
-5. Dumping and resetting statistics programmatically.
-6. Enabling debug flags from the command line and in tests.
-
-## Key gem5 classes
-
-### Statistics (`src/base/statistics.hh`, `src/base/stats/group.hh`)
-
-- `statistics::Scalar`: single counter (e.g., cache hits).
-- `statistics::Vector`: indexed array of counters.
-- `statistics::Distribution`: histogram of sampled values.
-- `statistics::Formula`: derived stat computed from other stats.
-- `statistics::Group`: hierarchical container that mirrors the SimObject
-  tree and provides `regStats()` / `resetStats()` hooks.
-
-### Debug flags (`src/base/debug.hh`, `src/base/trace.hh`)
-
-- `debug::SimpleFlag`: a named boolean flag toggled at runtime.
-- `debug::CompoundFlag`: aggregates multiple simple flags.
-- `DPRINTF(flag, fmt, ...)`: prints if `flag` is enabled; prepends
-  tick and object name automatically.
-- `DPRINTFS(flag, obj, fmt, ...)`: same but explicitly names the object.
-- `DPRINTFN(fmt, ...)`: unconditional trace (no flag check).
-
-### Logging (`src/base/logging.hh`)
-
-- `panic(fmt, ...)`: bug in gem5 itself; aborts immediately.
-- `fatal(fmt, ...)`: user configuration error; exits cleanly.
-- `warn(fmt, ...)`: something suspicious but non-fatal.
-- `inform(fmt, ...)`: informational message (always printed).
-
-## Why this lesson matters for later lessons
-
-Every component built in later lessons will use stats, DPRINTF, and
-logging. Understanding these APIs early makes debugging and validation
-straightforward from the start.
+Problem statement only. Implementation and runnable code examples will be
+added in a later change.
