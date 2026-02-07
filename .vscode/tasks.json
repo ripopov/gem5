@@ -79,6 +79,21 @@
             "problemMatcher": [
                 "$gcc"
             ]
+        },
+        {
+            "label": "tutorial: build lesson04 debug (NULL)",
+            "type": "process",
+            "command": "scons",
+            "args": [
+                "build/NULL/tutorial/lesson04_clock_domains.test.debug"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": "build",
+            "problemMatcher": [
+                "$gcc"
+            ]
         }
     ],
     "inputs": [

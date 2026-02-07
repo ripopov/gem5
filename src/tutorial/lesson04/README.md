@@ -1,138 +1,235 @@
-# Lesson 4: C++ Clock Domains
+# Lesson 4: Clock Domains, ClockedObjects, and Cycle/Tick Conversion
 
-This lesson explores gem5's clock domain infrastructure by using real APIs
-from `src/sim/clock_domain.hh` and `src/sim/clocked_object.hh`.
+This lesson is a runnable C++ example that builds on Lessons 1-3 and focuses
+on time at the *clock-domain* level.
 
 The goal is to make four ideas concrete:
 
-1. gem5 supports multiple independent clock domains, each with its own
-   frequency (period in ticks).
-2. `ClockedObject` binds a SimObject to a clock domain and provides
-   cycle/tick conversion helpers.
-3. `DerivedClockDomain` creates hierarchical clocks with integer frequency
-   dividers that automatically propagate parent frequency changes.
-4. `VoltageDomain` coordinates voltage levels across clock domains and
-   enables DVFS (Dynamic Voltage and Frequency Scaling).
+1. A `SrcClockDomain` defines an operating clock period (and DVFS points).
+2. A `DerivedClockDomain` tracks a parent with an integer divider.
+3. `Clocked`/`ClockedObject` helpers convert cleanly between cycles and ticks.
+4. Changing a source-domain perf level propagates period updates to members and
+   derived domains.
 
-## Status
+## Source map
 
-Placeholder. Code examples will be authored in a later change.
+- Lesson API:
+  `src/tutorial/lesson04/clock_domains.hh`
+- Lesson behavior:
+  `src/tutorial/lesson04/clock_domains.cc`
+- Unit test and domain setup:
+  `src/tutorial/lesson04/clock_domains.test.cc`
+- Build integration:
+  `src/tutorial/SConscript`
+- Sphinx wrapper page including this file:
+  `docs/tutorial/lesson-04-cpp-timing-and-cpu-hooks.md`
 
-## Planned scope
+## Build and run
 
-1. Creating `SrcClockDomain` and `VoltageDomain` instances.
-2. Binding a `ClockedObject` to a clock domain.
-3. Using cycle/tick conversion: `clockEdge()`, `clockPeriod()`, `curCycle()`,
-   `cyclesToTicks()`, `ticksToCycles()`.
-4. Building a `DerivedClockDomain` hierarchy with integer dividers.
-5. Observing clock propagation when a parent domain changes frequency.
-6. DVFS performance-level switching across voltage/frequency points.
+Build the lesson test binary:
 
-## Key gem5 classes
-
-### `ClockDomain` (`src/sim/clock_domain.hh`)
-
-Abstract base class that owns a clock period and notifies registered
-members and child domains when the period changes.
-
-### `SrcClockDomain` (`src/sim/clock_domain.hh`)
-
-A root clock domain configured with one or more frequency operating points
-(for DVFS). Each point pairs with a voltage level from an associated
-`VoltageDomain`.
-
-### `DerivedClockDomain` (`src/sim/clock_domain.hh`)
-
-A child clock domain whose period is `parent.clockPeriod() * clk_divider`.
-When the parent's frequency changes, derived domains automatically
-recompute and propagate the new period to all their members and children.
-
-### `VoltageDomain` (`src/sim/voltage_domain.hh`)
-
-Manages voltage operating points and coordinates voltage selection across
-all `SrcClockDomain` children sharing the same voltage rail.
-
-### `ClockedObject` (`src/sim/clocked_object.hh`)
-
-Inherits both `SimObject` and `Clocked`. Every clocked component in gem5
-(CPUs, caches, memory controllers, etc.) inherits from this class. It
-provides:
-
-- `clockPeriod()`: domain's clock period in ticks.
-- `clockEdge(Cycles n)`: absolute tick of the nth future clock edge.
-- `curCycle()`: current cycle number.
-- `cyclesToTicks(Cycles)` / `ticksToCycles(Tick)`: conversions.
-- `frequency()`: clock frequency derived from period.
-- `nextCycle()`: tick of the next rising clock edge.
-
-### Python configuration (`ClockDomain.py`, `VoltageDomain.py`)
-
-```python
-from m5.objects import *
-
-# Root clock at 2 GHz
-sys_clk = SrcClockDomain(clock="2GHz",
-                          voltage_domain=VoltageDomain())
-
-# Derived clock at half frequency (1 GHz)
-mem_clk = DerivedClockDomain(clk_domain=sys_clk, clk_divider=2)
+```bash
+scons build/NULL/tutorial/lesson04_clock_domains.test.debug
 ```
 
-Objects default to `Parent.clk_domain`, so children automatically inherit
-their parent's clock unless explicitly overridden.
+Run the binary:
 
-## Mental model: multiple clock domains
+```bash
+./build/NULL/tutorial/lesson04_clock_domains.test.debug
+```
+
+List test cases:
+
+```bash
+./build/NULL/tutorial/lesson04_clock_domains.test.debug --gtest_list_tests
+```
+
+Run one test case:
+
+```bash
+./build/NULL/tutorial/lesson04_clock_domains.test.debug \
+  --gtest_filter=ClockDomainsTest.DvfsChangesPeriodsAndPropagatesToDerivedClock
+```
+
+## Why this lesson exists
+
+Lesson 1 showed that gem5 uses a global `Tick` timeline and an event queue.
+That is necessary, but not sufficient, for realistic timing models.
+
+Real hardware is built from blocks running at different clocks:
+
+- a CPU core clock,
+- one or more cache clocks,
+- an interconnect clock,
+- memory-controller and I/O clocks.
+
+gem5 models this with **clock domains**. A clocked component still schedules
+events on the same global event queue, but it computes event times using its
+own local cycle notion.
+
+That is exactly what this lesson demonstrates with runnable C++ code:
+
+- two clock domains (`source` and `derived`),
+- two clocked probes bound to those domains,
+- cycle/tick conversions and edge alignment at runtime,
+- a DVFS switch that updates periods and voltage.
+
+## Mental model
 
 ```text
-VoltageDomain (1.0V)
- |
- +-- SrcClockDomain "sys_clk" (2 GHz, period = 500 ticks)
- |    |
- |    +-- CPU (ClockedObject, inherits sys_clk)
- |    +-- L1 Cache (ClockedObject, inherits sys_clk)
- |    |
- |    +-- DerivedClockDomain "mem_clk" (divider=2 -> 1 GHz, period = 1000)
- |         |
- |         +-- Memory Controller (ClockedObject, inherits mem_clk)
- |
- +-- SrcClockDomain "io_clk" (500 MHz, period = 2000 ticks)
-      |
-      +-- I/O Bridge (ClockedObject, inherits io_clk)
+Global event queue tick timeline:
+  0 -------- 500 -------- 1000 -------- 1500 -------- 2000 ...
+
+Source clock domain (period = 500 ticks):
+  cycle 0     cycle 1      cycle 2       cycle 3
+
+Derived clock domain (divider=2, period = 1000 ticks):
+  cycle 0                 cycle 1                   cycle 2
 ```
 
-Each domain ticks independently. Events scheduled by objects in different
-domains fire at their respective clock edges, all on the same global
-`EventQueue` tick timeline from Lesson 1.
+Both domains share one global timeline, but their cycle boundaries differ.
+`Clocked::clockEdge()` and `Clocked::curCycle()` expose this mapping.
 
-## Clock change propagation
+## gem5 APIs used in this lesson
 
-```mermaid
-flowchart TD
-    A[SrcClockDomain::clockPeriod set] --> B[update all Clocked members]
-    B --> C[update all DerivedClockDomain children]
-    C --> D[DerivedClockDomain recalculates period]
-    D --> E[update its Clocked members]
-    E --> F[propagate to its own children]
+### 1) `VoltageDomain` (`src/sim/voltage_domain.hh`)
+
+Defines voltage operating points shared by source clock domains on the same
+rail.
+
+This lesson configures:
+
+- level 0: `1.0V`
+- level 1: `0.9V`
+
+### 2) `SrcClockDomain` (`src/sim/clock_domain.hh`)
+
+A source domain owns one or more clock periods (DVFS points). In this lesson:
+
+- perf level 0: `500` ticks (faster)
+- perf level 1: `1000` ticks (slower)
+
+`perfLevel(...)` changes both:
+
+- the selected source period,
+- the selected voltage-domain perf level (via sanitization).
+
+### 3) `DerivedClockDomain` (`src/sim/clock_domain.hh`)
+
+A derived domain period is:
+
+`derived_period = parent_period * clk_divider`
+
+This lesson uses `clk_divider = 2`, so:
+
+- parent `500` -> derived `1000`
+- parent `1000` -> derived `2000`
+
+### 4) `Clocked` (`src/sim/clocked_object.hh`)
+
+`Clocked` is the conversion utility behind `ClockedObject`.
+Lesson class `ClockedProbe` directly inherits `Clocked` to expose:
+
+- `clockPeriod()`
+- `curCycle()`
+- `clockEdge(Cycles n)`
+- `nextCycle()`
+- `ticksToCycles(Tick)`
+- `cyclesToTicks(Cycles)`
+
+It also overrides `clockPeriodUpdated()` to record period-change propagation.
+
+## Lesson implementation walkthrough
+
+### Header: `clock_domains.hh`
+
+`ClockedProbe` combines:
+
+- `Clocked`: domain-aware cycle/tick helpers,
+- `EventManager`: queue scheduling support for pulse callbacks.
+
+State tracked by each probe:
+
+- trace lines (`traceLog`),
+- pulse counter (`pulseCount`),
+- clock-update counter (`clockUpdateCount`).
+
+### Source: `clock_domains.cc`
+
+Important methods:
+
+1. `sample(tag)`
+   logs current tick, period, cycle, current edge, and next edge.
+2. `schedulePulse(cycles_from_now)`
+   schedules a pulse event at `clockEdge(cycles_from_now)`.
+3. `clockPeriodUpdated()`
+   runs when the owning domain changes period and records that update.
+
+Every trace line is normalized for testing, for example:
+
+```text
+tick=750 label=source_probe tag=after-dvfs period=1000 cycle=2
+edge=1000 next=2000
 ```
 
-## DVFS flow
+## Test walkthrough
 
-```mermaid
-flowchart TD
-    A[SrcClockDomain::perfLevel changed] --> B[signal VoltageDomain]
-    B --> C[VoltageDomain::sanitiseVoltages]
-    C --> D[pick highest perf level across all children]
-    D --> E[update voltage if changed]
-    E --> F[SrcClockDomain updates clock period]
-    F --> G[propagate to members and derived domains]
-```
+### Fixture setup
 
-## Why this lesson matters for later lessons
+`ClockDomainsTest`:
 
-Clock domains are foundational for any timing-accurate simulation:
+- installs event queue 0 as current queue,
+- drains any stale events,
+- resets tick to 0 before/after each test.
 
-- Lesson 5 builds on clock domains to model latency and timing modes.
-- Python configuration (Lessons 6-7) uses `SrcClockDomain` and
-  `DerivedClockDomain` to wire up multi-frequency systems.
-- DVFS support enables power/performance research workflows in later
-  lessons.
+### `ClockedHelpersConvertBetweenCyclesAndTicks`
+
+Validates:
+
+1. initial source/derived periods are `500` and `1000`,
+2. helper conversions at tick 0 (`clockEdge`, `ticksToCycles`,
+   `cyclesToTicks`),
+3. mid-cycle behavior at tick `750`:
+   - source aligns to cycle 2, edge 1000, next 1500,
+   - derived aligns to cycle 1, edge 1000, next 2000.
+
+### `DvfsChangesPeriodsAndPropagatesToDerivedClock`
+
+Validates:
+
+1. `source.perfLevel(1)` changes source period (`500 -> 1000`),
+2. derived period follows (`1000 -> 2000`),
+3. voltage domain follows (`1.0V -> 0.9V`),
+4. both probes receive a `clockPeriodUpdated()` callback.
+
+### `PulseSchedulingUsesEachProbeClockEdges`
+
+Validates pulse events scheduled one cycle ahead:
+
+- source pulse lands at tick `500`,
+- derived pulse lands at tick `1000`.
+
+This is the key operational behavior: one event queue, multiple domain-specific
+cycle interpretations.
+
+## Relationship to `ClockedObject`
+
+Production components usually derive from `ClockedObject` (not bare
+`Clocked`). `ClockedObject` inherits `Clocked` and adds:
+
+- full `SimObject` lifecycle and params wiring,
+- power-state model integration.
+
+This lesson keeps the code minimal by using `Clocked` directly while exercising
+the same clock conversion and update APIs that `ClockedObject` classes use.
+
+## Why this matters for later lessons
+
+With clock domains in place, you can now build realistic timing behavior:
+
+- per-component latency in cycles,
+- multi-frequency subsystems (core/cache/memory),
+- DVFS experiments where performance levels change over time.
+
+Later lessons will apply this to timing pipelines, integration hooks, and full
+system composition.

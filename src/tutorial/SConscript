@@ -42,3 +42,16 @@ GTest(
     "../sim/port.cc",
     with_tag("gem5 simobject"),
 )
+
+GTest(
+    "lesson04_clock_domains.test",
+    "lesson04/clock_domains.test.cc",
+    "lesson04/clock_domains.cc",
+    "../base/statistics.cc",
+    "../base/stats/info.cc",
+    "../base/types.cc",
+    "lesson04/stat_stubs.cc",
+    "../sim/clock_domain.cc",
+    "../sim/voltage_domain.cc",
+    with_tag("gem5 simobject"),
+)
