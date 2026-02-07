@@ -37,6 +37,16 @@ SimObject(
     sim_objects=["TutorialHierarchyStage", "TutorialHierarchyDemo"],
 )
 
+SimObject(
+    "lesson07/TutorialStatsDebugDemo.py",
+    sim_objects=["TutorialStatsDebugDemo"],
+)
+
+DebugFlag(
+    "TutorialLesson07",
+    "Debug traces for tutorial Lesson 7 stats/debug/logging examples",
+)
+
 GTest(
     "lesson03_memory_ports.test",
     "lesson03/memory_ports.test.cc",
@@ -87,6 +97,22 @@ GTest(
     "lesson06/hierarchical_modeling.cc",
     "../base/statistics.cc",
     "../base/stats/info.cc",
+    "../base/types.cc",
+    "lesson04/stat_stubs.cc",
+    "lesson05/power_model_stubs.cc",
+    "../sim/clock_domain.cc",
+    "../sim/voltage_domain.cc",
+    "../sim/clocked_object.cc",
+    with_tag("gem5 simobject"),
+)
+
+GTest(
+    "lesson07_stats_debug_logging.test",
+    "lesson07/stats_debug_logging.test.cc",
+    "lesson07/stats_debug_logging.cc",
+    "../base/statistics.cc",
+    "../base/stats/info.cc",
+    "../base/stats/storage.cc",
     "../base/types.cc",
     "lesson04/stat_stubs.cc",
     "lesson05/power_model_stubs.cc",

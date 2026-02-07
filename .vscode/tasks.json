@@ -124,6 +124,21 @@
             "problemMatcher": [
                 "$gcc"
             ]
+        },
+        {
+            "label": "tutorial: build lesson07 debug (NULL)",
+            "type": "process",
+            "command": "scons",
+            "args": [
+                "build/NULL/tutorial/lesson07_stats_debug_logging.test.debug"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": "build",
+            "problemMatcher": [
+                "$gcc"
+            ]
         }
     ],
     "inputs": [
