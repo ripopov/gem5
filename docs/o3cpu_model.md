@@ -32,7 +32,7 @@
 The O3CPU is gem5's cycle-accurate model of a superscalar, out-of-order processor. It
 faithfully represents the major microarchitectural structures found in modern high-performance
 cores: branch prediction, register renaming, out-of-order issue, speculative execution, and
-in-order retirement. The model comprises approximately 28,500 lines of C++ across 46 source
+in-order retirement. The model comprises approximately 28,505 lines of C++ across 50 source
 files in `src/cpu/o3/`, complemented by eight Python SimObject definitions.
 
 The O3CPU models a processor pipeline that fetches multiple instructions per cycle,
@@ -54,7 +54,7 @@ reflect this:
   to be configured without code changes.
 
 - **Activity-driven scheduling.** The CPU tracks whether any pipeline stage has useful work.
-  When the entire pipeline is idle, the CPU deschedulesitself from the event queue, avoiding
+  When the entire pipeline is idle, the CPU deschedules itself from the event queue, avoiding
   simulation cycles on an inactive core.
 
 - **Modular front-end.** The branch predictor and fetch stage can operate in either a
@@ -101,7 +101,7 @@ src/cpu/o3/
 
 ### 2.1 Pipeline Stages
 
-The O3CPU pipeline consists of seven logical stages, each modeled as a C++ class
+The O3CPU pipeline consists of six logical stages, each modeled as a C++ class
 instantiated as a direct member of the `CPU` object:
 
 ```
@@ -120,7 +120,7 @@ instantiated as a direct member of the `CPU` object:
 ### 2.2 Execution Order Within a Cycle
 
 Each simulated cycle, the CPU's `tick()` method
-([cpu.cc:380-390](src/cpu/o3/cpu.cc#L380-L390)) calls stage ticks in strict order:
+([cpu.cc](src/cpu/o3/cpu.cc)) calls stage ticks in strict order:
 
 ```
 1. BAC.tick()       Branch prediction / fetch target generation
@@ -132,7 +132,7 @@ Each simulated cycle, the CPU's `tick()` method
 ```
 
 After all stages tick, the CPU advances all inter-stage time buffers
-([cpu.cc:393-398](src/cpu/o3/cpu.cc#L393-L398)), making data written this cycle
+([cpu.cc](src/cpu/o3/cpu.cc)), making data written this cycle
 visible to downstream consumers after the configured latency.
 
 ### 2.3 Pipeline Width
@@ -153,7 +153,7 @@ A typical instruction flows through the pipeline as follows. The latencies betwe
 stages are configurable parameters:
 
 ```
-Cycle  0:  BAC generates fetch target
+Cycle  0:  (Decoupled mode) BAC may generate fetch target(s)
 Cycle  1:  Fetch sends I-cache request, ITLB translation
 Cycle  2:  I-cache returns data, instructions pre-decoded
 Cycle  3:  Fetch queue → Decode receives instructions
@@ -163,6 +163,9 @@ Cycle  6+: IEW issues when operands ready, executes on FU
 Cycle  N:  Execution completes, writeback wakes dependents
 Cycle  N+1: Commit retires instruction from ROB head
 ```
+
+In coupled front-end mode, branch prediction advances through `Fetch::buildInst()`
+calling `BAC::updatePC()`; BAC does not independently run ahead.
 
 ---
 
@@ -190,7 +193,7 @@ Each dynamic instruction carries:
 
 ### 3.2 Lifecycle Status Tracking
 
-A `DynInst` tracks its progress through the pipeline using a 23-bit status bitset. Multiple
+A `DynInst` tracks its progress through the pipeline using a 24-bit status bitset. Multiple
 bits can be set simultaneously. The key lifecycle states are:
 
 ```
@@ -206,7 +209,7 @@ management for partial writes.
 ### 3.3 Register Operand Storage
 
 To minimize heap allocation overhead, `DynInst` uses a custom `operator new`
-([dyn_inst.cc:136-188](src/cpu/o3/dyn_inst.cc#L136-L188)) that allocates a single
+([dyn_inst.cc](src/cpu/o3/dyn_inst.cc)) that allocates a single
 contiguous buffer containing the `DynInst` object itself plus trailing arrays for:
 
 - Flattened architectural destination register IDs
@@ -221,14 +224,14 @@ This single-allocation strategy improves cache locality and reduces allocator pr
 
 The field `readyRegs` counts how many source registers have been marked ready. When a
 source register's producing instruction completes writeback, the IQ calls
-`markSrcRegReady()` ([dyn_inst.cc:304-319](src/cpu/o3/dyn_inst.cc#L304-L319)),
+`markSrcRegReady()` ([dyn_inst.cc](src/cpu/o3/dyn_inst.cc)),
 which increments `readyRegs`. When `readyRegs` equals the total number of source registers,
 the instruction is marked `CanIssue` and becomes eligible for scheduling.
 
 ### 3.5 Branch Prediction Data
 
 Each `DynInst` stores the predicted next PC (`predPC`). The `mispredicted()` method
-([dyn_inst.hh:534-540](src/cpu/o3/dyn_inst.hh#L534-L540)) computes the actual next PC
+([dyn_inst.hh](src/cpu/o3/dyn_inst.hh)) computes the actual next PC
 by calling `staticInst->advancePC()` and compares it against `predPC`. If they differ,
 the branch predictor was wrong, and a squash is initiated.
 
@@ -250,11 +253,12 @@ iterators into the load queue and store queue.
 
 ### 3.8 Deferred Miscellaneous Register Writes
 
-Instructions that write to miscellaneous (control/status) registers do not apply those
-writes immediately. Instead, the destination register index and value are saved in
-internal vectors. The method `updateMiscRegs()`
-([dyn_inst.hh:1104-1119](src/cpu/o3/dyn_inst.hh#L1104-L1119)) applies these writes
-at commit time, ensuring that speculative instructions cannot corrupt architectural state.
+Instructions that write to miscellaneous (control/status) registers are recorded for
+commit-time application via `updateMiscRegs()`
+([dyn_inst.hh](src/cpu/o3/dyn_inst.hh)).
+For non-serializing misc registers on non-speculative instructions, the model may also
+apply the write immediately in `setMiscRegOperand()` while still keeping the deferred
+commit-time record.
 
 ---
 
@@ -297,7 +301,7 @@ Each structure carries up to `MaxWidth` (16) instruction pointers and a `size` c
 
 All backward communication (squash signals, stall signals, resource availability counts)
 flows through a single shared `TimeBuffer<TimeStruct>`
-([comm.hh:113-239](src/cpu/o3/comm.hh#L113-L239)). This structure contains per-stage
+([comm.hh](src/cpu/o3/comm.hh)). This structure contains per-stage
 sub-structures:
 
 ```
@@ -364,26 +368,26 @@ which calls `BPU::update()` and `BPU::squash()` respectively.
 
 In decoupled mode, the BAC runs ahead of fetch, acting as an independent prediction
 engine that populates the Fetch Target Queue (FTQ). Each cycle, `generateFetchTargets()`
-([bac.cc:585-758](src/cpu/o3/bac.cc#L585-L758)) performs the following:
+([bac.cc](src/cpu/o3/bac.cc)) performs the following:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │ BAC::generateFetchTargets() -- one cycle                            │
 │                                                                     │
-│  1. Start at current BAC PC                                        │
+│  1. Start at current BAC PC                                         │
 │  2. Scan consecutive addresses using BTB lookup                     │
-│     (increment by minInstSize: 1 byte for x86, 4 bytes for ARM)    │
+│     (increment by minInstSize: 1 byte for x86, 4 bytes for ARM)     │
 │  3. When branch found in BTB:                                       │
 │     a. Query branch predictor for direction                         │
-│     b. Create FetchTarget with [startPC, endPC, predPC, taken]     │
+│     b. Create FetchTarget with [startPC, endPC, predPC, taken]      │
 │     c. Attach BPU history to the FetchTarget                        │
 │     d. Insert FetchTarget into FTQ                                  │
 │  4. Update BAC PC for next iteration                                │
 │  5. Repeat until bandwidth limit or FTQ full                        │
 │                                                                     │
 │  Bandwidth limits:                                                  │
-│    maxFTPerCycle       -- max fetch targets generated per cycle      │
-│    maxTakenPredPerCycle -- max taken branches predicted per cycle    │
+│    maxFTPerCycle        -- max fetch targets generated per cycle    │
+│    maxTakenPredPerCycle -- max taken branches predicted per cycle   │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -391,7 +395,7 @@ engine that populates the Fetch Target Queue (FTQ). Each cycle, `generateFetchTa
 
 In decoupled mode, when Fetch actually pre-decodes an instruction and discovers it is
 a branch, it calls `BAC::updatePreDecode()`
-([bac.cc:763-901](src/cpu/o3/bac.cc#L763-L901)) to reconcile the fetch-time decode
+([bac.cc](src/cpu/o3/bac.cc)) to reconcile the fetch-time decode
 with the earlier BAC prediction. This handles cases such as:
 
 - The BTB correctly predicted the branch location (most common case -- simply transfers
@@ -404,7 +408,7 @@ with the earlier BAC prediction. This handles cases such as:
 
 When a squash occurs (from commit, decode, or fetch), the BAC must undo speculative
 branch predictor state. The method `squashBpuHistories()`
-([bac.cc:463-481](src/cpu/o3/bac.cc#L463-L481)) iterates the FTQ backwards and calls
+([bac.cc](src/cpu/o3/bac.cc)) iterates the FTQ backwards and calls
 `BPU::squashHistory()` for each FetchTarget that has an attached predictor history,
 reverting the predictor to its pre-speculation state.
 
@@ -415,11 +419,16 @@ reverting the predictor to its pre-speculation state.
 │ Idle │ ──────────────────▶ │ Running │
 └──────┘                      └────┬────┘
                                    │
-                    ┌──────────────┼──────────────┐
-                    ▼              ▼              ▼
-              ┌──────────┐  ┌─────────┐   ┌──────────┐
-              │ FTQFull  │  │Squashing│   │ Blocked  │
-              └──────────┘  └─────────┘   └──────────┘
+                 ┌─────────────────┼──────────────────────────┐
+                 ▼                 ▼                          ▼
+           ┌──────────┐      ┌─────────┐                ┌──────────┐
+           │ FTQFull  │      │Squashing│                │ Blocked  │
+           └──────────┘      └─────────┘                └──────────┘
+                 │
+                 ▼
+           ┌──────────┐
+           │FTQLocked │
+           └──────────┘
 ```
 
 ---
@@ -437,19 +446,19 @@ Each FetchTarget represents a contiguous sequence of instructions ending at a br
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ FetchTarget                                                  │
-│                                                              │
-│  startPC ─────────────────────────────── endPC               │
-│  │                                        │                  │
-│  ▼                                        ▼                  │
-│  ┌────┬────┬────┬────┬────┬────┬────┬────┐                   │
-│  │inst│inst│inst│inst│inst│inst│inst│ BR │                   │
-│  └────┴────┴────┴────┴────┴────┴────┴──┬─┘                   │
-│                                        │                     │
-│  is_branch: true                       ▼                     │
-│  taken: true/false              predPC (predicted target)    │
-│  bpuHistory: attached predictor state                        │
-│  ftSeqNum: ordering number                                   │
+│ FetchTarget                                                 │
+│                                                             │
+│  startPC ─────────────────────────────── endPC              │
+│  │                                        │                 │
+│  ▼                                        ▼                 │
+│  ┌────┬────┬────┬────┬────┬────┬────┬────┐                  │
+│  │inst│inst│inst│inst│inst│inst│inst│ BR │                  │
+│  └────┴────┴────┴────┴────┴────┴────┴──┬─┘                  │
+│                                        │                    │
+│  is_branch: true                       ▼                    │
+│  taken: true/false              predPC (predicted target)   │
+│  bpuHistory: attached predictor state                       │
+│  ftSeqNum: ordering number                                  │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -460,61 +469,63 @@ The FTQ provides these operations:
 - **insert()**: BAC pushes a new FetchTarget to the tail.
 - **readHead()**: Fetch peeks at the head FetchTarget without removing it.
 - **popHead()**: Fetch removes the head FetchTarget after consuming all its instructions.
-  Returns false if the FetchTarget still has an attached BPU history (indicating a
-  BAC-detected misprediction).
+  Returns false if the head still has attached BPU history, or if the FTQ is `Locked`
+  (in which case status transitions to `Invalid` and a squash is required to recover).
 - **squash()**: Clears all entries on a squash, resetting to `Valid` state.
 
 ### 6.3 FTQ Status Model
 
+The `FTQ::Status` enum includes `Invalid`, `Valid`, `Full`, and `Locked`. In the
+current implementation, control flow uses `Invalid`, `Valid`, and `Locked`; queue
+fullness is determined by occupancy (`isFull()`), not by setting `ftqStatus = Full`.
+
 ```
-┌─────────┐   squash    ┌───────┐   insert    ┌──────┐
-│ Invalid │ ──────────▶ │ Valid │ ──────────▶ │ Full │
-└─────────┘              └───┬───┘             └──────┘
-      ▲                      │
-      │                  lock()
-      │                      │
-      │                      ▼
-      │                ┌────────┐
-      └────────────────│ Locked │  (head valid, tail invalid)
-                       └────────┘
+┌─────────┐   squash/reset   ┌───────┐
+│ Invalid │ ───────────────▶ │ Valid │
+└────┬────┘                   └───┬───┘
+     │                            │ lock()
+     │ popHead fail / locked pop  ▼
+     └────────────────────────┌────────┐
+                              │ Locked │
+                              └────────┘
+
+Occupancy (`size >= numEntries`) determines "fullness" via `isFull()`.
 ```
 
 ### 6.4 Coupled vs. Decoupled Behavior
 
-In coupled mode, the FTQ is still instantiated but plays a minimal role. Its `readHead()`
-always returns a valid (though mostly ignored) FetchTarget, and its `isReady()` always
-returns true. The key difference is that in coupled mode, Fetch does not check whether
-instructions fall within the FetchTarget's address range, and the FTQ is never the
-bottleneck.
+In coupled mode, the FTQ is still instantiated but plays a minimal role. `readHead()`
+returns `nullptr` when the queue is empty, as usual. The key behavioral difference is that
+`Fetch::ftqReady()` always returns true when `decoupledFrontEnd` is disabled, so fetch
+does not stall on FTQ head readiness.
 
 ---
 
 ## 7. Fetch Stage
 
 The Fetch stage ([fetch.hh](src/cpu/o3/fetch.hh), [fetch.cc](src/cpu/o3/fetch.cc))
-is the largest stage by line count (~2,266 lines combined) and handles instruction
+is one of the largest stages and handles instruction
 retrieval from the instruction cache, pre-decoding, macro-op expansion, and branch
 prediction coordination.
 
 ### 7.1 High-Level Architecture
 
 ```
-                           ┌──────────────────────────────┐
-                           │         Fetch Stage           │
-                           │                               │
-  I-Cache ◀────────────▶  │  ┌─────────┐   ┌──────────┐  │
-  (IcachePort)             │  │  Fetch  │   │  Fetch   │  │
-                           │  │ Buffer  │──▶│  Queue   │──┼──▶ To Decode
-  ITLB ◀──────────────▶   │  │ (bytes) │   │ (insts)  │  │
-  (FetchTranslation)       │  └─────────┘   └──────────┘  │
-                           │       ▲                      │
-  BAC/FTQ ◀────────────▶  │       │ ISA Decoder          │
-                           │       │                      │
-                           └───────┼──────────────────────┘
-                                   │
-                              fetchCacheLine()
-                              finishTranslation()
-                              processCacheCompletion()
+                              ┌──────────────────────────────┐
+                              │          Fetch Stage         │
+                              │                              │
+I-Cache ◀──────────────▶      │  ┌─────────┐  ┌──────────┐  │
+(IcachePort)                  │  │  Fetch  │  │  Fetch   │  │
+                              │  │ Buffer  │─▶│  Queue   │──┼──▶ To Decode
+ITLB ◀──────────────────▶     │  │ (bytes) │  │ (insts)  │  │
+(FetchTranslation)            │  └─────────┘  └──────────┘  │
+BAC/FTQ ◀──────────────▶      │        ▲                     │
+                              │        │ ISA Decoder         │
+                              └────────┼─────────────────────┘
+                                       │
+                                 fetchCacheLine()
+                                 finishTranslation()
+                                 processCacheCompletion()
 ```
 
 ### 7.2 Per-Thread State
@@ -532,31 +543,30 @@ Fetch maintains independent state for each hardware thread:
 ### 7.3 Thread Status Model
 
 ```
-                    ┌─────────────────────────────────┐
-                    │        Fetch Thread States       │
-                    │                                  │
-                    │  Running ◀───────▶ Blocked       │
-                    │    │                   ▲         │
-                    │    │                   │ stall   │
-                    │    ▼                   │         │
-                    │  ItlbWait ──▶ IcacheWaitResponse │
-                    │                   │              │
-                    │                   ▼              │
-                    │          IcacheAccessComplete     │
-                    │                   │              │
-                    │                   ▼              │
-                    │               Running            │
-                    │                                  │
-                    │  Special states:                 │
-                    │    Squashing, Idle, TrapPending,  │
-                    │    QuiescePending, FtqWait,       │
-                    │    IcacheWaitRetry, NoGoodAddr    │
-                    └─────────────────────────────────┘
+                    ┌──────────────────────────────────────────────┐
+                    │              Fetch Thread States             │
+                    │                                              │
+                    │  Running  ◀────────▶  Blocked                │
+                    │     │                     ▲                  │
+                    │     │                     │ stall            │
+                    │     ▼                     │                  │
+                    │  Fetching ─▶ ItlbWait ─▶ IcacheWaitResponse  │
+                    │                     │      │                 │
+                    │                     ▼      │                 │
+                    │          IcacheAccessComplete                │
+                    │                     │                        │
+                    │                     ▼                        │
+                    │                  Running                     │
+                    │                                              │
+                    │  Special: Squashing, Idle, TrapPending,      │
+                    │           QuiescePending, FtqWait,           │
+                    │           IcacheWaitRetry, NoGoodAddr        │
+                    └──────────────────────────────────────────────┘
 ```
 
 ### 7.4 The Fetch Algorithm
 
-The `tick()` method ([fetch.cc:821-916](src/cpu/o3/fetch.cc#L821-L916)) orchestrates
+The `tick()` method ([fetch.cc](src/cpu/o3/fetch.cc)) orchestrates
 each cycle:
 
 **Step 1: Check backward signals.**
@@ -578,7 +588,7 @@ SMT bandwidth sharing.
 
 ### 7.5 The Core Fetch Loop
 
-The `fetch()` method ([fetch.cc:1058-1400](src/cpu/o3/fetch.cc#L1058-L1400)) is the
+The `fetch()` method ([fetch.cc](src/cpu/o3/fetch.cc)) is the
 heart of the stage. For the selected thread:
 
 **Phase 1: Thread selection.** The SMT fetch policy selects which thread to service.
@@ -635,7 +645,7 @@ The fetch stage communicates with the instruction cache through an `IcachePort`
 
 ### 7.7 Squash Handling
 
-The `doSquash()` method ([fetch.cc:710-759](src/cpu/o3/fetch.cc#L710-L759)):
+The `doSquash()` method ([fetch.cc](src/cpu/o3/fetch.cc)):
 
 1. Sets the PC to the squash target address.
 2. Resets the fetch offset and macro-op state.
@@ -648,20 +658,20 @@ The `doSquash()` method ([fetch.cc:710-759](src/cpu/o3/fetch.cc#L710-L759)):
 
 ```
 ┌────────────────────────────────────────────────────────┐
-│ Policy          │ Algorithm                             │
+│ Policy          │ Algorithm                            │
 ├────────────────────────────────────────────────────────┤
 │ RoundRobin      │ Rotate through threads in order.     │
-│                 │ Move serviced thread to back of list. │
+│                 │ Move serviced thread to back of list.│
 ├────────────────────────────────────────────────────────┤
-│ IQCount         │ Favor thread with fewest IQ entries.  │
-│                 │ Reduces pressure on the busiest       │
-│                 │ thread's instruction queue.            │
+│ IQCount         │ Favor thread with fewest IQ entries. │
+│                 │ Reduces pressure on the busiest      │
+│                 │ thread's instruction queue.          │
 ├────────────────────────────────────────────────────────┤
-│ LSQCount        │ Favor thread with fewest LSQ entries. │
-│                 │ Prevents one thread from monopolizing  │
-│                 │ the load/store queue.                  │
+│ LSQCount        │ Favor thread with fewest LSQ entries.│
+│                 │ Prevents one thread from monopolizing│
+│                 │ the load/store queue.                │
 ├────────────────────────────────────────────────────────┤
-│ BranchCount     │ Not yet implemented.                  │
+│ Branch          │ Not yet implemented.                 │
 └────────────────────────────────────────────────────────┘
 ```
 
@@ -681,7 +691,7 @@ serves three purposes:
 ### 8.1 Early Branch Resolution
 
 The most important functional contribution of the decode stage is checking direct
-branch targets ([decode.cc:722-744](src/cpu/o3/decode.cc#L722-L744)):
+branch targets ([decode.cc](src/cpu/o3/decode.cc)):
 
 ```
 For each instruction passing through decode:
@@ -701,7 +711,7 @@ Indirect branches (register-based targets) can only be resolved at execute.
 
 ### 8.2 Decode Processing Loop
 
-The `decodeInsts()` method ([decode.cc:636-758](src/cpu/o3/decode.cc#L636-L758))
+The `decodeInsts()` method ([decode.cc](src/cpu/o3/decode.cc))
 processes instructions from either the input queue or the skid buffer:
 
 ```
@@ -759,7 +769,7 @@ eliminates false dependencies (WAR and WAW hazards) while preserving true depend
 ### 9.1 The Rename Algorithm
 
 For each instruction, `renameInsts()`
-([rename.cc:534-790](src/cpu/o3/rename.cc#L534-L790)) performs:
+([rename.cc](src/cpu/o3/rename.cc)) performs:
 
 ```
 For each instruction (up to renameWidth per cycle):
@@ -801,24 +811,24 @@ recent rename at the front:
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│ RenameHistory Entry                                       │
-│                                                           │
-│  instSeqNum:  Instruction that caused this rename         │
-│  archReg:     Flattened architectural register ID         │
-│  newPhysReg:  Newly allocated physical register           │
-│  prevPhysReg: Physical register that was previously mapped│
+│ RenameHistory Entry                                      │
+│                                                          │
+│  instSeqNum:  Instruction that caused this rename        │
+│  archReg:     Flattened architectural register ID        │
+│  newPhysReg:  Newly allocated physical register          │
+│  prevPhysReg: Physical register previously mapped        │
 └──────────────────────────────────────────────────────────┘
 ```
 
 The history buffer serves two purposes:
 
 **On commit** (`removeFromHistory()`,
-[rename.cc:990-1044](src/cpu/o3/rename.cc#L990-L1044)): The **old** physical register
+[rename.cc](src/cpu/o3/rename.cc)): The **old** physical register
 (`prevPhysReg`) is returned to the free list. The new mapping is now architecturally
 permanent.
 
 **On squash** (`doSquash()`,
-[rename.cc:933-988](src/cpu/o3/rename.cc#L933-L988)): The **new** physical register
+[rename.cc](src/cpu/o3/rename.cc)): The **new** physical register
 (`newPhysReg`) is returned (via deferred freeing), and the rename map is restored to
 point at `prevPhysReg`.
 
@@ -842,9 +852,9 @@ might still be reading these registers (because instructions from different thre
 share the physical register file).
 
 Instead, squashed registers are placed in `freeingInProgress[tid]`
-([rename.cc:966](src/cpu/o3/rename.cc#L966)). They are actually freed only after
+([rename.cc](src/cpu/o3/rename.cc)). They are actually freed only after
 commit confirms that the ROB has finished squashing
-([rename.cc:1366-1378](src/cpu/o3/rename.cc#L1366-L1378)).
+([rename.cc](src/cpu/o3/rename.cc)).
 
 ### 9.4 Serialization Protocol
 
@@ -876,15 +886,15 @@ round-trip confirmation from downstream stages.
 
 ```
 ┌────────────────────────────────────────────────────────────┐
-│ Condition              │ Source              │ Resolution   │
+│ Condition              │ Source              │ Resolution  │
 ├────────────────────────────────────────────────────────────┤
-│ ROB full               │ Commit reporting    │ Commit frees │
-│ IQ full                │ IEW reporting       │ IEW frees    │
-│ LQ full                │ IEW reporting       │ Load commits │
-│ SQ full                │ IEW reporting       │ Store commits│
-│ No free phys registers │ Free list empty     │ Commit frees │
-│ IEW stall signal       │ IEW blocking        │ IEW unblocks │
-│ Serialize stall        │ Instruction flag    │ ROB drains   │
+│ ROB full               │ Commit reporting    │ Commit frees│
+│ IQ full                │ IEW reporting       │ IEW frees   │
+│ LQ full                │ IEW reporting       │ Load commits│
+│ SQ full               │ IEW reporting       │ Store commits│
+│ No free phys registers │ Free list empty     │ Commit frees│
+│ IEW stall signal       │ IEW blocking        │ IEW unblocks│
+│ Serialize stall        │ Instruction flag    │ ROB drains  │
 └────────────────────────────────────────────────────────────┘
 ```
 
@@ -896,11 +906,11 @@ round-trip confirmation from downstream stages.
 
 The renaming infrastructure consists of two layers:
 
-**`SimpleRenameMap`** ([rename_map.hh:71-159](src/cpu/o3/rename_map.hh#L71-L159)):
+**`SimpleRenameMap`** ([rename_map.hh](src/cpu/o3/rename_map.hh)):
 A per-register-class mapping table. Internally, it is a vector indexed by architectural
 register number, storing the current physical register pointer.
 
-**`UnifiedRenameMap`** ([rename_map.hh:168-297](src/cpu/o3/rename_map.hh#L168-L297)):
+**`UnifiedRenameMap`** ([rename_map.hh](src/cpu/o3/rename_map.hh)):
 Wraps one `SimpleRenameMap` per register class (integer, floating-point, vector, vector
 element, predicate, matrix, condition code). It dispatches rename/lookup operations to
 the appropriate per-class map.
@@ -926,11 +936,11 @@ fixed physical register mappings obtained from the register file.
 
 ### 10.3 The Free List
 
-**`SimpleFreeList`** ([free_list.hh:71-108](src/cpu/o3/free_list.hh#L71-L108)):
+**`SimpleFreeList`** ([free_list.hh](src/cpu/o3/free_list.hh)):
 A FIFO queue of physical register pointers for a single register class. `getReg()` pops
 from the front (allocation), `addReg()` pushes to the back (deallocation).
 
-**`UnifiedFreeList`** ([free_list.hh:124-192](src/cpu/o3/free_list.hh#L124-L192)):
+**`UnifiedFreeList`** ([free_list.hh](src/cpu/o3/free_list.hh)):
 Wraps one `SimpleFreeList` per register class. Initialized by the physical register file,
 which populates each free list with all available physical registers at startup.
 
@@ -974,8 +984,8 @@ would be separate stages in a deeper pipeline:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                        IEW Stage                                     │
-│                                                                      │
+│                        IEW Stage                                    │
+│                                                                     │
 │  ┌──────────┐    ┌─────────────────┐    ┌───────────────────────┐   │
 │  │ Dispatch │───▶│  Issue (IQ)     │───▶│ Execute (FU + LSQ)    │   │
 │  │          │    │  (schedule when │    │ (run on functional    │   │
@@ -983,20 +993,22 @@ would be separate stages in a deeper pipeline:
 │  │  into    │    │   ready)        │    │  memory)              │   │
 │  │  IQ/LSQ) │    │                 │    │                       │   │
 │  └──────────┘    └─────────────────┘    └───────────┬───────────┘   │
-│                                                      │               │
+│                                                      │              │
 │                                              ┌───────▼───────┐      │
 │                                              │   Writeback   │      │
-│                                              │ (wake deps,   │──────┼──▶ To Commit
+│                                              │ (wake deps,   │      │
 │                                              │  update       │      │
 │                                              │  scoreboard)  │      │
 │                                              └───────────────┘      │
 └─────────────────────────────────────────────────────────────────────┘
+                                │
+                                └──────────────────────────────▶ To Commit
 ```
 
 ### 11.1 Dispatch
 
 The `dispatchInsts()` method
-([iew.cc:881-1113](src/cpu/o3/iew.cc#L881-L1113)) takes renamed instructions from
+([iew.cc](src/cpu/o3/iew.cc)) takes renamed instructions from
 the rename queue (or skid buffer) and inserts them into the appropriate structures:
 
 ```
@@ -1009,13 +1021,13 @@ For each instruction (up to dispatchWidth per cycle):
 
     Classification and insertion:
     ┌──────────────┬──────────────────────────────────────────┐
-    │ Type         │ Action                                    │
+    │ Type         │ Action                                   │
     ├──────────────┼──────────────────────────────────────────┤
     │ Load         │ Insert into LQ + insert into IQ (normal) │
     │ Store        │ Insert into SQ + insert into IQ (normal) │
-    │ Store Cond.  │ Insert into SQ + insert as non-speculative│
-    │ Atomic       │ Insert into SQ + insert as non-speculative│
-    │ Barrier      │ Insert as barrier (no IQ)                │
+    │ Store Cond. │ Insert into SQ + insert as non-speculative│
+    │ Atomic      │ Insert into SQ + insert as non-speculative│
+    │ Barrier      │ Insert as barrier + non-spec entry in IQ │
     │ NOP          │ Immediately mark complete (no IQ/LSQ)    │
     │ Non-spec     │ Insert as non-speculative                │
     │ Regular      │ Insert into IQ (normal)                  │
@@ -1025,7 +1037,7 @@ For each instruction (up to dispatchWidth per cycle):
 ### 11.2 Execute
 
 The `executeInsts()` method
-([iew.cc:1138-1377](src/cpu/o3/iew.cc#L1138-L1377)) runs instructions that were
+([iew.cc](src/cpu/o3/iew.cc)) runs instructions that were
 scheduled by the IQ in a previous cycle:
 
 ```
@@ -1054,7 +1066,7 @@ For each instruction delivered via issueToExecQueue:
 ### 11.3 Writeback
 
 The `writebackInsts()` method
-([iew.cc:1380-1427](src/cpu/o3/iew.cc#L1380-L1427)) processes completed instructions:
+([iew.cc](src/cpu/o3/iew.cc)) processes completed instructions:
 
 ```
 For each completed instruction (up to wbWidth per cycle):
@@ -1069,7 +1081,7 @@ For each completed instruction (up to wbWidth per cycle):
 
 ### 11.4 Writeback Bandwidth Management
 
-When `instToCommit()` ([iew.cc:593-618](src/cpu/o3/iew.cc#L593-L618)) sends a
+When `instToCommit()` ([iew.cc](src/cpu/o3/iew.cc)) sends a
 completed instruction to the commit queue, it manages bandwidth by tracking slot
 occupancy:
 
@@ -1087,13 +1099,13 @@ finishing simultaneously) are spread across multiple cycles in the commit queue.
 IEW can initiate squashes for two reasons:
 
 **Branch misprediction** (`squashDueToBranch()`,
-[iew.cc:473-494](src/cpu/o3/iew.cc#L473-L494)):
+[iew.cc](src/cpu/o3/iew.cc)):
 - The mispredicting instruction itself is NOT squashed (it executed correctly, just
   predicted the wrong direction).
 - `includeSquashInst = false`.
 
 **Memory ordering violation** (`squashDueToMemOrder()`,
-[iew.cc:497-520](src/cpu/o3/iew.cc#L497-L520)):
+[iew.cc](src/cpu/o3/iew.cc)):
 - The violating instruction IS included in the squash (it must be re-executed).
 - `includeSquashInst = true`.
 - Memory violations take priority over branch mispredictions for the same instruction.
@@ -1170,7 +1182,7 @@ When an instruction completes execution:
 ### 12.3 The Scheduling Algorithm
 
 The `scheduleReadyInsts()` method
-([inst_queue.cc:848-1029](src/cpu/o3/inst_queue.cc#L848-L1029)) uses an
+([inst_queue.cc](src/cpu/o3/inst_queue.cc)) uses an
 **oldest-first, cross-class** scheduling policy:
 
 ```
@@ -1195,7 +1207,7 @@ For each entry in the age order list (oldest first):
     2. If squashed: skip, update age ordering
     3. Try to acquire a functional unit: fu_pool->getUnit(op_class)
        ├── NoNeedFU:     Instruction needs no FU (e.g., move elimination)
-       ├── NoCapableFU:  Configuration error -- no FU can handle this
+       ├── NoCapableFU:  Mark inst as unsupported; commit may later panic
        ├── NoFreeFU:     All FUs for this class are busy -- skip
        └── FU acquired:  Proceed
     4. Determine execution latency from the FU
@@ -1253,7 +1265,7 @@ Three special lists manage memory instruction lifecycle:
 ### 12.6 Squash Handling
 
 When a squash occurs, `doSquash()`
-([inst_queue.cc:1310-1444](src/cpu/o3/inst_queue.cc#L1310-L1444)) walks the per-thread
+([inst_queue.cc](src/cpu/o3/inst_queue.cc)) walks the per-thread
 instruction list from the tail backwards:
 
 1. For each instruction younger than the squash point:
@@ -1332,7 +1344,7 @@ Each store queue entry (`SQEntry`) extends the base entry with:
 ### 13.3 Store-to-Load Forwarding
 
 When a load executes, the `read()` method
-([lsq_unit.cc:1339-1632](src/cpu/o3/lsq_unit.cc#L1339-L1632)) scans the store queue
+([lsq_unit.cc](src/cpu/o3/lsq_unit.cc)) scans the store queue
 for potential forwarding:
 
 ```
@@ -1341,8 +1353,8 @@ For each older store (from youngest to oldest, down to storeWBIt):
     Compute address overlap between load and store:
 
     ┌──────────────────────┐     ┌──────────────────────┐
-    │ Load range           │     │ Store range           │
-    │ [req_s ─── req_e]    │     │ [st_s ──── st_e]     │
+    │ Load range           │     │ Store range                  │
+    │ [req_s ─── req_e]    │     │ [st_s ──── st_e]             │
     └──────────────────────┘     └──────────────────────┘
 
     Three cases:
@@ -1360,13 +1372,13 @@ For each older store (from youngest to oldest, down to storeWBIt):
     └───────────────────────────────────────────────────────────┘
 
     If no store forwards data:
-        Send request to D-cache via IcachePort
+        Send request to D-cache via DcachePort
 ```
 
 ### 13.4 Memory Ordering Violation Detection
 
 After both loads and stores execute, the `checkViolations()` method
-([lsq_unit.cc:525-600](src/cpu/o3/lsq_unit.cc#L525-L600)) checks for ordering
+([lsq_unit.cc](src/cpu/o3/lsq_unit.cc)) checks for ordering
 violations:
 
 ```
@@ -1383,7 +1395,7 @@ When a STORE executes and computes its address:
 
 Stores are written to the memory system only after they are committed. The
 `writebackStores()` method
-([lsq_unit.cc:811-941](src/cpu/o3/lsq_unit.cc#L811-L941)) iterates from `storeWBIt`
+([lsq_unit.cc](src/cpu/o3/lsq_unit.cc)) iterates from `storeWBIt`
 forward:
 
 ```
@@ -1405,7 +1417,7 @@ to the memory system at any time.
 ### 13.6 External Snoop Handling
 
 When an external invalidation (cache coherence snoop) arrives, `checkSnoop()`
-([lsq_unit.cc:443-523](src/cpu/o3/lsq_unit.cc#L443-L523)) scans the load queue:
+([lsq_unit.cc](src/cpu/o3/lsq_unit.cc)) scans the load queue:
 
 - Loads whose addresses match the invalidated address may have read stale data.
 - Under TSO, all subsequent loads after a snooped load are also marked for squash.
@@ -1414,7 +1426,7 @@ When an external invalidation (cache coherence snoop) arrives, `checkSnoop()`
 ### 13.7 Split (Unaligned) Operations
 
 The LSQ supports memory accesses that cross cache-line boundaries through the
-`SplitDataRequest` class ([lsq.hh:644-691](src/cpu/o3/lsq.hh#L644-L691)):
+`SplitDataRequest` class ([lsq.hh](src/cpu/o3/lsq.hh)):
 
 1. The access is split into a prefix fragment (unaligned head), zero or more aligned
    middle fragments, and a suffix fragment.
@@ -1434,19 +1446,19 @@ units -- the hardware that actually performs arithmetic, logic, and other operat
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│ FUPool                                                │
-│                                                       │
+│ FUPool                                               │
+│                                                      │
 │  Capability Bitset: [IntAlu, IntMult, FpAlu, MemRW]  │
-│                                                       │
-│  Per-OpClass Circular Queues:                         │
-│    IntAlu:  ──▶ [FU0, FU1, FU2, FU3] ──▶ (wrap)     │
-│    IntMult: ──▶ [FU4, FU5] ──▶ (wrap)               │
-│    FpAlu:   ──▶ [FU6, FU7] ──▶ (wrap)               │
-│    MemRead: ──▶ [FU8, FU9] ──▶ (wrap)               │
-│    MemWrite:──▶ [FU8, FU9] ──▶ (wrap)               │
-│                                                       │
-│  Busy Vector: [0,0,1,0,0,0,1,0,0,0]                 │
-│                                                       │
+│                                                      │
+│  Per-OpClass Circular Queues:                        │
+│    IntAlu:  ──▶ [FU0, FU1, FU2, FU3] ──▶ (wrap)      │
+│    IntMult: ──▶ [FU4, FU5] ──▶ (wrap)                │
+│    FpAlu:   ──▶ [FU6, FU7] ──▶ (wrap)                │
+│    MemRead: ──▶ [FU8, FU9] ──▶ (wrap)                │
+│    MemWrite:──▶ [FU8, FU9] ──▶ (wrap)                │
+│                                                      │
+│  Busy Vector: [0,0,1,0,0,0,1,0,0,0]                  │
+│                                                      │
 │  Deferred Free: [FU2 (free next cycle)]              │
 └──────────────────────────────────────────────────────┘
 ```
@@ -1516,23 +1528,25 @@ and O(1) removal at the head.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ Policy       │ Behavior                                      │
+│ Policy       │ Behavior                                     │
 ├─────────────────────────────────────────────────────────────┤
-│ Dynamic      │ All entries shared. Any thread can use all    │
-│              │ entries. First-come, first-served.             │
+│ Dynamic      │ All entries shared. Any thread can use all   │
+│              │ entries. First-come, first-served.           │
 ├─────────────────────────────────────────────────────────────┤
-│ Partitioned  │ Entries divided equally among threads.        │
-│              │ Each thread has a fixed maximum.               │
+│ Partitioned  │ Entries divided equally among threads.       │
+│              │ Each thread has a fixed maximum.             │
 ├─────────────────────────────────────────────────────────────┤
-│ Threshold    │ Each thread has a configurable maximum cap.   │
-│              │ Entries beyond the cap are shared.             │
+│ Threshold    │ Each thread has a configurable maximum cap.  │
+│             │ Cap applies while multiple threads are active;│
+│              │ with one active thread, resetEntries() can   │
+│              │ expand that thread to full ROB capacity.     │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 ### 15.3 Instruction Insertion
 
 When the commit stage calls `insertInst()`
-([rob.cc:193-227](src/cpu/o3/rob.cc#L193-L227)):
+([rob.cc](src/cpu/o3/rob.cc)):
 
 1. The instruction is appended to `instList[tid]` with `push_back()`.
 2. If this is the first instruction in the entire ROB, the global `head` is set.
@@ -1543,7 +1557,7 @@ When the commit stage calls `insertInst()`
 ### 15.4 Instruction Retirement
 
 When `retireHead()` is called
-([rob.cc:230-261](src/cpu/o3/rob.cc#L230-L261)):
+([rob.cc](src/cpu/o3/rob.cc)):
 
 1. The head instruction is extracted from the thread's list.
 2. It must be `readyToCommit()` (assertion).
@@ -1555,7 +1569,7 @@ When `retireHead()` is called
 
 ROB squashing may take multiple cycles, bounded by the configurable `squashWidth`
 parameter. The `doSquash()` method
-([rob.cc:300-382](src/cpu/o3/rob.cc#L300-L382)) uses a persistent per-thread iterator
+([rob.cc](src/cpu/o3/rob.cc)) uses a persistent per-thread iterator
 (`squashIt[tid]`) to remember where it left off:
 
 ```
@@ -1585,7 +1599,7 @@ architecturally visible.
 ### 16.1 The Commit Loop
 
 The `commitInsts()` method
-([commit.cc:898-1108](src/cpu/o3/commit.cc#L898-L1108)) is the core retirement loop:
+([commit.cc](src/cpu/o3/commit.cc)) is the core retirement loop:
 
 ```
 While num_committed < commitWidth:
@@ -1610,37 +1624,37 @@ While num_committed < commitWidth:
 ### 16.2 commitHead() -- The Three Cases
 
 The `commitHead()` method
-([commit.cc:1110-1292](src/cpu/o3/commit.cc#L1110-L1292)) handles three cases:
+([commit.cc](src/cpu/o3/commit.cc)) handles three cases:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │ Case 1: Instruction Not Yet Executed                            │
-│                                                                  │
-│  Applies to: non-speculative insts, atomics, barriers,           │
-│              strictly ordered loads, store conditionals           │
-│                                                                  │
-│  Action: Signal IEW to schedule this instruction now that it     │
-│          is at the ROB head. Clear canCommit so it won't be      │
-│          re-attempted until it executes.                          │
-│  Returns: false                                                  │
+│                                                                 │
+│  Applies to: non-speculative insts, atomics, barriers,          │
+│              strictly ordered loads, store conditionals         │
+│                                                                 │
+│  Action: Signal IEW to schedule this instruction now that it    │
+│          is at the ROB head. Clear canCommit so it won't be     │
+│          re-attempted until it executes.                        │
+│  Returns: false                                                 │
 ├─────────────────────────────────────────────────────────────────┤
-│ Case 2: Instruction Has a Fault                                  │
-│                                                                  │
-│  Precondition: Must be the first instruction committed this      │
-│                cycle AND all stores must have written back.       │
-│                                                                  │
-│  Action: Invoke the fault handler via cpu->trap().               │
-│          Generate a trap event to squash the pipeline after       │
-│          trapLatency cycles. Set status to TrapPending.           │
-│  Returns: false                                                  │
+│ Case 2: Instruction Has a Fault                                 │
+│                                                                 │
+│  Precondition: Must be the first instruction committed this     │
+│                cycle AND all stores must have written back.     │
+│                                                                 │
+│  Action: Invoke the fault handler via cpu->trap().              │
+│          Generate a trap event to squash the pipeline after     │
+│          trapLatency cycles. Set status to TrapPending.         │
+│  Returns: false                                                 │
 ├─────────────────────────────────────────────────────────────────┤
-│ Case 3: Normal Successful Commit                                 │
-│                                                                  │
-│  Action: Update committed rename map with final register         │
-│          mappings. Retire instruction from ROB.                   │
-│          Apply deferred misc register writes.                     │
-│          Record commit timestamp on instruction.                  │
-│  Returns: true                                                   │
+│ Case 3: Normal Successful Commit                                │
+│                                                                 │
+│  Action: Update committed rename map with final register        │
+│          mappings. Retire instruction from ROB.                 │
+│          Apply deferred misc register writes.                   │
+│          Record commit timestamp on instruction.                │
+│  Returns: true                                                  │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -1681,7 +1695,7 @@ Interrupt Flow:
 
 At commit time, for each destination register of the committed instruction, the
 **committed rename map** is updated
-([commit.cc:1263-1266](src/cpu/o3/commit.cc#L1263-L1266)):
+([commit.cc](src/cpu/o3/commit.cc)):
 
 ```
 For each destination register:
@@ -1696,41 +1710,42 @@ correct values.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ Policy       │ Algorithm                                     │
+│ Policy       │ Algorithm                                    │
 ├─────────────────────────────────────────────────────────────┤
 │ RoundRobin   │ Rotate through threads. Pick the first       │
 │              │ thread with a ready ROB head. Move it to     │
-│              │ the back of the priority list.                │
+│              │ the back of the priority list.               │
 ├─────────────────────────────────────────────────────────────┤
 │ OldestReady  │ Scan all threads. Pick the thread whose      │
-│              │ ROB head has the globally smallest (oldest)   │
-│              │ sequence number.                              │
+│              │ ROB head has the globally smallest (oldest)  │
+│              │ sequence number.                             │
 ├─────────────────────────────────────────────────────────────┤
-│ (Special)    │ Exiting threads take priority over all        │
-│              │ policies. An exiting thread's ROB is drained  │
-│              │ first to ensure clean thread removal.         │
+│ (Special)    │ Exiting threads take priority over all       │
+│              │ policies. An exiting thread's ROB is drained │
+│              │ first to ensure clean thread removal.        │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 ### 16.6 Per-Thread Status Machine
 
 ```
-┌─────────┐     commit inst    ┌──────────────────┐
-│ Running │ ◀─────────────── │ FetchTrapPending  │
-└────┬────┘                    └──────────────────┘
-     │                                ▲
-     │ fault at head                  │ trap event fires
-     ▼                                │
-┌─────────────┐                 ┌─────┴────────┐
-│ TrapPending │ ───────────── │ ROBSquashing  │
-└─────────────┘  squash all    └──────────────┘
-                                      ▲
-     ┌────────────────────────────────┘
-     │ squash from IEW or SquashAfter
-     │
-┌────┴───────────────┐
-│ SquashAfterPending │ ──▶ (committed a SquashAfter inst;
-└────────────────────┘      will squash next cycle)
+┌─────────┐   commit inst   ┌──────────────────┐
+│ Running │ ◀─────────────▶ │ FetchTrapPending │
+└────┬────┘                 └──────────────────┘
+     │                               ▲
+     │ fault at head                 │ trap event fires
+     ▼                               │
+┌─────────────┐                ┌─────┴────────┐
+│ TrapPending │ ─────────────▶ │ ROBSquashing │
+└─────────────┘   squash all   └──────────────┘
+                                     ▲
+                                     │ squash from IEW or SquashAfter
+                                     │
+                        ┌────────────┴─────────────┐
+                        │    SquashAfterPending    │
+                        └──────────────────────────┘
+                      (committed a SquashAfter inst;
+                       will squash next cycle)
 ```
 
 ---
@@ -1748,24 +1763,24 @@ system.
 ┌──────────────────────────────────────────────────────────────────────────┐
 │ Source             │ Detected At │ Signal Path                           │
 ├──────────────────────────────────────────────────────────────────────────┤
-│ Branch mispredict  │ IEW execute │ IEW → Commit → All stages            │
+│ Branch mispredict  │ IEW execute │ IEW → Commit → All stages             │
 │                    │             │ (includeSquashInst = false)           │
 ├──────────────────────────────────────────────────────────────────────────┤
-│ Mem order violation│ IEW execute │ IEW → Commit → All stages            │
+│ Mem order violation│ IEW execute │ IEW → Commit → All stages             │
 │                    │             │ (includeSquashInst = true)            │
 ├──────────────────────────────────────────────────────────────────────────┤
-│ Direct branch      │ Decode      │ Decode → Fetch (direct redirect)     │
-│ target mismatch    │             │ Also Decode → CPU (remove insts)     │
+│ Direct branch      │ Decode      │ Decode → Fetch (direct redirect)      │
+│ target mismatch    │             │ Also Decode → CPU (remove insts)      │
 ├──────────────────────────────────────────────────────────────────────────┤
-│ Trap/Fault         │ Commit      │ Commit → All stages (squashAll)      │
+│ Trap/Fault         │ Commit      │ Commit → All stages (squashAll)       │
 ├──────────────────────────────────────────────────────────────────────────┤
-│ Interrupt          │ Commit      │ Commit → All stages (squashAll)      │
+│ Interrupt          │ Commit      │ Commit → All stages (squashAll)       │
 ├──────────────────────────────────────────────────────────────────────────┤
-│ External TC write  │ Commit      │ Commit → All stages (squashAll)      │
+│ External TC write  │ Commit      │ Commit → All stages (squashAll)       │
 ├──────────────────────────────────────────────────────────────────────────┤
-│ SquashAfter inst   │ Commit      │ Commit → All stages (next cycle)     │
+│ SquashAfter inst   │ Commit      │ Commit → All stages (next cycle)      │
 ├──────────────────────────────────────────────────────────────────────────┤
-│ Drain request      │ Commit      │ Commit → All stages (squashAfter)    │
+│ Drain request      │ Commit      │ Commit → All stages (squashAfter)     │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -1830,32 +1845,32 @@ Cycle N+3+: ROB continues squashing (up to squashWidth per cycle)
 ┌───────────────────────────────────────────────────────────────────────┐
 │ Stage   │ Squash Actions                                              │
 ├───────────────────────────────────────────────────────────────────────┤
-│ BAC     │ Revert branch predictor speculative state                  │
-│         │ Invalidate FTQ entries                                     │
+│ BAC     │ Revert branch predictor speculative state                   │
+│         │ In decoupled mode, squash/clear FTQ bookkeeping             │
 ├───────────────────────────────────────────────────────────────────────┤
-│ Fetch   │ Reset PC to squash target                                  │
-│         │ Clear fetch queue                                          │
-│         │ Invalidate pending I-cache requests                        │
-│         │ Reset ISA decoder                                          │
+│ Fetch   │ Reset PC to squash target                                   │
+│         │ Clear fetch queue                                           │
+│         │ Invalidate pending I-cache requests                         │
+│         │ Reset ISA decoder                                           │
 ├───────────────────────────────────────────────────────────────────────┤
-│ Decode  │ Clear instruction and skid buffers                         │
-│         │ Unblock fetch if decode was blocking                       │
+│ Decode  │ Clear instruction and skid buffers                          │
+│         │ Unblock fetch if decode was blocking                        │
 ├───────────────────────────────────────────────────────────────────────┤
-│ Rename  │ Walk history buffer, undo speculative renames              │
-│         │ Restore old register mappings in rename map                │
-│         │ Defer freeing of new registers (SMT safety)                │
-│         │ Clear instruction and skid buffers                         │
-│         │ Unblock decode if rename was blocking                      │
+│ Rename  │ Walk history buffer, undo speculative renames               │
+│         │ Restore old register mappings in rename map                 │
+│         │ Defer freeing of new registers (SMT safety)                 │
+│         │ Clear instruction and skid buffers                          │
+│         │ Unblock decode if rename was blocking                       │
 ├───────────────────────────────────────────────────────────────────────┤
-│ IEW     │ Squash IQ entries (remove dependency graph links)          │
+│ IEW     │ Squash IQ entries (remove dependency graph links)           │
 │         │ Squash LSQ entries (remove load/store queue entries)        │
-│         │ Clear skid buffer                                          │
-│         │ Discard incoming instructions from rename                  │
-│         │ Unblock rename if IEW was blocking                         │
+│         │ Clear skid buffer                                           │
+│         │ Discard incoming instructions from rename                   │
+│         │ Unblock rename if IEW was blocking                          │
 ├───────────────────────────────────────────────────────────────────────┤
-│ Commit  │ Initiate ROB squash (may take multiple cycles)             │
-│         │ Set commitStatus = ROBSquashing                            │
-│         │ Broadcast squash signals to all stages                     │
+│ Commit  │ Initiate ROB squash (may take multiple cycles)              │
+│         │ Set commitStatus = ROBSquashing                             │
+│         │ Broadcast squash signals to all stages                      │
 └───────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -1878,23 +1893,23 @@ same set before executing.
 
 ```
 ┌───────────────────────────────────────────────────────────────┐
-│ Store Set Predictor                                            │
-│                                                                │
-│  SSIT (Store Set ID Table):                                    │
-│    Set-associative cache mapping instruction PCs to SSIDs      │
-│    ┌──────┬──────┬──────┬──────┐                               │
+│ Store Set Predictor                                           │
+│                                                               │
+│  SSIT (Store Set ID Table):                                   │
+│    Set-associative cache mapping instruction PCs to SSIDs     │
+│    ┌──────┬──────┬──────┬──────┐                              │
 │    │ PC_A │ PC_B │ PC_C │ ...  │  ──▶ SSID                    │
-│    │ =5   │ =12  │ =5   │      │                               │
-│    └──────┴──────┴──────┴──────┘                               │
-│                                                                │
-│  LFST (Last Fetched Store Table):                              │
-│    Direct-mapped table: SSID → last fetched store seqNum       │
-│    ┌──────┬──────┬──────┬──────┐                               │
-│    │SSID 0│SSID 1│SSID 5│ ...  │                               │
-│    │ =--- │ =--- │ =42  │      │                               │
-│    └──────┴──────┴──────┴──────┘                               │
-│                                                                │
-│  storeList: Map of in-flight stores (seqNum → SSID)            │
+│    │ =5   │ =12  │ =5   │      │                              │
+│    └──────┴──────┴──────┴──────┘                              │
+│                                                               │
+│  LFST (Last Fetched Store Table):                             │
+│    Direct-mapped table: SSID → last fetched store seqNum      │
+│    ┌──────┬──────┬──────┬──────┐                              │
+│    │SSID 0│SSID 1│SSID 5│ ...  │                              │
+│    │ =--- │ =--- │ =42  │      │                              │
+│    └──────┴──────┴──────┴──────┘                              │
+│                                                               │
+│  storeList: Map of in-flight stores (seqNum → SSID)           │
 └───────────────────────────────────────────────────────────────┘
 ```
 
@@ -1948,16 +1963,14 @@ SMT support is pervasive throughout the design.
 │ SHARED Resources             │ PER-THREAD Resources            │
 ├────────────────────────────────────────────────────────────────┤
 │ Physical register file       │ Rename maps                     │
-│ Instruction queue (IQ)       │ Free lists (conceptually shared │
-│ Functional unit pools        │   but track per-class)          │
-│ ROB entries (policy-based)   │ Fetch queue                     │
-│ D-cache port                 │ Fetch buffer                    │
-│ I-cache port                 │ PC state                        │
-│ Pipeline bandwidth           │ ISA decoder                     │
-│ Scoreboard                   │ Thread status                   │
-│                              │ Skid buffers (per stage)        │
-│                              │ LSQ entries (policy-based)      │
-│                              │ History buffer                  │
+│ Unified free lists           │ Fetch queue                     │
+│ Instruction queue (IQ)       │ Fetch buffer                    │
+│ Functional unit pools        │ PC state                        │
+│ ROB entries (policy-based)   │ ISA decoder                     │
+│ D-cache port                 │ Thread status                   │
+│ I-cache port                 │ Skid buffers (per stage)        │
+│ Pipeline bandwidth           │ LSQ entries (policy-based)      │
+│ Scoreboard                   │ History buffer                  │
 └────────────────────────────────────────────────────────────────┘
 ```
 
@@ -1969,19 +1982,19 @@ Each stage that must select among threads has its own policy:
 ┌──────────┬──────────────────────────────────────────────────────┐
 │ Stage    │ Policies Available                                   │
 ├──────────┼──────────────────────────────────────────────────────┤
-│ Fetch    │ RoundRobin, IQCount, LSQCount, BranchCount          │
+│ Fetch    │ RoundRobin, IQCount, LSQCount, Branch                │
 │          │ (configurable via SMTFetchPolicy)                    │
 ├──────────┼──────────────────────────────────────────────────────┤
-│ Decode   │ Interleaved (random start, round-robin drain)       │
-│          │ Width shared across threads                          │
+│ Decode   │ No separate SMT policy object                        │
+│          │ Iterates active threads; decodeWidth shared globally │
 ├──────────┼──────────────────────────────────────────────────────┤
-│ Rename   │ Width shared across threads (round-robin from       │
-│          │ decode output)                                       │
+│ Rename   │ No separate SMT policy object                        │
+│          │ Width shared globally across per-thread input queues │
 ├──────────┼──────────────────────────────────────────────────────┤
 │ IEW      │ Width shared across threads                          │
-│ (dispatch)│                                                     │
+│ (dispatch) │                                                    │
 ├──────────┼──────────────────────────────────────────────────────┤
-│ IEW      │ Oldest-first across all threads (by seqNum)         │
+│ IEW      │ Oldest-first across all threads (by seqNum)          │
 │ (issue)  │                                                      │
 ├──────────┼──────────────────────────────────────────────────────┤
 │ Commit   │ RoundRobin or OldestReady                            │
@@ -1991,19 +2004,21 @@ Each stage that must select among threads has its own policy:
 
 ### 19.3 Resource Sharing Policies
 
-The ROB and LSQ support three sharing policies:
+The ROB, LSQ, and each IQUnit support `Dynamic`, `Partitioned`, and `Threshold`
+policies:
 
 - **Dynamic**: All entries form a single shared pool. Any thread can use any entry.
   Maximizes utilization but allows one thread to starve others.
-- **Partitioned**: Entries are divided equally among active threads. Guarantees minimum
-  allocation but may waste entries when threads have unequal demand.
-- **Threshold**: Each thread has a configurable cap. A thread can use up to its cap,
-  and entries beyond all caps form a shared overflow pool.
+- **Partitioned**: Entries are divided into per-thread shares (typically equal shares).
+  Guarantees minimum allocation but may waste entries when threads have unequal demand.
+- **Threshold**: Each thread is limited by a configured cap for that structure. The
+  implementation enforces per-thread maxima directly; it does not maintain a separate
+  explicit "overflow pool" object.
 
 ### 19.4 Per-Thread Fetch Queues
 
 A critical SMT design choice is the use of per-thread fetch queues
-([fetch.hh:508](src/cpu/o3/fetch.hh#L508)). Without per-thread queues, a stalled
+([fetch.hh](src/cpu/o3/fetch.hh)). Without per-thread queues, a stalled
 thread's instructions would create head-of-line blocking for other threads. The
 per-thread design allows each thread to buffer independently, and the drain-to-decode
 logic interleaves across threads with a random starting point for fairness.
@@ -2034,13 +2049,13 @@ even if no new instructions are flowing.
 
 ```
 ┌─────────┐   activateContext()   ┌─────────┐
-│  Idle   │ ────────────────────▶│ Running │
+│  Idle   │ ────────────────────▶ │ Running │
 └─────────┘                       └────┬────┘
      ▲                                 │
      │ no active threads               │ switchOut()
      │                                 ▼
      │                           ┌────────────┐
-     │                           │SwitchedOut  │
+     │                           │ SwitchedOut │
      │                           └────────────┘
      │
      │ suspendContext()
@@ -2070,10 +2085,8 @@ CPU switching, or simulation termination:
    └── All queues empty
 
 4. tryDrain() checks isCpuDrained():
-   ├── instList empty?
-   ├── All stages report isDrained()?
-   ├── ROB empty?
-   └── IQ, LSQ, FU pools all drained?
+   ├── instList/removeList empty?
+   └── Stage-level drained checks pass (BAC/Fetch/Decode/Rename/IEW/Commit)
 
 5. When fully drained:
    ├── Deschedule tick event
@@ -2145,7 +2158,7 @@ FTQ:      ppFTQInsert (fetch target inserted), ppFTQRemove (fetch target removed
 
 The `O3PipeView` tracing facility uses per-instruction tick stamps to generate pipeline
 diagrams. Each instruction's destructor
-([dyn_inst.cc:220-252](src/cpu/o3/dyn_inst.cc#L220-L252)) emits a trace record with
+([dyn_inst.cc](src/cpu/o3/dyn_inst.cc)) emits a trace record with
 its timestamps through each stage, enabling offline reconstruction of the pipeline state.
 
 ---
@@ -2179,9 +2192,10 @@ Pipeline Depth Parameters:
 
 Buffer Sizes:
     numROBEntries            Total ROB entries
-    numIQEntries             Total IQ entries
-    LQEntries                Load queue entries per thread
-    SQEntries                Store queue entries per thread
+    instQueues               Vector of IQUnit SimObjects
+    instQueues[*].numEntries Entries per IQUnit
+    LQEntries                Base load-queue entry count (policy dependent)
+    SQEntries                Base store-queue entry count (policy dependent)
     fetchBufferSize          Fetch buffer size (bytes)
     fetchQueueSize           Fetch queue entries (instructions)
 
@@ -2189,25 +2203,34 @@ Register File:
     numPhysIntRegs           Physical integer registers
     numPhysFloatRegs         Physical floating-point registers
     numPhysVecRegs           Physical vector registers
+    numPhysVecPredRegs       Physical vector predicate registers
+    numPhysMatRegs           Physical matrix registers
     numPhysCCRegs            Physical condition code registers
 
 SMT:
     numThreads               Number of hardware threads
+    smtNumFetchingThreads    Threads fetch can service per cycle
     smtFetchPolicy           Fetch thread selection policy
     smtCommitPolicy          Commit thread selection policy
     smtROBPolicy             ROB sharing policy
+    smtROBThreshold          ROB threshold policy cap
     smtLSQPolicy             LSQ sharing policy
-    smtIQPolicy              IQ sharing policy
+    smtLSQThreshold          LSQ threshold policy cap
+    instQueues[*].smtIQPolicy    IQ sharing policy (per IQUnit)
+    instQueues[*].smtIQThreshold IQ threshold parameter in percent
 
 Branch Prediction:
     decoupledFrontEnd        Enable decoupled front-end mode
-    numFetchTargetEntries    FTQ size
+    numFTQEntries            FTQ size (decoupled front-end mode)
+    fetchTargetWidth         Max bytes per fetch target
+    minInstSize              BTB scan granularity in BAC
     maxFTPerCycle            Max fetch targets per cycle
     maxTakenPredPerCycle     Max taken predictions per cycle
 
 Miscellaneous:
     trapLatency              Cycles to process a trap
-    squashWidth              ROB entries squashed per cycle (0 = unlimited)
+    squashWidth              Optional ROB squash bandwidth limit
+                              (unspecified = squash all in one cycle)
 ```
 
 ### 22.2 Typical Configuration Examples
@@ -2217,7 +2240,8 @@ A simple in-order-like configuration (narrow pipeline):
 ```
 fetchWidth = 1, decodeWidth = 1, renameWidth = 1
 dispatchWidth = 1, issueWidth = 1, commitWidth = 1
-numROBEntries = 16, numIQEntries = 8
+numROBEntries = 16
+instQueues = [IQUnit(numEntries=8)]
 LQEntries = 8, SQEntries = 8
 numPhysIntRegs = 64
 ```
@@ -2227,7 +2251,8 @@ A wide out-of-order configuration:
 ```
 fetchWidth = 8, decodeWidth = 8, renameWidth = 8
 dispatchWidth = 8, issueWidth = 8, commitWidth = 8
-numROBEntries = 256, numIQEntries = 128
+numROBEntries = 256
+instQueues = [IQUnit(numEntries=128)]
 LQEntries = 64, SQEntries = 64
 numPhysIntRegs = 256
 ```
@@ -2247,27 +2272,29 @@ unit configurations that can be overridden in simulation scripts.
 
 ### 22.4 Debug Flags
 
-The following debug flags are available for tracing O3CPU operation:
+The O3-specific debug flags declared in
+[SConscript](src/cpu/o3/SConscript) are:
 
 ```
 O3CPU        General CPU-level messages
 BAC          Branch Address Calculation
-Fetch        (uses base Fetch flag)
-Decode       (uses base Decode flag)
-Rename       Register renaming
+CommitRate   Per-cycle commit counts
+FTQ          Fetch target queue
 IEW          Issue/Execute/Writeback
 IQ           Instruction queue scheduling
 LSQ          Load/Store queue operations
 LSQUnit      Per-thread LSQ details
 MemDepUnit   Memory dependence tracking
-StoreSet     Store set predictor
 ROB          Reorder buffer operations
-FTQ          Fetch target queue
-CommitRate   Per-cycle commit counts
+Rename       Register renaming
 Scoreboard   Register readiness tracking
+StoreSet     Store set predictor
 Writeback    Writeback events
 
-O3CPUAll     Compound flag enabling all of the above
+O3CPUAll     Compound flag enabling:
+             BAC, FTQ, Fetch, Decode, Rename, IEW, Commit,
+             IQ, ROB, FreeList, LSQ, LSQUnit, StoreSet, MemDepUnit,
+             DynInst, O3CPU, Activity, Scoreboard, Writeback
 ```
 
 ---
@@ -2278,15 +2305,18 @@ O3CPUAll     Compound flag enabling all of the above
                     ┌──────────────────────────────────────────────────────────┐
                     │                 O3CPU Pipeline                           │
                     │                                                          │
-                    │  ┌─────┐  FetchTarget  ┌───┐                            │
-                    │  │ BAC │──────────────▶│FTQ│                            │
-                    │  └──┬──┘               └─┬─┘                            │
-                    │     │                    │                               │
-                    │     │  updatePC()        │ readHead()/popHead()          │
-                    │     ▼                    ▼                               │
-  I-Cache ◀────────│  ┌───────┐  FetchStruct  ┌────────┐  DecodeStruct       │
-                    │  │ Fetch │──────────────▶│ Decode │──────────────▶      │
-  ITLB ◀───────────│  └───────┘  (fetchQueue)  └────────┘  (decodeQueue)      │
+                    │  ┌─────┐   generateFetchTargets()   ┌───┐                │
+                    │  │ BAC │───────────────────────────▶ │FTQ│               │
+                    │  └──▲──┘   (decoupled front-end)     └─┬─┘               │
+                    │     │                                   │                │
+                    │     │ updatePC()                        │                │
+                    │     │ (all modes)                       │                │
+                    │     │                           readHead()/popHead()     │
+                    │     │                           (decoupled mode)         │
+                    │     │                                   ▼                │
+  I-Cache ◀────────│  ┌───────┐  FetchStruct  ┌────────┐  DecodeStruct         │
+                    │  │ Fetch │──────────────▶│ Decode │──────────────▶       │
+  ITLB ◀───────────│  └───────┘  (fetchQueue)  └────────┘  (decodeQueue)        │
                     │                                           │              │
                     │                                    RenameStruct          │
                     │                                    (renameQueue)         │
@@ -2295,25 +2325,25 @@ O3CPUAll     Compound flag enabling all of the above
                     │                           ┌──────────────────────────┐   │
                     │                           │          IEW             │   │
                     │                           │                          │   │
-                    │                           │  Dispatch ──▶ IQ ──▶    │   │
-                    │                           │              │    ├─▶FU │   │
+                    │                           │  Dispatch ──▶ IQ ──▶    │    │
+                    │                           │              │    ├─▶FU │    │
   D-Cache ◀────────│                           │              │    └─▶LSQ│   │
-                    │                           │              │          │   │
-                    │                           │  Writeback ◀─┘          │   │
+                    │                           │              │          │    │
+                    │                           │  Writeback ◀─┘          │    │
                     │                           └──────────┬───────────────┘   │
                     │                                      │                   │
-                    │                               IEWStruct                 │
-                    │                               (iewQueue)                │
+                    │                               IEWStruct                  │
+                    │                               (iewQueue)                 │
                     │                                      │                   │
                     │                                      ▼                   │
-                    │                               ┌──────────┐              │
-                    │                               │  Commit  │              │
-                    │                               │          │              │
-                    │                               │  ROB ◀───│              │
-                    │                               └──────────┘              │
+                    │                               ┌──────────┐               │
+                    │                               │  Commit  │               │
+                    │                               │          │               │
+                    │                               │  ROB ◀───│               │
+                    │                               └──────────┘               │
                     │                                                          │
                     │  ◀──────── Backward Communication (TimeStruct) ────────▶ │
-                    │     squash, stall, free entries, interrupt, trap          │
+                    │     squash, stall, free entries, interrupt, trap         │
                     └──────────────────────────────────────────────────────────┘
 ```
 
@@ -2321,27 +2351,26 @@ O3CPUAll     Compound flag enabling all of the above
 
 ```
                               ┌─────────────┐
-                              │   Created   │ (Fetch: buildInst)
-                              │  at Fetch   │
+                              │   Created   │
                               └──────┬──────┘
                                      │
-                    ┌────────────────┤
-                    │                │
-                    ▼                ▼
-             ┌────────────┐   ┌───────────┐
-             │  In Fetch  │   │ Squashed  │ (can happen at any point)
-             │   Queue    │   │           │
-             └─────┬──────┘   └───────────┘
+                    ┌────────────────┴───────────────┐
+                    │                                │
+                    ▼                                ▼
+             ┌────────────┐                   ┌───────────┐
+             │  In Fetch  │                   │ Squashed  │
+             │   Queue    │                   └───────────┘
+             └─────┬──────┘
                    │
                    ▼
              ┌────────────┐
-             │  In Decode │ (early branch check)
+             │  In Decode │
              │   Buffer   │
              └─────┬──────┘
                    │
                    ▼
              ┌────────────┐
-             │  Renamed   │ (regs renamed, history recorded)
+             │  Renamed   │
              │  IqEntry   │
              │  RobEntry  │
              │ [LsqEntry] │
@@ -2350,32 +2379,37 @@ O3CPUAll     Compound flag enabling all of the above
           ┌────────┴────────┐
           │                 │
           ▼                 ▼
-    ┌───────────┐    ┌───────────┐
-    │ CanIssue  │    │  Waiting  │ (deps not ready)
-    │ (all regs │    │ in IQ     │
-    │  ready)   │    └─────┬─────┘
-    └─────┬─────┘          │ wakeup
-          │                │
-          ▼                ▼
-    ┌───────────┐
-    │  Issued   │ (sent to functional unit)
-    └─────┬─────┘
-          │
-          ▼
-    ┌───────────┐
-    │ Executed  │ (FU completed, result available)
-    └─────┬─────┘
-          │
-          ▼
-    ┌───────────┐
-    │CanCommit  │ (writeback done, waiting at ROB head)
-    └─────┬─────┘
-          │
-          ▼
-    ┌───────────┐
-    │ Committed │ (retired from ROB, result is architectural)
-    └───────────┘
+    ┌───────────┐     ┌───────────┐
+    │ CanIssue  │     │  Waiting  │
+    └─────┬─────┘     │  in IQ    │
+          │           └─────┬─────┘
+          │                 │ wakeup
+          └──────────┬──────┘
+                     ▼
+               ┌───────────┐
+               │  Issued   │
+               └─────┬─────┘
+                     │
+                     ▼
+               ┌───────────┐
+               │ Executed  │
+               └─────┬─────┘
+                     │
+                     ▼
+               ┌───────────┐
+               │ CanCommit │
+               └─────┬─────┘
+                     │
+                     ▼
+               ┌───────────┐
+               │ Committed │
+               └───────────┘
 ```
+
+Notes:
+- `Created` is at fetch (`buildInst()`).
+- `Squashed` may occur from any pipeline stage.
+- `CanCommit` waits at the ROB head after writeback.
 
 ## Appendix C: Squash Signal Flow Diagram
 
@@ -2400,22 +2434,22 @@ O3CPUAll     Compound flag enabling all of the above
                                       │                    doneSeqNum
                                       │                    pc (redirect)
                                       │
-              ┌───────────────────────┼───────────────────────┐
-              │                       │                       │
-              ▼                       ▼                       ▼
-        ┌──────────┐           ┌──────────┐           ┌──────────┐
-        │  Fetch   │           │  Rename  │           │   IEW    │
-        │ doSquash │           │ doSquash │           │  squash  │
-        │          │           │          │           │          │
-        │ Reset PC │           │ Undo     │           │ IQ.squash│
-        │ Clear    │           │ renames  │           │ LSQ.squash│
-        │ queue    │           │ Restore  │           │ Clear    │
-        │ Reset    │           │ map      │           │ skid buf │
-        │ decoder  │           │ Defer    │           │          │
-        │          │           │ reg free │           │          │
-        └──────────┘           └──────────┘           └──────────┘
-              │
-              ▼
+              ┌───────────────────────┼─────────────────────────┬─────────────┐
+              │                       │                         │             │
+              ▼                       ▼                         ▼             ▼
+        ┌──────────┐           ┌──────────┐               ┌──────────┐ ┌────────────┐
+        │  Fetch   │           │  Rename  │               │   IEW    │ │ BAC / FTQ  │
+        │ doSquash │           │ doSquash │               │  squash  │ │ (decoupled)│
+        │          │           │          │               │          │ │            │
+        │ Reset PC │           │ Undo     │               │ IQ.squash│ │ squash BPU │
+        │ Clear    │           │ renames  │               │ LSQ.squash│ │ histories  │
+        │ queue    │           │ Restore  │               │ Clear    │ │ FTQ reset  │
+        │ Reset    │           │ map      │               │ skid buf │ │            │
+        │ decoder  │           │ Defer    │               │          │ │            │
+        │          │           │ reg free │               │          │ │            │
+        └────┬─────┘           └──────────┘               └──────────┘ └────────────┘
+             │
+             ▼
         ┌──────────┐
         │  Decode  │
         │  squash  │
@@ -2424,8 +2458,7 @@ O3CPUAll     Compound flag enabling all of the above
         │ buffers  │
         └──────────┘
 
-              │                       │                       │
-              └───────────────────────┼───────────────────────┘
+                        (all squash paths converge)
                                       │
                                       ▼
                             Resume fetching from
