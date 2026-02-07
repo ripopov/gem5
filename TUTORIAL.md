@@ -13,6 +13,7 @@ scons build/NULL/tutorial/lesson02_simobject_lifecycle.test.debug
 scons build/NULL/tutorial/lesson03_memory_ports.test.debug
 scons build/NULL/tutorial/lesson04_clock_domains.test.debug
 scons build/NULL/tutorial/lesson05_clocked_objects.test.debug
+scons build/NULL/tutorial/lesson06_hierarchical_modeling.test.debug
 ```
 
 `NULL` is the fastest ISA target for unit-test style tutorial examples.
@@ -27,6 +28,7 @@ Run a full tutorial test binary:
 ./build/NULL/tutorial/lesson03_memory_ports.test.debug
 ./build/NULL/tutorial/lesson04_clock_domains.test.debug
 ./build/NULL/tutorial/lesson05_clocked_objects.test.debug
+./build/NULL/tutorial/lesson06_hierarchical_modeling.test.debug
 ```
 
 List test cases:
