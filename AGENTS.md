@@ -24,6 +24,9 @@ Guidance for Codex and other AI agents working in this gem5 repository.
 - Each added lesson must include all of the following deliverables:
   - A detailed `README.md` with a textbook-quality introduction and complete
     lesson documentation.
+  - A dedicated "core vocabulary" section in the lesson `README.md` that
+    defines foundational terms early (e.g., `## Time, ticks, clocks, and
+    periods`), before implementation walkthrough details.
   - Working lesson code plus at least one runnable test.
   - Build integration in `src/tutorial/SConscript`.
   - VS Code integration via `.vscode/launch.json` and `.vscode/tasks.json`

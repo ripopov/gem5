@@ -1,4 +1,4 @@
-# Lesson 12: Probe Points and Observability
+# Lesson 12: Workloads and Checkpoints
 
 ## Status
 
@@ -6,7 +6,7 @@ Placeholder. Content will be authored in a later change.
 
 ## Planned scope
 
-1. Probe points as a publish-subscribe pattern for inter-object observation.
-2. Implementing ProbePoint publishers and ProbeListener subscribers.
-3. Use cases: power modeling, PMU counters, and trace-driven analysis.
-4. Building a repeatable observability workflow for model validation.
+1. Selecting and parameterizing workloads.
+2. Resource acquisition and reproducibility.
+3. Creating, restoring, and validating checkpoints.
+4. Experiment design for iterative simulator development.
