@@ -591,8 +591,8 @@ for variant_path in variant_paths:
         env.Append(CCFLAGS=['-Wall', '-Wundef', '-Wextra',
                             '-Wno-sign-compare', '-Wno-unused-parameter'])
 
-        # We always compile using C++17
-        env.Append(CXXFLAGS=['-std=c++17'])
+        # We always compile using C++20
+        env.Append(CXXFLAGS=['-std=c++20'])
 
         if sys.platform.startswith('freebsd'):
             env.Append(CCFLAGS=['-I/usr/local/include'])
