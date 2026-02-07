@@ -1,0 +1,65 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "tutorial: build all examples",
+            "type": "process",
+            "command": "bash",
+            "args": [
+                "-lc",
+                "set -euo pipefail; ISA='${input:gem5Isa}'; MODE='${input:gem5Mode}'; JOBS=$(nproc); TARGETS=$(awk -v isa=\"${ISA}\" -v mode=\"${MODE}\" '/GTest[[:space:]]*\\(/ {g=1} g && match($0,/\"[^\"]+\"/){name=substr($0,RSTART+1,RLENGTH-2); print \"build/\" isa \"/tutorial/\" name \".\" mode; g=0}' src/tutorial/SConscript); if [ -z \"${TARGETS}\" ]; then echo 'No GTest tutorial targets found in src/tutorial/SConscript.'; exit 1; fi; echo 'Building tutorial targets:'; printf '  %s\\n' ${TARGETS}; scons -j ${JOBS} ${TARGETS}"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": [
+                "$gcc"
+            ]
+        },
+        {
+            "label": "tutorial: build lesson01 example",
+            "type": "process",
+            "command": "scons",
+            "args": [
+                "build/${input:gem5Isa}/tutorial/lesson01_event_timeline.test.${input:gem5Mode}"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": "build",
+            "problemMatcher": [
+                "$gcc"
+            ]
+        }
+    ],
+    "inputs": [
+        {
+            "id": "gem5Isa",
+            "type": "pickString",
+            "description": "Select build ISA",
+            "options": [
+                "NULL",
+                "ALL",
+                "X86",
+                "ARM",
+                "RISCV"
+            ],
+            "default": "NULL"
+        },
+        {
+            "id": "gem5Mode",
+            "type": "pickString",
+            "description": "Select build mode",
+            "options": [
+                "opt",
+                "debug",
+                "fast"
+            ],
+            "default": "opt"
+        }
+    ]
+}
