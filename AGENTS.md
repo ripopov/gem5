@@ -21,6 +21,13 @@ Guidance for Codex and other AI agents working in this gem5 repository.
 - Tutorial lesson documentation lives with source in `src/tutorial/`.
 - Sphinx wrapper pages for tutorials live in `docs/tutorial/`.
 - Top-level tutorial runbook is `TUTORIAL.md`.
+- Each added lesson must include all of the following deliverables:
+  - A detailed `README.md` with a textbook-quality introduction and complete
+    lesson documentation.
+  - Working lesson code plus at least one runnable test.
+  - Build integration in `src/tutorial/SConscript`.
+  - VS Code integration via `.vscode/launch.json` and `.vscode/tasks.json`
+    updates needed to build/run/debug the lesson.
 - When working on lessons, prioritize runnable C++/Python examples first, then
   update Markdown to explain the implemented code.
 - Integrate new tutorial examples into SCons via `src/tutorial/SConscript`.
