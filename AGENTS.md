@@ -15,6 +15,17 @@ Guidance for Codex and other AI agents working in this gem5 repository.
 - `util/`: utilities and helper scripts.
 - `docs/`: documentation sources.
 
+## Current focus: Tutorials
+- We are actively building a code-first tutorial track.
+- Tutorial source examples live in `src/tutorial/`.
+- Tutorial lesson documentation lives in `docs/tutorial/`.
+- Top-level tutorial runbook is `TUTORIAL.md`.
+- When working on lessons, prioritize runnable C++/Python examples first, then
+  update Markdown to explain the implemented code.
+- Integrate new tutorial examples into SCons via `src/tutorial/SConscript`.
+- Validate tutorial changes by building and running the smallest relevant
+  tutorial test target (prefer `build/NULL/...` when possible).
+
 ## Build commands
 - Full optimized build (all ISAs): `scons build/ALL/gem5.opt`
 - Unit tests binary: `scons build/ALL/unittests.opt`
