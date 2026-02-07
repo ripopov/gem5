@@ -64,6 +64,21 @@
             "problemMatcher": [
                 "$gcc"
             ]
+        },
+        {
+            "label": "tutorial: build lesson03 debug (NULL)",
+            "type": "process",
+            "command": "scons",
+            "args": [
+                "build/NULL/tutorial/lesson03_memory_ports.test.debug"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": "build",
+            "problemMatcher": [
+                "$gcc"
+            ]
         }
     ],
     "inputs": [

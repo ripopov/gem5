@@ -88,6 +88,50 @@
                     "ignoreFailures": true
                 }
             ]
+        },
+        {
+            "name": "tutorial: debug lesson03 (all tests)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/NULL/tutorial/lesson03_memory_ports.test.debug",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "miDebuggerPath": "/usr/bin/gdb",
+            "preLaunchTask": "tutorial: build lesson03 debug (NULL)",
+            "setupCommands": [
+                {
+                    "description": "Enable gdb pretty printing",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
+        },
+        {
+            "name": "tutorial: debug lesson03 (single test)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/NULL/tutorial/lesson03_memory_ports.test.debug",
+            "args": [
+                "--gtest_filter=MemoryPortsTest.BackpressureBlocksSecondRequest"
+            ],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "miDebuggerPath": "/usr/bin/gdb",
+            "preLaunchTask": "tutorial: build lesson03 debug (NULL)",
+            "setupCommands": [
+                {
+                    "description": "Enable gdb pretty printing",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
         }
     ]
 }

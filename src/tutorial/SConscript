@@ -21,3 +21,24 @@ GTest(
     "lesson02/simobject_lifecycle.cc",
     with_tag("gem5 simobject"),
 )
+
+SimObject(
+    "lesson03/TutorialMemoryBridge.py",
+    sim_objects=["TutorialMemoryBridge"],
+)
+
+GTest(
+    "lesson03_memory_ports.test",
+    "lesson03/memory_ports.test.cc",
+    "lesson03/memory_ports.cc",
+    "lesson02/simobject_lifecycle.cc",
+    "../base/types.cc",
+    "../mem/packet.cc",
+    "../mem/port.cc",
+    "../mem/protocol/atomic.cc",
+    "../mem/protocol/functional.cc",
+    "../mem/protocol/timing.cc",
+    "../sim/bufval.cc",
+    "../sim/port.cc",
+    with_tag("gem5 simobject"),
+)
