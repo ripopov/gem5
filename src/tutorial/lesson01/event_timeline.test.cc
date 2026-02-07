@@ -47,11 +47,17 @@ TEST_F(EventTimelineTest, ProcessesCallbacksByTickThenPriority)
     timeline.runToCompletion();
     EXPECT_TRUE(queue.empty());
     EXPECT_EQ(queue.getCurTick(), 11);
-    EXPECT_EQ(timeline.callbacksExecuted(), 6);
+    EXPECT_EQ(timeline.callbacksExecuted(), 8);
 
     const std::vector<std::string> expectedTrace = {
         "tick=3 label=bootstrap",
         "tick=7 label=high-priority-phase",
+        // The next three events share tick 7 AND Default_Pri (0).
+        // They were scheduled in order: default -> alpha -> beta.
+        // gem5 stores same-priority events in a LIFO stack, so the
+        // last one scheduled (beta) executes first.
+        "tick=7 label=default-priority-beta",
+        "tick=7 label=default-priority-alpha",
         "tick=7 label=default-priority-phase",
         "tick=7 label=low-priority-pulse",
         "tick=9 label=low-priority-pulse",

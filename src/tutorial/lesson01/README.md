@@ -3,11 +3,14 @@
 This lesson is a small, runnable C++ example that introduces gem5's event
 kernel by using real APIs from `src/sim/eventq.hh`.
 
-The goal is to make three ideas concrete:
+The goal is to make four ideas concrete:
 
 1. gem5 time is modeled in `Tick` units.
 2. Work is performed by scheduling `Event`s onto an `EventQueue`.
 3. If two events have the same `Tick`, priority decides order.
+4. If two events have the same `Tick` **and** the same priority, they execute
+   in LIFO (last-in-first-out) order -- the most recently scheduled one runs
+   first.
 
 ## Source map
 
@@ -54,15 +57,18 @@ Time (Tick) ---> 3 ------------------- 7 ----------- 9 ----------- 11
 
 At tick 3:
   bootstrap
-    schedules for tick 7:
-      high_priority   (EventBase::Delayed_Writeback_Pri = -1)
-      default_priority(EventBase::Default_Pri = 0)
-      low_priority    (EventBase::Progress_Event_Pri = 95)
+    schedules for tick 7 (in this order):
+      high_priority    (EventBase::Delayed_Writeback_Pri = -1)
+      default_priority (EventBase::Default_Pri = 0)
+      default_alpha    (EventBase::Default_Pri = 0)
+      default_beta     (EventBase::Default_Pri = 0)
+      low_priority     (EventBase::Progress_Event_Pri = 95)
 
-At tick 7:
-  high_priority -> default_priority -> low_priority
-                                     \
-                                      reschedule low_priority at tick 9
+At tick 7 (ordered by priority, then LIFO within same priority):
+  high_priority -> default_beta -> default_alpha -> default_priority
+                                                        -> low_priority
+                                                             \
+                                                    reschedule at tick 9
 
 At tick 9:
   low_priority
@@ -72,11 +78,15 @@ At tick 11:
   low_priority
 ```
 
-gem5 ordering rule from `sim/eventq.hh` is:
+gem5 ordering rules from `sim/eventq.hh`:
 
 - Earlier `when()` (tick) runs first.
 - For equal `when()`, lower numeric priority runs first.
   Example: `-1` runs before `0`, and `0` runs before `95`.
+- For equal `when()` **and** equal priority, events execute in **LIFO** order.
+  The event queue uses a stack per priority bin, so the last event inserted
+  runs first. In this lesson, `default`, `alpha`, `beta` are scheduled in
+  that order but execute as `beta`, `alpha`, `default`.
 
 ## Event flow diagram
 
@@ -86,15 +96,17 @@ flowchart TD
     B --> C["run to completion loop"]
     C --> D["service one event"]
     D --> E["bootstrap callback at tick 3"]
-    E --> F["schedule high default low at tick 7"]
+    E --> F["schedule high, default, alpha, beta, low at tick 7"]
     F --> G["high priority callback at tick 7"]
-    G --> H["default priority callback at tick 7"]
-    H --> I["low priority callback at tick 7"]
-    I --> J["schedule low callback at tick 9"]
-    J --> K["low priority callback at tick 9"]
-    K --> L["schedule low callback at tick 11"]
-    L --> M["low priority callback at tick 11"]
-    M --> N["queue empty loop exits"]
+    G --> H["default-beta callback at tick 7 (LIFO: scheduled last)"]
+    H --> I["default-alpha callback at tick 7"]
+    I --> J["default-priority callback at tick 7 (LIFO: scheduled first)"]
+    J --> K["low priority callback at tick 7"]
+    K --> L["schedule low callback at tick 9"]
+    L --> M["low priority callback at tick 9"]
+    M --> N["schedule low callback at tick 11"]
+    N --> O["low priority callback at tick 11"]
+    O --> P["queue empty loop exits"]
 ```
 
 ## gem5 APIs used in this lesson
@@ -114,6 +126,8 @@ Behavior this lesson relies on:
 - `serviceOne()` advances queue time to the event's tick before calling
   `event->process()`.
 - Event sorting is by `(when, priority)`.
+- Within the same `(when, priority)` bin, events form a LIFO stack: the
+  most recently scheduled event executes first.
 
 ### 2) `EventManager` (`src/sim/eventq.hh`)
 
@@ -140,7 +154,13 @@ Lesson instances:
 - `bootstrapEvent`: default priority.
 - `highPriorityEvent`: `EventBase::Delayed_Writeback_Pri` (`-1`).
 - `defaultPriorityEvent`: `EventBase::Default_Pri` (`0`).
+- `defaultPriorityAlphaEvent`: `EventBase::Default_Pri` (`0`).
+- `defaultPriorityBetaEvent`: `EventBase::Default_Pri` (`0`).
 - `lowPriorityPulseEvent`: `EventBase::Progress_Event_Pri` (`95`).
+
+The three `Default_Pri` events demonstrate LIFO ordering within a priority
+bin. They are scheduled in order `default -> alpha -> beta`, but execute
+in reverse: `beta -> alpha -> default`.
 
 ### 4) `curTick()` (`src/sim/cur_tick.hh`)
 
@@ -170,7 +190,7 @@ queue.
 `EventTimeline` owns:
 
 - trace state: `eventTrace`, `callbackCount`, `pulseCount`
-- four `EventFunctionWrapper` event objects
+- six `EventFunctionWrapper` event objects
 
 Public methods:
 
@@ -183,13 +203,15 @@ Private callbacks model phases of a tiny timeline:
 - `onBootstrap()`
 - `onHighPriorityPhase()`
 - `onDefaultPriorityPhase()`
+- `onDefaultPriorityAlpha()`
+- `onDefaultPriorityBeta()`
 - `onLowPriorityPulse()`
 
 ### Implementation (`event_timeline.cc`)
 
 1. Constructor wires each event wrapper to a member callback.
 2. `prime()` schedules bootstrap at tick 3.
-3. `onBootstrap()` appends trace, then schedules three events at tick 7.
+3. `onBootstrap()` appends trace, then schedules five events at tick 7.
 4. `onLowPriorityPulse()` appends trace and self-reschedules twice:
    ticks 9 and 11.
 5. `runToCompletion()` executes one event at a time until queue is empty.
@@ -206,17 +228,19 @@ Important detail:
 1. queue is non-empty after `prime()`,
 2. queue is empty after `runToCompletion()`,
 3. final queue tick is `11`,
-4. callbacks executed is `6`,
+4. callbacks executed is `8`,
 5. full trace lines match expected order exactly.
 
 Expected trace:
 
 1. `tick=3 label=bootstrap`
 2. `tick=7 label=high-priority-phase`
-3. `tick=7 label=default-priority-phase`
-4. `tick=7 label=low-priority-pulse`
-5. `tick=9 label=low-priority-pulse`
-6. `tick=11 label=low-priority-pulse`
+3. `tick=7 label=default-priority-beta`   (LIFO: scheduled last, runs first)
+4. `tick=7 label=default-priority-alpha`  (LIFO: scheduled second)
+5. `tick=7 label=default-priority-phase`  (LIFO: scheduled first, runs last)
+6. `tick=7 label=low-priority-pulse`
+7. `tick=9 label=low-priority-pulse`
+8. `tick=11 label=low-priority-pulse`
 
 ## Why this lesson matters for later lessons
 
@@ -225,4 +249,5 @@ systems) still runs on this same event kernel:
 
 - model behavior becomes event callbacks,
 - simulation time advances by processing events,
-- deterministic ordering depends on tick and priority choices.
+- deterministic ordering depends on tick, priority, and insertion order (LIFO
+  within the same priority bin).

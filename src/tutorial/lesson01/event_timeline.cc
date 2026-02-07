@@ -30,6 +30,16 @@ EventTimeline::EventTimeline(EventQueue *event_queue)
           "tutorial.lesson01.default_priority",
           false,
           EventBase::Default_Pri),
+      defaultPriorityAlphaEvent(
+          [this]() { onDefaultPriorityAlpha(); },
+          "tutorial.lesson01.default_priority_alpha",
+          false,
+          EventBase::Default_Pri),
+      defaultPriorityBetaEvent(
+          [this]() { onDefaultPriorityBeta(); },
+          "tutorial.lesson01.default_priority_beta",
+          false,
+          EventBase::Default_Pri),
       lowPriorityPulseEvent(
           [this]() { onLowPriorityPulse(); },
           "tutorial.lesson01.low_priority_pulse",
@@ -66,10 +76,20 @@ EventTimeline::onBootstrap()
 {
     appendTrace("bootstrap");
 
-    // These three callbacks all run at tick 7. Their priorities determine
-    // execution order: high, then default, then low.
+    // These callbacks all run at tick 7. Their priorities determine
+    // execution order: high (pri -1), then all three default (pri 0),
+    // then low (pri 95).
     schedule(highPriorityEvent, 7);
+
+    // The next three events share both tick 7 and Default_Pri (0).
+    // gem5's event queue stores same-priority events in a LIFO stack,
+    // so the *last* one scheduled executes *first* within the bin.
+    // Scheduling order: default -> alpha -> beta
+    // Execution order:  beta -> alpha -> default   (LIFO)
     schedule(defaultPriorityEvent, 7);
+    schedule(defaultPriorityAlphaEvent, 7);
+    schedule(defaultPriorityBetaEvent, 7);
+
     schedule(lowPriorityPulseEvent, 7);
 }
 
@@ -83,6 +103,18 @@ void
 EventTimeline::onDefaultPriorityPhase()
 {
     appendTrace("default-priority-phase");
+}
+
+void
+EventTimeline::onDefaultPriorityAlpha()
+{
+    appendTrace("default-priority-alpha");
+}
+
+void
+EventTimeline::onDefaultPriorityBeta()
+{
+    appendTrace("default-priority-beta");
 }
 
 void

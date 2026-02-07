@@ -27,6 +27,7 @@ namespace lesson01
  *
  * 1) Event ordering by time.
  * 2) Event ordering by priority when time is identical.
+ * 3) LIFO (last-in-first-out) ordering when time AND priority are identical.
  */
 class EventTimeline : public EventManager
 {
@@ -49,6 +50,8 @@ class EventTimeline : public EventManager
     void onBootstrap();
     void onHighPriorityPhase();
     void onDefaultPriorityPhase();
+    void onDefaultPriorityAlpha();
+    void onDefaultPriorityBeta();
     void onLowPriorityPulse();
 
     std::vector<std::string> eventTrace;
@@ -58,6 +61,8 @@ class EventTimeline : public EventManager
     EventFunctionWrapper bootstrapEvent;
     EventFunctionWrapper highPriorityEvent;
     EventFunctionWrapper defaultPriorityEvent;
+    EventFunctionWrapper defaultPriorityAlphaEvent;
+    EventFunctionWrapper defaultPriorityBetaEvent;
     EventFunctionWrapper lowPriorityPulseEvent;
 };
 
