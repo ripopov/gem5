@@ -102,26 +102,34 @@ The model uses GPU terminology consistently across code and configuration.
 The table below summarizes key terms in the gem5 AMDGPU context.
 
 ```text
-+-------------------+-----------------------------------------------------+
-| Term              | Meaning in the gem5 AMDGPU model                    |
-+-------------------+-----------------------------------------------------+
-| Work-item         | A single SIMD lane of a kernel; one logical thread. |
-| Wavefront (WF)    | The SIMD execution unit (default 64 work-items).    |
-| Workgroup (WG)    | A collection of wavefronts that share LDS.          |
-| SIMD              | A vector lane group inside a compute unit.          |
-| Compute Unit (CU) | The core pipeline entity executing wavefronts.      |
-| Shader            | A GPU instance containing multiple CUs.             |
-| VALU/SALU         | Vector/scalar ALU resources inside a CU.            |
-| LDS               | Local Data Share, per-WG shared memory.             |
-| VRF/SRF           | Vector/Scalar Register Files.                       |
-| SQC/TCP/TCC       | I-cache, L1 data cache, and L2 cache in VIPER.      |
-| AQL packet        | HSA packet describing a kernel dispatch.            |
-| MQD/HQD           | Queue descriptor structures in HSA runtime.         |
-| Doorbell          | Memory-mapped write that signals queue activity.    |
-| TLB coalescer     | Front-end that merges translation requests.         |
-| VMID/PASID        | GPU virtual memory identifiers for process context. |
-| Waitcnt           | Barrier on outstanding memory operations.           |
-+-------------------+-----------------------------------------------------+
++-----------------------+------------------------------------------------------+
+| Term                  | Meaning in the gem5 AMDGPU model                     |
++-----------------------+------------------------------------------------------+
+| Work-item             | A single SIMD lane of a kernel; one logical thread.  |
+| Wavefront (WF)        | The SIMD execution unit (default 64 work-items).     |
+| Workgroup (WG)        | A collection of wavefronts that share LDS.           |
+| SIMD                  | A vector lane group inside a compute unit.           |
+| Compute Unit (CU)     | The core pipeline entity executing wavefronts.       |
+| Shader                | A GPU instance containing multiple CUs.              |
+| VALU/SALU             | Vector/scalar ALU resources inside a CU.             |
+| LDS                   | Local Data Share, per-WG shared memory.              |
+| VRF/SRF               | Vector/Scalar Register Files.                        |
+| SQC/TCP/TCC           | I-cache, L1 data cache, and L2 cache in VIPER.       |
+| GPUStaticInst         | Decoded static CU ISA instruction template.          |
+| GPUDynInst            | Dynamic per-wavefront instance of a CU instruction.  |
+| HSA AQL packet        | 64-byte HSA queue packet (for example, dispatch).    |
+| Agent dispatch packet | HSA packet used for CP/driver control operations.    |
+| PM4 packet            | Command packet decoded by `PM4PacketProcessor`.      |
+| HSAQueueEntry         | Internal dispatch object built from AQL, MQD, AKC.   |
+| MQD/HQD               | Queue descriptor structures in HSA runtime.          |
+| Doorbell              | Memory-mapped write that signals queue activity.     |
+| Request / Packet      | Generic gem5 memory request and transport objects.   |
+| GpuTranslationState   | GPU TLB translation context in packet sender state.  |
+| Port SenderState      | Per-port return context attached to memory packets.  |
+| TLB coalescer         | Front-end that merges translation requests.          |
+| VMID/PASID            | GPU virtual memory identifiers for process context.  |
+| Waitcnt               | Barrier on outstanding memory operations.            |
++-----------------------+------------------------------------------------------+
 ```
 
 ### 1.3 Design Philosophy
@@ -525,6 +533,76 @@ pipeline and tracing infrastructure:
 
 These utilities are not just for debug output; they also help the pipeline
 reason about resource usage and instruction scheduling pressure.
+
+### 7.3 Transaction Object Relationships
+
+The model uses different transaction objects for CU ISA execution, command
+processing, and memory transport. These are intentionally separate.
+
+```mermaid
+flowchart TB
+  HostQ["Host queue and doorbell"]
+  HSAPkt["HSA packet structs"]
+  HSAPP["HSA Packet Processor"]
+  GCP["GPU Command Processor"]
+  HSAEntry["HSA Queue Entry"]
+  Disp["GPU Dispatcher"]
+
+  PM4Q["PM4 Queue"]
+  PM4PP["PM4 Packet Processor"]
+  PM4Pkt["PM4 packet structs"]
+
+  HostQ -->|queue entry| HSAPkt
+  HSAPkt -->|processed by| HSAPP
+  HSAPP -->|submits packet to| GCP
+  GCP -->|creates child task object| HSAEntry
+  HSAEntry -->|consumed by| Disp
+
+  HostQ -->|doorbell queue update| PM4Q
+  PM4Q -->|next packet| PM4PP
+  PM4PP -->|decode header selects| PM4Pkt
+```
+
+```mermaid
+flowchart TB
+  Disp["GPU Dispatcher"]
+  Launch["Workgroup and wavefront launch state"]
+
+  Decoder["GPU ISA Decoder"]
+  StaticFlags["GPU Static Inst Flags parent class"]
+  StaticInst["GPU Static Inst"]
+  ExecCtx["GPU Exec Context parent class"]
+  DynInst["GPU Dyn Inst"]
+
+  Req["Request"]
+  Pkt["Packet"]
+  BaseSS["Packet Sender State parent class"]
+  GTS["GPU Translation State"]
+  DTLBSS["DTLB Port Sender State"]
+  DataSS["Data Port Sender State"]
+
+  Disp -->|launches workgroups and wavefronts| Launch
+  Launch -->|creates dynamic execution context| DynInst
+
+  Decoder -->|decodes bytes into| StaticInst
+  StaticFlags -->|inherits parent of| StaticInst
+  ExecCtx -->|inherits parent of| DynInst
+  StaticInst -->|referenced by dynamic child| DynInst
+
+  DynInst -->|creates per lane scalar requests| Req
+  Req -->|wrapped by| Pkt
+  BaseSS -->|inherits parent of| GTS
+  BaseSS -->|inherits parent of| DTLBSS
+  BaseSS -->|inherits parent of| DataSS
+  Pkt -->|sender state during translation| GTS
+  GTS -->|saved pointer links back to| DTLBSS
+  Pkt -->|sender state after translation| DataSS
+```
+
+There is no `GPUStaticInst`/`GPUDynInst` equivalent for command packets.
+CP-side "instructions" are packet structs (HSA AQL or PM4), while memory
+transactions are generic gem5 `Request`/`Packet` objects annotated with
+GPU sender state.
 
 ---
 
@@ -1238,6 +1316,19 @@ These mechanisms are critical for end-to-end correctness in full-system
 simulation, and they can be a significant component of observed runtime
 for workloads composed of many short kernels or fine-grained host-device
 synchronization.
+
+### 20.5 CP Command Representation
+
+The command path does not decode commands into `GPUStaticInst` objects.
+Instead, HSA and PM4 processors operate directly on packet structs:
+
+- HSA command packets from `src/dev/hsa/hsa_packet.hh`, selected by packet
+  type in `HSAPacketProcessor::processPkt()`.
+- PM4 command packets from `src/dev/amdgpu/pm4_defines.hh`, selected by
+  opcode in `PM4PacketProcessor::decodeHeader()`.
+
+For kernel dispatch packets specifically, CP converts packet data into
+`HSAQueueEntry` and then hands that object to `GPUDispatcher`.
 
 ---
 
