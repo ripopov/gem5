@@ -474,6 +474,77 @@ issue logic. Together, `WaitClass` occupancy and `issue_period` define a
 simple but effective backpressure network that limits throughput and
 propagates contention across stages.
 
+### 5.4 Event-Driven Activation, Cycle Stepping, and Sleep
+
+At first glance, the CU pipeline appears purely cycle-based because
+`ComputeUnit::exec()` models one full CU cycle per call. However, the CU
+is still embedded in gem5's event-driven kernel. The key point is:
+
+- The CU does not free-run continuously.
+- It ticks once per clock only while active.
+- It deschedules itself when quiescent.
+
+The CU owns an event callback (`tickEvent`) bound to `ComputeUnit::exec()`
+(`src/gpu-compute/compute_unit.cc`), and its lifecycle is controlled by
+dispatch and quiescence checks.
+
+#### 5.4.1 Wakeup Path
+
+When the shader dispatches a workgroup to a CU (`Shader::dispatchWorkgroups()`
+in `src/gpu-compute/shader.cc`), the CU entry point
+`ComputeUnit::dispWorkgroup()` checks whether its tick event is already
+scheduled. If not, it schedules a wakeup at `nextCycle()`.
+
+This creates a demand-driven activation policy: newly dispatched work is what
+starts CU ticking.
+
+#### 5.4.2 Active Phase (One Tick per CU Clock)
+
+During active execution, each `tickEvent` invokes `ComputeUnit::exec()`, which:
+
+1. Runs one cycle of register file and pipeline work.
+2. Updates CU cycle statistics.
+3. Decides whether to schedule another tick at `nextCycle()`.
+
+In pseudocode:
+
+```text
+on CU tickEvent:
+    exec_one_cycle()
+    if not isDone():
+        schedule(tickEvent, nextCycle())
+    else:
+        shader.notifyCuSleep()
+```
+
+So the microarchitecture is cycle-stepped, but only because an event
+re-schedules the next cycle while work remains.
+
+#### 5.4.3 Quiescence and Sleep Condition
+
+`ComputeUnit::isDone()` (`src/gpu-compute/compute_unit.cc`) is the gate that
+stops per-cycle ticking. It checks for CU-level quiescence across:
+
+- Wavefront activity: every SIMD slot must be `S_STOPPED`
+  (`isVectorAluIdle()`).
+- Issue-side timing resources: GM/LM/SM issue buses must be ready.
+- Memory-pipeline timing resources: request/response-path resources must be
+  ready (GM/LM/SM pipeline readiness checks and return-bus readiness).
+
+If all checks pass, the CU does not schedule the next `tickEvent`; it calls
+`Shader::notifyCuSleep()`, which decrements the shader's active-CU count.
+
+#### 5.4.4 Why This Is Still Event-Driven
+
+The CU's cycle stepping is one event source among many. Other GPU activities
+are also event-triggered, including memory and translation response handling
+through port callbacks and delayed response events in `ComputeUnit`, as well
+as deferred counter updates in `Shader::ScheduleAdd()`.
+
+Therefore, the AMDGPU CU model is best described as an
+event-driven simulator with cycle-stepped CU microarchitecture while active,
+not as an always-running cycle simulator.
+
 ---
 
 ## 6. Wavefront and Workgroup Lifecycle
