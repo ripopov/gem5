@@ -139,6 +139,20 @@
             "problemMatcher": [
                 "$gcc"
             ]
+        },
+        {
+            "label": "riscv o3: matrix-multiply (stats + pipeview)",
+            "type": "process",
+            "command": "bash",
+            "args": [
+                "-lc",
+                "set -euo pipefail; OUTDIR='m5out_mm_o3_vscode'; BIN='build/RISCV/gem5.opt'; WORKLOAD='/root/.cache/gem5/riscv-matrix-multiply-1.0.0'; if [ ! -x \"${BIN}\" ]; then echo \"Missing ${BIN}. Build with: scons -j$(nproc) ${BIN}\"; exit 1; fi; if [ ! -f \"${WORKLOAD}\" ]; then echo \"Missing ${WORKLOAD}. Prime once with: ${BIN} tests/gem5/se_mode/hello_se/configs/simple_binary_run.py riscv-matrix-multiply o3 riscv\"; exit 1; fi; \"${BIN}\" -d \"${OUTDIR}\" --debug-flags=O3PipeView --debug-file=trace.out configs/deprecated/example/se.py --cpu-type=RiscvO3CPU --caches --cmd=\"${WORKLOAD}\" --maxinsts=200000; python3 util/o3-pipeview.py -c 500 -o \"${OUTDIR}/pipeview.txt\" \"${OUTDIR}/trace.out\"; echo \"stats: ${OUTDIR}/stats.txt\"; echo \"trace: ${OUTDIR}/trace.out\"; echo \"pipeview: ${OUTDIR}/pipeview.txt\""
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": "test",
+            "problemMatcher": []
         }
     ],
     "inputs": [
