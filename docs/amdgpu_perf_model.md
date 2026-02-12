@@ -361,10 +361,40 @@ instantiated as members of `ComputeUnit` (`src/gpu-compute/compute_unit.hh`):
 
 ### 5.1 Stage Ordering and Timing
 
-The CU executes its pipeline stages every cycle in reverse order to
-model latency (`ComputeUnit::exec()` in `src/gpu-compute/compute_unit.cc`).
-The reverse-order execution ensures that data produced in a later stage
-is not consumed in the same cycle by an earlier stage.
+The CU executes its pipeline stages every cycle in reverse order
+(`ComputeUnit::exec()` in `src/gpu-compute/compute_unit.cc`), and this is a
+functional requirement of the current implementation, not just a modeling
+style choice.
+
+The key reason is that stage handoff structures are single-copy containers
+which are cleared by the producer stage at the beginning of `exec()`:
+
+- `ScheduleStage::exec()` starts with `toExecute.reset()`
+  (`ScheduleToExecute` interface). If schedule ran before execute, execute
+  would either see an empty dispatch list or consume newly-created entries
+  in the same cycle.
+- `ScoreboardCheckStage::exec()` starts with `toSchedule.reset()`
+  (`ScoreboardCheckToSchedule` interface). If scoreboard ran before schedule,
+  schedule would see same-cycle ready-list production (effectively collapsing
+  that stage boundary).
+- Fetch writes decoded instructions directly into each wavefront's
+  `instructionBuffer`. Running fetch last means newly fetched instructions are
+  not checked by scoreboard until the following cycle.
+
+Memory pipelines are intentionally run first for timing correctness. Their
+`exec()` methods retire responses, decrement waitcnt-tracked counters
+(`vmemInstsIssued`, `lgkmInstsIssued`, `expInstsIssued`), update outstanding
+request counters, and mark return-path buses/resources busy
+(`glbMemToVrfBus`, `locMemToVrfBus`, `scalarMemToSrfBus`). Those states are
+then consumed by:
+
+- `ScoreboardCheckStage::ready()` (waitcnt/barrier readiness behavior),
+- `ScheduleStage::checkMemResources()` and `dispatchReady()`
+  (`rdy(Cycles(1))` checks, FIFO-space checks, coalescer gating).
+
+So the reverse order gives a consistent "consume old state, then write new
+state" discipline for each stage boundary, which emulates a one-cycle latch
+without an explicit `TimeBuffer` between these stages.
 
 ```
 Per-cycle execution order (reverse pipeline):
@@ -376,6 +406,22 @@ Per-cycle execution order (reverse pipeline):
 6. ScoreboardCheckStage.exec()
 7. FetchStage.exec()
 ```
+
+A useful way to read one CU tick is:
+
+- `ExecStage` consumes the dispatch list built by the previous tick.
+- `ScheduleStage` consumes the ready list built by the previous tick and
+  builds the next dispatch list.
+- `ScoreboardCheckStage` evaluates post-exec/post-memory wavefront state and
+  builds the next ready list.
+- `FetchStage` appends newly decoded instructions that become visible to
+  scoreboard on the next tick.
+
+Short comparison to O3CPU: the O3 core can tick stages in forward order
+because stage communication is buffered with `TimeBuffer` objects and made
+visible on `advance()`. The AMDGPU CU path here uses direct shared
+stage-interface state, so it executes in reverse order to preserve the same
+cycle-separation semantics.
 
 ### 5.2 Conceptual Pipeline Flow
 
