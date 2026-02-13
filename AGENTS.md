@@ -68,6 +68,65 @@ Guidance for Codex and other AI agents working in this gem5 repository.
 - Add a blank line after the header, then optional body text with lines within
   72 characters.
 
+## Literate-programming writing style
+
+### Narrative structure
+- Every section should answer a question the reader would naturally ask next.
+  Order content by curiosity, not by source-file layout.
+- Open each chapter/section with a one-paragraph motivation: why does this
+  mechanism exist? What problem does it solve?
+- End each section with a short bridge sentence that foreshadows the next topic.
+
+### Explanation before implementation
+- State the invariant or design rule in plain English first, then show where
+  the code enforces it. Never lead with a code reference and explain backward.
+- When introducing a data structure, describe its purpose and lifecycle before
+  its fields. Readers need the "what and why" before the "how."
+
+### Code references
+- Keep inline code excerpts to 5-10 lines max. If more context is needed,
+  point the reader to the source file and line range.
+- Every code excerpt must be preceded by a sentence explaining what the reader
+  should notice in it. Never drop code without narration.
+- Use a consistent annotation style: `// ←` or `// ^^^` arrows to highlight
+  the key line(s) within a snippet.
+
+### Vocabulary discipline
+- Define each domain term exactly once, in bold, the first time it appears.
+  Subsequent uses should match that spelling/capitalization exactly.
+- Maintain a glossary section (or an early "Key concepts" section) that readers
+  can reference. Avoid synonyms for the same concept—pick one name and stick
+  with it.
+
+### Diagrams and visual aids
+- Prefer ASCII art or Mermaid diagrams over prose for anything involving
+  sequences, pipelines, or data flow. A picture replaces several paragraphs.
+- Every diagram must have a brief caption or lead-in sentence explaining what
+  it shows.
+- Keep ASCII diagrams within 72 columns so they render well everywhere.
+
+### Progressive disclosure
+- Introduce a simplified mental model first, then refine it with real
+  implementation details. Explicitly tell the reader when you are simplifying
+  ("For now, think of X as…; we refine this in §N").
+- Avoid forward references to concepts not yet introduced. If unavoidable,
+  keep them to a parenthetical ("we will cover Y in §N").
+
+### Tone and voice
+- Write in second person ("you") or first-person plural ("we") to keep the
+  reader engaged. Avoid passive voice where possible.
+- Be direct. Prefer "The rename stage allocates a physical register" over
+  "What happens is that a physical register gets allocated by the rename
+  stage."
+- It is fine to be opinionated—explain not just what the code does, but
+  whether the design is clever, surprising, or a known trade-off.
+
+### Self-checks
+- After writing a section, re-read it imagining a reader who has only read
+  the preceding sections. Flag any term or concept used before it was defined.
+- If a claim about behavior is non-obvious, cite the source file and line.
+  If it cannot be cited, mark it with a TODO for verification.
+
 ## Agent workflow tips
 - Prefer small, focused edits and avoid touching unrelated files.
 - Run the smallest relevant tests; note when tests are not run.
