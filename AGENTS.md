@@ -15,42 +15,37 @@ Guidance for Codex and other AI agents working in this gem5 repository.
 - `util/`: utilities and helper scripts.
 - `docs/`: documentation sources.
 
-## Current focus: Tutorials
-- We are actively building a code-first tutorial track.
-- Tutorial source examples live in `src/tutorial/`.
-- Tutorial lesson documentation lives with source in `src/tutorial/`.
-- Sphinx wrapper pages for tutorials live in `docs/tutorial/`.
-- Top-level tutorial runbook is `TUTORIAL.md`.
-- Each added lesson must include all of the following deliverables:
-  - A detailed `README.md` with a textbook-quality introduction and complete
-    lesson documentation.
-  - A dedicated "core vocabulary" section in the lesson `README.md` that
-    defines foundational terms early (e.g., `## Time, ticks, clocks, and
-    periods`), before implementation walkthrough details.
-  - Working lesson code plus at least one runnable test.
-  - Build integration in `src/tutorial/SConscript`.
-  - VS Code integration via `.vscode/launch.json` and `.vscode/tasks.json`
-    updates needed to build/run/debug the lesson.
-- When working on lessons, prioritize runnable C++/Python examples first, then
-  update Markdown to explain the implemented code.
-- Integrate new tutorial examples into SCons via `src/tutorial/SConscript`.
-- Validate tutorial changes by building and running the smallest relevant
-  tutorial test target (prefer `build/NULL/...` when possible).
-- For tutorial work, always use debug binaries (`*.debug`) by default.
-- Do not use optimized (`*.opt`) tutorial targets unless explicitly requested.
+## Current focus: O3 CPU textbook
+- We are actively writing a textbook-style O3 CPU model tutorial.
+- Primary document: `docs/o3cpu_model.md`.
+- Target audience: readers with no prior exposure to CPU modeling.
+- Write in a literate-programming style: lead with clear English explanations,
+  then map concepts to implementation details.
+- Prefer ASCII graphics and Mermaid diagrams to explain structure, control
+  flow, and timing behavior.
+- Do not inject large code snippets into the textbook. Keep excerpts short and
+  point to source files instead.
+- Link to implementation code using paths relative to
+  `docs/o3cpu_model.md` so links are clickable in VS Code, for example:
+  `../src/cpu/o3/cpu.cc#L368`.
+- Introduce core vocabulary early in the document and reuse terminology
+  consistently across sections.
+- When revising content, preserve a beginner-friendly progression from
+  fundamentals to detailed pipeline internals.
 
 ## Build commands
+- Fast debug build for docs validation: `scons build/NULL/gem5.debug`
 - Full optimized build (all ISAs): `scons build/ALL/gem5.opt`
 - Unit tests binary: `scons build/ALL/unittests.opt`
 - NULL ISA unit tests: `scons build/NULL/unittests.opt`
-- Tutorial lesson tests (debug, preferred): `scons build/NULL/tutorial/<lesson>.test.debug`
 
 ## Test commands
 - Quick system tests (from `tests/`): `./main.py run`
 - Python unit tests (after `gem5.opt` build): `./build/ALL/gem5.opt tests/run_pyunit.py`
 - Run a single C++ test binary: `./build/ALL/base/bitunion.test.opt`
 - List gtest cases: `./build/ALL/base/bitunion.test.opt --gtest_list_tests`
-- Run a tutorial lesson test (debug, preferred): `./build/NULL/tutorial/<lesson>.test.debug`
+- For textbook updates, run the smallest relevant command needed to verify any
+  behavior claims and note what was not validated.
 
 ## Style and formatting
 - C/C++: 4-space indents, no tabs, 79-char lines, brace style per
@@ -76,5 +71,7 @@ Guidance for Codex and other AI agents working in this gem5 repository.
 ## Agent workflow tips
 - Prefer small, focused edits and avoid touching unrelated files.
 - Run the smallest relevant tests; note when tests are not run.
+- Keep explanations source-backed: if a technical claim is non-obvious, cite
+  the corresponding file and line in the repository.
 - If instructions conflict, defer to repo docs like `CONTRIBUTING.md` and
   `TESTING.md`.
