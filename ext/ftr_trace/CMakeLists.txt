@@ -3,56 +3,22 @@ cmake_minimum_required(VERSION 3.20)
 set(FTR_TRACE_IS_TOP_LEVEL OFF)
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
   set(FTR_TRACE_IS_TOP_LEVEL ON)
-  project(ftr_trace LANGUAGES CXX)
+  project(ftr_trace LANGUAGES C CXX)
 endif()
 
 include(GNUInstallDirs)
-find_package(lz4 QUIET)
-if(NOT TARGET lz4::lz4)
-  find_package(LZ4 QUIET)
-  if(TARGET LZ4::lz4)
-    add_library(lz4::lz4 ALIAS LZ4::lz4)
-  elseif(TARGET LZ4::LZ4)
-    add_library(lz4::lz4 ALIAS LZ4::LZ4)
-  endif()
+set(FTR_TRACE_LZ4_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/lz4")
+set(FTR_TRACE_LZ4_SRC "${FTR_TRACE_LZ4_DIR}/lz4.c")
+set(FTR_TRACE_LZ4_HDR "${FTR_TRACE_LZ4_DIR}/lz4.h")
+
+if(NOT EXISTS "${FTR_TRACE_LZ4_SRC}" OR NOT EXISTS "${FTR_TRACE_LZ4_HDR}")
+  message(FATAL_ERROR "Bundled LZ4 sources not found in "
+          "${FTR_TRACE_LZ4_DIR}")
 endif()
 
-if(NOT TARGET lz4::lz4)
-  find_package(PkgConfig QUIET)
-  if(PkgConfig_FOUND)
-    pkg_check_modules(LIBLZ4 QUIET IMPORTED_TARGET liblz4)
-    if(TARGET PkgConfig::LIBLZ4)
-      add_library(lz4::lz4 ALIAS PkgConfig::LIBLZ4)
-    endif()
-  endif()
-endif()
-
-if(NOT TARGET lz4::lz4)
-  if(NOT TARGET lz4_static AND NOT TARGET lz4)
-    include(FetchContent)
-    set(LZ4_BUILD_CLI OFF CACHE BOOL "" FORCE)
-    set(LZ4_BUILD_LEGACY_LZ4C OFF CACHE BOOL "" FORCE)
-    FetchContent_Declare(
-      lz4
-      GIT_REPOSITORY https://github.com/lz4/lz4.git
-      GIT_TAG v1.10.0
-      SOURCE_SUBDIR build/cmake
-    )
-    FetchContent_MakeAvailable(lz4)
-  endif()
-
-  if(NOT TARGET lz4::lz4)
-    if(TARGET lz4_static)
-      add_library(lz4::lz4 ALIAS lz4_static)
-    elseif(TARGET lz4)
-      add_library(lz4::lz4 ALIAS lz4)
-    endif()
-  endif()
-endif()
-
-if(NOT TARGET lz4::lz4)
-  message(FATAL_ERROR "ftr_trace requires an lz4::lz4 target")
-endif()
+add_library(ftr_trace_lz4 STATIC "${FTR_TRACE_LZ4_SRC}")
+target_include_directories(ftr_trace_lz4 PUBLIC "${FTR_TRACE_LZ4_DIR}")
+add_library(lz4::lz4 ALIAS ftr_trace_lz4)
 
 add_library(ftr_trace INTERFACE)
 add_library(ftr_trace::ftr_trace ALIAS ftr_trace)

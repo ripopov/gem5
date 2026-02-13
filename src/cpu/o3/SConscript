@@ -55,6 +55,10 @@ if env['CONF']['BUILD_ISA']:
     Source('cpu.cc')
     Source('decode.cc')
     Source('dyn_inst.cc')
+    if env['HAVE_FTR_TRACE']:
+        Source('ftr_pipeview_sink.cc')
+    else:
+        Source('ftr_pipeview_sink_stub.cc')
     Source('fetch.cc')
     Source('free_list.cc')
     Source('ftq.cc')

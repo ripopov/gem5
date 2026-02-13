@@ -43,6 +43,7 @@
 #include <algorithm>
 
 #include "base/intmath.hh"
+#include "cpu/o3/ftr_pipeview_sink.hh"
 #include "debug/DynInst.hh"
 #include "debug/IQ.hh"
 #include "debug/O3PipeView.hh"
@@ -247,6 +248,7 @@ DynInst::~DynInst()
             Tick valS = (storeTick == -1) ? 0 : fetch + storeTick;
             DPRINTFR(O3PipeView, "O3PipeView:retire:%llu:store:%llu\n",
                     val, valS);
+            maybeEmitPipeviewFtr(*this);
         }
     }
 #endif

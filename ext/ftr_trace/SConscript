@@ -3,18 +3,25 @@
 
 from gem5_scons import warning
 
-import gem5_scons
-
 Import("env")
 
 env["HAVE_FTR_TRACE"] = False
 
-with gem5_scons.Configure(env) as conf:
-    if not conf.CheckLibWithHeader(
-            "lz4", "lz4.h", "C++", call="LZ4_versionNumber();"):
-        warning("ext/ftr_trace is present but liblz4 and/or lz4.h were not "
-                "found. Disabling ftr_trace integration.")
-        Return()
+ftr_include = Dir("./include").srcnode()
+lz4_include = Dir("./third_party/lz4").srcnode()
+lz4_source = File("./third_party/lz4/lz4.c").srcnode()
+lz4_header = File("./third_party/lz4/lz4.h").srcnode()
 
-env.Prepend(CPPPATH=Dir("./include").srcnode())
+if not lz4_source.exists() or not lz4_header.exists():
+    warning("ext/ftr_trace bundled LZ4 sources are missing. Disabling "
+            "ftr_trace integration.")
+    Return()
+
+lz4_env = env.Clone()
+lz4_obj = lz4_env.SharedObject("lz4", lz4_source)
+lz4_env.Library("ftr_lz4", [lz4_obj])
+
+env.Prepend(CPPPATH=[ftr_include, lz4_include])
+env.Append(LIBS=["ftr_lz4"])
+env.Prepend(LIBPATH=[Dir(".")])
 env["HAVE_FTR_TRACE"] = True

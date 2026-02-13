@@ -1,0 +1,13 @@
+Bundled LZ4 source for gem5 FTR trace support.
+
+Version: v1.10.0
+Origin: https://github.com/lz4/lz4/tree/v1.10.0/lib
+Files copied:
+- lz4.c
+- lz4.h
+- LICENSE
+
+Update process:
+1. Replace lz4.c and lz4.h from a newer upstream `lib/` directory.
+2. Replace LICENSE from upstream `lib/LICENSE`.
+3. Rebuild `build/<ISA>/gem5.opt`.
