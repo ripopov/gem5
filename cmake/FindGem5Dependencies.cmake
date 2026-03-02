@@ -25,7 +25,14 @@ message(STATUS "Python3 libraries: ${Python3_LIBRARIES}")
 # ---------------------------------------------------------------------------
 
 # Protobuf
-find_package(Protobuf QUIET)
+# Use CONFIG mode first to get proper transitive dependencies (abseil, utf8_range).
+# The built-in FindProtobuf module doesn't know about these dependencies, which
+# causes link failures on systems with protobuf v22+ (e.g. Homebrew on macOS).
+set(protobuf_MODULE_COMPATIBLE TRUE)
+find_package(Protobuf CONFIG QUIET)
+if(NOT Protobuf_FOUND)
+    find_package(Protobuf QUIET)
+endif()
 if(Protobuf_FOUND)
     set(HAVE_PROTOBUF TRUE)
     message(STATUS "Protobuf found: ${Protobuf_VERSION}")

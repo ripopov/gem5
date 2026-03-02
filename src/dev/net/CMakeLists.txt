@@ -45,9 +45,13 @@ gem5_add_debug_flag(EthernetNoData "Ethernet debugging without data"
     COMPONENTS Ethernet EthernetPIO EthernetDesc EthernetIntr
                EthernetSM EthernetCksum)
 
-# Note: EtherTap is conditional on CONF_HAVE_TUNTAP in the SConscript,
-# but gem5_add_simobject registers all objects - the Python side handles availability.
 gem5_add_simobject(Ethernet.py SIM_OBJECTS
     EtherLink DistEtherLink EtherBus EtherSwitch EtherTapBase
     EtherTapStub EtherDump EtherDevice IGbE EtherDevBase
-    NSGigE Sinic EtherTap)
+    NSGigE Sinic)
+
+# EtherTap requires linux/if_tun.h (TUN/TAP support), matching the conditional
+# definition in Ethernet.py which checks buildEnv["HAVE_TUNTAP"].
+if(HAVE_TUNTAP)
+    gem5_add_simobject(Ethernet.py SIM_OBJECTS EtherTap)
+endif()
