@@ -78,7 +78,9 @@ The reader assembles `rbook_mesh_config.py`, a Python configuration script that:
 - Configures `--num-l3caches=16` so each HN-F gets an LLC slice.
 - Passes `--num-dirs=2` so that two SN-F (memory) nodes are created.
 - Selects the Garnet network with `--network=garnet`.
-- Accepts the test binary path as a command-line argument and loads it as a shared `Process` across all 16 CPUs (SE mode requires this pattern — see `chi-with-isa.py` for reference).
+- Accepts the test binary path as a command-line argument (`--cmd`) and loads it as a shared `Process` across all 16 CPUs (SE mode requires this pattern — see `chi-with-isa.py` for reference).
+
+When gem5 is built with `PROTOCOL=MULTIPLE` (the default for the book's `build_opts/RISCV`), the runner must also pass `--protocol=CHI` so that the `MULTIPLE.py` dispatch layer selects the CHI protocol.
 
 The existing `tests/gem5/chi_protocol/configs/chi-with-isa.py` and `configs/ruby/CHI.py` serve as reference — the reader is not writing a CHI configuration from nothing, but adapting the known patterns to a specific mesh layout.
 
@@ -101,11 +103,14 @@ Build gem5 with the CHI protocol enabled:
 scons build/RISCV/gem5.opt -j$(nproc) PROTOCOL=CHI
 ```
 
-Run `rbook_mesh_config.py` with a minimal workload (a trivial single-threaded binary or `--cmd` that exits immediately) and dump the topology graph:
+A trivial smoke-test binary (`trivial.c`) lives in `ruby-book/final/` alongside a `Makefile` that cross-compiles all test sources (see [File organization](#file-organization) below).
+Build it and run the system:
 
 ```bash
+make -C ruby-book/final
 ./build/RISCV/gem5.opt -d m5out/rbook-topology-$(date +%Y%m%d-%H%M%S) \
-    rbook_mesh_config.py --cmd=<trivial-binary>
+    configs/example/rbook_mesh_config.py --protocol=CHI \
+    --cmd=ruby-book/final/trivial
 dot -Tsvg m5out/rbook-topology-*/config.dot -o rbook_topology.svg
 ```
 
@@ -123,17 +128,19 @@ If the topology looks wrong, fix the noc_config before proceeding.
 
 Each substage below is a small C program compiled for RISC-V and run under SE mode on the 16-core mesh.
 The pattern follows Chapter 5b: write a focused binary, run it on the configured system, then read the statistics to confirm the expected behavior.
-All test binaries are cross-compiled with:
+All test sources live in `ruby-book/final/` and are cross-compiled via the shared `Makefile`:
 
 ```bash
-riscv64-linux-gnu-gcc -O2 -static -lpthread -o rbook_test_<name> rbook_test_<name>.c
+make -C ruby-book/final          # builds all test binaries
+make -C ruby-book/final clean    # removes binaries
 ```
 
 Run each test with:
 
 ```bash
 ./build/RISCV/gem5.opt -d m5out/rbook-<name>-$(date +%Y%m%d-%H%M%S) \
-    rbook_mesh_config.py --cmd=rbook_test_<name>
+    configs/example/rbook_mesh_config.py --protocol=CHI \
+    --cmd=ruby-book/final/rbook_test_<name>
 ```
 
 #### 3a — Single-core smoke test (`rbook_test_smoke.c`)
@@ -240,6 +247,30 @@ Configuration-only projects have their own failure modes, distinct from protocol
 - **Missing node class definitions** — `CHI.py` unconditionally reads all seven node class names from the noc_config at import time (lines 97–103), even for node types that are never instantiated. Omitting any class — even one that is dead code in SE mode, like `CHI_SNF_BootMem` — produces an `AttributeError` before simulation begins.
 - **Address interleaving mismatch** — if the two DDR controllers have overlapping or non-covering address ranges, some addresses are unmapped. Requests to those addresses produce cryptic "no match for address" errors deep inside the directory controller.
 - **Wrong number of LLC slices** — setting `--num-l3caches=2` instead of 16 creates a system where all coherence traffic funnels through two HN-F nodes. The mesh topology is wasted — it becomes a de facto two-node system with 14 idle routers.
+
+## File Organization
+
+The project adds files in two locations:
+
+```
+configs/example/
+├── noc_config/
+│   └── rbook_4x4.py          # Stage 1a — 4×4 mesh noc_config
+└── rbook_mesh_config.py       # Stage 1b — 16-core system configuration
+
+ruby-book/final/
+├── Makefile                   # cross-compiles all test binaries
+├── trivial.c                  # Stage 2 — minimal boot smoke test
+├── rbook_test_smoke.c         # Stage 3a
+├── rbook_test_hop_latency.c   # Stage 3b
+├── rbook_test_false_sharing.c # Stage 3c
+├── rbook_test_prodcons.c      # Stage 3d
+└── rbook_test_barrier.c       # Stage 3e
+```
+
+The `Makefile` uses `riscv64-linux-gnu-gcc -O2 -static` and links `-lpthread` for the multi-threaded tests.
+Run `make -C ruby-book/final` to build all binaries; `make -C ruby-book/final clean` to remove them.
+Compiled binaries are not checked into the repository.
 
 ## Primary Code Anchors
 
