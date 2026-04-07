@@ -95,34 +95,33 @@ DDR controllers, and links.
 ([`process.cc:71–82`](../../src/arch/riscv/process.cc#L71)):
 
 ```
-High virtual addresses
-0x7fff_ffff_ffff_ffff   stack_base
-        |               main stack grows down
-        |               max_stack_size = 64 MiB default
-        v
-
-0x7fff_ffff_ffff_ffff   next_thread_stack_base
-  - 64 MiB             (reserved for thread stacks via mmap)
-
-        ... large gap ...
-
-0x4000_0000_0000_0000   mmap_end (mmap region grows downward)
-                        Thread stacks allocated here via
-                        mmap in glibc's pthread_create
-
-        ... large gap ...
-
-brk_point               first page after image.maxAddr()
-        |               heap grows up (via brk/sbrk/malloc)
-        v
-
-ELF segments:
-        .bss            (zero-initialized data)
-        .data           (initialized data)
-        .text           (code)
-        .rodata, etc.
-
-Low virtual addresses   (typically ~0x10000 for RISC-V)
+┌──────────────────────────────────┐  0x7fff_ffff_ffff_ffff
+│  Main Stack                      │  stack_base
+│  (64 MiB max)                    │  ↓ grows down
+├──────────────────────────────────┤
+│  Thread Stack Reserve            │  next_thread_stack_base
+│  (mmap'd by glibc pthread)       │  = stack_base − 64 MiB
+├ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─┤
+│                                  │
+│           ~~~ gap ~~~            │
+│                                  │
+├──────────────────────────────────┤  0x4000_0000_0000_0000
+│  mmap Region                     │  mmap_end
+│  (shared libs, anon maps)        │  ↓ grows down
+├ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─┤
+│                                  │
+│           ~~~ gap ~~~            │
+│                                  │
+├──────────────────────────────────┤  brk_point
+│  Heap (brk / sbrk / malloc)      │  ↑ grows up
+├──────────────────────────────────┤
+│  .bss    (zero-init data)        │
+│  .data   (initialized data)      │
+│  .rodata (read-only data)        │
+│  .text   (code)                  │
+├──────────────────────────────────┤  ~0x10000
+│  Unmapped / Guard                │
+└──────────────────────────────────┘  0x0
 ```
 
 ### Static vs Dynamic Memory
