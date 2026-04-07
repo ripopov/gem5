@@ -4,10 +4,11 @@
 
 You have spent sixteen chapters learning gem5's memory system piece by piece.
 You traced requests through the event queue, walked Classic cache miss paths, built an MSI protocol from scratch, diagnosed Garnet router pipelines, navigated CHI's SLICC decomposition, and measured DRAM scheduling effects.
-This chapter asks you to put it all together: **build a complete 16-core CHI mesh system from scratch, boot a multicore test on it, and interpret the results**.
+This chapter asks you to put it all together: **build a complete 16-core CHI mesh system from scratch, verify it with targeted test programs, and interpret the results**.
 
-The first four stages use the stock CHI SLICC protocol and Garnet routers unmodified — the challenge is entirely in the configuration: wiring 16 RISC-V cores, 16 private L1 caches, 16 home nodes with LLC slices, and 2 DDR controllers into a coherent mesh that actually runs.
-The final stage takes one step further: extending `CustomMesh.py` to support per-vnet dedicated links, closing a real bandwidth fidelity gap in gem5's CHI mesh model.
+The first two stages produce the configuration and a running system.
+Stage 3 is the heart of the chapter: a series of test programs — each a small C binary running on the 16 RISC-V cores in SE mode — that progressively exercise the mesh, the coherence protocol, and the DRAM controllers.
+The final stage extends `CustomMesh.py` to support per-vnet dedicated links, closing a real bandwidth fidelity gap in gem5's CHI mesh model.
 
 ## The Target System: A 4×4 CHI Mesh
 
@@ -27,11 +28,18 @@ The CHI protocol handles coherence across all 16 LLC slices — no protocol chan
 
 ## What the Reader Builds
 
-The project proceeds in four stages, each producing a runnable artifact.
+The project proceeds in four stages.
+Stages 1–2 produce the configuration files and a bootable system.
+Stage 3 verifies the system with five focused test programs.
+Stage 4 extends the simulator itself.
 
-### Stage 1 — The noc_config file
+### Stage 1 — Configuration files
 
-The reader writes a `rbook_4x4.py` noc_config file, extending the existing `configs/example/noc_config/2x4.py` template.
+The reader creates two Python files.
+
+#### 1a — The noc_config (`rbook_4x4.py`)
+
+The reader writes `rbook_4x4.py`, extending the existing `configs/example/noc_config/2x4.py` template.
 Every node class inherits from its counterpart in `configs/ruby/CHI_config.py` and overrides only the `NoC_Params` inner class (specifically `router_list`, which tells `CustomMesh.distributeNodes` which mesh router each controller attaches to).
 
 The file defines:
@@ -44,8 +52,7 @@ This is where the co-location of RN-F + HN-F + LLC at each tile happens — both
 `CHI.py` creates this node unconditionally (line 139), so every noc_config must define it.
 In our RISC-V SE-mode system the MN is architecturally idle — RISC-V cores never issue ARM DVM operations — but the CHI SLICC protocol requires it to exist.
 
-#### Nodes we omit (SE-mode only)
-
+**Nodes we omit (SE-mode only).**
 The CHI protocol defines three additional infrastructure node types that our system does not need.
 `CHI.py` (lines 97–103) unconditionally *reads* all seven node class names from the noc_config at import time, so the classes must be defined in the file even if they are never instantiated.
 Their `router_list` values do not matter — they are dead code in our scenario:
@@ -62,20 +69,20 @@ We run in SE mode.
 
 The reader should copy these three classes verbatim from `2x4.py` with any valid `router_list` — the values are irrelevant since the classes are never instantiated.
 
-### Stage 2 — The system configuration script
+#### 1b — The system configuration script (`rbook_mesh_config.py`)
 
-The reader assembles a Python configuration script (`rbook_mesh_config.py`) that:
+The reader assembles `rbook_mesh_config.py`, a Python configuration script that:
 
-- Creates 16 RISC-V `TimingSimpleCPU` cores (or `MinorCPU` for more realistic timing).
-- Instantiates the CHI cache hierarchy using the legacy path (`configs/ruby/CHI.py`) with `--topology=CustomMesh` and `--chi-config=<path-to-4x4.py>`.
+- Creates 16 RISC-V `TimingSimpleCPU` cores.
+- Instantiates the CHI cache hierarchy using the legacy path (`configs/ruby/CHI.py`) with `--topology=CustomMesh` and `--chi-config=rbook_4x4.py`.
 - Configures `--num-l3caches=16` so each HN-F gets an LLC slice.
 - Passes `--num-dirs=2` so that two SN-F (memory) nodes are created.
 - Selects the Garnet network with `--network=garnet`.
+- Accepts the test binary path as a command-line argument and loads it as a shared `Process` across all 16 CPUs (SE mode requires this pattern — see `chi-with-isa.py` for reference).
 
 The existing `tests/gem5/chi_protocol/configs/chi-with-isa.py` and `configs/ruby/CHI.py` serve as reference — the reader is not writing a CHI configuration from nothing, but adapting the known patterns to a specific mesh layout.
 
-#### How DDR controllers get wired
-
+**How DDR controllers get wired.**
 The DDR connection happens in two stages, split across two files:
 
 1. **`CHI.py`** creates two SN-F controller shells with no memory port bound (`mem_ctrl=None` at line 182).
@@ -86,22 +93,141 @@ With `--num-dirs=2`, the interleaving bit is bit 6 (= log₂ of the 64-byte cach
 Consecutive cache lines alternate between DDR0 (at router 0) and DDR1 (at router 15), spreading traffic evenly regardless of access pattern.
 The reader does not write any interleaving logic — `Ruby.py` handles it automatically from `--num-dirs`.
 
-### Stage 3 — Build and boot
+### Stage 2 — Build and visualize
 
-Build gem5 with the CHI protocol enabled and run the configuration:
+Build gem5 with the CHI protocol enabled:
 
-- Build: `scons build/RISCV/gem5.opt -j$(nproc)` (with `PROTOCOL=CHI` in the build options).
-- First smoke test: run with a `LinearGenerator` traffic source instead of real cores to verify the mesh, protocol, and memory controllers are wired correctly. If this deadlocks or crashes, the problem is in the configuration, not in application code.
-- Boot test: run `ruby_random_test.py` or a simple multithreaded RISC-V binary across all 16 cores. Confirm that the simulation completes without protocol errors or assertion failures.
+```bash
+scons build/RISCV/gem5.opt -j$(nproc) PROTOCOL=CHI
+```
 
-### Stage 4 — Observe and interpret
+Run `rbook_mesh_config.py` with a minimal workload (a trivial single-threaded binary or `--cmd` that exits immediately) and dump the topology graph:
 
-With the system running, the reader collects and interprets:
+```bash
+./build/RISCV/gem5.opt -d m5out/rbook-topology-$(date +%Y%m%d-%H%M%S) \
+    rbook_mesh_config.py --cmd=<trivial-binary>
+dot -Tsvg m5out/rbook-topology-*/config.dot -o rbook_topology.svg
+```
 
-- **Ruby protocol statistics** — per-controller hit/miss rates, transition counts, and average latency breakdowns. Do the 16 LLC slices share load roughly evenly, or does address hashing create hotspots?
-- **Garnet network statistics** — average flit latency, per-link utilization, router buffer occupancy. Do the corner routers (near DDR0 and DDR1) show higher utilization than interior routers?
-- **DRAM controller statistics** — row-buffer hit rates, bank conflict rates, queue occupancy at each DDR controller. Does the diagonal placement create balanced memory traffic, or does one controller see significantly more load?
-- **End-to-end latency distribution** — what is the difference in observed memory latency between a core adjacent to a DDR controller (tile 0) and a core maximally far from both (tile 5 or 10)?
+Open `rbook_topology.svg` and verify:
+- 16 RN-F controllers, each attached to a distinct mesh router.
+- 16 HN-F controllers co-located with the RN-F at the same routers.
+- 2 SN-F controllers at routers 0 and 15.
+- 1 MN controller.
+- Garnet IntLinks forming a 4×4 mesh grid between the 16 routers.
+
+This visual sanity check catches wiring mistakes before any test program runs.
+If the topology looks wrong, fix the noc_config before proceeding.
+
+### Stage 3 — Test programs
+
+Each substage below is a small C program compiled for RISC-V and run under SE mode on the 16-core mesh.
+The pattern follows Chapter 5b: write a focused binary, run it on the configured system, then read the statistics to confirm the expected behavior.
+All test binaries are cross-compiled with:
+
+```bash
+riscv64-linux-gnu-gcc -O2 -static -lpthread -o rbook_test_<name> rbook_test_<name>.c
+```
+
+Run each test with:
+
+```bash
+./build/RISCV/gem5.opt -d m5out/rbook-<name>-$(date +%Y%m%d-%H%M%S) \
+    rbook_mesh_config.py --cmd=rbook_test_<name>
+```
+
+#### 3a — Single-core smoke test (`rbook_test_smoke.c`)
+
+**Goal:** verify the system boots and all 16 LLC slices are reachable from a single core.
+
+**What it does.**
+Core 0 allocates a large array (at least 16 × LLC slice size) and reads every 64th byte (one per cache line) in a sequential sweep.
+With `--num-dirs=2` and `--num-l3caches=16`, address interleaving distributes cache lines across all 16 HN-F slices.
+After the sweep, the program prints "PASS" and exits.
+
+**What to check in the statistics.**
+- Simulation completes without errors — the most basic validation that the mesh, protocol, and memory controllers are wired correctly.
+- Per-HN-F access counts (`m_demand_hits` + `m_demand_misses` across the 16 `L3Cache_Controller` instances) are nonzero and roughly balanced.
+If any HN-F shows zero accesses, the address mapping or router binding is wrong.
+
+#### 3b — Hop-distance latency (`rbook_test_hop_latency.c`)
+
+**Goal:** demonstrate that mesh hop count measurably affects memory access latency.
+
+**What it does.**
+Core 0 (at router 0) performs a series of cold reads.
+Between each read, it flushes the L1 and L2 to force the request to travel to the HN-F.
+It uses the RISC-V `rdcycle` CSR to measure the round-trip latency of each load.
+The addresses are chosen so that some lines are homed at HN-F 0 (0 mesh hops — local tile) and others at HN-F 15 (6 mesh hops — diagonal corner).
+
+The program prints the measured cycle counts for near and far accesses and exits.
+
+**What to check in the statistics.**
+- The far-HN-F reads should show higher latency than near-HN-F reads. The difference reflects the Garnet router pipeline delay × hop count (each XY hop adds `router_latency` + `link_latency` cycles in both directions).
+- Garnet per-link statistics should show that the far reads activate links along the full diagonal path (row 0→3, column 0→3), while near reads only touch the local ExtLink.
+
+#### 3c — False sharing (`rbook_test_false_sharing.c`)
+
+**Goal:** exercise the CHI invalidation protocol under two-core contention on a single cache line.
+
+**What it does.**
+Two threads, pinned to core 0 (router 0) and core 15 (router 15), repeatedly write to adjacent `int` elements in the same 64-byte cache line.
+Each core performs N iterations (e.g., 10,000) of `array[my_index] += 1`.
+Because both words share a cache line, every write by one core invalidates the other's copy, forcing a full CHI coherence round-trip across the mesh diagonal.
+After both threads join, the program verifies the final values and prints "PASS".
+
+**What to check in the statistics.**
+- L1 cache controller stats should show a high count of invalidation-triggered misses (transitions involving `SnpUnique` or `SnpCleanInvalid`).
+- The number of invalidations should be proportional to 2 × N (each core's write invalidates the other's copy).
+- Garnet stats should show elevated flit traffic on the diagonal path between routers 0 and 15.
+Compare with the single-core smoke test to confirm the increase comes from coherence traffic, not capacity misses.
+
+#### 3d — Producer-consumer (`rbook_test_prodcons.c`)
+
+**Goal:** measure coherence-mediated data handoff latency across the mesh.
+
+**What it does.**
+Core 0 (producer) writes a sequence of data values into a shared buffer, one cache line at a time.
+After writing each value, it sets a per-entry flag (on a separate cache line) using a release store (`fence rw,w` + store).
+Core 15 (consumer) spins on each flag using an acquire load (`load` + `fence r,rw`), then reads the corresponding data.
+The consumer measures the cycle count between seeing the flag and reading the data.
+
+After all entries are consumed, the program prints the average handoff latency and "PASS".
+
+**What to check in the statistics.**
+- The handoff latency reflects the snoop-forwarding path: consumer's load misses in L1 → request to HN-F → HN-F snoops producer's L1 → data forwarded to consumer.
+This involves at least two mesh traversals (consumer→HN-F, HN-F→producer, producer→consumer), with the exact hop count depending on which HN-F owns the line.
+- Protocol stats should show snoop-forwarding transitions (data supplied by a peer cache rather than by memory).
+- If the producer and consumer are at opposite corners and the HN-F is near neither, the total latency includes three mesh segments — a good exercise in tracing the CHI request flow on the topology diagram.
+
+#### 3e — Barrier synchronization (`rbook_test_barrier.c`)
+
+**Goal:** stress-test the mesh under 16-way contention on a single shared cache line.
+
+**What it does.**
+All 16 cores execute a simple workload (e.g., sum a private array segment), then synchronize via a barrier implemented with an atomic increment (`amoadd.w`) on a shared counter.
+The barrier repeats for R rounds (e.g., 100).
+Each round, every core atomically increments the counter and spins until the counter reaches `16 × round`.
+
+After all rounds complete, core 0 prints "PASS".
+
+**What to check in the statistics.**
+- The barrier counter is a single cache line that all 16 cores contend for simultaneously. This creates worst-case serialization: each atomic increment requires exclusive ownership, so 15 invalidations fan out across the mesh for every increment.
+- Per-router buffer occupancy in Garnet stats should show that interior routers (which relay more paths) have higher occupancy than corner routers.
+- Compare average flit latency with the single-core smoke test. The increase quantifies the cost of mesh contention.
+- DRAM controller stats should show roughly balanced load between DDR0 and DDR1, confirming that the diagonal placement and interleaving work as designed even under heavy coherence traffic.
+
+### Interpreting the results
+
+After running all five tests, the reader has a complete picture of the system's behavior:
+
+| Test | What it reveals |
+|------|----------------|
+| Smoke | Address distribution across LLC slices, basic wiring correctness |
+| Hop latency | Mesh distance → access latency relationship, router pipeline cost |
+| False sharing | CHI invalidation protocol cost, coherence traffic on mesh links |
+| Producer-consumer | Snoop-forwarding latency, multi-hop data transfer path |
+| Barrier | 16-way contention cost, mesh saturation, router buffer pressure |
 
 The goal is not to optimize anything — it is to **read the statistics and explain what they mean** in terms of the mesh topology, the CHI protocol, and the DRAM placement.
 This is the synthesis exercise: every number in the output connects back to a mechanism the reader studied in a previous chapter.
@@ -119,15 +245,16 @@ Configuration-only projects have their own failure modes, distinct from protocol
 
 - `configs/topologies/CustomMesh.py` — the topology that wires CHI nodes into a Garnet mesh.
 - `configs/ruby/CHI_config.py` — base classes for all CHI node types (`CHI_RNF`, `CHI_HNF`, `CHI_SNF_MainMem`, etc.) and default NoC parameters.
-- `configs/example/noc_config/2x4.py` — the starting template for the 4×4 noc_config file.
-- `configs/ruby/CHI.py` — the legacy CHI system builder that instantiates controllers and connects them to the network.
+- `configs/example/noc_config/2x4.py` — the starting template for the `rbook_4x4.py` noc_config file.
+- `configs/ruby/CHI.py` — the CHI system builder that instantiates controllers and connects them to the network.
+- `configs/ruby/Ruby.py` — binds DDR memory controllers to SN-F nodes with address interleaving.
 - `tests/gem5/chi_protocol/configs/chi-with-isa.py` — a working CHI system on RISC-V that serves as the primary reference.
 - `src/mem/ruby/protocol/chi/CHI.slicc` — the CHI protocol manifest (used as-is, not modified).
 - `src/mem/ruby/network/garnet/GarnetNetwork.cc` — the Garnet network (used as-is, not modified).
 
-## Stage 5 — Per-Vnet Dedicated Links in CustomMesh
+## Stage 4 — Per-Vnet Dedicated Links in CustomMesh
 
-The baseline system from Stages 1–4 has a bandwidth fidelity gap: every pair of adjacent Garnet routers is connected by a single shared link per direction, and all four CHI virtual networks (REQ, SNP, RSP, DAT) multiplex onto that one link.
+The baseline system from Stages 1–3 has a bandwidth fidelity gap: every pair of adjacent Garnet routers is connected by a single shared link per direction, and all four CHI virtual networks (REQ, SNP, RSP, DAT) multiplex onto that one link.
 Real CHI interconnects like ARM CMN use dedicated physical channels per traffic class.
 gem5 already has the infrastructure to model this — `Mesh_XY.py` supports a `--per-vnet-links` flag that creates one dedicated link per vnet per direction — but `CustomMesh.py` does not.
 In this stage the reader closes that gap.
@@ -155,7 +282,7 @@ Backward compatible: without `--per-vnet-links`, the loop runs once with `suppor
 
 ### Verification
 
-1. **Without the flag** — rerun the Stage 3 smoke test and confirm identical statistics. Zero behavioral change.
+1. **Without the flag** — rerun the Stage 3 barrier test and confirm identical statistics. Zero behavioral change.
 2. **With `--per-vnet-links`** — rerun and check Garnet's per-link `flits_per_vnet` statistics. Each internal link should carry traffic for exactly one vnet. With the flag off, links carry mixed vnet traffic.
 3. **Compare latency** — the per-vnet configuration should show lower tail latency under load because DAT and RSP channels no longer contend for the same physical link.
 
@@ -171,10 +298,9 @@ Backward compatible: without `--per-vnet-links`, the loop runs once with `suppor
 
 By the end of this chapter, the reader has:
 
-1. Written a `noc_config` file that maps 16 CHI nodes onto a 4×4 Garnet mesh with DDR controllers at opposite corners.
-2. Assembled a complete system configuration script that wires RISC-V cores, the CHI protocol, a Garnet mesh, and DDR4 memory into a single runnable simulation.
-3. Built, booted, and run a multicore test on the 16-core system.
-4. Read the resulting statistics — protocol, network, and DRAM — and explained what the numbers mean in terms of the system's topology and architecture.
-5. Extended `CustomMesh.py` to support per-vnet dedicated links, closing a bandwidth fidelity gap between gem5's CHI mesh model and real ARM CMN hardware.
+1. Written a noc_config and system configuration that maps 16 CHI nodes onto a 4×4 Garnet mesh with DDR controllers at opposite corners.
+2. Visualized the topology from the generated dot graph and verified the wiring.
+3. Written and run five test programs that progressively exercise the system — from single-core LLC reachability to 16-way atomic contention — and interpreted the resulting protocol, network, and DRAM statistics.
+4. Extended `CustomMesh.py` to support per-vnet dedicated links, closing a bandwidth fidelity gap between gem5's CHI mesh model and real ARM CMN hardware.
 
 The reader finishes the book having both assembled a research-grade tiled multicore simulation and improved the simulator itself — the full arc from consumer to contributor.
