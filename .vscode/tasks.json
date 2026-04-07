@@ -29,6 +29,19 @@
             "problemMatcher": "$gcc",
             "detail":
                 "Generate compile_commands.json for IntelliSense/clangd (MI+MSI+CHI)"
+        },
+        {
+            "label": "ch17: check smoke stats",
+            "type": "shell",
+            "command":
+                "python3 ruby-book/final/check_smoke.py m5out/ch17-smoke",
+            "problemMatcher": [],
+            "detail":
+                "Verify all 16 HN-F slices were exercised by the smoke test",
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            }
         }
     ]
 }

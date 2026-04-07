@@ -161,6 +161,29 @@
                     "description": "gem5 uses SIGSEGV for null checks"
                 }
             ]
+        },
+        {
+            "name": "gem5: ch17-smoke (4x4 CHI mesh)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/RISCV/${input:gem5Build}",
+            "args": [
+                "-d",
+                "m5out/ch17-smoke",
+                "configs/example/rbook_mesh_config.py",
+                "--cmd=ruby-book/final/rbook_test_smoke"
+            ],
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "text": "handle SIGSEGV nostop noprint pass",
+                    "description": "gem5 uses SIGSEGV for null checks"
+                }
+            ],
+            "postDebugTask": "ch17: check smoke stats"
         }
     ]
 }
