@@ -149,7 +149,6 @@
                 "-d",
                 "m5out/ch17-trivial",
                 "configs/example/rbook_mesh_config.py",
-                "--protocol=CHI",
                 "--cmd=ruby-book/final/trivial"
             ],
             "cwd": "${workspaceFolder}",

@@ -80,7 +80,7 @@ The reader assembles `rbook_mesh_config.py`, a Python configuration script that:
 - Selects the Garnet network with `--network=garnet`.
 - Accepts the test binary path as a command-line argument (`--cmd`) and loads it as a shared `Process` across all 16 CPUs (SE mode requires this pattern — see `chi-with-isa.py` for reference).
 
-When gem5 is built with `PROTOCOL=MULTIPLE` (the default for the book's `build_opts/RISCV`), the runner must also pass `--protocol=CHI` so that the `MULTIPLE.py` dispatch layer selects the CHI protocol.
+The script auto-injects `--protocol=CHI` into `sys.argv` when gem5 is built with `PROTOCOL=MULTIPLE` (the default for the book's `build_opts/RISCV`), so the user never needs to pass it manually.
 
 The existing `tests/gem5/chi_protocol/configs/chi-with-isa.py` and `configs/ruby/CHI.py` serve as reference — the reader is not writing a CHI configuration from nothing, but adapting the known patterns to a specific mesh layout.
 
@@ -109,7 +109,7 @@ Build it and run the system:
 ```bash
 make -C ruby-book/final
 ./build/RISCV/gem5.opt -d m5out/rbook-topology-$(date +%Y%m%d-%H%M%S) \
-    configs/example/rbook_mesh_config.py --protocol=CHI \
+    configs/example/rbook_mesh_config.py \
     --cmd=ruby-book/final/trivial
 dot -Tsvg m5out/rbook-topology-*/config.dot -o rbook_topology.svg
 ```
@@ -139,7 +139,7 @@ Run each test with:
 
 ```bash
 ./build/RISCV/gem5.opt -d m5out/rbook-<name>-$(date +%Y%m%d-%H%M%S) \
-    configs/example/rbook_mesh_config.py --protocol=CHI \
+    configs/example/rbook_mesh_config.py \
     --cmd=ruby-book/final/rbook_test_<name>
 ```
 

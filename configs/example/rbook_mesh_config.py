@@ -29,6 +29,12 @@ parser = argparse.ArgumentParser(
 )
 Options.addCommonOptions(parser)
 Options.addSEOptions(parser)
+
+# This script only supports CHI. MULTIPLE.define_options() scans sys.argv for
+# --protocol before parse_args() runs, so inject it unconditionally.
+if not any(a.startswith("--protocol") for a in sys.argv):
+    sys.argv.append("--protocol=CHI")
+
 Ruby.define_options(parser)
 
 # Hardcode the mesh-specific defaults so the user only needs --cmd.
