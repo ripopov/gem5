@@ -194,7 +194,188 @@ Pages are allocated sequentially from this pool by [`MemPool::allocate()`](../..
 
 ---
 
-## 3. How Memory Maps to the Two DDR Controllers
+## 3. How ELF Segments Reach Simulated DRAM
+
+### Intuition
+
+Section 1 mentioned that `Process::initState()` writes ELF segments into simulated memory.
+But what does that actually mean?
+The ELF binary sits on the host filesystem.
+The simulated DRAM is a `mmap`'d buffer inside the gem5 host process.
+Between those two endpoints lies a chain of translations, page allocations, and packet sends
+that touches almost every layer of the memory system.
+
+Understanding this chain matters for Chapter 17 because it explains:
+- Why `.text` and `.data` pages are immediately backed (unlike heap pages),
+- How the `EmulationPageTable` gets populated before simulation starts,
+- Why functional access bypasses the timing model entirely, and
+- How both DDR controllers share one host backing store despite being separate SimObjects.
+
+### Working Model
+
+The chain has five stages.
+Each stage transforms the data one step closer to its final home.
+
+**Stage 1: ELF parsing → `MemoryImage`**
+
+The `Process` constructor ([`process.cc:161`](../../src/sim/process.cc#L161)) calls `objFile->buildImage()`.
+The ELF parser ([`elf_object.cc:126–133`](../../src/base/loader/elf_object.cc#L126)) iterates ELF program headers
+and for each `PT_LOAD` segment calls `handleLoadableSegment()` ([`elf_object.cc:374–404`](../../src/base/loader/elf_object.cc#L374)).
+This creates `MemoryImage::Segment` entries holding `(vaddr, data_ptr, size)` —
+just references to the `mmap`'d ELF file data, no copy yet.
+For BSS (where file size < memory size), a separate zero-filled segment is created.
+
+**Stage 2: `Process::initState()` triggers the write**
+
+[`process.cc:306`](../../src/sim/process.cc#L306):
+
+```cpp
+image.write(*initVirtMem);
+```
+
+`initVirtMem` is an [`SETranslatingPortProxy`](../../src/mem/se_translating_port_proxy.hh#L49) configured with `AllocateType::Always` —
+it will allocate physical pages on demand for any virtual address it encounters.
+
+`MemoryImage::write()` ([`memory_image.cc:53–59`](../../src/base/loader/memory_image.cc#L53)) iterates all segments.
+For each one, `writeSegment()` ([`memory_image.cc:39–50`](../../src/base/loader/memory_image.cc#L39)) calls:
+- Data segments → `proxy.writeBlob(seg.base, seg.data, seg.size)`
+- BSS segments → `proxy.memsetBlob(seg.base, 0, seg.size)`
+
+The `seg.base` is a **virtual address** from the ELF header.
+
+**Stage 3: page-by-page translation and on-demand allocation**
+
+`writeBlob()` calls `tryWriteBlob()` ([`translating_port_proxy.cc:101–111`](../../src/mem/translating_port_proxy.cc#L101)),
+which uses a `TranslationGen` to walk the write request page by page.
+For each page-sized chunk ([`translating_port_proxy.cc:63–86`](../../src/mem/translating_port_proxy.cc#L63)):
+
+1. Ask the MMU to translate the virtual address via `translateFunctional()`.
+2. If the page is **unmapped** (fault), call `fixupRange()`.
+
+`SETranslatingPortProxy::fixupRange()` ([`se_translating_port_proxy.cc:54–71`](../../src/mem/se_translating_port_proxy.cc#L54))
+handles the fault by calling:
+
+```cpp
+process->allocateMem(range_start, range_size);
+```
+
+`Process::allocateMem()` ([`process.cc:318–345`](../../src/sim/process.cc#L318)) does two things:
+1. Asks `seWorkload->allocPhysPages(npages)` for physical frames from the `MemPool` — a simple bump allocator over the `0..512 MiB` physical range.
+2. Calls `pTable->map(vaddr, paddr, size)` to insert entries into the `EmulationPageTable` hash map.
+
+After `fixupRange()` returns, translation retries and succeeds.
+The entire fault-allocate-retry cycle is **synchronous and inline** — there is no OS trap or context switch.
+The proxy detects an unmapped page, allocates a physical frame, maps it, and retries,
+all within the same `writeBlob()` call.
+This is what makes SE mode "syscall emulation" — the simulator *is* the OS.
+
+**Stage 4: functional write via the port hierarchy**
+
+After translation, `PortProxy::writeBlobPhys()` ([`port_proxy.cc:75–89`](../../src/mem/port_proxy.cc#L75))
+splits the write into cache-line-sized chunks, creates a `WriteReq` packet for each
+with the **physical address**, and calls `sendFunctional(pkt)`.
+
+The packet travels through the normal port hierarchy as a **functional** access
+(it bypasses the timing model entirely — no queue delays, no bank conflicts):
+
+```
+ThreadContext::sendFunctional()     ← cpu/thread_context.cc:159
+    ▼
+CPU DataPort → SystemXBar           ← routes by address range
+    ▼
+MemCtrl::recvFunctional()           ← or SimpleMemory::recvFunctional()
+    ▼
+AbstractMemory::functionalAccess()  ← abstract_mem.cc:489
+```
+
+**Stage 5: host pointer arithmetic**
+
+`AbstractMemory::functionalAccess()` computes:
+
+```cpp
+uint8_t *host_addr = pmemAddr + paddr - range.start();
+pkt->writeData(host_addr);   // memcpy into host buffer
+```
+
+The ELF segment data is now in the `mmap`'d host buffer that *is* the simulated DRAM.
+
+### How the Backing Store Is Set Up
+
+`PhysicalMemory` ([`physical.cc:79–195`](../../src/mem/physical.cc#L79)) owns the actual host memory.
+When the `System` is constructed, `PhysicalMemory` takes the list of `AbstractMemory` objects
+(in our case, the two DDR controllers) and does the following:
+
+1. Detects that both DDR controllers have **interleaved** address ranges covering the same span.
+2. **Merges** them into one contiguous range ([`physical.cc:181–194`](../../src/mem/physical.cc#L181)).
+3. Calls `createBackingStore()` **once** — a single `mmap(MAP_ANON | MAP_PRIVATE)` for the full 512 MiB.
+4. Hands the **same host pointer** to both `AbstractMemory` objects via `setBackingStore(pmem)` ([`physical.cc:258–261`](../../src/mem/physical.cc#L258)).
+
+Both DDR controllers share one contiguous host buffer.
+The interleaving is purely a **routing** concern — which controller handles a given address during timing simulation — not a storage concern.
+During the ELF loading functional writes, it does not matter which controller the packet is routed to;
+both compute the same `toHostAddr()` and write to the correct offset in the shared buffer.
+
+### The Complete Chain
+
+```
+ELF on host disk
+  │  mmap'd by loader
+  ▼
+MemoryImage::Segment{vaddr, data*, size}     references into ELF file
+  │
+  ▼
+MemoryImage::write(proxy)                    iterate segments
+  │
+  ▼
+TranslatingPortProxy::tryWriteBlob()         walk page-by-page
+  │
+  ├─ page unmapped? ──► SETranslatingPortProxy::fixupRange()
+  │                          │
+  │                          ├─ MemPool::allocate()       bump-alloc physical frame
+  │                          └─ EmulationPageTable::map() vaddr→paddr in hash map
+  │
+  ▼
+PortProxy::writeBlobPhys(paddr, data)        split into cache-line packets
+  │
+  ▼
+sendFunctional(WriteReq)                     traverse port hierarchy
+  │
+  ▼
+AbstractMemory::functionalAccess()           host_ptr = pmemAddr + (paddr − base)
+  │                                          memcpy(host_ptr, data, size)
+  ▼
+Host mmap'd buffer  ═══  Simulated DRAM      shared by both DDR controllers
+```
+
+### Formal and Code
+
+| Class | File | Role |
+|-------|------|------|
+| `ElfObject` | [`elf_object.cc:374`](../../src/base/loader/elf_object.cc#L374) | Parses ELF `PT_LOAD` segments into `MemoryImage` |
+| `MemoryImage` | [`memory_image.cc:39`](../../src/base/loader/memory_image.cc#L39) | Iterates segments, calls `writeBlob`/`memsetBlob` |
+| `SETranslatingPortProxy` | [`se_translating_port_proxy.cc:54`](../../src/mem/se_translating_port_proxy.cc#L54) | Allocates pages on fault via `fixupRange()` |
+| `TranslatingPortProxy` | [`translating_port_proxy.cc:63`](../../src/mem/translating_port_proxy.cc#L63) | Walks write requests page by page, retries after fault |
+| `PortProxy` | [`port_proxy.cc:75`](../../src/mem/port_proxy.cc#L75) | Splits into cache-line packets, sends functional writes |
+| `PhysicalMemory` | [`physical.cc:198`](../../src/mem/physical.cc#L198) | `mmap`s host buffer, distributes pointer to `AbstractMemory` objects |
+| `AbstractMemory` | [`abstract_mem.cc:489`](../../src/mem/abstract_mem.cc#L489) | `toHostAddr()` + `memcpy` — final destination |
+| `MemPool` | [`mem_pool.cc:96`](../../src/sim/mem_pool.cc#L96) | Bump allocator for physical page frames |
+| `EmulationPageTable` | [`page_table.cc:48`](../../src/mem/page_table.cc#L48) | `map()` inserts vaddr→paddr entries |
+
+### Failure Modes
+
+- If you assume ELF loading goes through the timing model, you will look for cache miss
+  statistics that do not exist. Functional access bypasses all timing — no L1 fills,
+  no coherence traffic, no DRAM bank activations.
+- If you think each DDR controller has its own separate backing store, you will be confused
+  by the fact that both compute the same host pointer for the same physical address.
+  The split only matters for timing; the backing store is shared.
+- If you expect lazy page allocation for `.text` and `.data`, you will miscount page faults.
+  These segments are eagerly backed during `initState()` — only heap and `mmap` pages
+  are lazy (see Section 2).
+
+---
+
+## 4. How Memory Maps to the Two DDR Controllers
 
 ### Intuition
 
@@ -309,7 +490,7 @@ Only individual cache lines are.
 
 ---
 
-## 4. How Threads Work in This SE Configuration
+## 5. How Threads Work in This SE Configuration
 
 ### Intuition
 
@@ -409,7 +590,7 @@ the others wait at a barrier or idle.
 
 void *worker(void *arg) {
     int tid = (int)(long)arg;
-    int cpu = gem5_cpu_id();  // see Section 5
+    int cpu = gem5_cpu_id();  // see Section 6
 
     if (cpu == 15) {
         // This is the thread at the far corner — do the active role
@@ -457,7 +638,7 @@ int main() {
 
 ---
 
-## 5. How to Figure Out Which Core a Thread Runs On
+## 6. How to Figure Out Which Core a Thread Runs On
 
 ### Intuition
 
@@ -539,7 +720,7 @@ It does not tell you which CPU the thread is currently running on.
 
 ---
 
-## 6. Synchronization Primitives
+## 7. Synchronization Primitives
 
 ### Intuition
 
@@ -635,7 +816,7 @@ use(data->value);
 
 ---
 
-## 7. Measuring Cycles and Forcing Cache Misses
+## 8. Measuring Cycles and Forcing Cache Misses
 
 ### Cycle Measurement
 
@@ -695,7 +876,7 @@ producer-consumer behavior — otherwise they may false-share.
 
 ---
 
-## 8. How the Config Script Wires It Together
+## 9. How the Config Script Wires It Together
 
 Our config ([`rbook_mesh_config.py`](../../configs/example/rbook_mesh_config.py)) follows the
 **shared Process** pattern:
@@ -735,7 +916,7 @@ The 16 HNF controllers split it by bits [9:6] interleaving.
 
 ---
 
-## 9. Compilation and Running
+## 10. Compilation and Running
 
 ### Compiling
 
