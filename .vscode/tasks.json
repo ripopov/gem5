@@ -10,7 +10,8 @@
                 "isDefault": true
             },
             "problemMatcher": "$gcc",
-            "detail": "Build RISCV gem5.debug (-O0, full debug symbols)"
+            "detail":
+                "Build RISCV gem5.debug (-O0, full debug symbols, MI+MSI+CHI)"
         },
         {
             "label": "gem5: build opt",
@@ -18,7 +19,7 @@
             "command": "scons build/RISCV/gem5.opt -j$(nproc)",
             "group": "build",
             "problemMatcher": "$gcc",
-            "detail": "Build RISCV gem5.opt (-O3, debug+tracing)"
+            "detail": "Build RISCV gem5.opt (-O3, debug+tracing, MI+MSI+CHI)"
         },
         {
             "label": "gem5: generate compile_commands.json",
@@ -26,7 +27,8 @@
             "command": "scons build/RISCV/compile_commands.json -j$(nproc)",
             "group": "build",
             "problemMatcher": "$gcc",
-            "detail": "Generate compile_commands.json for IntelliSense/clangd"
+            "detail":
+                "Generate compile_commands.json for IntelliSense/clangd (MI+MSI+CHI)"
         }
     ]
 }
