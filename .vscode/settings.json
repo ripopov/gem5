@@ -1,4 +1,6 @@
 {
+    "C_Cpp.default.compileCommands":
+        "${workspaceFolder}/build/RISCV/compile_commands.json",
     "python.analysis.extraPaths": [
         "src/python",
         "ext",
@@ -17,7 +19,8 @@
         },
         {
             "label": "[gem5] PRs I am reviewing",
-            "query": "repo:gem5/gem5 is:open -is:draft review-requested:${user}"
+            "query":
+                "repo:gem5/gem5 is:open -is:draft review-requested:${user}"
         },
         {
             "label": "[gem5] All PRs in review",
@@ -34,7 +37,8 @@
         },
         {
             "label": "[gem5] Open Issues I created",
-            "query": "author:${user} state:open repo:gem5/gem5 sort:created-desc"
+            "query":
+                "author:${user} state:open repo:gem5/gem5 sort:created-desc"
         },
         {
             "label": "[gem5] All open Issues",

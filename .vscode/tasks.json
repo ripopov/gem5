@@ -1,0 +1,32 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "gem5: build debug",
+            "type": "shell",
+            "command": "scons build/RISCV/gem5.debug -j$(nproc)",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": "$gcc",
+            "detail": "Build RISCV gem5.debug (-O0, full debug symbols)"
+        },
+        {
+            "label": "gem5: build opt",
+            "type": "shell",
+            "command": "scons build/RISCV/gem5.opt -j$(nproc)",
+            "group": "build",
+            "problemMatcher": "$gcc",
+            "detail": "Build RISCV gem5.opt (-O3, debug+tracing)"
+        },
+        {
+            "label": "gem5: generate compile_commands.json",
+            "type": "shell",
+            "command": "scons build/RISCV/compile_commands.json -j$(nproc)",
+            "group": "build",
+            "problemMatcher": "$gcc",
+            "detail": "Generate compile_commands.json for IntelliSense/clangd"
+        }
+    ]
+}
