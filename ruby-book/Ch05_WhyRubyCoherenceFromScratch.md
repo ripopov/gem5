@@ -139,6 +139,9 @@ Key Ruby components (introduced here, detailed in Chapter 6):
 
 - **Controllers**: cache controllers, directory controllers, DMA controllers -- each runs a SLICC-generated state machine.
   A controller wakes up when a message arrives in one of its input buffers, looks up the current state of the addressed block, and executes the transition defined for that (state, event) pair.
+- **CacheMemory** ([`src/mem/ruby/structures/CacheMemory.hh`](../src/mem/ruby/structures/CacheMemory.hh)): the tag and data store behind each cache controller.
+  CacheMemory is a *separate* SimObject responsible for traditional cache mechanics: set indexing, tag matching, replacement policy, and block allocation/deallocation.
+  The SLICC protocol calls into CacheMemory (e.g., `cacheMemory.allocate()`, `cacheMemory.cacheProbe()`) but does not control cache geometry -- size, associativity, and replacement policy are configured in Python and passed into the controller as a parameter.
 - **Sequencer** ([`src/mem/ruby/system/Sequencer.hh:85`](../src/mem/ruby/system/Sequencer.hh#L85)): bridges CPU request/response ports into Ruby's protocol world.
   It translates `Packet` objects into `RubyRequest` messages and places them in the controller's `mandatoryQueue`.
   When the protocol completes a request, the controller calls back into the Sequencer via `readCallback` or `writeCallback`.
@@ -409,6 +412,31 @@ machine(MachineType:L1Cache, "MI Example L1 Cache")
 ```
 
 The parameters declare what this controller needs to operate: a `Sequencer` (the bridge from CPU ports into Ruby), a `CacheMemory` (the tag and data store), latency values, and five `MessageBuffer`s.
+
+> **Who is responsible for what?**
+> The `CacheMemory * cacheMemory` parameter reveals a fundamental design separation in Ruby: the coherence protocol and the cache microarchitecture are different concerns, owned by different objects.
+>
+> | Concern | Owner | Configured in |
+> |---|---|---|
+> | **When** to allocate a cache block | SLICC protocol (transition actions call `cacheMemory.allocate()`) | `.sm` file |
+> | **When** to evict a block | SLICC protocol (triggers `Replacement` event) | `.sm` file |
+> | **Where** to place a block (set indexing) | `CacheMemory` (`addressToCacheSet()`, controlled by `start_index_bit`) | Python config |
+> | **Who** to evict (replacement victim) | `CacheMemory` (`cacheProbe()` delegates to the replacement policy) | Python config |
+> | Cache size and associativity | `CacheMemory` (determines number of sets and ways) | Python config |
+> | Coherence state per block | SLICC protocol (the `Entry.CacheState` field) | `.sm` file |
+>
+> `CacheMemory` is a SimObject defined in [`RubyCache.py`](../src/mem/ruby/structures/RubyCache.py) with parameters for `size`, `assoc`, `replacement_policy` (default: `TreePLRURP`), `start_index_bit`, and banking/latency knobs.
+> The Python configuration script creates both objects separately and wires them together:
+>
+> ```python
+> l1_cache = RubyCache(size="16kB", assoc=8,
+>                      replacement_policy=TreePLRURP())
+> l1_cntrl = L1Cache_Controller(cacheMemory=l1_cache,
+>                               sequencer=sequencer, ...)
+> ```
+>
+> This means you can change cache size, associativity, or replacement policy without touching the coherence protocol -- and you can rewrite the protocol without touching cache geometry.
+> The SLICC code never mentions "16 kB" or "8-way"; the Python config never mentions "state M" or "GETX."
 
 Four buffers connect to the on-chip network via virtual network assignments.
 Each [`MessageBuffer`](../src/mem/ruby/network/MessageBuffer.hh#L74) is assigned to a **virtual network** number.
