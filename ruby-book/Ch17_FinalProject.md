@@ -14,23 +14,7 @@ The final stage takes one step further: extending `CustomMesh.py` to support per
 Each mesh tile co-locates a RISC-V core (RN-F), a home node (HN-F), and a last-level cache slice (LLC/SLC).
 Two DDR controllers (SN-F) attach at diagonally opposite corners so that memory traffic is never trivially local.
 
-```
-                         4×4 CHI Mesh
-
-         DDR0──┐
-               |
-    ┌──────────┼──────────┬──────────┬──────────┐
-    │ C0+HN0+L0│ C1+HN1+L1│ C2+HN2+L2│ C3+HN3+L3│
-    ├──────────┼──────────┼──────────┼──────────┤
-    │ C4+HN4+L4│ C5+HN5+L5│ C6+HN6+L6│ C7+HN7+L7│
-    ├──────────┼──────────┼──────────┼──────────┤
-    │ C8+HN8+L8│ C9+HN9+L9│C10+HN10+L10│C11+HN11+L11│
-    ├──────────┼──────────┼──────────┼──────────┤
-    │C12+HN12+L12│C13+HN13+L13│C14+HN14+L14│C15+HN15+L15│
-    └──────────┴──────────┴──────────┼──────────┘
-                                     │
-                                     └──DDR1
-```
+![4×4 CHI Mesh — 16 RISC-V tiles with Garnet routers, DDR controllers at opposite corners](resources/chi_mesh_4x4.svg)
 
 The Garnet network provides cycle-accurate flit transport with XY routing across the mesh.
 The CHI protocol handles coherence across all 16 LLC slices — no protocol changes required.
