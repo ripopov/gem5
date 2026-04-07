@@ -898,6 +898,10 @@ The following diagram shows the overall structure of the test system:
 
 ![MSI test system structure](resources/msi_test_system.svg)
 
+The auto-generated `config.dot.svg` from a completed run shows every SimObject and port connection in the instantiated system:
+
+![gem5 config.dot topology for the MSI test system](resources/msi_test_config_dot.svg)
+
 After setup, the script overrides [`send_evictions=False`](../configs/learning_gem5/part3/riscv/simple_ruby_riscv.py#L39-L40) on all L1Cache controllers.
 When `send_evictions` is true, the SLICC action `forward_eviction_to_cpu` calls `sequencer.evictionCallback(address)`, which sends an `InvalidateReq` snoop back to the CPU.
 x86 needs this to wake threads sleeping in `MONITOR`/`MWAIT` (the CPU watches a cache line and must be told when it is evicted); ARM needs it for its exclusive monitor / `WFE` mechanism.
