@@ -31,28 +31,60 @@ The project proceeds in four stages, each producing a runnable artifact.
 
 ### Stage 1 — The noc_config file
 
-The reader writes a `4x4.py` noc_config file, extending the existing `configs/example/noc_config/2x4.py` template.
-This file defines:
+The reader writes a `rbook_4x4.py` noc_config file, extending the existing `configs/example/noc_config/2x4.py` template.
+Every node class inherits from its counterpart in `configs/ruby/CHI_config.py` and overrides only the `NoC_Params` inner class (specifically `router_list`, which tells `CustomMesh.distributeNodes` which mesh router each controller attaches to).
+
+The file defines:
 
 - A `NoC_Params` class with `num_rows = 4` and `num_cols = 4`, giving 16 Garnet routers.
 - `CHI_RNF` and `CHI_HNF` node classes with `router_list` mapping each of the 16 nodes to its corresponding router (router 0 through 15).
-- `CHI_SNF_MainMem` with `router_list = [0, 15]` — the two DDR controllers at opposite corners.
-- `CHI_SNF_BootMem`, `CHI_RNI_DMA`, `CHI_RNI_IO`, and `CHI_MN` bindings for the remaining infrastructure nodes.
+This is where the co-location of RN-F + HN-F + LLC at each tile happens — both classes list the same 16 routers, so `distributeNodes` attaches one RN-F and one HN-F to every mesh router.
+- `CHI_SNF_MainMem` with `router_list = [0, 15]` — the two DDR controllers at diagonally opposite corners.
+- `CHI_MN` — the Miscellaneous Node for DVM (Distributed Virtual Memory) operations such as TLB invalidation broadcasts.
+`CHI.py` creates this node unconditionally (line 139), so every noc_config must define it.
+In our RISC-V SE-mode system the MN is architecturally idle — RISC-V cores never issue ARM DVM operations — but the CHI SLICC protocol requires it to exist.
 
-Every node class inherits from its counterpart in `configs/ruby/CHI_config.py` and overrides only the `NoC_Params` inner class.
-The reader must understand how `CustomMesh.distributeNodes` uses these router lists to attach controllers to the mesh — this is where the co-location of RN-F + HN-F + LLC at each tile happens.
+#### Nodes we omit (SE-mode only)
+
+The CHI protocol defines three additional infrastructure node types that our system does not need.
+`CHI.py` (lines 97–103) unconditionally *reads* all seven node class names from the noc_config at import time, so the classes must be defined in the file even if they are never instantiated.
+Their `router_list` values do not matter — they are dead code in our scenario:
+
+- **`CHI_SNF_BootMem`** — a memory controller for boot ROM / firmware.
+Created only when `bootmem` is passed to `create_system` (line 193: `if len(other_memories) > 0`).
+SE-mode simulations have no boot memory, so this node is never instantiated.
+- **`CHI_RNI_DMA`** — a cacheless request node for DMA devices.
+Created only when DMA ports exist (line 205: `if len(dma_ports) > 0`).
+Our system has no DMA controllers.
+- **`CHI_RNI_IO`** — a request node for coherent I/O agents.
+Created only in full-system mode (line 214: `if full_system`).
+We run in SE mode.
+
+The reader should copy these three classes verbatim from `2x4.py` with any valid `router_list` — the values are irrelevant since the classes are never instantiated.
 
 ### Stage 2 — The system configuration script
 
-The reader assembles a Python configuration script that:
+The reader assembles a Python configuration script (`rbook_mesh_config.py`) that:
 
 - Creates 16 RISC-V `TimingSimpleCPU` cores (or `MinorCPU` for more realistic timing).
 - Instantiates the CHI cache hierarchy using the legacy path (`configs/ruby/CHI.py`) with `--topology=CustomMesh` and `--chi-config=<path-to-4x4.py>`.
 - Configures `--num-l3caches=16` so each HN-F gets an LLC slice.
-- Attaches two `DDR4_2400_16x64` memory channels, one per SN-F, with address interleaving across them.
+- Passes `--num-dirs=2` so that two SN-F (memory) nodes are created.
 - Selects the Garnet network with `--network=garnet`.
 
 The existing `tests/gem5/chi_protocol/configs/chi-with-isa.py` and `configs/ruby/CHI.py` serve as reference — the reader is not writing a CHI configuration from nothing, but adapting the known patterns to a specific mesh layout.
+
+#### How DDR controllers get wired
+
+The DDR connection happens in two stages, split across two files:
+
+1. **`CHI.py`** creates two SN-F controller shells with no memory port bound (`mem_ctrl=None` at line 182).
+It returns them in `mem_cntrls` to the caller.
+2. **`Ruby.py`** (lines 161–202) does the actual plumbing: for each SN-F controller it creates a `MemCtrl` + `DRAMInterface` (e.g., DDR4_2400), computes cache-line-granularity address interleaving using `log2(num_dirs)` bits, binds `mem_ctrl.port` to the controller's `memory_out_port`, and sets the controller's `addr_ranges`.
+
+With `--num-dirs=2`, the interleaving bit is bit 6 (= log₂ of the 64-byte cache line size).
+Consecutive cache lines alternate between DDR0 (at router 0) and DDR1 (at router 15), spreading traffic evenly regardless of access pattern.
+The reader does not write any interleaving logic — `Ruby.py` handles it automatically from `--num-dirs`.
 
 ### Stage 3 — Build and boot
 
@@ -79,7 +111,7 @@ This is the synthesis exercise: every number in the output connects back to a me
 Configuration-only projects have their own failure modes, distinct from protocol or RTL bugs:
 
 - **Incorrect router bindings** — mapping two RN-F nodes to the same router but forgetting to co-locate the corresponding HN-F creates a system where coherence traffic takes unnecessary hops. The system runs, but latency is inexplicably high for some cores.
-- **Missing node types** — forgetting `CHI_MN` (the miscellaneous node for DVM) or `CHI_SNF_BootMem` causes simulation crashes or hangs during boot, with error messages that point to Ruby internals rather than the missing configuration.
+- **Missing node class definitions** — `CHI.py` unconditionally reads all seven node class names from the noc_config at import time (lines 97–103), even for node types that are never instantiated. Omitting any class — even one that is dead code in SE mode, like `CHI_SNF_BootMem` — produces an `AttributeError` before simulation begins.
 - **Address interleaving mismatch** — if the two DDR controllers have overlapping or non-covering address ranges, some addresses are unmapped. Requests to those addresses produce cryptic "no match for address" errors deep inside the directory controller.
 - **Wrong number of LLC slices** — setting `--num-l3caches=2` instead of 16 creates a system where all coherence traffic funnels through two HN-F nodes. The mesh topology is wasted — it becomes a de facto two-node system with 14 idle routers.
 
