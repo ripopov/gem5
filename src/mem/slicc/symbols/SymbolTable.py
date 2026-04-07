@@ -207,6 +207,16 @@ class {self.slicc.protocol}ProtocolInfo : public ProtocolInfo
             path, f"{self.slicc.protocol}/{self.slicc.protocol}ProtocolInfo.hh"
         )
 
+    def writeDotFiles(self, path):
+        makeDir(path)
+
+        dot_path = os.path.join(path, self.slicc.protocol)
+        makeDir(dot_path)
+
+        for symbol in self.sym_vec:
+            if hasattr(symbol, "writeDotFiles"):
+                symbol.writeDotFiles(dot_path)
+
     def writeHTMLFiles(self, path):
         makeDir(path)
 

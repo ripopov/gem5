@@ -27,16 +27,20 @@
 
 
 def printDotty(sm, code):
-    code("digraph ${{sm.getIdent()}} {")
+    code("digraph ${{sm.ident}} {")
     code.indent()
+    code('rankdir=LR;')
+    code('node [shape=rectangle, style=filled, fillcolor=white];')
     for t in sm.transitions:
-        # Don't print ignored transitions
+        # Don't print stall transitions
         if t.getActionShorthands() in ("--", "z"):
             continue
 
-        code("${{t.getStateShorthand()}} -> ${{t.getNextStateShorthand()}")
-        code(
-            '    [label="${{t.getEventShorthand()}}/${{t.getActionShorthands()}}"'
-        )
+        state = t.state.ident
+        next_state = t.nextState.ident
+        event = t.event.ident
+        actions = t.getActionShorthands()
+
+        code('${state} -> ${next_state} [label="${event}/${actions}"];')
     code.dedent()
     code("}")

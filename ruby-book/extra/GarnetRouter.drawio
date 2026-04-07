@@ -1,0 +1,572 @@
+<mxfile host="app.diagrams.net" modified="2026-04-02T00:00:00.000Z" agent="Claude" version="24.0.0" type="device">
+  <diagram id="garnet-router" name="Garnet Router Microarchitecture">
+    <mxGraphModel dx="1600" dy="1000" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1800" pageHeight="1180" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- ================================================================ -->
+        <!-- TITLE                                                            -->
+        <!-- ================================================================ -->
+        <mxCell id="title" value="Garnet Router Microarchitecture" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=20;fontStyle=1;fontColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="620" y="10" width="350" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="subtitle" value="&lt;font color=&quot;#888888&quot;&gt;src/mem/ruby/network/garnet/ — Virtual-channel wormhole router with credit-based flow control&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="500" y="38" width="570" height="24" as="geometry" />
+        </mxCell>
+
+        <!-- ================================================================ -->
+        <!-- ROUTER BOUNDARY                                                  -->
+        <!-- ================================================================ -->
+        <mxCell id="router" value="Router" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontColor=#333333;fontSize=16;fontStyle=1;verticalAlign=top;align=center;spacingTop=2;dashed=0;strokeWidth=3;arcSize=4;" vertex="1" parent="1">
+          <mxGeometry x="190" y="65" width="1370" height="1080" as="geometry" />
+        </mxCell>
+
+        <!-- Pipeline header inside router top -->
+        <mxCell id="pipeline_header" value="Pipeline:&amp;nbsp; &lt;b&gt;BW&lt;/b&gt; (Buffer Write) → &lt;b&gt;RC&lt;/b&gt; (Route Compute) → &lt;b&gt;SA&lt;/b&gt; (Switch Allocate) → &lt;b&gt;ST&lt;/b&gt; (Switch Traverse) → &lt;b&gt;LT&lt;/b&gt; (Link Traverse)" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=11;fontColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="340" y="84" width="640" height="24" as="geometry" />
+        </mxCell>
+
+        <!-- Wakeup order note -->
+        <mxCell id="wakeup_note" value="&lt;b&gt;Router::wakeup() order:&lt;/b&gt;&lt;br&gt;① InputUnit[*].wakeup() — BW+RC&lt;br&gt;② OutputUnit[*].wakeup() — credit rx&lt;br&gt;③ SwitchAllocator.wakeup() — SA‑I, SA‑II&lt;br&gt;④ CrossbarSwitch.wakeup() — ST" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;size=18;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;align=left;spacingLeft=6;spacingRight=6;verticalAlign=top;spacingTop=2;" vertex="1" parent="1">
+          <mxGeometry x="1100" y="950" width="270" height="95" as="geometry" />
+        </mxCell>
+
+        <!-- ================================================================ -->
+        <!--  COLUMN B: INPUT UNITS  (x=220..555, w=335)                      -->
+        <!-- ================================================================ -->
+
+        <!-- === InputUnit [0] — detailed === -->
+        <mxCell id="iu0" value="&lt;b&gt;InputUnit [0]&lt;/b&gt;  &lt;font color=&quot;#999&quot; style=&quot;font-size:9px&quot;&gt;InputUnit.hh/cc&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;verticalAlign=top;align=center;spacingTop=2;fontSize=11;arcSize=6;" vertex="1" parent="1">
+          <mxGeometry x="220" y="120" width="335" height="255" as="geometry" />
+        </mxCell>
+
+        <mxCell id="vc0_0" value="&lt;b&gt;VC 0&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:8px&quot;&gt;flitBuffer&lt;br&gt;IDLE_ / ACTIVE_&lt;br&gt;outport, outvc&lt;br&gt;enqueue_time&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=9;align=center;" vertex="1" parent="1">
+          <mxGeometry x="232" y="170" width="92" height="72" as="geometry" />
+        </mxCell>
+        <mxCell id="vc0_1" value="&lt;b&gt;VC 1&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:8px&quot;&gt;flitBuffer&lt;br&gt;IDLE_ / ACTIVE_&lt;br&gt;outport, outvc&lt;br&gt;enqueue_time&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=9;align=center;" vertex="1" parent="1">
+          <mxGeometry x="334" y="170" width="92" height="72" as="geometry" />
+        </mxCell>
+        <mxCell id="vc0_n" value="&lt;b&gt;VC N‑1&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:8px&quot;&gt;flitBuffer&lt;br&gt;IDLE_ / ACTIVE_&lt;br&gt;outport, outvc&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=9;align=center;" vertex="1" parent="1">
+          <mxGeometry x="451" y="170" width="92" height="72" as="geometry" />
+        </mxCell>
+        <mxCell id="vc0_dots" value="…" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=14;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="428" y="190" width="22" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="vc_class" value="&lt;font color=&quot;#999&quot; style=&quot;font-size:8px&quot;&gt;VirtualChannel.hh — N = num_vnets × vc_per_vnet&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="272" y="246" width="240" height="16" as="geometry" />
+        </mxCell>
+
+        <mxCell id="cq0" value="&lt;b&gt;creditQueue&lt;/b&gt; &lt;font style=&quot;font-size:8px&quot;&gt;(flitBuffer — credits to upstream)&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="232" y="268" width="220" height="30" as="geometry" />
+        </mxCell>
+
+        <mxCell id="bw_rc_label" value="&lt;font color=&quot;#0050AA&quot;&gt;&lt;b&gt;BW + RC&lt;/b&gt;&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="232" y="303" width="60" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- VC count note -->
+        <mxCell id="vc_count_note" value="&lt;font style=&quot;font-size:8px&quot; color=&quot;#999&quot;&gt;m_vc_per_vnet VCs per vnet&lt;/font&gt;" style="text;html=1;align=right;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="380" y="303" width="160" height="18" as="geometry" />
+        </mxCell>
+
+        <!-- === InputUnit [1] — compact === -->
+        <mxCell id="iu1" value="&lt;b&gt;InputUnit [1]&lt;/b&gt;  &lt;font color=&quot;#999&quot; style=&quot;font-size:9px&quot;&gt;(same structure)&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;verticalAlign=top;align=center;spacingTop=2;fontSize=11;arcSize=6;" vertex="1" parent="1">
+          <mxGeometry x="220" y="400" width="335" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="iu1_inner" value="VC 0 &amp;nbsp;│&amp;nbsp; VC 1 &amp;nbsp;│ … │&amp;nbsp; VC N‑1 &amp;nbsp;+&amp;nbsp; creditQueue" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="232" y="435" width="310" height="36" as="geometry" />
+        </mxCell>
+
+        <!-- vertical dots -->
+        <mxCell id="iu_vdots" value="⋮" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=20;fontColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="370" y="510" width="30" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- === InputUnit [N-1] — compact === -->
+        <mxCell id="iu_n" value="&lt;b&gt;InputUnit [N‑1]&lt;/b&gt;  &lt;font color=&quot;#999&quot; style=&quot;font-size:9px&quot;&gt;(same structure)&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;verticalAlign=top;align=center;spacingTop=2;fontSize=11;arcSize=6;" vertex="1" parent="1">
+          <mxGeometry x="220" y="550" width="335" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="iun_inner" value="VC 0 &amp;nbsp;│&amp;nbsp; VC 1 &amp;nbsp;│ … │&amp;nbsp; VC N‑1 &amp;nbsp;+&amp;nbsp; creditQueue" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="232" y="585" width="310" height="36" as="geometry" />
+        </mxCell>
+
+        <!-- ================================================================ -->
+        <!--  COLUMN C: SWITCH ALLOCATOR  (x=600..1010, w=410)                -->
+        <!-- ================================================================ -->
+        <mxCell id="sa" value="&lt;b&gt;SwitchAllocator&lt;/b&gt;  &lt;font color=&quot;#999&quot; style=&quot;font-size:9px&quot;&gt;SwitchAllocator.hh/cc&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;verticalAlign=top;align=center;spacingTop=2;fontSize=11;arcSize=6;" vertex="1" parent="1">
+          <mxGeometry x="600" y="120" width="410" height="530" as="geometry" />
+        </mxCell>
+
+        <!-- SA-I block -->
+        <mxCell id="sa1" value="&lt;b&gt;SA‑I : arbitrate_inports()&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;Per-input round-robin — selects one VC per input port&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF9E0;strokeColor=#d6b656;verticalAlign=top;align=center;spacingTop=2;fontSize=10;arcSize=6;" vertex="1" parent="1">
+          <mxGeometry x="615" y="170" width="380" height="185" as="geometry" />
+        </mxCell>
+
+        <mxCell id="arb_in0" value="&lt;b&gt;Input Arbiter [0]&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:8px&quot;&gt;round_robin_invc[0]&lt;br&gt;Scan VCs: need_stage(SA_)?&lt;br&gt;Check send_allowed()&lt;br&gt;→ port_requests[0], vc_winners[0]&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#d6b656;fontSize=9;align=left;spacingLeft=5;" vertex="1" parent="1">
+          <mxGeometry x="625" y="212" width="175" height="72" as="geometry" />
+        </mxCell>
+        <mxCell id="arb_in1" value="&lt;b&gt;Input Arbiter [1]&lt;/b&gt; &lt;font style=&quot;font-size:8px&quot;&gt;(same)&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#d6b656;fontSize=9;align=left;spacingLeft=5;" vertex="1" parent="1">
+          <mxGeometry x="625" y="294" width="175" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="arb_in_n" value="&lt;b&gt;Input Arbiter [N‑1]&lt;/b&gt; &lt;font style=&quot;font-size:8px&quot;&gt;(same)&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#d6b656;fontSize=9;align=left;spacingLeft=5;" vertex="1" parent="1">
+          <mxGeometry x="625" y="326" width="175" height="24" as="geometry" />
+        </mxCell>
+
+        <mxCell id="send_allowed" value="&lt;b&gt;send_allowed()&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:8px&quot;&gt;HEAD: free output VC?&lt;br&gt;BODY/TAIL: has credit?&lt;br&gt;Ordered vnet: no older&lt;br&gt;flit for same outport?&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#B85450;fontSize=9;align=left;spacingLeft=5;" vertex="1" parent="1">
+          <mxGeometry x="815" y="220" width="165" height="72" as="geometry" />
+        </mxCell>
+
+        <mxCell id="sa1_label" value="&lt;font color=&quot;#B8860B&quot;&gt;&lt;b&gt;SA stage (1st half)&lt;/b&gt;&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="820" y="310" width="120" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- Arrow SA-I → SA-II -->
+        <mxCell id="sa1_to_sa2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;strokeColor=#d6b656;strokeWidth=2;" edge="1" source="sa1" target="sa2" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="sa1_to_sa2_lbl" value="&lt;font style=&quot;font-size:8px&quot; color=&quot;#B8860B&quot;&gt;m_port_requests[], m_vc_winners[]&lt;/font&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="sa1_to_sa2">
+          <mxGeometry x="0.2" relative="1" as="geometry">
+            <mxPoint x="100" as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- SA-II block -->
+        <mxCell id="sa2" value="&lt;b&gt;SA‑II : arbitrate_outports()&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;Per-output round-robin — grants one input per output port&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF9E0;strokeColor=#d6b656;verticalAlign=top;align=center;spacingTop=2;fontSize=10;arcSize=6;" vertex="1" parent="1">
+          <mxGeometry x="615" y="390" width="380" height="245" as="geometry" />
+        </mxCell>
+
+        <mxCell id="arb_out0" value="&lt;b&gt;Output Arbiter [0]&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:8px&quot;&gt;round_robin_inport[0]&lt;br&gt;Match port_requests → grant&lt;br&gt;vc_allocate() for HEAD flits&lt;br&gt;getTopFlit() → set outport, outvc&lt;br&gt;decrement_credit(outvc)&lt;br&gt;grant_switch(inport, flit) → CrossbarSwitch&lt;br&gt;increment_credit(invc) → upstream credit&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#d6b656;fontSize=9;align=left;spacingLeft=5;" vertex="1" parent="1">
+          <mxGeometry x="625" y="432" width="220" height="105" as="geometry" />
+        </mxCell>
+        <mxCell id="arb_out1" value="&lt;b&gt;Output Arbiter [1]&lt;/b&gt; &lt;font style=&quot;font-size:8px&quot;&gt;(same)&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#d6b656;fontSize=9;align=left;spacingLeft=5;" vertex="1" parent="1">
+          <mxGeometry x="625" y="547" width="175" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="arb_out_n" value="&lt;b&gt;Output Arbiter [N‑1]&lt;/b&gt; &lt;font style=&quot;font-size:8px&quot;&gt;(same)&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#d6b656;fontSize=9;align=left;spacingLeft=5;" vertex="1" parent="1">
+          <mxGeometry x="625" y="579" width="175" height="24" as="geometry" />
+        </mxCell>
+
+        <mxCell id="sa2_label" value="&lt;font color=&quot;#B8860B&quot;&gt;&lt;b&gt;SA stage (2nd half) + VC Alloc&lt;/b&gt;&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="815" y="555" width="185" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- ================================================================ -->
+        <!--  COLUMN D: OUTPUT UNITS  (x=1060..1395, w=335)                   -->
+        <!-- ================================================================ -->
+
+        <!-- === OutputUnit [0] — detailed === -->
+        <mxCell id="ou0" value="&lt;b&gt;OutputUnit [0]&lt;/b&gt;  &lt;font color=&quot;#999&quot; style=&quot;font-size:9px&quot;&gt;OutputUnit.hh/cc&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;verticalAlign=top;align=center;spacingTop=2;fontSize=11;arcSize=6;" vertex="1" parent="1">
+          <mxGeometry x="1060" y="120" width="335" height="255" as="geometry" />
+        </mxCell>
+
+        <mxCell id="ovs0" value="&lt;b&gt;OutVcState [0]&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:8px&quot;&gt;credit_count&lt;br&gt;max_credit_count&lt;br&gt;IDLE_ / ACTIVE_&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=9;align=center;" vertex="1" parent="1">
+          <mxGeometry x="1072" y="170" width="92" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="ovs1" value="&lt;b&gt;OutVcState [1]&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:8px&quot;&gt;credit_count&lt;br&gt;state&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=9;align=center;" vertex="1" parent="1">
+          <mxGeometry x="1174" y="170" width="92" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="ovs_dots" value="…" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=14;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1268" y="185" width="22" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="ovs_n" value="&lt;b&gt;OutVcState [M‑1]&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:8px&quot;&gt;credit_count&lt;br&gt;state&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=9;align=center;" vertex="1" parent="1">
+          <mxGeometry x="1291" y="170" width="92" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="ovs_class" value="&lt;font color=&quot;#999&quot; style=&quot;font-size:8px&quot;&gt;OutVcState.hh — tracks downstream buffer credits&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="1100" y="240" width="250" height="16" as="geometry" />
+        </mxCell>
+
+        <mxCell id="ob0" value="&lt;b&gt;outBuffer&lt;/b&gt; &lt;font style=&quot;font-size:8px&quot;&gt;(flitBuffer — flit → out_link)&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="1072" y="262" width="220" height="30" as="geometry" />
+        </mxCell>
+
+        <mxCell id="lt_label" value="&lt;font color=&quot;#0050AA&quot;&gt;&lt;b&gt;→ LT&lt;/b&gt;&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1072" y="297" width="40" height="20" as="geometry" />
+        </mxCell>
+
+        <mxCell id="insert_note" value="&lt;font style=&quot;font-size:8px&quot; color=&quot;#999&quot;&gt;insert_flit(): buf + schedule link&lt;/font&gt;" style="text;html=1;align=right;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="1200" y="297" width="170" height="18" as="geometry" />
+        </mxCell>
+
+        <!-- === OutputUnit [1] — compact === -->
+        <mxCell id="ou1" value="&lt;b&gt;OutputUnit [1]&lt;/b&gt;  &lt;font color=&quot;#999&quot; style=&quot;font-size:9px&quot;&gt;(same structure)&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;verticalAlign=top;align=center;spacingTop=2;fontSize=11;arcSize=6;" vertex="1" parent="1">
+          <mxGeometry x="1060" y="400" width="335" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="ou1_inner" value="OutVcState[0..M‑1]  +  outBuffer" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="1072" y="435" width="310" height="36" as="geometry" />
+        </mxCell>
+
+        <!-- vertical dots -->
+        <mxCell id="ou_vdots" value="⋮" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=20;fontColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="1210" y="510" width="30" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- === OutputUnit [N-1] — compact === -->
+        <mxCell id="ou_n" value="&lt;b&gt;OutputUnit [N‑1]&lt;/b&gt;  &lt;font color=&quot;#999&quot; style=&quot;font-size:9px&quot;&gt;(same structure)&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;verticalAlign=top;align=center;spacingTop=2;fontSize=11;arcSize=6;" vertex="1" parent="1">
+          <mxGeometry x="1060" y="550" width="335" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="oun_inner" value="OutVcState[0..M‑1]  +  outBuffer" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="1072" y="585" width="310" height="36" as="geometry" />
+        </mxCell>
+
+        <!-- ================================================================ -->
+        <!--  EXTERNAL LINKS — LEFT (Col A)                                   -->
+        <!-- ================================================================ -->
+
+        <!-- Port 0 -->
+        <mxCell id="nl_in0" value="&lt;b&gt;NetworkLink&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:8px&quot;&gt;from upstream&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="40" y="185" width="110" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="cl_out0" value="&lt;b&gt;CreditLink&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:8px&quot;&gt;to upstream&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="40" y="270" width="110" height="36" as="geometry" />
+        </mxCell>
+
+        <!-- Port 1 -->
+        <mxCell id="nl_in1" value="&lt;font style=&quot;font-size:8px&quot;&gt;NetworkLink&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="60" y="438" width="95" height="26" as="geometry" />
+        </mxCell>
+
+        <!-- Port N-1 -->
+        <mxCell id="nl_in_n" value="&lt;font style=&quot;font-size:8px&quot;&gt;NetworkLink&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="60" y="588" width="95" height="26" as="geometry" />
+        </mxCell>
+
+        <!-- Flit arrows IN -->
+        <mxCell id="e_flit_in0" style="rounded=1;orthogonalLoop=1;jettySize=auto;strokeColor=#009900;strokeWidth=2;entryX=0;entryY=0.26;entryDx=0;entryDy=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;" edge="1" source="nl_in0" target="iu0" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_flit_in0_lbl" value="&lt;font style=&quot;font-size:8px&quot; color=&quot;#009900&quot;&gt;flits →&lt;/font&gt;" style="edgeLabel;html=1;align=center;verticalAlign=bottom;resizable=0;points=[];" vertex="1" connectable="0" parent="e_flit_in0">
+          <mxGeometry x="-0.1" relative="1" as="geometry">
+            <mxPoint y="-4" as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Credit arrow OUT (from InputUnit to upstream) -->
+        <mxCell id="e_cred_out0" style="rounded=1;orthogonalLoop=1;jettySize=auto;strokeColor=#CC6600;strokeWidth=2;dashed=1;exitX=0;exitY=0.66;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" edge="1" source="iu0" target="cl_out0" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_cred_out0_lbl" value="&lt;font style=&quot;font-size:8px&quot; color=&quot;#CC6600&quot;&gt;← credits&lt;/font&gt;" style="edgeLabel;html=1;align=center;verticalAlign=top;resizable=0;points=[];" vertex="1" connectable="0" parent="e_cred_out0">
+          <mxGeometry x="0.1" relative="1" as="geometry">
+            <mxPoint y="4" as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="e_flit_in1" style="rounded=1;orthogonalLoop=1;jettySize=auto;strokeColor=#009900;strokeWidth=2;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" source="nl_in1" target="iu1" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_flit_in_n" style="rounded=1;orthogonalLoop=1;jettySize=auto;strokeColor=#009900;strokeWidth=2;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" source="nl_in_n" target="iu_n" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ================================================================ -->
+        <!--  EXTERNAL LINKS — RIGHT (Col E)                                  -->
+        <!-- ================================================================ -->
+
+        <!-- Port 0 -->
+        <mxCell id="nl_out0" value="&lt;b&gt;NetworkLink&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:8px&quot;&gt;to downstream&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="1460" y="185" width="110" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="cl_in0" value="&lt;b&gt;CreditLink&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:8px&quot;&gt;from downstream&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="1460" y="270" width="110" height="36" as="geometry" />
+        </mxCell>
+
+        <!-- Port 1 -->
+        <mxCell id="nl_out1" value="&lt;font style=&quot;font-size:8px&quot;&gt;NetworkLink&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="1460" y="438" width="95" height="26" as="geometry" />
+        </mxCell>
+
+        <!-- Port N-1 -->
+        <mxCell id="nl_out_n" value="&lt;font style=&quot;font-size:8px&quot;&gt;NetworkLink&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="1460" y="588" width="95" height="26" as="geometry" />
+        </mxCell>
+
+        <!-- Flit arrows OUT -->
+        <mxCell id="e_flit_out0" style="rounded=1;orthogonalLoop=1;jettySize=auto;strokeColor=#009900;strokeWidth=2;exitX=1;exitY=0.26;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" source="ou0" target="nl_out0" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_flit_out0_lbl" value="&lt;font style=&quot;font-size:8px&quot; color=&quot;#009900&quot;&gt;flits →&lt;/font&gt;" style="edgeLabel;html=1;align=center;verticalAlign=bottom;resizable=0;points=[];" vertex="1" connectable="0" parent="e_flit_out0">
+          <mxGeometry x="0.1" relative="1" as="geometry">
+            <mxPoint y="-4" as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Credit arrow IN (from downstream to OutputUnit) -->
+        <mxCell id="e_cred_in0" style="rounded=1;orthogonalLoop=1;jettySize=auto;strokeColor=#CC6600;strokeWidth=2;dashed=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.66;entryDx=0;entryDy=0;" edge="1" source="cl_in0" target="ou0" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_cred_in0_lbl" value="&lt;font style=&quot;font-size:8px&quot; color=&quot;#CC6600&quot;&gt;← credits&lt;/font&gt;" style="edgeLabel;html=1;align=center;verticalAlign=top;resizable=0;points=[];" vertex="1" connectable="0" parent="e_cred_in0">
+          <mxGeometry x="-0.1" relative="1" as="geometry">
+            <mxPoint y="4" as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="e_flit_out1" style="rounded=1;orthogonalLoop=1;jettySize=auto;strokeColor=#009900;strokeWidth=2;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" source="ou1" target="nl_out1" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_flit_out_n" style="rounded=1;orthogonalLoop=1;jettySize=auto;strokeColor=#009900;strokeWidth=2;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" source="ou_n" target="nl_out_n" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ================================================================ -->
+        <!--  INTERNAL DATA-FLOW ARROWS                                       -->
+        <!-- ================================================================ -->
+
+        <!-- InputUnit 0 → SA (need_stage, getTopFlit) -->
+        <mxCell id="e_iu0_sa" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;strokeColor=#B8860B;strokeWidth=2;exitX=1;exitY=0.3;exitDx=0;exitDy=0;entryX=0;entryY=0.12;entryDx=0;entryDy=0;" edge="1" source="iu0" target="sa" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_iu0_sa_lbl" value="&lt;font style=&quot;font-size:8px&quot; color=&quot;#B8860B&quot;&gt;need_stage(SA_)?&lt;br&gt;getTopFlit()&lt;/font&gt;" style="edgeLabel;html=1;align=center;verticalAlign=bottom;resizable=0;points=[];" vertex="1" connectable="0" parent="e_iu0_sa">
+          <mxGeometry x="0.3" relative="1" as="geometry">
+            <mxPoint y="-6" as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- InputUnit 1 → SA -->
+        <mxCell id="e_iu1_sa" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;strokeColor=#B8860B;strokeWidth=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.55;entryDx=0;entryDy=0;" edge="1" source="iu1" target="sa" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- InputUnit N-1 → SA -->
+        <mxCell id="e_iun_sa" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;strokeColor=#B8860B;strokeWidth=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.88;entryDx=0;entryDy=0;" edge="1" source="iu_n" target="sa" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- SA → OutputUnit 0 (query credits / select_free_vc) -->
+        <mxCell id="e_sa_ou0" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;strokeColor=#6c8ebf;strokeWidth=2;dashed=1;dashPattern=5 3;exitX=1;exitY=0.12;exitDx=0;exitDy=0;entryX=0;entryY=0.3;entryDx=0;entryDy=0;" edge="1" source="sa" target="ou0" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_sa_ou0_lbl" value="&lt;font style=&quot;font-size:8px&quot; color=&quot;#6c8ebf&quot;&gt;has_free_vc()? has_credit()?&lt;br&gt;select_free_vc() / decrement_credit()&lt;/font&gt;" style="edgeLabel;html=1;align=center;verticalAlign=bottom;resizable=0;points=[];" vertex="1" connectable="0" parent="e_sa_ou0">
+          <mxGeometry x="0.3" relative="1" as="geometry">
+            <mxPoint y="-6" as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ================================================================ -->
+        <!--  BOTTOM-LEFT: ROUTING UNIT  (x=220..555, y=690..920)             -->
+        <!-- ================================================================ -->
+        <mxCell id="ru" value="&lt;b&gt;RoutingUnit&lt;/b&gt;  &lt;font color=&quot;#999&quot; style=&quot;font-size:9px&quot;&gt;RoutingUnit.hh/cc&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;verticalAlign=top;align=center;spacingTop=2;fontSize=11;arcSize=6;" vertex="1" parent="1">
+          <mxGeometry x="220" y="690" width="335" height="230" as="geometry" />
+        </mxCell>
+
+        <mxCell id="ru_table" value="&lt;b&gt;m_routing_table&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:8px&quot;&gt;vector&amp;lt;vector&amp;lt;NetDest&amp;gt;&amp;gt;&lt;br&gt;[vnet][outport] → reachable destinations&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="232" y="735" width="180" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="ru_weight" value="&lt;b&gt;m_weight_table&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:8px&quot;&gt;vector&amp;lt;int&amp;gt; — per-link weights&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="232" y="793" width="180" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="ru_algo" value="&lt;b&gt;outportCompute()&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:8px&quot;&gt;TABLE_ → lookupRoutingTable()&lt;br&gt;XY_ → outportComputeXY()&lt;br&gt;CUSTOM_ → outportComputeCustom()&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=9;align=left;spacingLeft=5;" vertex="1" parent="1">
+          <mxGeometry x="232" y="839" width="180" height="62" as="geometry" />
+        </mxCell>
+        <mxCell id="ru_maps" value="&lt;b&gt;Direction maps&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:8px&quot;&gt;inport_dirn ↔ idx&lt;br&gt;outport_dirn ↔ idx&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="424" y="735" width="118" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="rc_label" value="&lt;font color=&quot;#9673a6&quot;&gt;&lt;b&gt;RC stage&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:8px&quot;&gt;HEAD / HEAD_TAIL only&lt;/font&gt;&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="424" y="800" width="118" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- Arrow: InputUnit → RoutingUnit -->
+        <mxCell id="e_iu_ru" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;strokeColor=#9673a6;strokeWidth=2;dashed=1;dashPattern=8 4;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" source="iu_n" target="ru" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_iu_ru_lbl" value="&lt;font style=&quot;font-size:8px&quot; color=&quot;#9673a6&quot;&gt;route_compute(route, inport, dirn)&lt;br&gt;HEAD flit → outport&lt;/font&gt;" style="edgeLabel;html=1;align=left;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="e_iu_ru">
+          <mxGeometry x="0.2" relative="1" as="geometry">
+            <mxPoint x="80" as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ================================================================ -->
+        <!--  BOTTOM-CENTER: CROSSBAR SWITCH  (x=600..1010, y=690..920)       -->
+        <!-- ================================================================ -->
+        <mxCell id="xbar" value="&lt;b&gt;CrossbarSwitch&lt;/b&gt;  &lt;font color=&quot;#999&quot; style=&quot;font-size:9px&quot;&gt;CrossbarSwitch.hh/cc&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;verticalAlign=top;align=center;spacingTop=2;fontSize=11;arcSize=6;" vertex="1" parent="1">
+          <mxGeometry x="600" y="690" width="410" height="230" as="geometry" />
+        </mxCell>
+
+        <mxCell id="swbuf0" value="&lt;b&gt;switchBuffers[0]&lt;/b&gt; &lt;font style=&quot;font-size:8px&quot;&gt;flitBuffer&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#b85450;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="615" y="738" width="150" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="swbuf1" value="&lt;b&gt;switchBuffers[1]&lt;/b&gt; &lt;font style=&quot;font-size:8px&quot;&gt;flitBuffer&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#b85450;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="615" y="776" width="150" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="swbuf_dots" value="⋮" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=16;fontColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="670" y="806" width="20" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="swbuf_n" value="&lt;b&gt;switchBuffers[N‑1]&lt;/b&gt; &lt;font style=&quot;font-size:8px&quot;&gt;flitBuffer&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#b85450;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="615" y="830" width="150" height="28" as="geometry" />
+        </mxCell>
+
+        <mxCell id="xbar_logic" value="&lt;b&gt;wakeup() logic:&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:8px&quot;&gt;for each switchBuffer:&lt;br&gt;&amp;nbsp; if flit.is_stage(ST_, curTick()):&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp; flit.advance_stage(LT_)&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp; OutputUnit[outport].insert_flit(flit)&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#b85450;fontSize=9;align=left;spacingLeft=5;" vertex="1" parent="1">
+          <mxGeometry x="785" y="738" width="210" height="76" as="geometry" />
+        </mxCell>
+
+        <mxCell id="st_label" value="&lt;font color=&quot;#CC0000&quot;&gt;&lt;b&gt;ST stage&lt;/b&gt;&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="855" y="820" width="60" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- Arrow: SA-II → CrossbarSwitch (grant_switch) -->
+        <mxCell id="e_sa_xbar" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;strokeColor=#b85450;strokeWidth=2;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" source="sa" target="xbar" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_sa_xbar_lbl" value="&lt;font style=&quot;font-size:8px&quot; color=&quot;#b85450&quot;&gt;grant_switch(inport, flit)&lt;br&gt;→ update_sw_winner()&lt;/font&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="e_sa_xbar">
+          <mxGeometry x="0.3" relative="1" as="geometry">
+            <mxPoint x="110" as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Arrow: CrossbarSwitch → OutputUnit (insert_flit) — goes right then up -->
+        <mxCell id="e_xbar_ou" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;strokeColor=#CC0000;strokeWidth=2;exitX=1;exitY=0.2;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" edge="1" source="xbar" target="ou0" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1040" y="736" />
+              <mxPoint x="1040" y="670" />
+              <mxPoint x="1228" y="670" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_xbar_ou_lbl" value="&lt;font style=&quot;font-size:8px&quot; color=&quot;#CC0000&quot;&gt;insert_flit()&lt;/font&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="e_xbar_ou">
+          <mxGeometry x="-0.3" relative="1" as="geometry">
+            <mxPoint x="-20" y="-10" as="offset" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ================================================================ -->
+        <!--  BOTTOM-RIGHT: LEGEND  (x=1060..1395, y=690..920)               -->
+        <!-- ================================================================ -->
+        <mxCell id="legend" value="&lt;b&gt;Legend&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;verticalAlign=top;align=center;spacingTop=2;fontSize=11;arcSize=6;" vertex="1" parent="1">
+          <mxGeometry x="1060" y="690" width="335" height="230" as="geometry" />
+        </mxCell>
+
+        <!-- Legend entries — aligned at y=730, 758, 786, 814, 842, 870 (28px spacing) -->
+        <mxCell id="leg1_line" value="" style="endArrow=classic;html=1;strokeColor=#009900;strokeWidth=2;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1075" y="730" as="sourcePoint" />
+            <mxPoint x="1155" y="730" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="leg1_txt" value="&lt;font style=&quot;font-size:9px&quot;&gt;Flit data path&lt;/font&gt;" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="1165" y="718" width="90" height="24" as="geometry" />
+        </mxCell>
+
+        <mxCell id="leg2_line" value="" style="endArrow=classic;html=1;strokeColor=#CC6600;strokeWidth=2;dashed=1;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1075" y="758" as="sourcePoint" />
+            <mxPoint x="1155" y="758" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="leg2_txt" value="&lt;font style=&quot;font-size:9px&quot;&gt;Credit flow (backpressure)&lt;/font&gt;" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="1165" y="746" width="150" height="24" as="geometry" />
+        </mxCell>
+
+        <mxCell id="leg3_line" value="" style="endArrow=classic;html=1;strokeColor=#B8860B;strokeWidth=2;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1075" y="786" as="sourcePoint" />
+            <mxPoint x="1155" y="786" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="leg3_txt" value="&lt;font style=&quot;font-size:9px&quot;&gt;SA queries InputUnit VCs&lt;/font&gt;" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="1165" y="774" width="150" height="24" as="geometry" />
+        </mxCell>
+
+        <mxCell id="leg4_line" value="" style="endArrow=classic;html=1;strokeColor=#9673a6;strokeWidth=2;dashed=1;dashPattern=8 4;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1075" y="814" as="sourcePoint" />
+            <mxPoint x="1155" y="814" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="leg4_txt" value="&lt;font style=&quot;font-size:9px&quot;&gt;Route computation (HEAD only)&lt;/font&gt;" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="1165" y="802" width="175" height="24" as="geometry" />
+        </mxCell>
+
+        <mxCell id="leg5_line" value="" style="endArrow=classic;html=1;strokeColor=#CC0000;strokeWidth=2;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1075" y="842" as="sourcePoint" />
+            <mxPoint x="1155" y="842" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="leg5_txt" value="&lt;font style=&quot;font-size:9px&quot;&gt;Crossbar → OutputUnit (ST→LT)&lt;/font&gt;" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="1165" y="830" width="180" height="24" as="geometry" />
+        </mxCell>
+
+        <mxCell id="leg6_line" value="" style="endArrow=classic;html=1;strokeColor=#6c8ebf;strokeWidth=2;dashed=1;dashPattern=5 3;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1075" y="870" as="sourcePoint" />
+            <mxPoint x="1155" y="870" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="leg6_txt" value="&lt;font style=&quot;font-size:9px&quot;&gt;SA queries OutputUnit credits&lt;/font&gt;" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="1165" y="858" width="175" height="24" as="geometry" />
+        </mxCell>
+
+        <mxCell id="leg_note" value="&lt;font style=&quot;font-size:8px&quot; color=&quot;#999&quot;&gt;&lt;b&gt;N&lt;/b&gt; = number of ports (in or out)&lt;br&gt;&lt;b&gt;VCs per port&lt;/b&gt; = num_vnets × vc_per_vnet&lt;br&gt;&lt;b&gt;M&lt;/b&gt; = consumerVcs × num_vnets (downstream)&lt;/font&gt;" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="1072" y="890" width="200" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- ================================================================ -->
+        <!--  VERY BOTTOM: PARAMS + FLIT LIFECYCLE  (y=940..1120)             -->
+        <!-- ================================================================ -->
+
+        <!-- Key params -->
+        <mxCell id="params" value="&lt;b&gt;Key Router Params (GarnetRouter.py):&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;latency (Cycles) — pipeline depth (default 1)&lt;br&gt;vcs_per_vnet — VCs per virtual network (default 4)&lt;br&gt;virt_nets — number of virtual networks&lt;br&gt;width — flit bit-width (default 128)&lt;/font&gt;" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;size=16;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=9;align=left;spacingLeft=6;spacingRight=6;verticalAlign=top;spacingTop=2;" vertex="1" parent="1">
+          <mxGeometry x="220" y="950" width="225" height="95" as="geometry" />
+        </mxCell>
+
+        <!-- Flit stage lifecycle -->
+        <mxCell id="lifecycle" value="&lt;b&gt;Flit Stage Lifecycle (flit.m_stage):&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;verticalAlign=top;align=center;spacingTop=2;fontSize=10;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="470" y="950" width="310" height="95" as="geometry" />
+        </mxCell>
+
+        <!-- Stages as inline row -->
+        <mxCell id="stg_i" value="&lt;b&gt;I_&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=9;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="485" y="985" width="36" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="stg_sa" value="&lt;b&gt;SA_&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=9;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="545" y="985" width="36" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="stg_st" value="&lt;b&gt;ST_&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=9;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="605" y="985" width="36" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="stg_lt" value="&lt;b&gt;LT_&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=9;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="665" y="985" width="36" height="22" as="geometry" />
+        </mxCell>
+
+        <!-- Arrows between stages -->
+        <mxCell id="stg_a1" style="rounded=0;orthogonalLoop=1;jettySize=auto;strokeColor=#666666;strokeWidth=1;endArrow=classic;endSize=4;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="523" y="996" as="sourcePoint" />
+            <mxPoint x="543" y="996" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="stg_a2" style="rounded=0;orthogonalLoop=1;jettySize=auto;strokeColor=#666666;strokeWidth=1;endArrow=classic;endSize=4;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="583" y="996" as="sourcePoint" />
+            <mxPoint x="603" y="996" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="stg_a3" style="rounded=0;orthogonalLoop=1;jettySize=auto;strokeColor=#666666;strokeWidth=1;endArrow=classic;endSize=4;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="643" y="996" as="sourcePoint" />
+            <mxPoint x="663" y="996" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Stage labels below -->
+        <mxCell id="stg_i_lbl" value="&lt;font style=&quot;font-size:7px&quot; color=&quot;#888&quot;&gt;Initial&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=top;resizable=0;points=[];strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="480" y="1008" width="46" height="14" as="geometry" />
+        </mxCell>
+        <mxCell id="stg_sa_lbl" value="&lt;font style=&quot;font-size:7px&quot; color=&quot;#888&quot;&gt;Switch Alloc&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=top;resizable=0;points=[];strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="530" y="1008" width="66" height="14" as="geometry" />
+        </mxCell>
+        <mxCell id="stg_st_lbl" value="&lt;font style=&quot;font-size:7px&quot; color=&quot;#888&quot;&gt;Switch Trav&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=top;resizable=0;points=[];strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="590" y="1008" width="66" height="14" as="geometry" />
+        </mxCell>
+        <mxCell id="stg_lt_lbl" value="&lt;font style=&quot;font-size:7px&quot; color=&quot;#888&quot;&gt;Link Trav&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=top;resizable=0;points=[];strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="652" y="1008" width="62" height="14" as="geometry" />
+        </mxCell>
+
+        <!-- Buffer turnaround time note -->
+        <mxCell id="turnaround" value="&lt;b&gt;Buffer turnaround time:&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;credit traversal (1 cyc) + SA (1 cyc) + link traversal (1 cyc)&lt;br&gt;Credit update happens &lt;i&gt;before&lt;/i&gt; SA in wakeup()&lt;/font&gt;" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;size=16;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=9;align=left;spacingLeft=6;spacingRight=6;verticalAlign=top;spacingTop=2;" vertex="1" parent="1">
+          <mxGeometry x="810" y="950" width="260" height="65" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

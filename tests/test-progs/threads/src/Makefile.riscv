@@ -1,0 +1,7 @@
+CROSS_COMPILE ?= riscv64-linux-gnu-
+CXX = $(CROSS_COMPILE)g++
+CXXFLAGS = -static -pthread -std=c++11 -O2
+
+../bin/riscv/linux/threads: threads.cpp
+	mkdir -p ../bin/riscv/linux
+	$(CXX) $(CXXFLAGS) -o $@ $<

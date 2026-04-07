@@ -1,0 +1,100 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "gem5: ch01-linear",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/RISCV/gem5.debug",
+      "args": [
+        "-d", "m5out/ch01-linear",
+        "tests/gem5/traffic_gen/configs/simple_traffic_run.py",
+        "LinearGenerator", "1", "NoCache",
+        "gem5.components.memory", "SingleChannelDDR4_2400", "1GiB"
+      ],
+      "cwd": "${workspaceFolder}",
+      "environment": [],
+      "externalConsole": false,
+      "MIMode": "gdb",
+      "setupCommands": [
+        { "text": "handle SIGSEGV nostop noprint pass", "description": "gem5 uses SIGSEGV for null checks" }
+      ]
+    },
+    {
+      "name": "gem5: ch01-random",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/RISCV/gem5.debug",
+      "args": [
+        "-d", "m5out/ch01-random",
+        "tests/gem5/traffic_gen/configs/simple_traffic_run.py",
+        "RandomGenerator", "1", "NoCache",
+        "gem5.components.memory", "SingleChannelDDR4_2400", "1GiB"
+      ],
+      "cwd": "${workspaceFolder}",
+      "environment": [],
+      "externalConsole": false,
+      "MIMode": "gdb",
+      "setupCommands": [
+        { "text": "handle SIGSEGV nostop noprint pass", "description": "gem5 uses SIGSEGV for null checks" }
+      ]
+    },
+    {
+      "name": "gem5: ch05-mi-example-traffic",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/RISCV/gem5.debug",
+      "args": [
+        "-d", "m5out/ch05-mi-example-traffic",
+        "--debug-flags=ProtocolTrace",
+        "--debug-file=protocol_trace.log",
+        "tests/gem5/traffic_gen/configs/simple_traffic_run.py",
+        "LinearGenerator", "1", "MIExample",
+        "gem5.components.memory", "SingleChannelDDR3_1600", "512MiB"
+      ],
+      "cwd": "${workspaceFolder}",
+      "environment": [],
+      "externalConsole": false,
+      "MIMode": "gdb",
+      "setupCommands": [
+        { "text": "handle SIGSEGV nostop noprint pass", "description": "gem5 uses SIGSEGV for null checks" }
+      ]
+    },
+    {
+      "name": "gem5: ch05b-msi-two-cpu",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/RISCV/gem5.debug",
+      "args": [
+        "-d", "m5out/msi-test",
+        "configs/learning_gem5/part3/riscv/simple_ruby_riscv.py"
+      ],
+      "cwd": "${workspaceFolder}",
+      "environment": [],
+      "externalConsole": false,
+      "MIMode": "gdb",
+      "setupCommands": [
+        { "text": "handle SIGSEGV nostop noprint pass", "description": "gem5 uses SIGSEGV for null checks" }
+      ]
+    },
+    {
+      "name": "gem5: ch05b-msi-two-cpu (ProtocolTrace)",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/RISCV/gem5.debug",
+      "args": [
+        "-d", "m5out/msi-trace",
+        "--debug-flags=ProtocolTrace",
+        "--debug-file=trace.txt",
+        "configs/learning_gem5/part3/riscv/simple_ruby_riscv.py"
+      ],
+      "cwd": "${workspaceFolder}",
+      "environment": [],
+      "externalConsole": false,
+      "MIMode": "gdb",
+      "setupCommands": [
+        { "text": "handle SIGSEGV nostop noprint pass", "description": "gem5 uses SIGSEGV for null checks" }
+      ]
+    }
+  ]
+}

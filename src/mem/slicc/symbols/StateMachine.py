@@ -41,6 +41,7 @@
 import re
 from collections import OrderedDict
 
+import slicc.generate.dot as dot
 import slicc.generate.html as html
 from slicc.symbols.Symbol import Symbol
 from slicc.symbols.Var import Var
@@ -1818,6 +1819,12 @@ if (!checkResourceAvailable({}_RequestType_{}, addr)) {{
     ${{html.formatShorthand(text)}}
     </A>""")
         return str(code)
+
+    def writeDotFiles(self, path):
+        code = self.symtab.codeFormatter()
+        dot.printDotty(self, code)
+        name = f"{self.ident}_transitions.dot"
+        code.write(path, name)
 
     def writeHTMLFiles(self, path):
         # Create table with no row hilighted

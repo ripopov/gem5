@@ -1,0 +1,17 @@
+{
+  "name": "ruby-book-slides",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "slidev",
+    "build": "slidev build",
+    "export": "slidev export"
+  },
+  "devDependencies": {
+    "@slidev/cli": "latest",
+    "@slidev/theme-default": "latest"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

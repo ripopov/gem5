@@ -119,6 +119,9 @@ class SLICC(Grammar):
     def writeHTMLFiles(self, html_path):
         self.symtab.writeHTMLFiles(html_path)
 
+    def writeDotFiles(self, dot_path):
+        self.symtab.writeDotFiles(dot_path)
+
     def files(self):
         f = set()
         if self.protocol:
