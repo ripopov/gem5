@@ -1,0 +1,76 @@
+=== Analyzing smoke test results ===
+python3 analyze_smoke_test.py /home/roman.i.popov/work/gem5-oss/m5out/gl47-3a-smoke-test/stats.txt
+================================================================================
+SMOKE TEST ANALYSIS REPORT
+Statistics file: /home/roman.i.popov/work/gem5-oss/m5out/gl47-3a-smoke-test/stats.txt
+================================================================================
+
+================================================================================
+CPU Statistics (CPU 0 (smoke test core))
+================================================================================
+
+Committed instructions: 263480
+Simulation cycles: 4256799
+IPC: 0.0619
+
+I-cache: 318944 hits, 395 misses, hit rate = 0.9988
+D-cache: 21256 hits, 33744 misses, hit rate = 0.3865
+
+================================================================================
+LLC Slice (HN-F) Access Distribution
+================================================================================
+
+Total accesses across all LLC slices: 17627
+Average per slice: 1101.69
+
+Slice     accesses    Hits         Misses       Hit Rate   % of Total
+--------------------------------------------------------------------------------
+  HN-F 0   1099         0            1099         0.0000      6.23%
+  HN-F 1   1097         0            1097         0.0000      6.22%
+  HN-F 2   1090         0            1090         0.0000      6.18%
+  HN-F 3   1098         0            1098         0.0000      6.23%
+  HN-F 4   1103         0            1103         0.0000      6.26%
+  HN-F 5   1098         0            1098         0.0000      6.23%
+  HN-F 6   1096         0            1096         0.0000      6.22%
+  HN-F 7   1099         0            1099         0.0000      6.23%
+  HN-F 8   1106         0            1106         0.0000      6.27%
+  HN-F 9   1106         0            1106         0.0000      6.27%
+  HN-F 10  1106         0            1106         0.0000      6.27%
+  HN-F 11  1102         0            1102         0.0000      6.25%
+  HN-F 12  1113         0            1113         0.0000      6.31%
+  HN-F 13  1109         0            1109         0.0000      6.29%
+  HN-F 14  1103         0            1103         0.0000      6.26%
+  HN-F 15  1102         0            1102         0.0000      6.25%
+
+✓ All 16 LLC slices were accessed
+Balance check: std_dev = 5.44, coeff. of variation = 0.0049
+✓ Access distribution is well balanced (CV < 5%)
+
+================================================================================
+DRAM Controller Statistics
+================================================================================
+
+Total read requests: 17627
+Total write requests: 0
+
+Controller           Read Reqs    Write Reqs   % of Reads
+------------------------------------------------------------
+DDR0 (router 0)      8815         0                 50.01%
+DDR1 (router 15)     8812         0                 49.99%
+
+✓ DRAM load is well balanced (imbalance < 5%)
+
+================================================================================
+Garnet Network Statistics
+================================================================================
+
+Total external flits: 0
+Total packets: 0
+
+================================================================================
+SUMMARY
+================================================================================
+✓ SMOKE TEST PASSED
+  - All 16 LLC slices were accessed
+  - LLCH access distribution is balanced
+  - DRAM load is balanced

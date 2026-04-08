@@ -1,0 +1,95 @@
+========================================================================
+SMOKE TEST ANALYSIS  -  rbook_test_smoke (single-core)
+========================================================================
+
+--- 1. Simulation Completion ---
+  Simulated ticks:  51,139,004,500
+  Simulated time:   51.14 ms
+  Instructions:     3,788,630
+  Host tick rate:   5.54e+08 ticks/s
+  Sim freq:         1.00e+12 Hz
+
+--- 2. HNF (LLC Slice) Access Distribution ---
+   HNF        Hits      Misses       Total  Distribution
+  ----        ----      ------       -----  ------------------------------
+     0          14       32857       32871  #############################-
+     1          12       32865       32877  #############################-
+     2           8       32855       32863  #############################-
+     3          24       32850       32874  #############################-
+     4           5       32844       32849  #############################-
+     5          24       32853       32877  #############################-
+     6           8       32852       32860  #############################-
+     7          11       32855       32866  #############################-
+     8           8       32856       32864  #############################-
+     9          12       32858       32870  #############################-
+    10           8       32843       32851  #############################-
+    11          12       32851       32863  #############################-
+    12          11       32846       32857  #############################-
+    13          12       32859       32871  #############################-
+    14          14       32866       32880  ##############################
+    15          12       32866       32878  #############################-
+
+  Total accesses:          525,871
+  Total hits:              195
+  Total misses:            525,676
+  LLC hit rate:            0.0%
+  Slices with >0 accesses: 16/16
+  CHECK: All 16 HNF slices received accesses. PASS
+  Balance ratio (max/min): 1.00x
+  BALANCE: Nearly perfect -- as expected for sequential interleaved access.
+
+--- 3. Per-CPU Cache Stats (L1D / L2) ---
+   CPU    L1D hits    L1D miss     L2 hits     L2 miss
+   ---    --------    --------     -------     -------
+     0     1072659      525413          26      525872
+     1           0           0           0           0
+     2           0           0           0           0
+     3           0           0           0           0
+     4           0           0           0           0
+     5           0           0           0           0
+     6           0           0           0           0
+     7           0           0           0           0
+     8           0           0           0           0
+     9           0           0           0           0
+    10           0           0           0           0
+    11           0           0           0           0
+    12           0           0           0           0
+    13           0           0           0           0
+    14           0           0           0           0
+    15           0           0           0           0
+  Active CPUs: 1/16 (only CPU0 expected for single-core smoke)
+
+--- 4. Garnet Network Statistics ---
+  Flits injected:            13,935,219
+  Flits received:            13,935,218
+  Packets injected:           7,755,067
+  Avg flit latency:             5126.09 cycles
+    network component:          4626.09 cycles
+    queueing component:          500.00 cycles
+  Avg packet latency:           5116.49 cycles
+  Avg hops:                        2.45
+  Avg link utilization:          0.6067
+  CHECK: Network carried traffic. PASS
+
+--- 5. DRAM Controller / SN-F Stats ---
+  DDR0: reads=   262,819  writes=         7
+  SNF0: reqToMem=   262,826  rspFromMem=   262,826
+  DDR1: reads=   262,857  writes=         6
+  SNF1: reqToMem=   262,863  rspFromMem=   262,863
+  Total DDR reads:     525,676
+  Total DDR writes:         13
+  CHECK: DRAM controllers served requests. PASS
+  DDR0/DDR1 read balance ratio: 1.00x
+
+========================================================================
+SUMMARY
+========================================================================
+  [PASS] Simulation completed
+  [PASS] All 16 HNF slices accessed
+  [PASS] Network carried traffic
+  [PASS] DRAM controllers served requests
+
+OVERALL: PASS
+  The 4x4 CHI mesh booted successfully. A single core reached
+  all 16 LLC slices with near-uniform distribution, the Garnet
+  network carried traffic, and both DDR controllers served reads.

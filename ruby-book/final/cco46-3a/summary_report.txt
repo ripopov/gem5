@@ -1,0 +1,62 @@
+========================================================================
+  Smoke Test Analysis (Chapter 17, Stage 3a)
+========================================================================
+
+## Simulation Overview
+  Simulated time : 0.006054 s
+  Simulated ticks: 6,053,692,500
+  Instructions   : 440,702
+
+## CPU 0 Cache Hierarchy
+  Level        Hits     Misses   Accesses   Hit Rate
+  ------ ---------- ---------- ---------- ----------
+  L1I       461,361        373    461,734      99.9%
+  L1D        87,673     66,575    154,248      56.8%
+  L2             11     66,906     66,917       0.0%
+
+## Per-HN-F (LLC Slice) Demand Accesses
+    HN-F       Hits     Misses   Accesses   Hit Rate
+  ------ ---------- ---------- ---------- ----------
+  hnf0            7      4,182      4,189       0.2%
+  hnf1            5      4,180      4,185       0.1%
+  hnf2            7      4,183      4,190       0.2%
+  hnf3            6      4,177      4,183       0.1%
+  hnf4            8      4,175      4,183       0.2%
+  hnf5            8      4,171      4,179       0.2%
+  hnf6            6      4,172      4,178       0.1%
+  hnf7            5      4,173      4,178       0.1%
+  hnf8            6      4,184      4,190       0.1%
+  hnf9            3      4,178      4,181       0.1%
+  hnf10           3      4,172      4,175       0.1%
+  hnf11           2      4,159      4,161       0.0%
+  hnf12           3      4,171      4,174       0.1%
+  hnf13           2      4,180      4,182       0.0%
+  hnf14           5      4,185      4,190       0.1%
+  hnf15           3      4,185      4,188       0.1%
+
+  Total accesses : 66,906
+  Mean per slice : 4,181.6
+  Min / Max      : 4,161 / 4,190
+  Spread (max-min)/mean: 0.69%
+
+## LLC Reachability Check
+  [PASS] All 16 HN-F slices received nonzero demand accesses.
+  [PASS] Accesses are well-balanced (spread 0.69% of mean).
+
+## DRAM Controller Balance
+  DDR0 (router 0): 33,424 reads, 6 writes, 2,139,136 bytes read
+  DDR1 (router 15): 33,403 reads, 5 writes, 2,137,792 bytes read
+  DDR0 share: 50.0% of total reads
+  [PASS] DRAM traffic is well-balanced between controllers.
+
+## Garnet Network Summary
+  Total flits injected : 1,542,962
+  Total packets injected: 870,594
+  Avg flit latency     : 4887.8 cycles
+  Avg packet latency   : 4870.6 cycles
+
+========================================================================
+  OVERALL: PASS
+  The 4x4 CHI mesh is correctly wired.  All 16 LLC slices
+  are reachable and address interleaving distributes traffic evenly.
+========================================================================
