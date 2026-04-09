@@ -171,7 +171,7 @@
                 "-d",
                 "m5out/ch17-smoke",
                 "configs/example/rbook_mesh_config.py",
-                "--cmd=ruby-book/final/rbook_test_smoke"
+                "--cmd=ruby-book/final/smoke/rbook_test_smoke"
             ],
             "cwd": "${workspaceFolder}",
             "environment": [],

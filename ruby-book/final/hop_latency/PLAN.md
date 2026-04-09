@@ -18,8 +18,8 @@ Implement Stage 3b from `ruby-book/Ch17_FinalProject.md`:
   - `configs/example/rbook_mesh_config.py`
   - `configs/example/noc_config/rbook_4x4.py`
 - The Stage 3a smoke test already exists:
-  - `ruby-book/final/rbook_test_smoke.c`
-  - `ruby-book/final/check_smoke.py`
+  - `ruby-book/final/smoke/rbook_test_smoke.c`
+  - `ruby-book/final/smoke/check_smoke.py`
 - `build/RISCV/gem5.opt` already exists, so no simulator build is required
   before running Stage 3b.
 - The Stage 3b sources now live under `ruby-book/final/hop_latency/`.

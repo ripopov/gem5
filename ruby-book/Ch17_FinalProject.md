@@ -162,15 +162,23 @@ make -C ruby-book/final          # builds all test binaries
 make -C ruby-book/final clean    # removes binaries
 ```
 
-Run each test with:
+Stage-specific end-to-end targets can wrap compilation, simulation, and
+analysis/report generation.
+For example, `make -C ruby-book/final rbook_test_smoke` runs the full Stage 3a
+workflow and writes a validated report under `ruby-book/final/smoke/`.
+
+Run each test with the corresponding built binary path:
 
 ```bash
 ./build/RISCV/gem5.opt -d m5out/rbook-<name>-$(date +%Y%m%d-%H%M%S) \
     configs/example/rbook_mesh_config.py \
-    --cmd=ruby-book/final/rbook_test_<name>
+    --cmd=<path-to-built-test-binary>
 ```
 
-#### 3a — Single-core smoke test (`rbook_test_smoke.c`)
+For example, use `ruby-book/final/smoke/rbook_test_smoke` for Stage 3a and
+`ruby-book/final/hop_latency/rbook_test_hop_latency` for Stage 3b.
+
+#### 3a — Single-core smoke test (`smoke/rbook_test_smoke.c`)
 
 **Goal:** verify the system boots and all 16 LLC slices are reachable from a single core.
 
@@ -291,9 +299,13 @@ configs/example/
 
 ruby-book/final/
 ├── Makefile                   # cross-compiles all test binaries
+├── smoke/
+│   ├── Makefile               # Stage 3a smoke-test build/check helper
+│   ├── check_smoke.py         # Stage 3a analysis
+│   └── rbook_test_smoke.c     # Stage 3a
+├── hop_latency/
+│   └── ...                    # Stage 3b collateral and report
 ├── trivial.c                  # Stage 2 — minimal boot smoke test
-├── rbook_test_smoke.c         # Stage 3a
-├── rbook_test_hop_latency.c   # Stage 3b
 ├── rbook_test_false_sharing.c # Stage 3c
 ├── rbook_test_prodcons.c      # Stage 3d
 └── rbook_test_barrier.c       # Stage 3e
