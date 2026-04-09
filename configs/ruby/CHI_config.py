@@ -109,6 +109,7 @@ class NoC_Params:
     router_link_latency = 1
     node_link_latency = 1
     router_latency = 1
+    node_router_latency = 1
     router_buffer_size = 4
     cntrl_msg_size = 8
     data_width = 32

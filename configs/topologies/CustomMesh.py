@@ -270,7 +270,12 @@ class CustomMesh(SimpleTopology):
         self._ExtLink = ExtLink
         self._Router = Router
 
-        self.node_router_latency = 1 if options.network == "garnet" else 0
+        if options.network == "garnet":
+            self.node_router_latency = getattr(
+                options, "node_router_latency", 1
+            )
+        else:
+            self.node_router_latency = 0
         if hasattr(options, "router_link_latency"):
             self._router_link_latency = options.router_link_latency
             self._node_link_latency = options.node_link_latency

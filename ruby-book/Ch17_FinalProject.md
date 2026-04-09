@@ -20,6 +20,31 @@ Two DDR controllers (SN-F) attach at diagonally opposite corners so that memory 
 The Garnet network provides cycle-accurate flit transport with XY routing across the mesh.
 The CHI protocol handles coherence across all 16 LLC slices — no protocol changes required.
 
+### Latency model
+
+The mesh timing parameters come from RTL feedback and are configured in `rbook_4x4.py`:
+
+| Component | Garnet parameter | Cycles | Breakdown |
+|-----------|-----------------|--------|-----------|
+| Mesh router | `router_latency` | 4 | 1 clk input read + 2 clk route compute + 1 clk output buffer |
+| Intermediate (mux) router | `node_router_latency` | 2 | Simplified router bridging CPU request ports to the mesh |
+| Inter-router link | `router_link_latency` | 4 | Repeater delay on wires between adjacent mesh routers |
+| Node-to-router link | `node_link_latency` | 1 | Local connection from controller to its router (default) |
+
+**Per-hop cost.**
+Each mesh hop traverses one router and one inter-router link: 4 + 4 = **8 cycles per hop per direction**.
+A round-trip request–response across *h* hops costs at least 2 × *h* × 8 = 16*h* network cycles, plus endpoint latencies (cache/protocol processing, mux router traversal).
+
+**Example paths** (network traversal only, excluding cache/protocol overhead):
+
+| Path | Hops | One-way (cycles) | Round-trip (cycles) |
+|------|------|-------------------|---------------------|
+| Core 0 → local HN-F 0 | 0 mesh hops | mux router (2) + node link (1) = 3 | 6 |
+| Core 0 → HN-F 1 (adjacent) | 1 hop | 3 + 8 = 11 | 22 |
+| Core 0 → HN-F 15 (diagonal) | 6 hops | 3 + 48 = 51 | 102 |
+
+These numbers set expectations for the hop-latency test (Stage 3b): far accesses should show roughly 96 more network cycles than local accesses (6 hops × 8 cycles × 2 directions).
+
 ### Why this system
 
 - **It exercises everything in the book**: CHI protocol (Part IV), Garnet mesh routing (Part III), Ruby controller architecture (Part II), and DRAM service (Chapter 14).
@@ -45,6 +70,8 @@ Every node class inherits from its counterpart in `configs/ruby/CHI_config.py` a
 The file defines:
 
 - A `NoC_Params` class with `num_rows = 4` and `num_cols = 4`, giving 16 Garnet routers.
+It also overrides the latency defaults with RTL-accurate values: `router_latency = 4` (1 input + 2 route + 1 output), `router_link_latency = 4` (repeater delay), and `node_router_latency = 2` (intermediate mux router).
+These values flow into `CustomMesh.makeTopology` via the `setattr` loop in `CHI.py` (line 248) that copies all `NoC_Params` attributes onto the `options` namespace.
 - `CHI_RNF` and `CHI_HNF` node classes with `router_list` mapping each of the 16 nodes to its corresponding router (router 0 through 15).
 This is where the co-location of RN-F + HN-F + LLC at each tile happens — both classes list the same 16 routers, so `distributeNodes` attaches one RN-F and one HN-F to every mesh router.
 - `CHI_SNF_MainMem` with `router_list = [0, 15]` — the two DDR controllers at diagonally opposite corners.
@@ -170,7 +197,11 @@ The addresses are chosen so that some lines are homed at HN-F 0 (0 mesh hops —
 The program prints the measured cycle counts for near and far accesses and exits.
 
 **What to check in the statistics.**
-- The far-HN-F reads should show higher latency than near-HN-F reads. The difference reflects the Garnet router pipeline delay × hop count (each XY hop adds `router_latency` + `link_latency` cycles in both directions).
+- The far-HN-F reads should show measurably higher latency than near-HN-F reads.
+With our RTL-calibrated latencies, each mesh hop costs `router_latency`(4) + `router_link_latency`(4) = 8 cycles per direction.
+A local HN-F access (0 mesh hops) traverses only the mux router (2 cycles) and node link (1 cycle) in each direction — about 6 network cycles round-trip.
+A diagonal HN-F access (6 mesh hops) adds 6 × 8 = 48 cycles per direction, for a round-trip network overhead of roughly 96 additional cycles.
+The measured `rdcycle` delta between near and far reads should reflect this ~96-cycle difference, plus any protocol processing variance.
 - Garnet per-link statistics should show that the far reads activate links along the full diagonal path (row 0→3, column 0→3), while near reads only touch the local ExtLink.
 
 #### 3c — False sharing (`rbook_test_false_sharing.c`)
@@ -228,13 +259,13 @@ After all rounds complete, core 0 prints "PASS".
 
 After running all five tests, the reader has a complete picture of the system's behavior:
 
-| Test | What it reveals |
-|------|----------------|
-| Smoke | Address distribution across LLC slices, basic wiring correctness |
-| Hop latency | Mesh distance → access latency relationship, router pipeline cost |
-| False sharing | CHI invalidation protocol cost, coherence traffic on mesh links |
-| Producer-consumer | Snoop-forwarding latency, multi-hop data transfer path |
-| Barrier | 16-way contention cost, mesh saturation, router buffer pressure |
+| Test | What it reveals | Key latency expectation |
+|------|----------------|------------------------|
+| Smoke | Address distribution across LLC slices, basic wiring correctness | N/A (functional check) |
+| Hop latency | Mesh distance → access latency relationship, router pipeline cost | ~96-cycle round-trip delta between local and diagonal (6-hop) HN-F accesses |
+| False sharing | CHI invalidation protocol cost, coherence traffic on mesh links | Each invalidation round-trip crosses 6 hops (≈102 network cycles) |
+| Producer-consumer | Snoop-forwarding latency, multi-hop data transfer path | Handoff involves 2–3 mesh segments; expect ≥50 cycles per data transfer |
+| Barrier | 16-way contention cost, mesh saturation, router buffer pressure | Serialized atomics amplified by multi-hop ownership transfers |
 
 The goal is not to optimize anything — it is to **read the statistics and explain what they mean** in terms of the mesh topology, the CHI protocol, and the DRAM placement.
 This is the synthesis exercise: every number in the output connects back to a mechanism the reader studied in a previous chapter.
