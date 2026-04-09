@@ -155,7 +155,23 @@ If the topology looks wrong, fix the noc_config before proceeding.
 
 Each substage below is a small C program compiled for RISC-V and run under SE mode on the 16-core mesh.
 The pattern follows Chapter 5b: write a focused binary, run it on the configured system, then read the statistics to confirm the expected behavior.
-All test sources live in `ruby-book/final/` and are cross-compiled via the shared `Makefile`:
+Each Stage 3 test should live in its own subdirectory under `ruby-book/final/`.
+That subdirectory should contain the C source, any analysis or report scripts, and a local `Makefile`.
+The parent `ruby-book/final/Makefile` should delegate to those per-test `Makefile`s so every test follows the same structure and workflow shape.
+
+The intended pattern is:
+
+```text
+ruby-book/final/
+├── Makefile
+├── smoke/
+├── hop_latency/
+├── false_sharing/
+├── prodcons/
+└── barrier/
+```
+
+The parent `Makefile` remains the single entry point:
 
 ```bash
 make -C ruby-book/final          # builds all test binaries
@@ -166,6 +182,8 @@ Stage-specific end-to-end targets can wrap compilation, simulation, and
 analysis/report generation.
 For example, `make -C ruby-book/final rbook_test_smoke` runs the full Stage 3a
 workflow and writes a validated report under `ruby-book/final/smoke/`.
+The remaining Stage 3 tests should adopt the same pattern rather than adding
+new top-level files directly under `ruby-book/final/`.
 
 Run each test with the corresponding built binary path:
 
@@ -192,7 +210,7 @@ After the sweep, the program prints "PASS" and exits.
 - Per-HN-F access counts (`m_demand_hits` + `m_demand_misses` across the 16 `L3Cache_Controller` instances) are nonzero and roughly balanced.
 If any HN-F shows zero accesses, the address mapping or router binding is wrong.
 
-#### 3b — Hop-distance latency (`rbook_test_hop_latency.c`)
+#### 3b — Hop-distance latency (`hop_latency/rbook_test_hop_latency.c`)
 
 **Goal:** demonstrate that mesh hop count measurably affects memory access latency.
 
@@ -212,7 +230,7 @@ A diagonal HN-F access (6 mesh hops) adds 6 × 8 = 48 cycles per direction, for 
 The measured `rdcycle` delta between near and far reads should reflect this ~96-cycle difference, plus any protocol processing variance.
 - Garnet per-link statistics should show that the far reads activate links along the full diagonal path (row 0→3, column 0→3), while near reads only touch the local ExtLink.
 
-#### 3c — False sharing (`rbook_test_false_sharing.c`)
+#### 3c — False sharing (`false_sharing/rbook_test_false_sharing.c`)
 
 **Goal:** exercise the CHI invalidation protocol under two-core contention on a single cache line.
 
@@ -228,7 +246,7 @@ After both threads join, the program verifies the final values and prints "PASS"
 - Garnet stats should show elevated flit traffic on the diagonal path between routers 0 and 15.
 Compare with the single-core smoke test to confirm the increase comes from coherence traffic, not capacity misses.
 
-#### 3d — Producer-consumer (`rbook_test_prodcons.c`)
+#### 3d — Producer-consumer (`prodcons/rbook_test_prodcons.c`)
 
 **Goal:** measure coherence-mediated data handoff latency across the mesh.
 
@@ -246,7 +264,7 @@ This involves at least two mesh traversals (consumer→HN-F, HN-F→producer, pr
 - Protocol stats should show snoop-forwarding transitions (data supplied by a peer cache rather than by memory).
 - If the producer and consumer are at opposite corners and the HN-F is near neither, the total latency includes three mesh segments — a good exercise in tracing the CHI request flow on the topology diagram.
 
-#### 3e — Barrier synchronization (`rbook_test_barrier.c`)
+#### 3e — Barrier synchronization (`barrier/rbook_test_barrier.c`)
 
 **Goal:** stress-test the mesh under 16-way contention on a single shared cache line.
 
@@ -298,18 +316,27 @@ configs/example/
 └── rbook_mesh_config.py       # Stage 1b — 16-core system configuration
 
 ruby-book/final/
-├── Makefile                   # cross-compiles all test binaries
+├── Makefile                   # delegates build/run/report targets per test
 ├── smoke/
-│   ├── Makefile               # Stage 3a smoke-test build/check helper
+│   ├── Makefile               # Stage 3a local workflow
 │   ├── check_smoke.py         # Stage 3a analysis
-│   └── rbook_test_smoke.c     # Stage 3a
+│   ├── report_smoke.py        # Stage 3a report generation
+│   └── rbook_test_smoke.c     # Stage 3a binary source
 ├── hop_latency/
 │   └── ...                    # Stage 3b collateral and report
+├── false_sharing/
+│   └── ...                    # Stage 3c should follow the same pattern
+├── prodcons/
+│   └── ...                    # Stage 3d should follow the same pattern
+├── barrier/
+│   └── ...                    # Stage 3e should follow the same pattern
 ├── trivial.c                  # Stage 2 — minimal boot smoke test
-├── rbook_test_false_sharing.c # Stage 3c
-├── rbook_test_prodcons.c      # Stage 3d
-└── rbook_test_barrier.c       # Stage 3e
 ```
+
+Each Stage 3 subdirectory should expose the same local target structure used by
+`smoke/` and `hop_latency/`: `build`, `run`, `check`, `report`, and `clean`.
+The parent `Makefile` should provide matching delegated targets so each test can
+be run end to end from `ruby-book/final/`.
 
 The `Makefile` uses `riscv64-linux-gnu-gcc -O2 -static` and links `-lpthread` for the multi-threaded tests.
 Run `make -C ruby-book/final` to build all binaries; `make -C ruby-book/final clean` to remove them.
