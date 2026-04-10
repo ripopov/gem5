@@ -11,6 +11,7 @@
 
 import argparse
 import os
+import shlex
 import sys
 
 import m5
@@ -77,10 +78,14 @@ system.clk_domain = SrcClockDomain(
 # --- SE workload (single Process shared by all CPUs) -------------------------
 
 binary_path = args.cmd
+cmd = [binary_path]
+if args.options:
+    cmd.extend(shlex.split(args.options))
+
 process = Process(
     pid=100,
     executable=binary_path,
-    cmd=[binary_path],
+    cmd=cmd,
     cwd=os.getcwd(),
 )
 

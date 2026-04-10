@@ -2,10 +2,11 @@ CC = riscv64-linux-gnu-gcc
 CFLAGS = -O2 -static
 SMOKE_DIR = smoke
 HOP_LATENCY_DIR = hop_latency
+FALSE_SHARING_DIR = false_sharing
 
 BINS = trivial
 
-all: $(BINS) smoke_build rbook_test_hop_latency
+all: $(BINS) smoke_build rbook_test_hop_latency rbook_test_false_sharing
 
 trivial: trivial.c
 	$(CC) $(CFLAGS) -o $@ $<
@@ -22,10 +23,17 @@ rbook_test_hop_latency:
 hop_latency_report:
 	@$(MAKE) -C $(HOP_LATENCY_DIR) report
 
+rbook_test_false_sharing:
+	@$(MAKE) -C $(FALSE_SHARING_DIR) rbook_test_false_sharing
+
+false_sharing_report:
+	@$(MAKE) -C $(FALSE_SHARING_DIR) report
+
 clean:
 	rm -f $(BINS)
 	rm -rf __pycache__
 	$(MAKE) -C $(SMOKE_DIR) clean
 	$(MAKE) -C $(HOP_LATENCY_DIR) clean
+	$(MAKE) -C $(FALSE_SHARING_DIR) clean
 
-.PHONY: all clean smoke_build rbook_test_smoke rbook_test_hop_latency hop_latency_report
+.PHONY: all clean smoke_build rbook_test_smoke rbook_test_hop_latency hop_latency_report rbook_test_false_sharing false_sharing_report
