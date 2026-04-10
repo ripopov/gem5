@@ -191,13 +191,14 @@ The mapping from FTR concepts to gem5 concepts is:
 | Stream | SimObject (controller, router, memory controller) |
 | Generator | A named queue or pipeline stage within a SimObject |
 | Transaction | The lifetime of a request, message, packet, or flit within one component |
-| Relation | Parent-child or causal link between transactions (e.g. request → message → flit) |
+| Relation | Parent-child or causal link between transactions (e.g. request → flit in v1, later request → message → flit) |
 | Attribute | Address, request type, size, requestor ID, latency, state transitions |
 
 A memory request entering Ruby will produce a single root transaction on the sequencer stream that lives until the request retires.
-Child transactions are created only when the request is split into multiple independently-routed Garnet flits — each flit gets its own child transaction because it may take a different path through the network.
-When a request produces only a single flit, there is no need for a separate child: the root transaction covers the entire lifetime, and flit-level attributes (route taken, per-hop timestamps) are recorded directly on it.
-Relations link child flit transactions back to their parent request, so a viewer can follow the fan-out through the network and the eventual convergence back at the requestor.
+In the first version, Garnet child transactions are created only at the flit level.
+Each flit gets its own child transaction because it may take a different path through the network and accumulate different per-hop timing.
+Relations link child flit transactions directly back to their parent request, so a viewer can follow the fan-out through the network and the eventual convergence back at the requestor.
+Distinct `RubyMessage` and `NetworkPacket` transaction nodes are deferred to a later phase, when the framework can represent them with their own stable identities instead of overloading one message-local ID.
 
 ---
 
@@ -330,15 +331,18 @@ Protocol response messages, forwarded requests, and SLICC-generated messages do 
 
 This creates a bridging gap: when `MessageBuffer::enqueue()` receives a `MsgPtr`, it cannot generically reach the `TraceContext` on the originating `Request`.
 
-The recommended solution is to add a single `trace_id` field to the `Message` base class.
+The recommended solution is to add a single root-trace field to the `Message` base class.
 
 ```cpp
 class Message
 {
     // ... existing fields ...
-    TraceId m_traceId = 0;  // 0 means untraced
+    TraceId m_traceId = 0;  // 0 means untraced; root request trace ID only
 };
 ```
+
+In the first version, this field always means "which root request tree does this message belong to?"
+It does not identify a distinct `RubyMessage` or `NetworkPacket` transaction node.
 
 This field is set once when trace identity is first associated with the message:
 
@@ -346,19 +350,19 @@ This field is set once when trace identity is first associated with the message:
 2. For protocol messages derived from a traced request, copy `m_traceId` from the originating message during SLICC action code or controller logic.
 3. For messages with no traced origin, leave it zero.
 
-The same `trace_id` should also be added to the `flit` class:
+The `flit` class gets its own distinct transaction-node ID:
 
 ```cpp
 class flit
 {
     // ... existing fields ...
-    TraceId m_traceId = 0;
+    TraceId m_traceId = 0;  // unique flit node ID
 };
 ```
 
-Set it during `flitisizeMessage()` by reading `msg_ptr->m_traceId`.
+Set it during `flitisizeMessage()` by allocating a new flit child transaction under the root request ID carried by `msg_ptr->m_traceId`.
 
-This gives `MessageBuffer::enqueue/dequeue` and Garnet router stages a cheap, uniform way to find the trace identity without type-testing the message or chasing pointer chains.
+This gives `MessageBuffer::enqueue/dequeue()` a cheap way to find the root transaction, and gives Garnet router stages a stable, flit-local node ID that remains constant as the flit traverses multiple routers and links.
 
 The cost is one 64-bit field per `Message` and one per `flit`, which is negligible relative to existing object sizes.
 
@@ -396,16 +400,14 @@ The recorder should internally manage transaction nodes rather than a flat event
 Recommended node kinds are:
 
 1. `MemoryRequest`
-2. `RubyMessage`
-3. `NetworkPacket`
-4. `Flit`
-5. Future: `Instruction`, `PipelineStageToken`, `DMARequest`, `Interrupt`
+2. `Flit`
+3. Future: `RubyMessage`, `NetworkPacket`, `Instruction`, `PipelineStageToken`, `DMARequest`, `Interrupt`
 
 Each node has:
 
-- globally unique `trace_id`
-- `root_trace_id`
-- optional `parent_trace_id`
+- globally unique `trace_id` for this exact node
+- `root_trace_id` naming the root request tree this node belongs to
+- optional `parent_trace_id` naming the immediate parent node
 - `kind`
 - `begin_tick`
 - optional `end_tick`
@@ -413,6 +415,9 @@ Each node has:
 - `retirement_object`
 - static attributes map
 - status
+
+In the first version, a root `MemoryRequest` node has `trace_id == root_trace_id` and `parent_trace_id == 0`.
+A `Flit` node has its own unique `trace_id`, the root request's ID as `root_trace_id`, and the root request's ID again as `parent_trace_id` because flits attach directly to the root in v1.
 
 Static attributes are values that should not change after node creation, such as address, size, request type, vnet, packet ID, flit index, source router, and destination router.
 
@@ -499,11 +504,10 @@ Use explicit `kind` fields instead.
 Recommended correlation rules are:
 
 1. CPU request entering Ruby creates root `MemoryRequest` node.
-2. If Ruby creates a protocol message that should be traced as its own lifetime, create child `RubyMessage` node.
-3. If the NI clones a multicast message into unicast packets, create a child `NetworkPacket` node per clone.
-4. If a packet becomes multiple flits, create a child `Flit` node per flit.
-5. Retirement of a parent does not automatically imply retirement of live children.
-6. All children retain the same `root_trace_id`.
+2. If the NI injects a traced message into Garnet, create a child `Flit` node per constructed flit.
+3. Distinct `RubyMessage` and `NetworkPacket` nodes are optional later refinements, not required for the first implementation.
+4. Retirement of a parent does not automatically imply retirement of live children.
+5. All children retain the same `root_trace_id`.
 
 This structure allows offline tools to answer both “show me the whole request tree” and “show me only network flits.”
 
@@ -589,36 +593,23 @@ But the design should support it cleanly.
 The recommended policy is:
 
 1. Root node is always `MemoryRequest`.
-2. Protocol and network-visible messages may create `RubyMessage` children when they first become externally visible on a `MessageBuffer` that feeds the network or a peer controller.
-3. Internal queue motion may be emitted as events on the root node if no separate message node exists yet.
+2. Internal and protocol-visible queue motion is emitted on the root request node in the first patch.
+3. Distinct `RubyMessage` child nodes may be added later when the framework can assign a stable message-local transaction ID that is not overloaded with root identity.
 
 This policy avoids requiring a full protocol-wide SLICC metadata retrofit on day one.
 
-### Network Packet Nodes
-
-At `NetworkInterface::flitisizeMessage()`, create a `NetworkPacket` child for each unicast message instance injected into the network.
-
-This is the right split point because multicast cloning and packet sizing both become explicit there.
-
-Record static attributes such as:
-
-- parent trace ID
-- vnet
-- virtual channel when assigned
-- message size in bytes
-- number of flits
-- source NI name
-- destination node or route info
-- Garnet packet ID
-
 ### Flit Nodes
 
-Also in `NetworkInterface::flitisizeMessage()`, create a `Flit` child node for each constructed flit.
+In `NetworkInterface::flitisizeMessage()`, create a `Flit` child node for each constructed flit.
+
+In the first version, flits attach directly to the root `MemoryRequest` node carried by `msg_ptr->m_traceId`.
+This avoids inventing an ambiguous message-local ID that would have to represent both the root request and multiple packet or flit descendants during multicast fan-out.
 
 Each flit node should carry:
 
-- parent packet trace ID
+- parent root request trace ID
 - flit index
+- Garnet packet ID
 - flit type
 - width
 - vnet
@@ -628,6 +619,8 @@ Each flit node should carry:
 Child creation must be explicit in the trace rather than inferred offline from packet size and link width.
 
 That explicitness matters for correctness once multicast, bridges, or SerDes paths enter the picture.
+
+If later phases add true `NetworkPacket` nodes with stable packet-local IDs, the parent of each flit can change from the root request to the packet node without changing the recorder API.
 
 ## Timestamp Capture Model
 
@@ -714,7 +707,7 @@ The funnels are:
 
 1. `TimingRequestProtocol::sendReq()` and `TimingResponseProtocol::sendResp()` for port crossings.
 2. `MessageBuffer::enqueue()` and `MessageBuffer::dequeue()` for Ruby queue motion.
-3. `NetworkInterface::flitisizeMessage()` for Garnet packet and flit creation.
+3. `NetworkInterface::flitisizeMessage()` for Garnet flit creation.
 4. Garnet router stage entry points for per-hop pipeline stamps.
 
 Manual instrumentation should be reserved only for domain-specific attribute capture that the primitives cannot know about, such as recording protocol-specific fields at root transaction creation.
@@ -901,6 +894,13 @@ They should include at least:
 10. instruction sequence number if present (`req->getInstSeqNum()`)
 11. secure, prefetch, atomic, LLSC, HTM, and TLBI related flags where applicable
 
+For flit nodes in the first version:
+
+1. `trace_id` is the unique flit node ID stored on the `flit`
+2. `root_trace_id` is the root request ID copied from `Message::m_traceId`
+3. `parent_trace_id` equals the root request ID because flits attach directly to the root in v1
+4. static attributes include flit index, Garnet packet ID, vnet, VC if known, width, source NI name, destination node, and route metadata if available
+
 For events, record:
 
 1. timestamp
@@ -954,7 +954,7 @@ The key primitives are:
 |-----------|----------|---------------|
 | `TimingRequestProtocol::sendReq/sendResp` | `src/mem/protocol/timing.cc` | Every timing port crossing system-wide |
 | `MessageBuffer::enqueue/dequeue` | `src/mem/ruby/network/MessageBuffer.cc` | Every Ruby queue operation, all protocols |
-| `NetworkInterface::flitisizeMessage` | `src/mem/ruby/network/garnet/NetworkInterface.cc` | Every Garnet packet and flit creation |
+| `NetworkInterface::flitisizeMessage` | `src/mem/ruby/network/garnet/NetworkInterface.cc` | Every Garnet flit creation |
 | Garnet router stage ProbePoints | `InputUnit`, `SwitchAllocator`, `CrossbarSwitch`, `NetworkLink` | Every router pipeline stage |
 
 The existing `addTrace()` / `removeTrace()` pattern in `RequestPort` (which already wraps every `sendTimingReq` call with a `TracingExtension` on `Packet`) demonstrates that gem5 already accepts this pattern for port-level concerns.
@@ -971,7 +971,7 @@ When a developer adds a new cache controller, coherence protocol, network topolo
 
 - If it uses standard ports, it gets port-crossing traces automatically.
 - If it uses `MessageBuffer`, it gets queue traces automatically.
-- If it uses Garnet's `NetworkInterface`, its traffic gets packet and flit traces automatically.
+- If it uses Garnet's `NetworkInterface`, its traffic gets flit traces automatically.
 - If it uses Garnet routers, it gets router stage traces automatically.
 
 No tracing code needs to be added to the new component.
@@ -1008,7 +1008,7 @@ These two methods cover all queue timestamps for all protocols and all controlle
 
 Instrument once in `NetworkInterface`.
 
-1. `NetworkInterface::flitisizeMessage()` — creates `NetworkPacket` and `Flit` child transactions for every message injected into Garnet.
+1. `NetworkInterface::flitisizeMessage()` — creates `Flit` child transactions for every message injected into Garnet.
 2. Destination-side `NetworkInterface::wakeup()` — stamps ejection and reassembly.
 
 ### Automatic: Router Stages (ProbePoints)
@@ -1153,6 +1153,7 @@ Add helpers to:
 Add a `TraceId m_traceId = 0` field to the `Message` base class in `src/mem/ruby/slicc_interface/Message.hh`.
 
 This bridges the gap between `Request`-anchored trace context and Ruby's internal message system.
+In the first version it stores the root request trace ID only.
 
 Set it from the `TraceContext` on the originating `Request` when `RubyRequest` is created.
 
@@ -1162,7 +1163,7 @@ For protocol messages derived from a traced request, copy `m_traceId` from the o
 
 Add a `TraceId m_traceId = 0` field to the `flit` class in `src/mem/ruby/network/garnet/flit.hh`.
 
-Set it during `flitisizeMessage()` by reading `msg_ptr->m_traceId`.
+Set it during `flitisizeMessage()` by allocating a new flit child node under the root request ID stored in `msg_ptr->m_traceId`.
 
 This gives router stage ProbePoints a cheap way to report flit identity without chasing `m_msg_ptr`.
 
@@ -1237,28 +1238,32 @@ When non-null:
 1. `enqueue()` emits an `Enqueue` event with the buffer's `SimObject::name()`, `curTick()`, queue occupancy, and vnet.
 2. `dequeue()` emits a `Dequeue` event with the same fields.
 
-The event is stamped on the most specific known trace node for the message being queued.
+The event is stamped on the root request node identified by `message->m_traceId`.
 
-If a message child node exists, stamp that node.
-
-Otherwise stamp the root request node.
+In the first version, `Message::m_traceId` is root identity only.
+`MessageBuffer` does not attempt to infer or create a more specific message-local node.
 
 This covers all queue timestamps for all protocols and all controllers with one code change.
 
-### Step 6. Instrument NetworkInterface For Packet And Flit Children (Automatic)
+### Step 6. Instrument NetworkInterface For Flit Children (Automatic)
 
 Instrument `NetworkInterface::flitisizeMessage()` once.
 
 Create:
 
-1. one `NetworkPacket` child transaction per injected unicast message instance
-2. one `Flit` child transaction per flit
+1. one `Flit` child transaction per flit
 
 Record parent-child relations explicitly.
 
 Stamp injection and per-flit creation immediately.
 
-Record static attributes: parent trace ID, vnet, VC, message size, flit count, source NI name, destination node.
+Record static attributes: parent root trace ID, vnet, VC, message size, flit count, source NI name, destination node, flit index, and Garnet packet ID.
+
+For clarity in v1:
+
+1. the new flit child gets a fresh `trace_id`
+2. `root_trace_id` is copied from `msg_ptr->m_traceId`
+3. `parent_trace_id` is set to that same root request ID
 
 Instrument destination-side `NetworkInterface::wakeup()` for ejection and reassembly events.
 
@@ -1394,7 +1399,7 @@ Port-level timing protocol methods should automatically stamp every port crossin
 
 `MessageBuffer` should automatically stamp every queue operation for all protocols.
 
-`NetworkInterface::flitisizeMessage()` should automatically create packet and flit child transactions.
+`NetworkInterface::flitisizeMessage()` should automatically create flit child transactions.
 
 Garnet router stages should emit ProbePoints that the recorder listens to.
 
