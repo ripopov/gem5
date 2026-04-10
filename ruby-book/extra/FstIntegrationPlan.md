@@ -5,8 +5,8 @@
 gem5 has no built-in waveform dump capability.
 Hardware designers are accustomed to viewing simulation results in waveform viewers (GTKWave, Surfer).
 The libfst library is already vendored at `ext/libfst/` with full writer/reader support.
-The goal is to create an `FstTrace` SimObject that automatically maps the SimObject hierarchy to an FST scope tree
-and records event dispatches during simulation.
+The goal is to create an `FstTrace` SimObject that maps the SimObject hierarchy to an FST scope tree
+and records dispatches of statically owned SimObject events during simulation.
 
 Unlike RTL simulators that toggle clock signals every cycle, gem5 is event-driven:
 computation happens only when events fire.
@@ -17,31 +17,38 @@ The implementation is split into three stages, each independently testable.
 
 ---
 
-## Core Mechanism: Event Self-Registration + Streaming FST Writes
+## Core Mechanism: Explicit Event Ownership + Streaming FST Writes
 
-Events in gem5 are predominantly constructed at elaboration time as member variables
-of SimObjects (~182 static members across the codebase). By adding self-registration
-to the `Event` constructor, we can discover all events before simulation starts,
-create FST signals upfront, and stream value changes during simulation — no buffering needed.
+Events in gem5 that are useful for waveform tracing are predominantly constructed at
+elaboration time and are logically owned by SimObjects. Instead of trying to infer
+ownership from `Event::name()`, V1 requires statically created events to be explicitly
+owned by a `SimObject` and creates FST signals upfront before simulation starts.
 
-### Event self-registration
+### Explicit event ownership
 
-Add a static `std::vector<Event*>` to the `Event` class.
-In the constructor, push `this`; in the destructor, remove it.
-At `startup()`, FstTrace walks this registry, extracts event names,
-resolves them to SimObjects via longest-prefix matching, and creates FST signals.
+Keep ownership metadata outside `Event` to preserve the hot object layout.
+Use a side registry such as:
+- `static std::unordered_map<const Event*, const SimObject*> staticEventOwners`
 
-### Event name → SimObject mapping
+For statically created events, require wrappers and event types to pass the owning
+`SimObject` as the first constructor argument.
+Examples:
+- `MemberEventWrapper` takes `SimObject &owner` as the first constructor argument
+- `EventFunctionWrapper` takes `const SimObject &owner` as the first constructor argument
 
-Event naming patterns in gem5:
-- `EventFunctionWrapper::name()` → `"<simobject_path>.<event_name>.wrapped_function_event"`
-- `MemberEventWrapper::name()` → `"<simobject_path>.wrapped_event"`
-- Inner event classes → `"Event_<id>"` (no path; only `description()` is semantic)
+At `startup()`, `FstTrace` walks the registry of statically created events,
+looks up each event in `staticEventOwners`, groups them by owner, and creates FST
+signals from the event's standard `name()`.
+For FST compatibility, the emitted signal name is derived from `name()` by replacing
+spaces and dots with `_`.
 
-**Parsing strategy:** At `startup()`, collect all SimObject names from `simObjectList`.
-For each registered event, find the longest SimObject name that is a prefix of the event name.
-The remainder after the prefix becomes the event's short signal name.
-Events that don't match go into a top-level "unresolved" scope.
+### Event registry
+
+Keep a static `std::vector<Event*> allEvents` in `Event`.
+Constructor pushes `this`; destructor removes it.
+This registry is only used to enumerate candidate events at startup.
+Ownership comes from the side registry populated by explicit owner-aware construction,
+not from parsing `Event::name()`.
 
 ### Streaming FST writes
 
@@ -51,9 +58,10 @@ No buffering, no deferred writes.
 
 ### Dynamic events
 
-~116 events are created dynamically during simulation (retries, syscall callbacks, etc.).
-These register in the global list but won't have FST signals since the hierarchy is already written.
-V1 simply skips them; future versions could add a catch-all string signal.
+Events created after `startup()` are not supported in V1.
+FST requires the design hierarchy and signals to be declared before streaming value
+changes, so dynamic events cannot be represented cleanly without a different trace model.
+This plan therefore scopes Stage 1 to **static SimObject event tracing** only.
 
 ### Dispatch hook
 
@@ -72,8 +80,12 @@ if (dispatchHook)
     dispatchHook(event, dispatchHookArg);
 ```
 
-When null, cost is a single pointer comparison — truly zero overhead.
+When null, cost is a single pointer comparison.
 No `std::function` (avoids heap allocation and indirect vtable call on the hot path).
+
+Install this hook on every active `EventQueue`, not just queue 0.
+`FstTrace` owns the global trace state, while each queue callback forwards the currently
+dispatched event and queue-local time into the same FST writer.
 
 ### Event → FST handle mapping
 
@@ -109,17 +121,32 @@ tests/gem5/fst_trace/
 
 ---
 
-## Stage 1: Hierarchy Dump + Event Tracing
+## Stage 1: Hierarchy Dump + Static Event Tracing
 
-**Goal:** Self-register events, walk SimObject hierarchy, create FST scope tree
-with per-event signals, stream event dispatches during simulation.
+**Goal:** Register statically owned SimObject events, walk SimObject hierarchy,
+create FST scope tree with per-event signals, and stream event dispatches during
+simulation.
 
-### 1.1 Event Self-Registration
+### 1.1 Event Registration + Explicit Ownership
 
 Modify `Event` class (`src/sim/eventq.hh`, `src/sim/eventq.cc`):
 - Add `static std::vector<Event*> allEvents`
 - Constructor: `allEvents.push_back(this)`
 - Destructor: erase from `allEvents`
+
+Add side storage for static event ownership outside `Event`:
+- `static std::unordered_map<const Event*, const SimObject*> staticEventOwners`
+- owner-aware constructors register into this map
+- destructors erase from this map
+
+For static events, require explicit owner-aware construction:
+- `MemberEventWrapper` takes the owning `SimObject` as the first constructor argument and registers itself in `staticEventOwners`
+- `EventFunctionWrapper` takes the owning `SimObject` as the first constructor argument and registers itself in `staticEventOwners`
+- statically declared custom events must pass their owning `SimObject` explicitly
+
+This requirement is intentional: if a static event does not declare its owning
+`SimObject`, the trace cannot be considered complete. V1 therefore makes owner-aware
+construction mandatory for static events rather than optional.
 
 ### 1.2 SimObject Hierarchy → FST Scopes
 
@@ -128,28 +155,31 @@ Modify `Event` class (`src/sim/eventq.hh`, `src/sim/eventq.cc`):
 - Track `vector<string> currentScope`; compute push/pop per object:
   - `fstWriterSetScope(ctx, FST_ST_VCD_MODULE, component, NULL)` per new level
   - `fstWriterSetUpscope(ctx)` per level to pop
-- Within each scope, create 1-bit wire per event belonging to that SimObject
+- Within each scope, create 1-bit wire per explicitly owned static event belonging to that SimObject
+- Signal names come from `event->name()` after replacing spaces and dots with `_`
 
 ### 1.3 FST File Lifecycle
 
 | gem5 Phase | Action |
 |------------|--------|
 | Constructor | Store params, register exit callback for `fstWriterClose()` |
-| `init()` | Collect SimObject names for prefix matching |
-| `startup()` | Walk `Event::allEvents`, resolve to SimObjects, open FST file, write hierarchy + signals, install dispatch hook on main EventQueue, set `dumpActive` from `start_active` param |
-| Simulation | Dispatch hook checks `dumpActive` flag, emits 1-bit pulses (1→0 pairs) to FST; Python script can call `setDumpActive()` between `m5.simulate()` calls for ROI control |
+| `init()` | Collect and sort SimObjects for hierarchy emission |
+| `startup()` | Walk `Event::allEvents`, require explicit ownership for static events, open FST file, write hierarchy + signals, install dispatch hooks on all EventQueues, set `dumpActive` from `start_active` param |
+| Simulation | Dispatch hook checks `dumpActive` flag, emits 1-bit pulses (1→0 pairs) to FST just before functional event processing; Python or ROI markers can toggle tracing |
 | Exit callback | Close FST file |
 
 All `fstWriterCreateVar()` calls complete in `startup()` before any value changes.
 
 ### 1.4 Dispatch Hook
 
-At `startup()`, install a static trampoline on the main `EventQueue`:
+At `startup()`, install a static trampoline on every active `EventQueue`:
 
 ```cpp
 // In startup():
-mainEventQueue[0]->dispatchHook = &FstTrace::dispatchTrampoline;
-mainEventQueue[0]->dispatchHookArg = this;
+for (auto *eventq : allMainEventQueues) {
+    eventq->dispatchHook = &FstTrace::dispatchTrampoline;
+    eventq->dispatchHookArg = this;
+}
 
 // Static callback — raw function pointer, no std::function overhead:
 void FstTrace::dispatchTrampoline(const Event *event, void *arg) {
@@ -166,8 +196,18 @@ void FstTrace::dispatchTrampoline(const Event *event, void *arg) {
 The `"1"` → `"0"` pair at the same timestamp produces a clean pulse in waveform
 viewers. FST preserves ordering within the same time step.
 
+The hook must run after `setCurTick(event->when())` and after the squashed-event check,
+but immediately before `event->process()`. That placement matches the intended meaning:
+the waveform pulse indicates that gem5 is about to execute the functional code for this event.
+
+Because multiple event queues may advance at different rates, the callback must always
+emit the current queue's `curTick()` before writing any value changes.
+`FstTrace` should track the last timestamp written and only advance the FST stream when
+the observed tick changes.
+
 `eventHandleMap` is `std::unordered_map<const Event*, fstHandle>`, built once at
-`startup()`. Can be upgraded to a faster flat hash map later if profiling warrants.
+`startup()`. Ownership is resolved from the side registry, and signal names are
+created from the event's standard `name()` with spaces and dots replaced by `_`.
 
 ### 1.5 ROI Tracing (Enable/Disable)
 
@@ -219,11 +259,13 @@ class FstTrace(SimObject):
 Setting `start_active = False` lets the script start in blackout and only enable
 tracing when the ROI begins. This avoids capturing warmup traffic.
 
-**Future C++ integration:**
+**ROI marker integration:**
 
-The C++ `setDumpActive()` method can also be called from within SimObject code,
-enabling programmatic ROI control from CPU models, workload markers, or
-magic instructions (e.g., `m5_work_begin` / `m5_work_end` pseudo-ops).
+In addition to explicit Python control, `FstTrace` should support optional binding to
+existing gem5 ROI mechanisms such as workload markers or magic instructions
+(`m5_work_begin` / `m5_work_end`).
+That keeps tracing control aligned with real workloads and avoids requiring scripts to
+split every ROI into separate `simulate()` calls.
 
 ### 1.6 Stage 1 Tests
 
@@ -248,6 +290,8 @@ magic instructions (e.g., `m5_work_begin` / `m5_work_end` pseudo-ops).
 
 ## Stage 2: Periodic Stat Sampling
 
+**Status:** Future extension, not part of the current implementation scope.
+
 **Goal:** Add `FstStatBinding` configuration; periodically sample selected stats
 and emit value changes to the FST file.
 
@@ -270,6 +314,8 @@ verify stat samples in FST output.
 
 ## Stage 3: Probe Point Listeners
 
+**Status:** Future extension, not part of the current implementation scope.
+
 **Goal:** Add `FstProbeBinding` configuration; connect typed listeners to probe points.
 
 ### 3.1 Design
@@ -287,32 +333,17 @@ verify stat samples in FST output.
 
 ---
 
-## Python Configuration Interface (Final)
+## Python Configuration Interface (Stage 1)
 
 ```python
-class FstProbeBinding(SimObject):                                                # Stage 3
-    type = "FstProbeBinding"
-    target = Param.SimObject("SimObject owning the probe point")
-    probe_name = Param.String("Name of the probe point")
-    signal_name = Param.String("", "Override name in FST")
-    bit_width = Param.Unsigned(64, "Bit width of the FST signal")
-    probe_type = Param.String("uint64", "Type: uint64, bool, packet")
-
-class FstStatBinding(SimObject):                                                 # Stage 2
-    type = "FstStatBinding"
-    target = Param.SimObject("SimObject owning the stat")
-    stat_name = Param.String("Stat name relative to the SimObject")
-    signal_name = Param.String("", "Override name in FST")
-
 class FstTrace(SimObject):
     type = "FstTrace"
     trace_file = Param.String("trace.fst", "Output file name")
     compression = Param.String("lz4", "Compression: zlib, lz4, fastlz")
     timescale = Param.Int(-12, "FST timescale exponent (-12 = 1ps)")
-    start_active = Param.Bool(True, "Start with dump enabled")                   # Stage 1
-    probe_bindings = VectorParam.FstProbeBinding([], "Probe→signal bindings")    # Stage 3
-    stat_bindings = VectorParam.FstStatBinding([], "Stat→signal bindings")       # Stage 2
-    stat_sample_period = Param.Tick(10000, "Ticks between stat samples")         # Stage 2
+    start_active = Param.Bool(True, "Start with dump enabled")
+    use_work_item_roi = Param.Bool(False,
+        "Toggle tracing from work item ROI markers when available")
 ```
 
 ---
@@ -336,7 +367,9 @@ GTest('fst_trace_hier.test', 'fst_trace_hier.test.cc', skip_lib=True)
 |------|--------|
 | `src/sim/sim_object.hh` | Add `static const vector<SimObject*> &getSimObjectList()` |
 | `src/sim/eventq.hh` | Add `static vector<Event*> allEvents` in Event; add `dispatchHook` / `dispatchHookArg` raw pointers on EventQueue |
-| `src/sim/eventq.cc` | Register/deregister in Event ctor/dtor; call `dispatchHook` in `serviceOne()` |
+| `src/sim/eventq.cc` | Register/deregister in Event ctor/dtor; call `dispatchHook` in `serviceOne()` immediately before `process()` |
+| `src/sim/eventq.hh` / `src/sim/eventq.cc` | Add side registry for static event ownership; erase entries on destruction |
+| `src/sim/eventq.hh` | Change static event wrappers so they require owning `SimObject` as the first constructor argument |
 
 ---
 
@@ -357,8 +390,9 @@ GTest('fst_trace_hier.test', 'fst_trace_hier.test.cc', skip_lib=True)
 
 | Risk | Mitigation |
 |------|-----------|
-| **Dynamic events without FST signals** | Skip in dispatch callback; ~116 dynamic events vs ~182 static |
-| **Event name parsing** | Longest-prefix match against SimObject names; "unresolved" scope for misses |
-| **Dispatch hook overhead** | Raw function pointer: single null check when disabled; O(1) hash lookup when enabled. Map can be upgraded to flat hash map if profiling shows need |
+| **Dynamic events without FST signals** | Explicitly unsupported in Stage 1; scope is static SimObject event tracing only |
+| **Missing event ownership metadata** | Make owning `SimObject` mandatory for static events; this is required so Stage 1 traces can be considered complete |
+| **Multiple event queues / different local times** | Install hooks on all EventQueues; emit time changes from the current queue tick before value changes |
+| **Dispatch hook overhead** | Raw function pointer: single null check when disabled; O(1) hash lookup when enabled |
 | **Event destructor cost** | Linear scan of `allEvents` to erase; acceptable for rare destruction |
-| **Thread safety** | `allEvents` populated before simulation (single-threaded); dispatch on main queue |
+| **Thread safety** | `allEvents` populated before simulation (single-threaded); callbacks installed on all EventQueues |
