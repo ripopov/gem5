@@ -30,6 +30,8 @@
 
 #include <cstdlib>
 #include <iostream>
+#include <map>
+#include <sstream>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -68,25 +70,53 @@ struct CallbackState
     std::unordered_map<fstHandle, std::vector<uint64_t>> changeTimes;
 };
 
-} // anonymous namespace
-
-int
-main(int argc, char **argv)
+struct TraceData
 {
-    require(argc == 2, "usage: verify_fst_trace <trace.fst>");
+    std::unordered_set<std::string> scopes;
+    std::unordered_map<std::string, fstHandle> eventHandles;
+    std::unordered_map<fstHandle, std::vector<uint64_t>> changeTimes;
+    std::vector<std::pair<uint64_t, uint32_t>> dumpActivityChanges;
+};
 
-    fstReaderContext *reader = fstReaderOpen(argv[1]);
+[[noreturn]] void
+usage()
+{
+    std::cerr << "usage: verify_fst_trace <events|traffic|dump> <trace.fst>"
+              << std::endl;
+    std::exit(1);
+}
+
+std::string
+formatTimes(const std::vector<uint64_t> &times)
+{
+    std::ostringstream out;
+    out << "[";
+
+    for (size_t idx = 0; idx < times.size(); ++idx) {
+        if (idx != 0) {
+            out << ", ";
+        }
+        out << times[idx];
+    }
+
+    out << "]";
+    return out.str();
+}
+
+TraceData
+loadTrace(const char *trace_path)
+{
+    fstReaderContext *reader = fstReaderOpen(trace_path);
     require(reader != nullptr, "failed to open FST trace");
 
+    TraceData trace;
     std::vector<std::string> scope_stack;
-    std::unordered_set<std::string> scopes;
-    std::unordered_map<std::string, fstHandle> event_handles;
 
     while (auto *hier = fstReaderIterateHier(reader)) {
         switch (hier->htyp) {
             case FST_HT_SCOPE:
                 scope_stack.emplace_back(hier->u.scope.name);
-                scopes.emplace(joinScope(scope_stack));
+                trace.scopes.emplace(joinScope(scope_stack));
                 break;
 
             case FST_HT_UPSCOPE:
@@ -102,8 +132,8 @@ main(int argc, char **argv)
                         full_name += '.';
                     }
                     full_name += hier->u.var.name;
-                    event_handles.emplace(std::move(full_name),
-                                          hier->u.var.handle);
+                    trace.eventHandles.emplace(std::move(full_name),
+                                               hier->u.var.handle);
                 }
                 break;
 
@@ -112,57 +142,177 @@ main(int argc, char **argv)
         }
     }
 
-    require(scopes.count("goodbye") == 1, "missing goodbye scope");
-    require(scopes.count("hello") == 1, "missing hello scope");
-    require(scopes.count("root") == 1, "missing root scope");
-    require(scopes.count("trace") == 1, "missing trace scope");
+    for (const auto &[name, handle] : trace.eventHandles) {
+        fstReaderSetFacProcessMask(reader, handle);
+    }
 
-    const std::string hello_event = "hello.hello_event_wrapped_function_event";
-    const std::string goodbye_event =
-        "goodbye.goodbye_event_wrapped_function_event";
-
-    auto hello_it = event_handles.find(hello_event);
-    auto goodbye_it = event_handles.find(goodbye_event);
-
-    require(hello_it != event_handles.end(), "missing hello event signal");
-    require(goodbye_it != event_handles.end(), "missing goodbye event signal");
-
-    fstReaderSetFacProcessMask(reader, hello_it->second);
-    fstReaderSetFacProcessMask(reader, goodbye_it->second);
-
-    CallbackState state;
+    CallbackState callback_state;
     fstReaderIterBlocks(
         reader,
         [](void *data, uint64_t time, fstHandle handle,
            const unsigned char *) {
-            auto *callback_state = static_cast<CallbackState *>(data);
-            callback_state->changeTimes[handle].push_back(time);
+            auto *state = static_cast<CallbackState *>(data);
+            state->changeTimes[handle].push_back(time);
         },
-        &state, nullptr);
+        &callback_state, nullptr);
 
-    const auto &hello_times = state.changeTimes[hello_it->second];
-    const auto &goodbye_times = state.changeTimes[goodbye_it->second];
+    trace.changeTimes = std::move(callback_state.changeTimes);
 
-    require(hello_times == std::vector<uint64_t>{1},
-            "unexpected hello event timestamps");
-    require(goodbye_times == std::vector<uint64_t>{18},
-            "unexpected goodbye event timestamps");
-
-    require(fstReaderGetNumberDumpActivityChanges(reader) == 2,
-            "unexpected dump activity change count");
-    require(fstReaderGetDumpActivityChangeTime(reader, 0) == 1,
-            "unexpected blackout start timestamp");
-    require(fstReaderGetDumpActivityChangeValue(reader, 0) == 0,
-            "unexpected blackout start value");
-    require(fstReaderGetDumpActivityChangeTime(reader, 1) == 2,
-            "unexpected blackout end timestamp");
-    require(fstReaderGetDumpActivityChangeValue(reader, 1) == 1,
-            "unexpected blackout end value");
+    const uint32_t dump_changes =
+        fstReaderGetNumberDumpActivityChanges(reader);
+    for (uint32_t idx = 0; idx < dump_changes; ++idx) {
+        trace.dumpActivityChanges.emplace_back(
+            fstReaderGetDumpActivityChangeTime(reader, idx),
+            fstReaderGetDumpActivityChangeValue(reader, idx));
+    }
 
     fstReaderClose(reader);
+    return trace;
+}
+
+void
+requireEventTimes(const TraceData &trace, const std::string &event_name,
+                  const std::vector<uint64_t> &expected_times)
+{
+    auto handle_it = trace.eventHandles.find(event_name);
+    require(handle_it != trace.eventHandles.end(),
+            "missing event signal: " + event_name);
+
+    auto times_it = trace.changeTimes.find(handle_it->second);
+    const auto &times = times_it != trace.changeTimes.end()
+                            ? times_it->second
+                            : std::vector<uint64_t>{};
+    require(times == expected_times, "unexpected timestamps for " +
+                                         event_name + ": got " +
+                                         formatTimes(times) + ", expected " +
+                                         formatTimes(expected_times));
+}
+
+void
+verifyStage1Events(const TraceData &trace)
+{
+    require(trace.scopes.count("goodbye") == 1, "missing goodbye scope");
+    require(trace.scopes.count("hello") == 1, "missing hello scope");
+    require(trace.scopes.count("root") == 1, "missing root scope");
+    require(trace.scopes.count("trace") == 1, "missing trace scope");
+
+    requireEventTimes(trace, "hello.hello_event_wrapped_function_event", {1});
+    requireEventTimes(trace, "goodbye.goodbye_event_wrapped_function_event",
+                      {18});
+
+    require(trace.dumpActivityChanges.size() == 2,
+            "unexpected dump activity change count");
+    require(trace.dumpActivityChanges[0] ==
+                std::make_pair<uint64_t, uint32_t>(1, 0),
+            "unexpected blackout start transition");
+    require(trace.dumpActivityChanges[1] ==
+                std::make_pair<uint64_t, uint32_t>(2, 1),
+            "unexpected blackout end transition");
 
     std::cout << "FST trace verified: hello=1 goodbye=18 blackout=1->2"
               << std::endl;
+}
+
+void
+verifyTraffic(const TraceData &trace)
+{
+    require(trace.scopes.count("board") == 1, "missing board scope");
+    require(trace.scopes.count("board.cache_hierarchy") == 1,
+            "missing board.cache_hierarchy scope");
+    require(trace.scopes.count("board.memory") == 1,
+            "missing board.memory scope");
+    require(trace.scopes.count("board.memory.mem_ctrl") == 1,
+            "missing board.memory.mem_ctrl scope");
+    require(trace.scopes.count("board.memory.mem_ctrl.dram") == 1,
+            "missing board.memory.mem_ctrl.dram scope");
+    require(trace.scopes.count("board.processor") == 1,
+            "missing board.processor scope");
+    require(trace.scopes.count("board.processor.cores") == 1,
+            "missing board.processor.cores scope");
+    require(trace.scopes.count("board.processor.cores.generator") == 1,
+            "missing traffic generator scope");
+    require(trace.scopes.count("root") == 1, "missing root scope");
+    require(trace.scopes.count("trace") == 1, "missing trace scope");
+
+    requireEventTimes(
+        trace,
+        "board.processor.cores.generator.updateEvent_wrapped_function_event",
+        {3725, 7450, 11175, 14900, 1000000});
+    requireEventTimes(
+        trace, "board.memory.mem_ctrl.nextReqEvent_wrapped_function_event",
+        {3725, 3725, 7450, 8332, 11175, 13332, 14900, 18332});
+    requireEventTimes(
+        trace, "board.memory.mem_ctrl.respondEvent_wrapped_function_event",
+        {45812, 50812, 55812, 60812});
+    requireEventTimes(trace,
+                      "board.processor.cores.generator.noProgressEvent_"
+                      "wrapped_function_event",
+                      {});
+
+    require(trace.dumpActivityChanges.empty(),
+            "traffic trace unexpectedly toggled dump activity");
+
+    std::cout << "FST traffic trace verified: updates=5 nextReq=8 "
+                 "respond=4"
+              << std::endl;
+}
+
+void
+dumpTrace(const TraceData &trace)
+{
+    std::map<std::string, std::vector<uint64_t>> events_by_name;
+
+    for (const auto &[name, handle] : trace.eventHandles) {
+        auto times_it = trace.changeTimes.find(handle);
+        if (times_it != trace.changeTimes.end()) {
+            events_by_name.emplace(name, times_it->second);
+        } else {
+            events_by_name.emplace(name, std::vector<uint64_t>{});
+        }
+    }
+
+    std::map<std::string, bool> sorted_scopes;
+    for (const auto &scope : trace.scopes) {
+        sorted_scopes.emplace(scope, true);
+    }
+
+    std::cout << "Scopes:\n";
+    for (const auto &[scope, _] : sorted_scopes) {
+        std::cout << "  " << scope << "\n";
+    }
+
+    std::cout << "Events:\n";
+    for (const auto &[name, times] : events_by_name) {
+        std::cout << "  " << name << " " << formatTimes(times) << "\n";
+    }
+
+    std::cout << "Dump activity changes:\n";
+    for (const auto &[time, value] : trace.dumpActivityChanges) {
+        std::cout << "  " << time << " -> " << value << "\n";
+    }
+}
+
+} // anonymous namespace
+
+int
+main(int argc, char **argv)
+{
+    if (argc != 3) {
+        usage();
+    }
+
+    const std::string mode = argv[1];
+    const TraceData trace = loadTrace(argv[2]);
+
+    if (mode == "events") {
+        verifyStage1Events(trace);
+    } else if (mode == "traffic") {
+        verifyTraffic(trace);
+    } else if (mode == "dump") {
+        dumpTrace(trace);
+    } else {
+        usage();
+    }
 
     return 0;
 }

@@ -53,15 +53,17 @@ class FstTraceVerifierFixture(SConsFixture):
 
 
 class VerifyFstTrace(verifier.Verifier):
-    def __init__(self, verify_fixture):
+    def __init__(self, verify_fixture, scenario, trace_name):
         super().__init__(fixtures=(verify_fixture,))
         self._verify_fixture = verify_fixture
+        self._scenario = scenario
+        self._trace_name = trace_name
 
     def test(self, params):
         tempdir = params.fixtures[constants.tempdir_fixture_name].path
-        trace_path = joinpath(tempdir, "events.fst")
+        trace_path = joinpath(tempdir, self._trace_name)
         result = subprocess.run(
-            [self._verify_fixture.path, trace_path],
+            [self._verify_fixture.path, self._scenario, trace_path],
             capture_output=True,
             text=True,
         )
@@ -79,7 +81,7 @@ gem5_verify_config(
     name="fst-trace-events",
     fixtures=(fst_trace_verifier,),
     verifiers=(
-        VerifyFstTrace(fst_trace_verifier),
+        VerifyFstTrace(fst_trace_verifier, "events", "events.fst"),
         verifier.MatchRegex(r"Goodbye hello!!"),
     ),
     config=joinpath(
@@ -89,6 +91,27 @@ gem5_verify_config(
         "fst_trace",
         "configs",
         "fst_events.py",
+    ),
+    config_args=[],
+    valid_isas=(constants.riscv_tag,),
+    valid_hosts=constants.supported_hosts,
+    length=constants.quick_tag,
+)
+
+gem5_verify_config(
+    name="fst-trace-memory-traffic",
+    fixtures=(fst_trace_verifier,),
+    verifiers=(
+        VerifyFstTrace(fst_trace_verifier, "traffic", "traffic.fst"),
+        verifier.MatchRegex(r".*encountered the exit state"),
+    ),
+    config=joinpath(
+        config.base_dir,
+        "tests",
+        "gem5",
+        "fst_trace",
+        "configs",
+        "fst_memory_traffic.py",
     ),
     config_args=[],
     valid_isas=(constants.riscv_tag,),
