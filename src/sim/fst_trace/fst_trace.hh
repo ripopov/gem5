@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017 Jason Lowe-Power
+ * Copyright (c) 2026 The Regents of The University of California
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,51 +26,64 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "learning_gem5/part2/hello_object.hh"
+#ifndef __SIM_FST_TRACE_FST_TRACE_HH__
+#define __SIM_FST_TRACE_FST_TRACE_HH__
 
-#include "base/logging.hh"
-#include "base/trace.hh"
-#include "debug/HelloExample.hh"
+#include <fstapi.h>
+
+#include <mutex>
+#include <string>
+#include <unordered_map>
+#include <vector>
+
+#include "params/FstTrace.hh"
+#include "sim/sim_object.hh"
 
 namespace gem5
 {
 
-HelloObject::HelloObject(const HelloObjectParams &params)
-    : SimObject(params),
-      // This is a C++ lambda. When the event is triggered, it will call the
-      // processEvent() function. (this must be captured)
-      event(
-          *this, [this] { processEvent(); }, name() + ".event"),
-      goodbye(params.goodbye_object),
-      // Note: This is not needed as you can *always* reference this->name()
-      myName(params.name),
-      latency(params.time_to_wait),
-      timesLeft(params.number_of_fires)
-{
-    DPRINTF(HelloExample, "Created the hello object\n");
-    panic_if(!goodbye, "HelloObject must have a non-null GoodbyeObject");
-}
+class Event;
 
-void
-HelloObject::startup()
+class FstTrace : public SimObject
 {
-    // Before simulation starts, we need to schedule the event
-    schedule(event, latency);
-}
+  public:
+    PARAMS(FstTrace);
 
-void
-HelloObject::processEvent()
-{
-    timesLeft--;
-    DPRINTF(HelloExample, "Hello world! Processing the event! %d left\n",
-                          timesLeft);
+    explicit FstTrace(const Params &p);
+    ~FstTrace() override;
 
-    if (timesLeft <= 0) {
-        DPRINTF(HelloExample, "Done firing!\n");
-        goodbye->sayGoodbye(myName);
-    } else {
-        schedule(event, curTick() + latency);
-    }
-}
+    void init() override;
+    void startup() override;
+
+    void setDumpActive(bool enable);
+
+    static void dispatchTrampoline(const Event *event, void *arg);
+
+  private:
+    fstWriterContext *fstCtx = nullptr;
+
+    std::vector<const SimObject *> simObjects;
+    std::vector<EventQueue *> hookedQueues;
+    std::unordered_map<const SimObject *, std::vector<const Event *>>
+        ownerEventMap;
+    std::unordered_map<const Event *, fstHandle> eventHandleMap;
+
+    std::mutex writerMutex;
+
+    std::string resolvedTracePath;
+    Tick lastWrittenTick = 0;
+    bool hasWrittenTime = false;
+    bool dumpActive = true;
+    bool hooksInstalled = false;
+
+    void closeTrace();
+    void collectOwnedEvents();
+    void emitHierarchy();
+    void installHooks();
+    void emitTimeChangeLocked(Tick tick);
+    void recordDispatch(const Event *event, Tick tick);
+};
 
 } // namespace gem5
+
+#endif // __SIM_FST_TRACE_FST_TRACE_HH__

@@ -85,9 +85,8 @@ class StatTester : public SimObject
     EventFunctionWrapper event;
 
   public:
-    StatTester(const StatTesterParams &p) :
-        SimObject(p),
-        event([this]{ setStats(); }, name() + ".event")
+    StatTester(const StatTesterParams &p)
+        : SimObject(p), event(*this, [this] { setStats(); }, name() + ".event")
     {}
     void startup() override { schedule(event, curTick()); }
 

@@ -182,6 +182,12 @@ class SimObject : public EventManager, public Serializable, public Drainable,
 
     virtual ~SimObject();
 
+    static const SimObjectList &
+    getSimObjectList()
+    {
+        return simObjectList;
+    }
+
   public:
     /**
      * init() is called after all C++ SimObjects have been created and

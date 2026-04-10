@@ -43,6 +43,7 @@
 #include <list>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "base/debug.hh"
 #include "base/flags.hh"
@@ -60,6 +61,7 @@ namespace gem5
 
 class EventQueue;       // forward declaration
 class BaseGlobalEvent;
+class SimObject;
 
 //! Simulation Quantum for multiple eventq simulation.
 //! The quantum value is the period length after which the queues
@@ -295,6 +297,8 @@ class Event : public EventBase, public Serializable
     Tick whenScheduled; //!< time scheduled
 #endif
 
+    static std::vector<Event *> allEvents;
+
     void
     setWhen(Tick when, EventQueue *q)
     {
@@ -397,6 +401,15 @@ class Event : public EventBase, public Serializable
     /** @} */
 
   public:
+    static const std::vector<Event *> &
+    getAllEvents()
+    {
+        return allEvents;
+    }
+
+    static const SimObject *lookupStaticOwner(const Event *event);
+
+  public:
 
     /*
      * Event constructor
@@ -417,7 +430,10 @@ class Event : public EventBase, public Serializable
         whenCreated = curTick();
         whenScheduled = 0;
 #endif
+        allEvents.push_back(this);
     }
+
+    Event(const SimObject &owner, Priority p = Default_Pri, Flags f = 0);
 
     /**
      * @ingroup api_eventq
@@ -739,6 +755,9 @@ class EventQueue
      * @ingroup api_eventq
      */
     EventQueue(const std::string &n);
+
+    void (*dispatchHook)(const Event *, void *) = nullptr;
+    void *dispatchHookArg = nullptr;
 
     /**
      * @ingroup api_eventq
@@ -1095,20 +1114,35 @@ class MemberEventWrapper final: public Event, public Named
     static_assert(std::is_same_v<MemberFunctionArgsTuple_t<F>, std::tuple<>>);
 
 public:
-    [[deprecated("Use reference version of this constructor instead")]]
-    MemberEventWrapper(CLASS *object,
-                       bool del = false,
-                       Priority p = Default_Pri):
-        MemberEventWrapper{*object, del, p}
-    {}
+  MemberEventWrapper(const SimObject &owner, CLASS *object, bool del = false,
+                     Priority p = Default_Pri)
+      : MemberEventWrapper(owner, *object, del, p)
+  {}
 
-    /**
-     * @brief Construct a new MemberEventWrapper object
-     *
-     * @param object instance of the object to call the wrapped member func on
-     * @param del if true, flag this event as AutoDelete
-     * @param p priority of this event
-     */
+  [[deprecated("Use reference version of this constructor instead")]]
+  MemberEventWrapper(CLASS *object, bool del = false, Priority p = Default_Pri)
+      : MemberEventWrapper{*object, del, p}
+  {}
+
+  /**
+   * @brief Construct a new MemberEventWrapper object
+   *
+   * @param object instance of the object to call the wrapped member func on
+   * @param del if true, flag this event as AutoDelete
+   * @param p priority of this event
+   */
+  MemberEventWrapper(const SimObject &owner, CLASS &object, bool del = false,
+                     Priority p = Default_Pri)
+      : Event(owner, p),
+        Named(object.name() + ".wrapped_event"),
+        mObject(&object)
+  {
+      if (del) {
+          setFlags(AutoDelete);
+      }
+      gem5_assert(mObject);
+  }
+
     MemberEventWrapper(CLASS &object,
                        bool del = false,
                        Priority p = Default_Pri):
@@ -1146,6 +1180,17 @@ class EventFunctionWrapper : public Event
      *
      * @ingroup api_eventq
      */
+    EventFunctionWrapper(const SimObject &owner,
+                         const std::function<void(void)> &callback,
+                         const std::string &name, bool del = false,
+                         Priority p = Default_Pri)
+        : Event(owner, p), callback(callback), _name(name)
+    {
+        if (del) {
+            setFlags(AutoDelete);
+        }
+    }
+
     EventFunctionWrapper(const std::function<void(void)> &callback,
                          const std::string &name,
                          bool del = false,

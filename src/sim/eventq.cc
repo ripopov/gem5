@@ -41,6 +41,7 @@
 #include "base/trace.hh"
 #include "cpu/smt.hh"
 #include "debug/Checkpoint.hh"
+#include "sim/sim_object.hh"
 
 namespace gem5
 {
@@ -58,6 +59,25 @@ std::vector<EventQueue *> mainEventQueue;
 __thread EventQueue *_curEventQueue = NULL;
 bool inParallelMode = false;
 
+namespace
+{
+
+std::unordered_map<const Event *, const SimObject *> staticEventOwners;
+
+void
+registerStaticOwner(const Event *event, const SimObject &owner)
+{
+    staticEventOwners[event] = &owner;
+}
+
+void
+clearStaticOwner(const Event *event)
+{
+    staticEventOwners.erase(event);
+}
+
+} // anonymous namespace
+
 EventQueue *
 getEventQueue(uint32_t index)
 {
@@ -74,10 +94,29 @@ getEventQueue(uint32_t index)
 Counter Event::instanceCounter = 0;
 #endif
 
+std::vector<Event *> Event::allEvents;
+
+Event::Event(const SimObject &owner, Priority p, Flags f) : Event(p, f)
+{
+    registerStaticOwner(this, owner);
+}
+
 Event::~Event()
 {
     assert(!scheduled());
+    auto it = std::find(allEvents.begin(), allEvents.end(), this);
+    if (it != allEvents.end()) {
+        allEvents.erase(it);
+    }
+    clearStaticOwner(this);
     flags = 0;
+}
+
+const SimObject *
+Event::lookupStaticOwner(const Event *event)
+{
+    auto it = staticEventOwners.find(event);
+    return it == staticEventOwners.end() ? nullptr : it->second;
 }
 
 const std::string
@@ -246,6 +285,9 @@ EventQueue::serviceOne()
         setCurTick(event->when());
         if (debug::Event)
             event->trace("executed");
+        if (dispatchHook) {
+            dispatchHook(event, dispatchHookArg);
+        }
         event->process();
         if (event->isExitEvent()) {
             assert(!event->flags.isSet(Event::Managed) ||

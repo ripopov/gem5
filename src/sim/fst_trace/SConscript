@@ -1,0 +1,7 @@
+Import('*')
+
+SimObject('FstTrace.py', sim_objects=['FstTrace'])
+Source('fst_trace.cc')
+DebugFlag('FstTrace')
+Executable('verify_fst_trace', 'verify_fst_trace.cc')
+GTest('fst_trace_hier.test', 'fst_trace_hier.test.cc', skip_lib=True)
