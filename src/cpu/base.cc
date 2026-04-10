@@ -127,22 +127,32 @@ CPUProgressEvent::description() const
 }
 
 BaseCPU::BaseCPU(const Params &p, bool is_checker)
-    : ClockedObject(p), instCnt(0), _cpuId(p.cpu_id), _socketId(p.socket_id),
+    : ClockedObject(p),
+      instCnt(0),
+      _cpuId(p.cpu_id),
+      _socketId(p.socket_id),
       _instRequestorId(p.system->getRequestorId(this, "inst")),
       _dataRequestorId(p.system->getRequestorId(this, "data")),
-      _taskId(context_switch_task_id::Unknown), _pid(invldPid),
-      _switchedOut(p.switched_out), _cacheLineSize(p.system->cacheLineSize()),
+      _taskId(context_switch_task_id::Unknown),
+      _pid(invldPid),
+      _switchedOut(p.switched_out),
+      _cacheLineSize(p.system->cacheLineSize()),
       modelResetPort(p.name + ".model_reset"),
-      interrupts(p.interrupts), numThreads(p.numThreads), system(p.system),
-      previousCycle(0), previousState(CPU_STATE_SLEEP),
-      functionTraceStream(nullptr), currentFunctionStart(0),
-      currentFunctionEnd(0), functionEntryTick(0),
+      interrupts(p.interrupts),
+      numThreads(p.numThreads),
+      system(p.system),
+      previousCycle(0),
+      previousState(CPU_STATE_SLEEP),
+      functionTraceStream(nullptr),
+      currentFunctionStart(0),
+      currentFunctionEnd(0),
+      functionEntryTick(0),
       baseStats(this),
       addressMonitor(p.numThreads),
       syscallRetryLatency(p.syscallRetryLatency),
       pwrGatingLatency(p.pwr_gating_latency),
       powerGatingOnIdle(p.power_gating_on_idle),
-      enterPwrGatingEvent([this]{ enterPwrGating(); }, name())
+      enterPwrGatingEvent(*this, [this] { enterPwrGating(); }, name())
 {
     // if Python did not provide a valid ID, do it here
     if (_cpuId == -1 ) {

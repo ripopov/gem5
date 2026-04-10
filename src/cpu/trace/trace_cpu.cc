@@ -48,25 +48,28 @@ namespace gem5
 int TraceCPU::numTraceCPUs = 0;
 
 TraceCPU::TraceCPU(const TraceCPUParams &params)
-    :   ClockedObject(params),
-        cacheLineSize(params.system->cacheLineSize()),
-        icachePort(this),
-        dcachePort(this),
-        instRequestorID(params.system->getRequestorId(this, "inst")),
-        dataRequestorID(params.system->getRequestorId(this, "data")),
-        instTraceFile(params.instTraceFile),
-        dataTraceFile(params.dataTraceFile),
-        icacheGen(*this, ".iside", icachePort, instRequestorID, instTraceFile),
-        dcacheGen(*this, ".dside", dcachePort, dataRequestorID, dataTraceFile,
-                  params),
-        icacheNextEvent([this]{ schedIcacheNext(); }, name()),
-        dcacheNextEvent([this]{ schedDcacheNext(); }, name()),
-        oneTraceComplete(false),
-        traceOffset(0),
-        execCompleteEvent(nullptr),
-        enableEarlyExit(params.enableEarlyExit),
-        progressMsgInterval(params.progressMsgInterval),
-        progressMsgThreshold(params.progressMsgInterval), traceStats(this)
+    : ClockedObject(params),
+      cacheLineSize(params.system->cacheLineSize()),
+      icachePort(this),
+      dcachePort(this),
+      instRequestorID(params.system->getRequestorId(this, "inst")),
+      dataRequestorID(params.system->getRequestorId(this, "data")),
+      instTraceFile(params.instTraceFile),
+      dataTraceFile(params.dataTraceFile),
+      icacheGen(*this, ".iside", icachePort, instRequestorID, instTraceFile),
+      dcacheGen(*this, ".dside", dcachePort, dataRequestorID, dataTraceFile,
+                params),
+      icacheNextEvent(
+          *this, [this] { schedIcacheNext(); }, name()),
+      dcacheNextEvent(
+          *this, [this] { schedDcacheNext(); }, name()),
+      oneTraceComplete(false),
+      traceOffset(0),
+      execCompleteEvent(nullptr),
+      enableEarlyExit(params.enableEarlyExit),
+      progressMsgInterval(params.progressMsgInterval),
+      progressMsgThreshold(params.progressMsgInterval),
+      traceStats(this)
 {
     // Increment static counter for number of Trace CPUs.
     ++TraceCPU::numTraceCPUs;

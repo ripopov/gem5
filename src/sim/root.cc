@@ -176,8 +176,10 @@ Root::timeSyncSpinThreshold(Time newThreshold)
 }
 
 Root::Root(const RootParams &p, int)
-    : SimObject(p), _enabled(false), _periodTick(p.time_sync_period),
-      syncEvent([this]{ timeSync(); }, name())
+    : SimObject(p),
+      _enabled(false),
+      _periodTick(p.time_sync_period),
+      syncEvent(*this, [this] { timeSync(); }, name())
 {
     _period.setTick(p.time_sync_period);
     _spinThreshold.setTick(p.time_sync_spin_threshold);

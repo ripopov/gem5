@@ -269,8 +269,9 @@ MinorCPU::activateContext(ThreadID thread_id)
     } else { //the thread from clone
         if (fetchEventWrapper != NULL)
             delete fetchEventWrapper;
-        fetchEventWrapper = new EventFunctionWrapper([this, thread_id]
-                  { pipeline->wakeupFetch(thread_id); }, "wakeupFetch");
+        fetchEventWrapper = new EventFunctionWrapper(
+            *this, [this, thread_id] { pipeline->wakeupFetch(thread_id); },
+            "wakeupFetch");
         schedule(*fetchEventWrapper, clockEdge(Cycles(0)));
     }
 

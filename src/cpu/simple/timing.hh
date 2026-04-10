@@ -162,10 +162,10 @@ class TimingSimpleCPU : public BaseSimpleCPU
     class TimingCPUPort : public RequestPort
     {
       public:
-
-        TimingCPUPort(const std::string& _name, TimingSimpleCPU* _cpu)
-            : RequestPort(_name), cpu(_cpu),
-              retryRespEvent([this]{ sendRetryResp(); }, name())
+        TimingCPUPort(const std::string &_name, TimingSimpleCPU *_cpu)
+            : RequestPort(_name),
+              cpu(_cpu),
+              retryRespEvent(*_cpu, [this] { sendRetryResp(); }, name())
         { }
 
       protected:

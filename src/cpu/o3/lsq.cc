@@ -125,19 +125,22 @@ LSQ::DcachePort::DcachePortStats::DcachePortStats(CPU* _cpu)
 }
 
 LSQ::LSQ(CPU *cpu_ptr, IEW *iew_ptr, const BaseO3CPUParams &params)
-    : cpu(cpu_ptr), iewStage(iew_ptr),
+    : cpu(cpu_ptr),
+      iewStage(iew_ptr),
       _cacheBlocked(false),
-      cacheStorePorts(params.cacheStorePorts), usedStorePorts(0),
-      cacheLoadPorts(params.cacheLoadPorts), usedLoadPorts(0),
+      cacheStorePorts(params.cacheStorePorts),
+      usedStorePorts(0),
+      cacheLoadPorts(params.cacheLoadPorts),
+      usedLoadPorts(0),
       waitingForStaleTranslation(false),
       staleTranslationWaitTxnId(0),
       lsqPolicy(params.smtLSQPolicy),
       LQEntries(params.LQEntries),
       SQEntries(params.SQEntries),
       maxLQEntries(maxLSQAllocation(lsqPolicy, LQEntries, params.numThreads,
-                  params.smtLSQThreshold)),
+                                    params.smtLSQThreshold)),
       maxSQEntries(maxLSQAllocation(lsqPolicy, SQEntries, params.numThreads,
-                  params.smtLSQThreshold)),
+                                    params.smtLSQThreshold)),
       dcachePort(this, cpu_ptr),
       numThreads(params.numThreads),
       recvRespThrottling(params.recvRespThrottling),
@@ -147,7 +150,7 @@ LSQ::LSQ(CPU *cpu_ptr, IEW *iew_ptr, const BaseO3CPUParams &params)
       recvRespCachelines(0),
       recvRespLastCachelineAddr(0),
       recvRespLastActiveCycle(0),
-      retryRespEvent([this]{ sendRetryResp(); }, name())
+      retryRespEvent(*cpu_ptr, [this] { sendRetryResp(); }, name())
 {
     assert(numThreads > 0 && numThreads <= MaxThreads);
 
