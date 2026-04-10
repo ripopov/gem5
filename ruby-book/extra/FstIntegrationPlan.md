@@ -260,6 +260,10 @@ void FstTrace::setDumpActive(bool enable) {
     dumpActive = enable;
     fstWriterEmitTimeChange(fstCtx, curTick());
     fstWriterEmitDumpActive(fstCtx, enable ? 1 : 0);
+    // On re-enable, clear hasEmitted so the next stat sample emits all
+    // values unconditionally (viewers treat blackout exit as unknown state).
+    if (enable)
+        std::fill(hasEmitted.begin(), hasEmitted.end(), false);
 }
 ```
 
@@ -399,40 +403,75 @@ void FstTrace::walkStatGroup(const statistics::Group *group)
 }
 ```
 
-`createStatSignals()` dispatches on Info subclass via `dynamic_cast`:
+`createStatSignals()` dispatches on Info subclass via `dynamic_cast`.
+
+**Signal naming:** Since the walk already maintains the correct FST scope,
+signal names must be the *leaf* name only (the last component after the final
+`.` in `info->name`), not the full dotted path.  Using the full path would
+produce redundant, unreadable names in GTKWave (e.g. `system_cpu0_numCycles`
+inside the `system.cpu0` scope).  The helper `leafName()` extracts this:
+
+```cpp
+std::string leafName(const std::string &dotted)
+{
+    auto pos = dotted.rfind('.');
+    return pos == std::string::npos ? dotted : dotted.substr(pos + 1);
+}
+```
+
+**FormulaInfo before VectorInfo:** `FormulaInfo` inherits `VectorInfo`, so a
+`dynamic_cast<VectorInfo*>` would match formulas too.  Check `FormulaInfo`
+first to keep the dispatch explicit and order-independent.
 
 ```cpp
 void FstTrace::createStatSignals(const statistics::Info *info)
 {
+    std::string leaf = leafName(info->name);
+
     if (auto *si = dynamic_cast<const statistics::ScalarInfo*>(info)) {
         fstHandle h = fstWriterCreateVar(fstCtx, FST_VT_VCD_REAL,
-            FST_VD_OUTPUT, 64, sanitize(info->name).c_str(), 0);
+            FST_VD_OUTPUT, 64, sanitize(leaf).c_str(), 0);
         statHandles.push_back({h, info, StatKind::Scalar});
     }
-    else if (auto *vi = dynamic_cast<const statistics::VectorInfo*>(info)) {
-        // One signal per element + total
-        for (size_t i = 0; i < vi->size(); ++i) {
-            std::string ename = vi->subnames.size() > i && !vi->subnames[i].empty()
-                ? sanitize(vi->subnames[i])
-                : sanitize(info->name) + "_" + std::to_string(i);
+    // FormulaInfo checked before VectorInfo (FormulaInfo inherits VectorInfo)
+    else if (auto *fi = dynamic_cast<const statistics::FormulaInfo*>(info)) {
+        for (size_t i = 0; i < fi->size(); ++i) {
+            std::string ename = fi->subnames.size() > i
+                    && !fi->subnames[i].empty()
+                ? sanitize(fi->subnames[i])
+                : sanitize(leaf) + "_" + std::to_string(i);
             fstHandle h = fstWriterCreateVar(fstCtx, FST_VT_VCD_REAL,
                 FST_VD_OUTPUT, 64, ename.c_str(), 0);
             statHandles.push_back({h, info, StatKind::VectorElem, i});
         }
         fstHandle ht = fstWriterCreateVar(fstCtx, FST_VT_VCD_REAL,
             FST_VD_OUTPUT, 64,
-            (sanitize(info->name) + "_total").c_str(), 0);
+            (sanitize(leaf) + "_total").c_str(), 0);
+        statHandles.push_back({ht, info, StatKind::VectorTotal});
+    }
+    else if (auto *vi = dynamic_cast<const statistics::VectorInfo*>(info)) {
+        for (size_t i = 0; i < vi->size(); ++i) {
+            std::string ename = vi->subnames.size() > i
+                    && !vi->subnames[i].empty()
+                ? sanitize(vi->subnames[i])
+                : sanitize(leaf) + "_" + std::to_string(i);
+            fstHandle h = fstWriterCreateVar(fstCtx, FST_VT_VCD_REAL,
+                FST_VD_OUTPUT, 64, ename.c_str(), 0);
+            statHandles.push_back({h, info, StatKind::VectorElem, i});
+        }
+        fstHandle ht = fstWriterCreateVar(fstCtx, FST_VT_VCD_REAL,
+            FST_VD_OUTPUT, 64,
+            (sanitize(leaf) + "_total").c_str(), 0);
         statHandles.push_back({ht, info, StatKind::VectorTotal});
     }
     else if (auto *di = dynamic_cast<const statistics::DistInfo*>(info)) {
-        // Mean and samples
         fstHandle hm = fstWriterCreateVar(fstCtx, FST_VT_VCD_REAL,
             FST_VD_OUTPUT, 64,
-            (sanitize(info->name) + "_mean").c_str(), 0);
+            (sanitize(leaf) + "_mean").c_str(), 0);
         statHandles.push_back({hm, info, StatKind::DistMean});
         fstHandle hs = fstWriterCreateVar(fstCtx, FST_VT_VCD_REAL,
             FST_VD_OUTPUT, 64,
-            (sanitize(info->name) + "_samples").c_str(), 0);
+            (sanitize(leaf) + "_samples").c_str(), 0);
         statHandles.push_back({hs, info, StatKind::DistSamples});
     }
     // ... Vector2dInfo, VectorDistInfo, SparseHistInfo similarly
@@ -446,10 +485,17 @@ period:
 
 ```cpp
 // In FstTrace:
-EventFunctionWrapper sampleStatsEvent;
+EventFunctionWrapper sampleStatsEvent;  // owned by *this (FstTrace)
 Tick statSamplePeriod;
 std::vector<StatEntry> statHandles;   // {fstHandle, Info*, kind, index}
-std::vector<double> lastValues;       // parallel to statHandles, for delta detection
+std::vector<bool> hasEmitted;         // parallel to statHandles, true after first write
+
+void FstTrace::FstTrace(const Params &p)
+    : SimObject(p),
+      // sampleStatsEvent owned by *this so it appears in the FST event trace
+      sampleStatsEvent(*this, [this] { sampleStats(); }, name()),
+      ...
+{}
 
 void FstTrace::startup()
 {
@@ -457,33 +503,56 @@ void FstTrace::startup()
 
     if (statSamplePeriod > 0) {
         createStatHierarchy();
-        lastValues.resize(statHandles.size(),
-                          std::numeric_limits<double>::quiet_NaN());
+        hasEmitted.resize(statHandles.size(), false);
+        lastValues.resize(statHandles.size(), 0.0);
         schedule(sampleStatsEvent, curTick() + statSamplePeriod);
     }
 }
 
 void FstTrace::sampleStats()
 {
-    // Prepare all stats (formulas, averages recompute)
+    // Skip sampling during blackout — stat value changes inside FST
+    // blackout regions would be silently discarded by viewers, and
+    // re-emitting stale cumulative counters on re-enable is confusing.
+    if (!dumpActive) {
+        schedule(sampleStatsEvent, curTick() + statSamplePeriod);
+        return;
+    }
+
+    // Recursively prepare all stats (formulas, averages recompute).
+    // preDumpStats() walks child groups, but does NOT call prepare()
+    // on individual Info objects.  We must do that ourselves via a
+    // recursive walk that mirrors createStatHierarchy().
     Root::root()->preDumpStats();
-    for (auto *info : Root::root()->getStats())
-        info->prepare();
-    // prepare() is called recursively through groups in preDumpStats
+    prepareStatsRecursive(Root::root());
 
     emitTimeChange(curTick());
 
     for (size_t i = 0; i < statHandles.size(); ++i) {
         double val = readStatValue(statHandles[i]);
-        if (val != lastValues[i]) {
+        // Use hasEmitted flag instead of NaN sentinel.  NaN != NaN
+        // is always true, so a NaN-initialized lastValues would
+        // re-emit NaN stats every sample, defeating delta compression.
+        if (!hasEmitted[i] || val != lastValues[i]) {
             char buf[64];
-            snprintf(buf, sizeof(buf), "%.17g", val);
+            snprintf(buf, sizeof(buf), "%.15g", val);
             fstWriterEmitValueChange(fstCtx, statHandles[i].handle, buf);
             lastValues[i] = val;
+            hasEmitted[i] = true;
         }
     }
 
     schedule(sampleStatsEvent, curTick() + statSamplePeriod);
+}
+
+// Recursively call prepare() on every Info in the Group tree.
+void FstTrace::prepareStatsRecursive(statistics::Group *group)
+{
+    for (auto *info : group->getStats())
+        info->prepare();
+
+    for (auto &[name, child] : group->getStatGroups())
+        prepareStatsRecursive(child);
 }
 ```
 
@@ -515,9 +584,13 @@ double FstTrace::readStatValue(const StatEntry &entry)
 when most stats are stable between samples.
 
 **ROI interaction:** The sampling event always fires on schedule regardless of
-`dumpActive`. Stat sampling is orthogonal to the Stage 1 event-dispatch
-blackout mechanism — stats represent cumulative counters and their values are
-meaningful even when event tracing is paused.
+`dumpActive`, but it skips emitting value changes when `dumpActive` is false.
+FST blackout regions cause waveform viewers to render all signals as unknown —
+writing stat values during a blackout would either be silently discarded or
+produce confusing visual artifacts where stat traces appear inside a gap.
+When `dumpActive` is re-enabled, the next sample will emit all values
+unconditionally (delta detection treats the blackout exit as a fresh start
+by clearing `hasEmitted`).
 
 ### 2.5 FST File Lifecycle (Updated for Stage 2)
 
@@ -526,7 +599,7 @@ meaningful even when event tracing is paused.
 | Constructor | Store params, register exit callback for `fstWriterClose()` |
 | `init()` | Collect and sort SimObjects for hierarchy emission |
 | `startup()` | Open FST file; write Stage 1 event hierarchy + signals; if `stat_sample_period > 0`: walk `Group` tree, write `stats` scope tree + signals, schedule first sample event; install dispatch hooks |
-| Simulation | Dispatch hook emits event markers (Stage 1); periodic sample event emits stat value changes (Stage 2) |
+| Simulation | Dispatch hook emits event markers (Stage 1); periodic sample event emits stat value changes when `dumpActive` is true (Stage 2) |
 | Exit callback | Close FST file |
 
 ### 2.6 Stage 2 Tests
@@ -611,6 +684,16 @@ GTest('fst_trace_hier.test', 'fst_trace_hier.test.cc', skip_lib=True)
 | `src/sim/fst_trace/` | `FstTrace` SimObject: hierarchy dump, event dispatch tracing, clock counters, stat sampling | Done |
 | Priority 1–3 migration | 29 files migrated to pass `SimObject&` owner to event constructors | Done |
 
+## Files Modified (Stage 2) — Planned
+
+| File | Change |
+|------|--------|
+| `src/sim/fst_trace/FstTrace.py` | Add `stat_sample_period = Param.Tick(0, ...)` |
+| `src/sim/fst_trace/fst_trace.hh` | Add `sampleStatsEvent` (owned by `*this`), `statHandles`, `hasEmitted`, `lastValues`, `prepareStatsRecursive()`, `createStatHierarchy()`, `walkStatGroup()`, `createStatSignals()`, `sampleStats()`, `readStatValue()`, `leafName()` |
+| `src/sim/fst_trace/fst_trace.cc` | Implement stat hierarchy walk, periodic sampling with blackout gating, recursive `prepare()`, `hasEmitted`-based delta detection |
+| `src/sim/fst_trace/fst_trace_hier.test.cc` | Add GTests for real-valued signals, delta encoding, stat scope hierarchy |
+| `tests/gem5/fst_trace/configs/fst_stats.py` | Python system test for stat sampling |
+
 ---
 
 ## Key Files to Reference
@@ -642,6 +725,8 @@ GTest('fst_trace_hier.test', 'fst_trace_hier.test.cc', skip_lib=True)
 | **Dispatch hook overhead** | Raw function pointer: single null check when disabled; O(1) hash lookup when enabled |
 | **Event destructor cost** | Linear scan of `allEvents` to erase; acceptable for rare destruction |
 | **Thread safety** | `allEvents` populated before simulation (single-threaded); callbacks installed on all EventQueues |
-| **Stat sampling overhead** | Delta-only writes skip unchanged stats; `prepare()` cost is unavoidable but matches normal stat dump path |
+| **Stat sampling overhead** | Delta-only writes (`hasEmitted` + `lastValues`) skip unchanged stats; `prepare()` cost is unavoidable but matches normal stat dump path |
 | **Large number of stat signals** | Every stat gets an FST signal; file size mitigated by delta-only writes and FST compression (lz4) |
-| **Stat `prepare()` ordering** | Call `preDumpStats()` on root group before sampling to ensure formulas and derived stats are current |
+| **Stat `prepare()` ordering** | Call `preDumpStats()` on root group, then `prepareStatsRecursive()` to walk all sub-groups — `preDumpStats()` alone does not call `Info::prepare()` |
+| **NaN stat values** | `hasEmitted` bitvector avoids NaN-sentinel comparison (`NaN != NaN` is always true, which would defeat delta compression) |
+| **Stats during blackout** | Sampling event skips emission when `dumpActive` is false; `hasEmitted` is cleared on re-enable so first post-blackout sample emits all values |
