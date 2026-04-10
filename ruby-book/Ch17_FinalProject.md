@@ -313,7 +313,7 @@ The project adds files in two locations:
 configs/example/
 ├── noc_config/
 │   └── rbook_4x4.py          # Stage 1a — 4×4 mesh noc_config
-└── rbook_mesh_config.py       # Stage 1b — 16-core system configuration
+└── rbook_mesh_config.py       # Stage 1b — system config (SE + --baremetal)
 
 ruby-book/final/
 ├── Makefile                   # delegates build/run/report targets per test
@@ -330,6 +330,14 @@ ruby-book/final/
 │   └── ...                    # Stage 3d should follow the same pattern
 ├── barrier/
 │   └── ...                    # Stage 3e should follow the same pattern
+├── baremetal/
+│   ├── Makefile               # Stage 4 — builds all baremetal tests
+│   ├── m5_bm.h               # Stage 4b — m5ops, UART, CSR helpers
+│   ├── start.S               # shared entry point (_start)
+│   ├── rbook_baremetal.ld     # Stage 4c — linker script
+│   ├── bm_smoke.c            # Stage 4d
+│   ├── bm_hop_latency.c      # Stage 4e
+│   └── bm_contention.c       # Stage 4f
 ├── trivial.c                  # Stage 2 — minimal boot smoke test
 ```
 
@@ -353,7 +361,374 @@ Compiled binaries are not checked into the repository.
 - `src/mem/ruby/protocol/chi/CHI.slicc` — the CHI protocol manifest (used as-is, not modified).
 - `src/mem/ruby/network/garnet/GarnetNetwork.cc` — the Garnet network (used as-is, not modified).
 
-## Stage 4 — Per-Vnet Dedicated Links in CustomMesh
+## Stage 4 — Baremetal Execution
+
+Stages 1–3 run every test in SE (Syscall Emulation) mode: the host OS intercepts `write()`, `exit()`, and `pthread_create()` on behalf of the simulated program.
+This is convenient but unrealistic — real SoCs do not have a host kernel forwarding system calls.
+In this stage the reader extends the existing system configuration script with a `--baremetal` flag and writes new test programs that run in **baremetal mode**: the binary executes directly on the simulated hardware in M-mode with no OS, no C standard library, and no syscall layer.
+
+This matters beyond pedagogy.
+Baremetal execution is the only way to get deterministic, OS-noise-free measurements from the mesh.
+It also forces the reader to understand exactly what the platform provides (CLINT, UART, physical memory layout) and what SE mode was hiding.
+
+### The baremetal system
+
+In SE mode (Stages 1–3) the simulated system is minimal: a `System` object with `SEWorkload`, physical memory starting at address 0, no platform devices, and no I/O bus.
+The Ruby `create_system` call receives `full_system=False`, so `CHI.py` skips three node types (`CHI_SNF_BootMem`, `CHI_RNI_IO`, `CHI_RNI_DMA`) and the CPU sequencers are never connected to an I/O bus.
+
+Baremetal mode replaces this with a complete RISC-V SoC model.
+The diagram below shows every component and how traffic flows between them:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│ RiscvSystem                                                             │
+│                                                                         │
+│  ┌──────────┐   RiscvBareMetal workload                                 │
+│  │ ELF file │──→ loads binary to physmem at 0x80000000                  │
+│  └──────────┘   sets all 16 PCs to entry point, M-mode                  │
+│                                                                         │
+│  ┌────────────────── 4×4 Garnet Mesh (CHI) ──────────────────────┐      │
+│  │                                                                │      │
+│  │   Router 0        Router 1    ...    Router 7                  │      │
+│  │   ┌─────┐         ┌─────┐            ┌─────┐                  │      │
+│  │   │RN-F │ CPU 0   │RN-F │ CPU 1      │RN-F │ CPU 7           │      │
+│  │   │HN-F │ LLC 0   │HN-F │ LLC 1      │HN-F │ LLC 7           │      │
+│  │   │SN-F │ DDR 0   │     │            │RN-I │ ← I/O bridge     │      │
+│  │   └─────┘         └─────┘            └──┬──┘                  │      │
+│  │      ...             ...          ...    │       ...           │      │
+│  │   Router 12       Router 13       Router 15                   │      │
+│  │   ┌─────┐         ┌─────┐         ┌─────┐                    │      │
+│  │   │RN-F │ CPU 12  │RN-F │ CPU 13  │RN-F │ CPU 15            │      │
+│  │   │HN-F │ LLC 12  │HN-F │ LLC 13  │HN-F │ LLC 15            │      │
+│  │   │     │         │     │         │SN-F │ DDR 1              │      │
+│  │   └─────┘         └─────┘         └─────┘                    │      │
+│  └────────────────────────────────────────┬──────────────────────┘      │
+│                                           │                             │
+│                            RN-I (CHI_RNI_IO) sequencer                  │
+│                                           │                             │
+│                                    ┌──────┴──────┐                      │
+│                                    │   IO XBar    │ (system.iobus)      │
+│                                    └──┬───┬───┬──┘                      │
+│                        ┌──────────────┤   │   ├──────────────┐          │
+│                        │              │   │                   │          │
+│                   ┌────┴────┐   ┌─────┴───┐           ┌──────┴─────┐   │
+│                   │  UART   │   │ Bridge  │           │  IOCache/  │   │
+│                   │ 8250    │   │ (iobus  │           │  Bridge    │   │
+│                   │@0x1000_ │   │  ↔      │           │ (iobus →   │   │
+│                   │  0000   │   │  membus)│           │  membus)   │   │
+│                   └─────────┘   └─────┬───┘           └──────┬─────┘   │
+│                                       │                      │          │
+│                                    ┌──┴──────────────────────┴──┐      │
+│                                    │         MemBus             │      │
+│                                    │     (system.membus)        │      │
+│                                    └──┬─────────────────────┬───┘      │
+│                                       │                     │          │
+│                                 ┌─────┴─────┐        ┌──────┴──────┐   │
+│                                 │   CLINT    │        │    PLIC     │   │
+│                                 │ @0x200_0000│        │ @0xC00_0000 │   │
+│                                 │ timer, IPI │        │ ext. IRQ    │   │
+│                                 └─────┬─────┘        └─────────────┘   │
+│                                       │                                 │
+│                                 ┌─────┴─────┐                          │
+│                                 │ RiscvRTC   │ (drives CLINT mtime)    │
+│                                 │ 100 MHz    │                          │
+│                                 └───────────┘                          │
+│                                                                         │
+│  PMAChecker (per CPU MMU): marks CLINT + PLIC + UART ranges            │
+│  as uncacheable → loads/stores bypass L1, go through IO path            │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Key architectural points:**
+
+**Memory map.**
+Physical DRAM starts at `0x80000000` (the standard RISC-V convention), not at 0 as in SE mode.
+The linker script places all code and data at this address.
+Device MMIO occupies the low address space: CLINT at `0x2000000`, PLIC at `0xC000000`, UART at `0x10000000`.
+
+**Two bus domains.**
+The `membus` carries coherent traffic and connects to on-chip devices (CLINT, PLIC).
+The `iobus` carries non-coherent I/O traffic and connects to off-chip devices (UART).
+A `Bridge` forwards device-addressed requests from `membus` to `iobus`.
+An `IOCache` (or second Bridge) forwards the reverse direction so the I/O bus can reach main memory.
+
+**RN-I (CHI_RNI_IO) at router 7.**
+When `full_system=True`, `CHI.py` creates a `CHI_RNI_IO` node — a cacheless CHI request node that bridges I/O traffic between the `iobus` and the coherent mesh.
+In `rbook_4x4.py` this node attaches to router 7 (top-right edge).
+The comment "unused in SE mode" in the noc_config becomes inaccurate — baremetal mode activates it, so the reader should update the comment and consciously choose the placement.
+An edge router is a good default: I/O traffic is infrequent (only UART writes and the final m5_exit), so it will not congest interior routing paths.
+
+**CPU sequencer I/O ports.**
+`Ruby.py` calls `connectIOPorts(piobus)` for each CPU sequencer, wiring their I/O ports to `system.iobus`.
+When a CPU executes an uncacheable load/store (identified by the PMAChecker), the request bypasses the L1 cache controller and goes directly to the I/O bus via this port.
+
+**PMAChecker.**
+Every CPU's MMU gets a `PMAChecker` configured with the union of `platform._on_chip_ranges()` (CLINT, PLIC) and `platform._off_chip_ranges()` (UART).
+Without this, the L1 controller would attempt to cache MMIO accesses, causing protocol violations — the CHI protocol expects cacheable addresses only.
+
+**Workload and boot.**
+`RiscvBareMetal(bootloader=args.cmd)` loads the ELF binary's segments into physical memory at the addresses specified in the ELF headers (starting at `0x80000000`).
+During `initState()`, each thread context is reset via a `Reset` fault that sets the privilege mode to M-mode and the PC to the ELF entry point.
+All 16 cores activate simultaneously — there is no staggered boot.
+
+**Ruby/CHI call.**
+The call changes from `Ruby.create_system(args, False, system)` (SE mode) to:
+
+```python
+Ruby.create_system(args, True, system,            # full_system=True
+                   piobus=system.iobus,           # device MMIO path
+                   dma_ports=[],                  # no DMA devices
+                   bootmem=None)                  # no boot ROM needed
+```
+
+`full_system=True` triggers `CHI_RNI_IO` creation and CPU sequencer I/O port wiring.
+`bootmem=None` means no `CHI_SNF_BootMem` is created — our baremetal programs are loaded directly into DRAM, not into a separate boot ROM.
+`dma_ports=[]` means no `CHI_RNI_DMA` is created — our system has no DMA-capable I/O devices.
+
+### 4a — Extending `rbook_mesh_config.py` with `--baremetal`
+
+Rather than creating a separate script, the reader adds a `--baremetal` flag to the existing `rbook_mesh_config.py`.
+The Ruby/CHI/Garnet setup — argument parsing, clock domains, CPU creation, network topology, and port wiring — is identical in both modes.
+Only the system shell, workload, and I/O plumbing differ, and those differences are well-isolated.
+
+The script gains a single argument:
+
+```python
+parser.add_argument(
+    "--baremetal", action="store_true",
+    help="Run in baremetal mode (no OS, M-mode execution)")
+```
+
+The system setup then branches on `args.baremetal`.
+The **SE path** (existing, unchanged) uses `System()`, `SEWorkload`, `Ruby.create_system(args, False, system)`, and `Root(full_system=False)`.
+The **baremetal path** (new) creates the full SoC model described above: `RiscvSystem()`, `HiFive` platform, buses and bridges, `RiscvBareMetal` workload, `Ruby.create_system(args, True, system, piobus=system.iobus)`, PMAChecker, and `Root(full_system=True)`.
+
+Everything after the branch — Ruby port wiring, `m5.instantiate()`, `m5.simulate()` — is shared.
+
+The reader should also update the noc_config comment from "unused in SE mode" to reflect that `CHI_RNI_IO` at router 7 is now active in baremetal mode.
+
+The existing `configs/deprecated/example/riscv/fs_linux.py` is the primary reference for the platform, bus, bridge, and PMAChecker wiring.
+
+### 4b — Baremetal support header (`m5_bm.h`)
+
+Before writing tests, the reader creates a minimal support header that all baremetal tests include.
+It provides three facilities without any standard library dependency:
+
+**Simulation exit via m5 pseudo-instructions.**
+The gem5 M5OP instruction encoding for RISC-V is a single 32-bit word: `0x0000007b | (func << 25)`, where `func` is the operation code.
+The header defines inline assembly wrappers:
+
+```c
+static inline void m5_exit(unsigned long delay) {
+    register unsigned long a0 asm("a0") = delay;
+    asm volatile (".4byte %0" :: "i"(0x0000007b | (0x21 << 25)),
+                  "r"(a0) : "memory");
+}
+
+static inline void m5_dump_stats(unsigned long delay,
+                                 unsigned long period) {
+    register unsigned long a0 asm("a0") = delay;
+    register unsigned long a1 asm("a1") = period;
+    asm volatile (".4byte %0" :: "i"(0x0000007b | (0x41 << 25)),
+                  "r"(a0), "r"(a1) : "memory");
+}
+
+static inline void m5_reset_stats(unsigned long delay,
+                                  unsigned long period) {
+    register unsigned long a0 asm("a0") = delay;
+    register unsigned long a1 asm("a1") = period;
+    asm volatile (".4byte %0" :: "i"(0x0000007b | (0x40 << 25)),
+                  "r"(a0), "r"(a1) : "memory");
+}
+```
+
+`m5_exit(0)` terminates the simulation immediately.
+`m5_dump_stats(0,0)` / `m5_reset_stats(0,0)` let tests snapshot statistics between phases.
+
+**Console output via UART MMIO.**
+The HiFive UART (8250-compatible) sits at `0x10000000`.
+A polled write is a single store to the transmit-hold register:
+
+```c
+#define UART_BASE 0x10000000UL
+
+static inline void uart_putc(char c) {
+    *(volatile char *)UART_BASE = c;
+}
+
+static inline void uart_puts(const char *s) {
+    while (*s) uart_putc(*s++);
+}
+```
+
+No FIFO status polling is needed — gem5's `Uart8250` model accepts writes unconditionally in simulation.
+Output appears on gem5's terminal (stdout or `system.terminal` telnet port).
+
+**Core identification via `mhartid` CSR.**
+Each core reads its hardware thread ID to determine its role (e.g., "am I core 0?"):
+
+```c
+static inline unsigned long get_hartid(void) {
+    unsigned long id;
+    asm volatile ("csrr %0, mhartid" : "=r"(id));
+    return id;
+}
+```
+
+**Cycle measurement via `mcycle` CSR.**
+Baremetal code runs in M-mode, so it reads `mcycle` directly (SE mode used the U-mode `rdcycle` alias):
+
+```c
+static inline unsigned long rdcycle(void) {
+    unsigned long c;
+    asm volatile ("csrr %0, mcycle" : "=r"(c));
+    return c;
+}
+```
+
+### 4c — Linker script and build setup
+
+All baremetal binaries share a linker script (`rbook_baremetal.ld`) that places code and data at `0x80000000`:
+
+```ld
+ENTRY(_start)
+SECTIONS {
+    . = 0x80000000;
+    .text   : { *(.text.entry) *(.text*) }
+    .rodata : { *(.rodata*) }
+    .data   : { *(.data*) }
+    .bss    : { *(.bss* COMMON) }
+    . = ALIGN(4096);
+    _stack_top = . + 0x4000 * 16;  /* 16 KiB stack per core */
+}
+```
+
+Each test begins with a small assembly entry point (`_start`) that sets up a per-core stack and jumps to `main`:
+
+```asm
+.section .text.entry
+.globl _start
+_start:
+    csrr  t0, mhartid
+    slli  t0, t0, 14        # 16 KiB per core
+    la    sp, _stack_top
+    sub   sp, sp, t0        # each core gets its own stack
+    call  main
+    # if main returns, exit simulation
+    li    a0, 0
+    .4byte 0x4200007b       # m5_exit(0): func=0x21, encoded as 0x21<<25 | 0x7b
+    j     .                 # should not reach here
+```
+
+The `Makefile` under `ruby-book/final/` gains a `baremetal/` subdirectory with its own Makefile that compiles with:
+
+```makefile
+CROSS   = riscv64-linux-gnu-
+CC      = $(CROSS)gcc
+CFLAGS  = -march=rv64gc -mabi=lp64d -mcmodel=medany -O2 \
+          -ffreestanding -nostdlib -nostartfiles \
+          -I$(dir $(lastword $(MAKEFILE_LIST)))
+LDFLAGS = -T rbook_baremetal.ld -nostdlib
+```
+
+The `-ffreestanding -nostdlib -nostartfiles` flags ensure no C runtime or library code is linked.
+`-mcmodel=medany` allows code to run at any address (needed because our load address is `0x80000000`, above the default `medlow` 2 GiB boundary).
+
+### 4d — Baremetal smoke test (`baremetal/bm_smoke.c`)
+
+**Goal:** verify the baremetal system boots, all 16 cores start, and UART output works.
+
+**What it does.**
+All 16 cores execute `_start`, set up their stack, and enter `main`.
+Core 0 prints "BOOT OK" via UART, then writes a shared flag.
+All other cores spin on the flag, then each atomically increments a shared counter.
+After all 15 non-zero cores have incremented, core 0 reads the counter, verifies it equals 15, prints "ALL CORES OK" and calls `m5_exit(0)`.
+
+This test exercises:
+- `RiscvBareMetal` workload loading and PC initialization for all 16 cores.
+- M-mode execution and `mhartid` CSR reads.
+- UART MMIO output through the PMAChecker → I/O bus → UART path.
+- Shared-memory communication through the CHI protocol (the flag and counter are coherent cache lines traversing the mesh).
+- Simulation exit via m5 pseudo-instruction.
+
+**What to check.**
+- Simulation completes without errors — validates the entire baremetal infrastructure (buses, bridges, PMAChecker, CHI_RNI_IO wiring).
+- UART output shows "BOOT OK" and "ALL CORES OK".
+- Ruby statistics confirm coherence traffic from the shared counter (L1 invalidations across cores).
+
+### 4e — Baremetal hop-latency test (`baremetal/bm_hop_latency.c`)
+
+**Goal:** reproduce the Stage 3b hop-distance measurement without SE-mode overhead, getting cleaner numbers.
+
+**What it does.**
+Core 0 measures round-trip latency to cache lines homed at its local HN-F (0 mesh hops) and at the diagonal HN-F 15 (6 mesh hops).
+Between measurements, it invalidates its L1/L2 by writing to enough conflicting addresses to force eviction (no `clflush` in RISC-V — eviction by capacity conflict is the standard baremetal technique).
+Cycle counts come from `mcycle` CSR.
+All other cores spin in `_start` (only core 0 calls `main`'s measurement loop, to eliminate interference).
+
+The program prints near-HN-F and far-HN-F cycle counts via UART and calls `m5_exit(0)`.
+
+**What to check.**
+- The far-access latency should exceed the near-access latency by approximately 96 cycles (6 hops × 8 cycles/hop × 2 directions), consistent with the Stage 3b SE-mode result.
+- Because there is no OS syscall overhead and no address-space translation, the measurements should be tighter (lower variance) than the SE-mode equivalent.
+- Compare the baremetal numbers with Stage 3b to confirm that SE mode did not introduce measurable latency artifacts.
+
+### 4f — Baremetal multi-core contention test (`baremetal/bm_contention.c`)
+
+**Goal:** measure 16-core atomic contention on the mesh without pthread or OS scheduling overhead.
+
+**What it does.**
+All 16 cores synchronize via a simple flag (core 0 sets it after setup), then each core performs R rounds (e.g., 1000) of `amoadd.w` on a single shared counter.
+Core 0 uses `m5_reset_stats` before the contention phase and `m5_dump_stats` after, isolating the contention statistics from boot overhead.
+After all rounds complete, core 0 verifies the counter equals `16 × R`, prints the result and per-phase cycle count via UART, and calls `m5_exit(0)`.
+
+This is the baremetal equivalent of Stage 3e (barrier), but stripped to a pure atomic-increment stress test.
+Without pthreads, there is no OS thread migration or scheduler jitter — every core runs on its assigned hart for the entire test.
+
+**What to check.**
+- Counter value is exactly `16 × R` — proves all cores executed the correct number of atomics.
+- The `m5_reset_stats` / `m5_dump_stats` window isolates contention statistics, so Garnet per-router buffer occupancy and per-link flit counts reflect only the contention phase.
+- Interior mesh routers (5, 6, 9, 10) should show higher buffer occupancy than corner routers (0, 3, 12, 15), because XY routing funnels more paths through interior nodes.
+- Compare with Stage 3e to quantify how much measurement noise SE mode and pthreads introduced.
+
+### File organization
+
+```
+ruby-book/final/baremetal/
+├── Makefile                       # builds all baremetal tests
+├── m5_bm.h                       # Stage 4b — support header
+├── start.S                       # shared entry point (_start)
+├── rbook_baremetal.ld             # Stage 4c — linker script
+├── bm_smoke.c                    # Stage 4d
+├── bm_hop_latency.c              # Stage 4e
+└── bm_contention.c               # Stage 4f
+```
+
+No new config script is created — `rbook_mesh_config.py` gains the `--baremetal` flag (Stage 4a).
+The parent `ruby-book/final/Makefile` delegates to `baremetal/Makefile` with the same `build` / `clean` targets.
+Each test binary is run with:
+
+```bash
+./build/RISCV/gem5.opt -d m5out/rbook-bm-<name>-$(date +%Y%m%d-%H%M%S) \
+    configs/example/rbook_mesh_config.py --baremetal \
+    --cmd=ruby-book/final/baremetal/bm_<name>
+```
+
+### Code anchors
+
+- `configs/example/rbook_mesh_config.py` — the unified script that gains `--baremetal` (Stage 4a).
+- `src/arch/riscv/RiscvFsWorkload.py` — `RiscvBareMetal` workload class: loads ELF, sets reset vector.
+- `src/arch/riscv/bare_metal/fs_workload.cc` — `BareMetal::initState()`: writes binary to physical memory, resets threads, activates cores.
+- `src/dev/riscv/HiFive.py` — `HiFive` platform: CLINT at `0x2000000`, PLIC at `0xC000000`, UART at `0x10000000`.
+- `src/dev/riscv/Clint.py` — CLINT device: timer (mtime/mtimecmp) and software interrupts (IPI).
+- `src/dev/riscv/PMAChecker.py` — marks device ranges as uncacheable.
+- `configs/ruby/CHI.py:214-218` — `CHI_RNI_IO` creation (only when `full_system=True`).
+- `configs/ruby/Ruby.py:293-295` — `connectIOPorts` wiring (only when `piobus` is not `None`).
+- `configs/deprecated/example/riscv/fs_linux.py` — reference for HiFive platform setup, bus/bridge wiring, and PMAChecker configuration.
+- `include/gem5/asm/generic/m5ops.h` — M5OP function codes (`M5OP_EXIT=0x21`, `M5OP_DUMP_STATS=0x41`, `M5OP_RESET_STATS=0x40`).
+- `util/m5/src/abi/riscv/m5op.S` — RISC-V m5 pseudo-instruction encoding: `0x0000007b | (func << 25)`.
+
+## Stage 5 — Per-Vnet Dedicated Links in CustomMesh
 
 The baseline system from Stages 1–3 has a bandwidth fidelity gap: every pair of adjacent Garnet routers is connected by a single shared link per direction, and all four CHI virtual networks (REQ, SNP, RSP, DAT) multiplex onto that one link.
 Real CHI interconnects like ARM CMN use dedicated physical channels per traffic class.
@@ -402,6 +777,7 @@ By the end of this chapter, the reader has:
 1. Written a noc_config and system configuration that maps 16 CHI nodes onto a 4×4 Garnet mesh with DDR controllers at opposite corners.
 2. Visualized the topology from the generated dot graph and verified the wiring.
 3. Written and run five test programs that progressively exercise the system — from single-core LLC reachability to 16-way atomic contention — and interpreted the resulting protocol, network, and DRAM statistics.
-4. Extended `CustomMesh.py` to support per-vnet dedicated links, closing a bandwidth fidelity gap between gem5's CHI mesh model and real ARM CMN hardware.
+4. Extended the configuration script with a `--baremetal` flag — adding `RiscvBareMetal` workload, HiFive platform, PMAChecker, and I/O bus wiring — and verified it with baremetal tests that use m5 pseudo-instructions and UART MMIO instead of syscalls.
+5. Extended `CustomMesh.py` to support per-vnet dedicated links, closing a bandwidth fidelity gap between gem5's CHI mesh model and real ARM CMN hardware.
 
 The reader finishes the book having both assembled a research-grade tiled multicore simulation and improved the simulator itself — the full arc from consumer to contributor.
