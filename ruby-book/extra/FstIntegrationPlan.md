@@ -136,8 +136,8 @@ Modify `Event` class (`src/sim/eventq.hh`, `src/sim/eventq.cc`):
 |------------|--------|
 | Constructor | Store params, register exit callback for `fstWriterClose()` |
 | `init()` | Collect SimObject names for prefix matching |
-| `startup()` | Walk `Event::allEvents`, resolve to SimObjects, open FST file, write hierarchy + signals, install dispatch hook on main EventQueue |
-| Simulation | Dispatch hook emits 1-bit pulses (1→0 pairs) to FST in real time |
+| `startup()` | Walk `Event::allEvents`, resolve to SimObjects, open FST file, write hierarchy + signals, install dispatch hook on main EventQueue, set `dumpActive` from `start_active` param |
+| Simulation | Dispatch hook checks `dumpActive` flag, emits 1-bit pulses (1→0 pairs) to FST; Python script can call `setDumpActive()` between `m5.simulate()` calls for ROI control |
 | Exit callback | Close FST file |
 
 All `fstWriterCreateVar()` calls complete in `startup()` before any value changes.
@@ -154,8 +154,9 @@ mainEventQueue[0]->dispatchHookArg = this;
 // Static callback — raw function pointer, no std::function overhead:
 void FstTrace::dispatchTrampoline(const Event *event, void *arg) {
     auto *self = static_cast<FstTrace*>(arg);
+    if (!self->dumpActive) return;                  // ROI blackout, skip
     auto it = self->eventHandleMap.find(event);
-    if (it == self->eventHandleMap.end()) return;  // dynamic/unresolved, skip
+    if (it == self->eventHandleMap.end()) return;   // dynamic/unresolved, skip
     self->emitTimeChange(curTick());
     fstWriterEmitValueChange(self->fstCtx, it->second, "1");
     fstWriterEmitValueChange(self->fstCtx, it->second, "0");
@@ -168,19 +169,80 @@ viewers. FST preserves ordering within the same time step.
 `eventHandleMap` is `std::unordered_map<const Event*, fstHandle>`, built once at
 `startup()`. Can be upgraded to a faster flat hash map later if profiling warrants.
 
-### 1.5 Stage 1 Tests
+### 1.5 ROI Tracing (Enable/Disable)
+
+FST natively supports **blackout regions** via `fstWriterEmitDumpActive(ctx, enable)`.
+When dump is inactive, waveform viewers show an empty gap — no signals, no toggles.
+This is the standard mechanism used by `$dumpoff` / `$dumpon` in Verilog.
+
+**C++ interface:**
+
+```cpp
+// In FstTrace:
+bool dumpActive = true;  // starts enabled
+
+void FstTrace::setDumpActive(bool enable) {
+    if (enable == dumpActive) return;
+    dumpActive = enable;
+    fstWriterEmitTimeChange(fstCtx, curTick());
+    fstWriterEmitDumpActive(fstCtx, enable ? 1 : 0);
+}
+```
+
+The dispatch hook checks `dumpActive` as the very first thing (before the hash
+lookup), so disabled regions have minimal overhead — a single bool check per dispatch.
+
+**Python interface:**
+
+The `FstTrace` SimObject exposes `setDumpActive()` to Python via pybind11,
+allowing simulation scripts to toggle tracing dynamically:
+
+```python
+# In simulation script — trace only the ROI:
+fst = FstTrace()
+# ... build system ...
+m5.simulate(warmup_ticks)
+fst.setDumpActive(True)     # begin ROI
+m5.simulate(roi_ticks)
+fst.setDumpActive(False)    # end ROI
+m5.simulate(cooldown_ticks)
+```
+
+**Initial state parameter:**
+
+```python
+class FstTrace(SimObject):
+    # ...
+    start_active = Param.Bool(True, "Start with dump enabled (False = start in blackout)")
+```
+
+Setting `start_active = False` lets the script start in blackout and only enable
+tracing when the ROI begins. This avoids capturing warmup traffic.
+
+**Future C++ integration:**
+
+The C++ `setDumpActive()` method can also be called from within SimObject code,
+enabling programmatic ROI control from CPU models, workload markers, or
+magic instructions (e.g., `m5_work_begin` / `m5_work_end` pseudo-ops).
+
+### 1.6 Stage 1 Tests
 
 **GTest** (`src/sim/fst_trace/fst_trace_hier.test.cc`, `skip_lib=True`):
 - Test hierarchy push/pop algorithm: feed sorted dotted names into scope builder,
   write to FST, read back with `fstReaderIterateHier()`, assert scope tree matches.
 - Test event pulse signals: create 1-bit wires, emit pulses at known times,
   read back with `fstReaderIterBlocks()`, verify values + timestamps.
+- Test blackout regions: emit pulses, call `fstWriterEmitDumpActive(ctx, 0)`,
+  emit more pulses, call `fstWriterEmitDumpActive(ctx, 1)`, read back and verify
+  blackout count and timestamps via `fstReaderGetNumberDumpActivityChanges()`.
 
 **Python system test** (`tests/gem5/fst_trace/configs/fst_events.py`):
 - Minimal config: traffic generator → crossbar → simple memory.
 - Attach `FstTrace()`.
 - Run for a small number of ticks.
 - Post-check: verify scope hierarchy and event signals with FST reader or `fst2vcd`.
+- Test ROI: run with `start_active=False`, enable mid-simulation via
+  `setDumpActive(True)`, disable again, verify blackout regions in FST output.
 
 ---
 
@@ -247,6 +309,7 @@ class FstTrace(SimObject):
     trace_file = Param.String("trace.fst", "Output file name")
     compression = Param.String("lz4", "Compression: zlib, lz4, fastlz")
     timescale = Param.Int(-12, "FST timescale exponent (-12 = 1ps)")
+    start_active = Param.Bool(True, "Start with dump enabled")                   # Stage 1
     probe_bindings = VectorParam.FstProbeBinding([], "Probe→signal bindings")    # Stage 3
     stat_bindings = VectorParam.FstStatBinding([], "Stat→signal bindings")       # Stage 2
     stat_sample_period = Param.Tick(10000, "Ticks between stat samples")         # Stage 2
@@ -279,7 +342,7 @@ GTest('fst_trace_hier.test', 'fst_trace_hier.test.cc', skip_lib=True)
 
 ## Key Files to Reference
 
-- `ext/libfst/fstapi.h` — FST writer/reader API
+- `ext/libfst/fstapi.h` — FST writer/reader API (`fstWriterEmitDumpActive` for blackout regions)
 - `src/sim/sim_object.hh:153` — `simObjectList` (private, need accessor)
 - `src/sim/eventq.hh:407-420` — Event constructor (add self-registration here)
 - `src/sim/eventq.cc:224-262` — `serviceOne()` dispatch point
