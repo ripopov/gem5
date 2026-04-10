@@ -111,7 +111,11 @@ for i in range(args.num_cpus):
 # --- Instantiate and run -----------------------------------------------------
 
 root = Root(full_system=False, system=system)
-root.trace = FstTrace(trace_file="trace.fst", start_active=True)
+root.trace = FstTrace(
+    trace_file="trace.fst",
+    start_active=True,
+    stat_sample_period=5000000,  # ~10,000 CPU cycles at 2GHz
+)
 m5.instantiate()
 exit_event = m5.simulate()
 

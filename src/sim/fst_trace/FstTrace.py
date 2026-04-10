@@ -16,3 +16,6 @@ class FstTrace(SimObject):
     use_work_item_roi = Param.Bool(
         False, "Toggle tracing from work item ROI markers when available"
     )
+    stat_sample_period = Param.Tick(
+        0, "Stat sampling period in ticks (0 = disabled)"
+    )

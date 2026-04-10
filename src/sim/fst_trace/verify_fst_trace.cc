@@ -29,6 +29,7 @@
 #include <fstapi.h>
 
 #include <cstdlib>
+#include <cstring>
 #include <iostream>
 #include <map>
 #include <sstream>
@@ -72,11 +73,19 @@ struct CallbackState
         changes;
 };
 
+struct VarInfo
+{
+    fstHandle handle;
+    enum fstVarType type;
+    std::string fullName;
+};
+
 struct TraceData
 {
     std::unordered_set<std::string> scopes;
     std::unordered_map<std::string, fstHandle> eventHandles;
     std::unordered_map<std::string, fstHandle> integerHandles;
+    std::unordered_map<std::string, fstHandle> realHandles;
     std::unordered_map<fstHandle, std::vector<uint64_t>> changeTimes;
     std::unordered_map<fstHandle,
                        std::vector<std::pair<uint64_t, std::string>>>
@@ -87,7 +96,8 @@ struct TraceData
 [[noreturn]] void
 usage()
 {
-    std::cerr << "usage: verify_fst_trace <events|traffic|dump> <trace.fst>"
+    std::cerr << "usage: verify_fst_trace "
+                 "<events|traffic|stats|dump> <trace.fst>"
               << std::endl;
     std::exit(1);
 }
@@ -164,35 +174,39 @@ loadTrace(const char *trace_path)
                 scope_stack.pop_back();
                 break;
 
-            case FST_HT_VAR:
-                if (hier->u.var.typ == FST_VT_VCD_EVENT ||
-                    hier->u.var.typ == FST_VT_VCD_INTEGER) {
-                    auto full_name = joinScope(scope_stack);
-                    if (!full_name.empty()) {
-                        full_name += '.';
-                    }
-                    full_name += hier->u.var.name;
-                    if (hier->u.var.typ == FST_VT_VCD_EVENT) {
+            case FST_HT_VAR: {
+                auto full_name = joinScope(scope_stack);
+                if (!full_name.empty()) {
+                    full_name += '.';
+                }
+                full_name += hier->u.var.name;
+
+                switch (hier->u.var.typ) {
+                    case FST_VT_VCD_EVENT:
                         trace.eventHandles.emplace(std::move(full_name),
                                                    hier->u.var.handle);
-                    } else {
+                        break;
+                    case FST_VT_VCD_INTEGER:
                         trace.integerHandles.emplace(std::move(full_name),
                                                      hier->u.var.handle);
-                    }
+                        break;
+                    case FST_VT_VCD_REAL:
+                    case FST_VT_VCD_REAL_PARAMETER:
+                        trace.realHandles.emplace(std::move(full_name),
+                                                  hier->u.var.handle);
+                        break;
+                    default:
+                        break;
                 }
                 break;
+            }
 
             default:
                 break;
         }
     }
 
-    for (const auto &[name, handle] : trace.eventHandles) {
-        fstReaderSetFacProcessMask(reader, handle);
-    }
-    for (const auto &[name, handle] : trace.integerHandles) {
-        fstReaderSetFacProcessMask(reader, handle);
-    }
+    fstReaderSetFacProcessMaskAll(reader);
 
     CallbackState callback_state;
     fstReaderIterBlocks(
@@ -332,19 +346,16 @@ verifyTraffic(const TraceData &trace)
                       "board.processor.cores.generator.noProgressEvent_"
                       "wrapped_function_event",
                       {});
-    requireClockValues(trace, "clocks.clk_3003_mhz",
-                       {{3725, 11},
-                        {7450, 22},
-                        {8332, 25},
-                        {11175, 33},
-                        {13332, 40},
-                        {14900, 44},
-                        {18332, 55},
-                        {45812, 137},
-                        {50812, 152},
-                        {55812, 167},
-                        {60812, 182},
-                        {1000000, 3003}});
+    // After event ownership migration, crossbar layer and packet queue
+    // events are also traced, producing additional clock counter entries.
+    requireClockValues(
+        trace, "clocks.clk_3003_mhz",
+        {{3725, 11},   {4329, 13},   {7450, 22},   {7992, 24},
+         {8332, 25},   {11175, 33},  {11655, 35},  {13332, 40},
+         {14900, 44},  {15318, 46},  {18332, 55},  {45812, 137},
+         {50812, 152}, {55812, 167}, {60812, 182}, {68747, 206},
+         {69597, 209}, {73685, 221}, {74592, 224}, {78623, 236},
+         {79587, 239}, {83561, 250}, {84249, 253}, {1000000, 3003}});
 
     require(trace.dumpActivityChanges.empty(),
             "traffic trace unexpectedly toggled dump activity");
@@ -352,6 +363,60 @@ verifyTraffic(const TraceData &trace)
     std::cout << "FST traffic trace verified: updates=5 nextReq=8 "
                  "respond=4 clk_3003_mhz=3003"
               << std::endl;
+}
+
+void
+verifyStats(const TraceData &trace)
+{
+    // Verify the stats scope exists
+    require(trace.scopes.count("stats") == 1, "missing stats scope");
+
+    // Verify at least some real-valued stat signals exist
+    require(!trace.realHandles.empty(),
+            "no real-valued stat signals found in FST trace");
+
+    // Count how many stat signals are under the stats scope
+    size_t stat_signal_count = 0;
+    for (const auto &[name, handle] : trace.realHandles) {
+        if (name.substr(0, 6) == "stats.") {
+            ++stat_signal_count;
+        }
+    }
+    require(stat_signal_count > 0,
+            "no stat signals found under the 'stats' scope");
+
+    // Verify that stat signals have value changes (sampling happened)
+    size_t signals_with_changes = 0;
+    for (const auto &[name, handle] : trace.realHandles) {
+        if (name.substr(0, 6) != "stats.") {
+            continue;
+        }
+        auto changes_it = trace.changeTimes.find(handle);
+        if (changes_it != trace.changeTimes.end() &&
+            !changes_it->second.empty()) {
+            ++signals_with_changes;
+        }
+    }
+    require(signals_with_changes > 0,
+            "no stat signals have any value changes (sampling may not "
+            "have fired)");
+
+    // Check that simSeconds or simTicks exists (root stats)
+    bool found_sim_stat = false;
+    for (const auto &[name, handle] : trace.realHandles) {
+        if (name.find("simSeconds") != std::string::npos ||
+            name.find("simTicks") != std::string::npos ||
+            name.find("simFreq") != std::string::npos) {
+            found_sim_stat = true;
+            break;
+        }
+    }
+    require(found_sim_stat, "could not find any root sim stats "
+                            "(simSeconds/simTicks/simFreq) in FST trace");
+
+    std::cout << "FST stat trace verified: " << stat_signal_count
+              << " stat signals, " << signals_with_changes
+              << " with value changes" << std::endl;
 }
 
 void
@@ -408,6 +473,20 @@ dumpTrace(const TraceData &trace)
         std::cout << "]\n";
     }
 
+    std::cout << "Reals:\n";
+    std::map<std::string, fstHandle> sorted_reals(trace.realHandles.begin(),
+                                                  trace.realHandles.end());
+    for (const auto &[name, handle] : sorted_reals) {
+        auto changes_it = trace.changes.find(handle);
+        std::cout << "  " << name;
+        if (changes_it != trace.changes.end()) {
+            std::cout << " [" << changes_it->second.size() << " changes]";
+        } else {
+            std::cout << " [no changes]";
+        }
+        std::cout << "\n";
+    }
+
     std::cout << "Dump activity changes:\n";
     for (const auto &[time, value] : trace.dumpActivityChanges) {
         std::cout << "  " << time << " -> " << value << "\n";
@@ -430,6 +509,8 @@ main(int argc, char **argv)
         verifyStage1Events(trace);
     } else if (mode == "traffic") {
         verifyTraffic(trace);
+    } else if (mode == "stats") {
+        verifyStats(trace);
     } else if (mode == "dump") {
         dumpTrace(trace);
     } else {

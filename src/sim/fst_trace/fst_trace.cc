@@ -30,16 +30,18 @@
 
 #include <algorithm>
 #include <cctype>
-#include <functional>
 #include <map>
 #include <string_view>
 #include <utility>
 
 #include "base/logging.hh"
 #include "base/output.hh"
+#include "base/stats/group.hh"
+#include "base/stats/info.hh"
 #include "debug/FstTrace.hh"
 #include "sim/clocked_object.hh"
 #include "sim/eventq.hh"
+#include "sim/root.hh"
 #include "sim/sim_exit.hh"
 
 namespace gem5
@@ -110,7 +112,12 @@ parseCompression(const std::string &compression)
 
 } // anonymous namespace
 
-FstTrace::FstTrace(const Params &p) : SimObject(p), dumpActive(p.start_active)
+FstTrace::FstTrace(const Params &p)
+    : SimObject(p),
+      dumpActive(p.start_active),
+      sampleStatsEvent(
+          *this, [this] { sampleStats(); }, name()),
+      statSamplePeriod(p.stat_sample_period)
 {
     registerExitCallback([this]() { closeTrace(); });
 }
@@ -150,6 +157,13 @@ FstTrace::startup()
     fstWriterSetVersion(fstCtx, "gem5 FstTrace");
 
     emitHierarchy();
+
+    if (statSamplePeriod > 0) {
+        createStatHierarchy();
+        lastValues.resize(statEntries.size(), 0.0);
+        hasEmitted.resize(statEntries.size(), false);
+    }
+
     installHooks();
 
     if (!dumpActive) {
@@ -158,8 +172,15 @@ FstTrace::startup()
         fstWriterEmitDumpActive(fstCtx, 0);
     }
 
-    DPRINTF(FstTrace, "Tracing %zu static events into %s\n",
-            eventHandleMap.size(), resolvedTracePath.c_str());
+    if (statSamplePeriod > 0) {
+        schedule(sampleStatsEvent, curTick() + statSamplePeriod);
+    }
+
+    DPRINTF(FstTrace,
+            "Tracing %zu static events and %zu stat signals "
+            "into %s\n",
+            eventHandleMap.size(), statEntries.size(),
+            resolvedTracePath.c_str());
 }
 
 void
@@ -178,6 +199,13 @@ FstTrace::setDumpActive(bool enable)
 
     emitTimeChangeLocked(curTick());
     fstWriterEmitDumpActive(fstCtx, enable ? 1 : 0);
+
+    // On re-enable, clear hasEmitted so the next stat sample emits all
+    // values unconditionally. Waveform viewers treat blackout exit as
+    // unknown state, so we must re-establish all signal values.
+    if (enable) {
+        std::fill(hasEmitted.begin(), hasEmitted.end(), false);
+    }
 }
 
 void
@@ -380,6 +408,231 @@ FstTrace::recordDispatch(const Event *event, Tick tick)
 
     emitTimeChangeLocked(tick);
     fstWriterEmitValueChange(fstCtx, handle_it->second, "1");
+}
+
+// --- Stage 2: Periodic stat sampling ---
+//
+// Two-pass approach to build the FST stat hierarchy:
+//
+// Pass 1 (collectStatGroup / collectStatSignals): Walk the Group tree
+// and build an in-memory trie (ScopeNode). Each dot-separated component
+// in a stat's relative name becomes a trie edge, so stats from merged
+// groups (e.g. "Cache_Controller.BUSY_BLKD.Load") produce intermediate
+// scope nodes rather than flat signal names with underscores.
+//
+// Pass 2 (emitScopeNode): Walk the trie depth-first, emitting FST
+// scopes for interior nodes and FST_VT_VCD_REAL variables for leaves.
+
+void
+FstTrace::createStatHierarchy()
+{
+    ScopeNode root;
+    collectStatGroup(Root::root(), "", root);
+
+    fstWriterSetScope(fstCtx, FST_ST_VCD_MODULE, "stats", nullptr);
+    emitScopeNode(root);
+    fstWriterSetUpscope(fstCtx);
+
+    DPRINTF(FstTrace, "Created %zu stat signals in FST hierarchy\n",
+            statEntries.size());
+}
+
+void
+FstTrace::collectStatGroup(const statistics::Group *group,
+                           const std::string &scopePrefix, ScopeNode &node)
+{
+    for (auto *info : group->getStats()) {
+        collectStatSignals(info, scopePrefix, node);
+    }
+
+    for (const auto &[child_name, child] : group->getStatGroups()) {
+        std::string childPrefix = scopePrefix.empty()
+                                      ? child_name + "."
+                                      : scopePrefix + child_name + ".";
+        collectStatGroup(child, childPrefix, node.children[child_name]);
+    }
+}
+
+void
+FstTrace::collectStatSignals(const statistics::Info *info,
+                             const std::string &scopePrefix, ScopeNode &node)
+{
+    // Compute the stat name relative to the current group scope.
+    // New-style stats have info->name = "system.ruby.foo" matching
+    // the group prefix "system.ruby." — strip the prefix.
+    // Old-style stats (e.g. SLICC profiler) have info->name =
+    // "Cache_Controller.ActionStalledOnHazard" with NO prefix at all —
+    // use the entire name as-is so dots become scope nodes.
+    std::string relName;
+    if (!scopePrefix.empty() && info->name.size() > scopePrefix.size() &&
+        info->name.compare(0, scopePrefix.size(), scopePrefix) == 0) {
+        relName = info->name.substr(scopePrefix.size());
+    } else {
+        relName = info->name;
+    }
+
+    // Split relName by dots to find the target ScopeNode. All
+    // components except the last become intermediate scope nodes;
+    // the last becomes the signal leaf name.
+    ScopeNode *target = &node;
+    std::string remaining = relName;
+    while (true) {
+        auto dot = remaining.find('.');
+        if (dot == std::string::npos) {
+            break;
+        }
+        target = &target->children[remaining.substr(0, dot)];
+        remaining = remaining.substr(dot + 1);
+    }
+    std::string leaf = sanitizeSignalName(remaining);
+
+    // Dispatch on Info subclass to create PendingSignal entries
+    if (auto *si = dynamic_cast<const statistics::ScalarInfo *>(info)) {
+        (void)si;
+        target->signals.push_back({info, StatKind::Scalar, 0, leaf});
+    }
+    // FormulaInfo before VectorInfo (FormulaInfo inherits VectorInfo)
+    else if (auto *fi = dynamic_cast<const statistics::FormulaInfo *>(info)) {
+        for (size_t i = 0; i < fi->size(); ++i) {
+            std::string ename =
+                fi->subnames.size() > i && !fi->subnames[i].empty()
+                    ? sanitizeSignalName(fi->subnames[i])
+                    : leaf + "_" + std::to_string(i);
+            target->signals.push_back({info, StatKind::VectorElem, i, ename});
+        }
+        target->signals.push_back(
+            {info, StatKind::VectorTotal, 0, leaf + "_total"});
+    } else if (auto *vi = dynamic_cast<const statistics::VectorInfo *>(info)) {
+        for (size_t i = 0; i < vi->size(); ++i) {
+            std::string ename =
+                vi->subnames.size() > i && !vi->subnames[i].empty()
+                    ? sanitizeSignalName(vi->subnames[i])
+                    : leaf + "_" + std::to_string(i);
+            target->signals.push_back({info, StatKind::VectorElem, i, ename});
+        }
+        target->signals.push_back(
+            {info, StatKind::VectorTotal, 0, leaf + "_total"});
+    } else if (auto *di = dynamic_cast<const statistics::DistInfo *>(info)) {
+        (void)di;
+        target->signals.push_back(
+            {info, StatKind::DistMean, 0, leaf + "_mean"});
+        target->signals.push_back(
+            {info, StatKind::DistSamples, 0, leaf + "_samples"});
+    } else if (auto *shi =
+                   dynamic_cast<const statistics::SparseHistInfo *>(info)) {
+        (void)shi;
+        target->signals.push_back(
+            {info, StatKind::SparseHistSamples, 0, leaf + "_samples"});
+    }
+}
+
+void
+FstTrace::emitScopeNode(ScopeNode &node)
+{
+    // Emit signals at this level
+    for (auto &sig : node.signals) {
+        fstHandle h =
+            fstWriterCreateVar(fstCtx, FST_VT_VCD_REAL, FST_VD_OUTPUT, 64,
+                               sig.signalName.c_str(), 0);
+        fatal_if(h == 0, "Failed to create FST stat signal '%s'",
+                 sig.signalName.c_str());
+        statEntries.push_back({h, sig.info, sig.kind, sig.index});
+    }
+
+    // Recurse into child scopes (std::map keeps them sorted)
+    for (auto &[child_name, child] : node.children) {
+        fstWriterSetScope(fstCtx, FST_ST_VCD_MODULE, child_name.c_str(),
+                          nullptr);
+        emitScopeNode(child);
+        fstWriterSetUpscope(fstCtx);
+    }
+}
+
+void
+FstTrace::sampleStats()
+{
+    {
+        std::lock_guard<std::mutex> lock(writerMutex);
+
+        // Skip sampling during blackout regions. Stat value changes
+        // inside FST blackout would be silently discarded by viewers.
+        if (!dumpActive || !fstCtx) {
+            schedule(sampleStatsEvent, curTick() + statSamplePeriod);
+            return;
+        }
+
+        // Recursively prepare all stats (formulas, averages recompute).
+        // preDumpStats() walks child groups but does NOT call prepare()
+        // on individual Info objects — we must do that ourselves.
+        Root::root()->preDumpStats();
+        prepareStatsRecursive(Root::root());
+
+        emitTimeChangeLocked(curTick());
+
+        for (size_t i = 0; i < statEntries.size(); ++i) {
+            double val = readStatValue(statEntries[i]);
+
+            // Use hasEmitted flag instead of NaN sentinel. NaN != NaN
+            // is always true in IEEE 754, which would defeat delta
+            // compression if we used NaN as the initial "no value" marker.
+            if (!hasEmitted[i] || val != lastValues[i]) {
+                // Emit as raw double bytes for FST_VT_VCD_REAL signals
+                fstWriterEmitValueChange(fstCtx, statEntries[i].handle, &val);
+                lastValues[i] = val;
+                hasEmitted[i] = true;
+            }
+        }
+    }
+
+    schedule(sampleStatsEvent, curTick() + statSamplePeriod);
+}
+
+void
+FstTrace::prepareStatsRecursive(statistics::Group *group)
+{
+    for (auto *info : group->getStats()) {
+        info->prepare();
+    }
+
+    for (auto &[child_name, child] : group->getStatGroups()) {
+        prepareStatsRecursive(child);
+    }
+}
+
+double
+FstTrace::readStatValue(const StatEntry &entry) const
+{
+    switch (entry.kind) {
+        case StatKind::Scalar: {
+            auto *si = static_cast<const statistics::ScalarInfo *>(entry.info);
+            return si->result();
+        }
+        case StatKind::VectorElem: {
+            auto *vi = static_cast<const statistics::VectorInfo *>(entry.info);
+            const auto &res = vi->result();
+            return entry.index < res.size() ? res[entry.index] : 0.0;
+        }
+        case StatKind::VectorTotal: {
+            auto *vi = static_cast<const statistics::VectorInfo *>(entry.info);
+            return vi->total();
+        }
+        case StatKind::DistMean: {
+            auto *di = static_cast<const statistics::DistInfo *>(entry.info);
+            return di->data.samples > 0 ? di->data.sum / di->data.samples
+                                        : 0.0;
+        }
+        case StatKind::DistSamples: {
+            auto *di = static_cast<const statistics::DistInfo *>(entry.info);
+            return static_cast<double>(di->data.samples);
+        }
+        case StatKind::SparseHistSamples: {
+            auto *shi =
+                static_cast<const statistics::SparseHistInfo *>(entry.info);
+            return static_cast<double>(shi->data.samples);
+        }
+        default:
+            return 0.0;
+    }
 }
 
 } // namespace gem5

@@ -118,3 +118,24 @@ gem5_verify_config(
     valid_hosts=constants.supported_hosts,
     length=constants.quick_tag,
 )
+
+gem5_verify_config(
+    name="fst-trace-stat-sampling",
+    fixtures=(fst_trace_verifier,),
+    verifiers=(
+        VerifyFstTrace(fst_trace_verifier, "stats", "stats.fst"),
+        verifier.MatchRegex(r".*encountered the exit state"),
+    ),
+    config=joinpath(
+        config.base_dir,
+        "tests",
+        "gem5",
+        "fst_trace",
+        "configs",
+        "fst_stats.py",
+    ),
+    config_args=[],
+    valid_isas=(constants.riscv_tag,),
+    valid_hosts=constants.supported_hosts,
+    length=constants.quick_tag,
+)

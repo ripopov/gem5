@@ -31,18 +31,26 @@
 
 #include <fstapi.h>
 
+#include <map>
 #include <mutex>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
 #include "params/FstTrace.hh"
+#include "sim/eventq.hh"
 #include "sim/sim_object.hh"
 
 namespace gem5
 {
 
 class Event;
+
+namespace statistics
+{
+class Group;
+class Info;
+} // namespace statistics
 
 class FstTrace : public SimObject
 {
@@ -92,6 +100,60 @@ class FstTrace : public SimObject
     void installHooks();
     void emitTimeChangeLocked(Tick tick);
     void recordDispatch(const Event *event, Tick tick);
+
+    // --- Stage 2: Periodic stat sampling ---
+
+    enum class StatKind
+    {
+        Scalar,
+        VectorElem,
+        VectorTotal,
+        DistMean,
+        DistSamples,
+        SparseHistSamples,
+    };
+
+    struct StatEntry
+    {
+        fstHandle handle = 0;
+        const statistics::Info *info = nullptr;
+        StatKind kind = StatKind::Scalar;
+        size_t index = 0;
+    };
+
+    // Intermediate tree node built during Pass 1. Dot-separated stat
+    // names are split into a trie of ScopeNode children so that each
+    // component becomes an FST scope and only the leaf carries signals.
+    struct PendingSignal
+    {
+        const statistics::Info *info;
+        StatKind kind;
+        size_t index;
+        std::string signalName;
+    };
+
+    struct ScopeNode
+    {
+        std::map<std::string, ScopeNode> children;
+        std::vector<PendingSignal> signals;
+    };
+
+    EventFunctionWrapper sampleStatsEvent;
+    Tick statSamplePeriod = 0;
+
+    std::vector<StatEntry> statEntries;
+    std::vector<double> lastValues;
+    std::vector<bool> hasEmitted;
+
+    void createStatHierarchy();
+    void collectStatGroup(const statistics::Group *group,
+                          const std::string &scopePrefix, ScopeNode &node);
+    void collectStatSignals(const statistics::Info *info,
+                            const std::string &scopePrefix, ScopeNode &node);
+    void emitScopeNode(ScopeNode &node);
+    void sampleStats();
+    void prepareStatsRecursive(statistics::Group *group);
+    double readStatValue(const StatEntry &entry) const;
 };
 
 } // namespace gem5
