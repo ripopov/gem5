@@ -61,8 +61,6 @@ def main() -> None:
     current_phase = "BOOTING"
     last_heartbeat = 0.0
     offset = 0
-    saw_progress = False
-
     print(
         f"[false_sharing] monitoring {console_path} for pid {pid}",
         flush=True,
@@ -103,8 +101,6 @@ def main() -> None:
                     f"eta={format_duration(remaining)}",
                     flush=True,
                 )
-                saw_progress = True
-
         alive = process_alive(pid)
         if not alive:
             lines, offset = read_new_lines(console_path, offset)
@@ -113,20 +109,11 @@ def main() -> None:
                 phase_match = PHASE_RE.match(line)
                 if phase_match:
                     current_phase = phase_match.group(1)
-                progress_match = PROGRESS_RE.match(line)
-                if progress_match:
-                    saw_progress = True
             print(
                 f"[false_sharing] process exited, final phase={current_phase}, "
                 f"total elapsed={format_duration(now - run_started)}",
                 flush=True,
             )
-            if not saw_progress:
-                print(
-                    "[false_sharing] no measured progress markers were seen; "
-                    "inspect the console log if the run failed.",
-                    flush=True,
-                )
             return
 
         if now - last_heartbeat >= HEARTBEAT_SECS:

@@ -33,20 +33,8 @@ REVERSE_PATH_EDGES = [
 
 
 @dataclass
-class AnalysisResult:
-    m5out_dir: str
-    console_path: str
-    command_line: str
-    gem5_started: str
-    iterations: int
-    shared_offset: str
-    cpu0: int
-    cpu15: int
-    cpu0_cycles: int
-    cpu15_cycles: int
-    value0: int
-    value1: int
-    stats_block_count: int
+class WindowMetrics:
+    name: str
     cpu0_l1d_accesses: float
     cpu0_l1d_misses: float
     cpu15_l1d_accesses: float
@@ -57,6 +45,40 @@ class AnalysisResult:
     send_comp_ack_total: float
     forward_path: list[tuple[str, float]]
     reverse_path: list[tuple[str, float]]
+
+    @property
+    def forward_sum(self) -> float:
+        return sum(value for _, value in self.forward_path)
+
+    @property
+    def reverse_sum(self) -> float:
+        return sum(value for _, value in self.reverse_path)
+
+
+@dataclass
+class AnalysisResult:
+    m5out_dir: str
+    console_path: str
+    command_line: str
+    gem5_started: str
+    iterations: int
+    shared_offset: str
+    cpu0: int
+    cpu15: int
+    control_avg: float
+    control_min: int
+    control_max: int
+    false_avg: float
+    false_min: int
+    false_max: int
+    delta_avg: float
+    control_value0: int
+    control_value1: int
+    value0: int
+    value1: int
+    stats_block_count: int
+    control_window: WindowMetrics
+    false_window: WindowMetrics
     errors: list[str]
 
     @property
@@ -94,7 +116,19 @@ def parse_console(
                     len("command line: ") :
                 ].strip()
 
-    for key in ("ITERATIONS", "CPU0", "CPU15", "VALUE0", "VALUE1"):
+    required = (
+        "ITERATIONS",
+        "CPU0",
+        "CPU15",
+        "CONTROL_AVG",
+        "FALSE_AVG",
+        "DELTA_AVG",
+        "CONTROL_VALUE0",
+        "CONTROL_VALUE1",
+        "VALUE0",
+        "VALUE1",
+    )
+    for key in required:
         if key not in metrics:
             fail(f"missing {key} in {console_path}")
 
@@ -126,8 +160,8 @@ def parse_stats_blocks(stats_path: str) -> list[dict[str, float]]:
             if match:
                 current[match.group(1)] = float(match.group(2))
 
-    if not blocks:
-        fail(f"expected at least 1 dumped stats block in {stats_path}")
+    if len(blocks) < 2:
+        fail(f"expected at least 2 dumped stats blocks in {stats_path}")
 
     return blocks
 
@@ -180,6 +214,57 @@ def parse_int_metric(metrics: dict[str, str], key: str) -> int:
     return int(metrics[key], 0)
 
 
+def parse_float_metric(metrics: dict[str, str], key: str) -> float:
+    return float(metrics[key])
+
+
+def extract_window(
+    name: str,
+    block: dict[str, float],
+    sections: dict[str, dict[str, str]],
+) -> WindowMetrics:
+    forward_links = [
+        find_int_link(sections, src, dst) for src, dst in FORWARD_PATH_EDGES
+    ]
+    reverse_links = [
+        find_int_link(sections, src, dst) for src, dst in REVERSE_PATH_EDGES
+    ]
+
+    return WindowMetrics(
+        name=name,
+        cpu0_l1d_accesses=stat_value(
+            block, "system.cpu0.l1d.cache.m_demand_accesses"
+        ),
+        cpu0_l1d_misses=stat_value(
+            block, "system.cpu0.l1d.cache.m_demand_misses"
+        ),
+        cpu15_l1d_accesses=stat_value(
+            block, "system.cpu15.l1d.cache.m_demand_accesses"
+        ),
+        cpu15_l1d_misses=stat_value(
+            block, "system.cpu15.l1d.cache.m_demand_misses"
+        ),
+        read_unique_total=stat_value(
+            block, "system.ruby.Cache_Controller.ReadUnique::total"
+        ),
+        store_total=stat_value(
+            block, "system.ruby.Cache_Controller.Store::total"
+        ),
+        comp_ack_total=stat_value(
+            block, "system.ruby.Cache_Controller.CompAck::total"
+        ),
+        send_comp_ack_total=stat_value(
+            block, "system.ruby.Cache_Controller.SendCompAck::total"
+        ),
+        forward_path=[
+            (link, int_link_total(block, link)) for link in forward_links
+        ],
+        reverse_path=[
+            (link, int_link_total(block, link)) for link in reverse_links
+        ],
+    )
+
+
 def analyze_run(m5out_dir: str, console_path: str) -> AnalysisResult:
     stats_path = os.path.join(m5out_dir, "stats.txt")
     config_path = os.path.join(m5out_dir, "config.ini")
@@ -191,50 +276,17 @@ def analyze_run(m5out_dir: str, console_path: str) -> AnalysisResult:
     metrics, metadata, saw_pass = parse_console(console_path)
     blocks = parse_stats_blocks(stats_path)
     sections = parse_config_sections(config_path)
-    measured_block = blocks[0]
-
-    forward_links = [
-        find_int_link(sections, src, dst) for src, dst in FORWARD_PATH_EDGES
-    ]
-    reverse_links = [
-        find_int_link(sections, src, dst) for src, dst in REVERSE_PATH_EDGES
-    ]
-    forward_path = [
-        (link, int_link_total(measured_block, link)) for link in forward_links
-    ]
-    reverse_path = [
-        (link, int_link_total(measured_block, link)) for link in reverse_links
-    ]
+    control_window = extract_window("control", blocks[0], sections)
+    false_window = extract_window("false", blocks[1], sections)
 
     iterations = parse_int_metric(metrics, "ITERATIONS")
+    control_avg = parse_float_metric(metrics, "CONTROL_AVG")
+    false_avg = parse_float_metric(metrics, "FALSE_AVG")
+    delta_avg = parse_float_metric(metrics, "DELTA_AVG")
+    control_value0 = parse_int_metric(metrics, "CONTROL_VALUE0")
+    control_value1 = parse_int_metric(metrics, "CONTROL_VALUE1")
     value0 = parse_int_metric(metrics, "VALUE0")
     value1 = parse_int_metric(metrics, "VALUE1")
-
-    cpu0_l1d_accesses = stat_value(
-        measured_block, "system.cpu0.l1d.cache.m_demand_accesses"
-    )
-    cpu0_l1d_misses = stat_value(
-        measured_block, "system.cpu0.l1d.cache.m_demand_misses"
-    )
-    cpu15_l1d_accesses = stat_value(
-        measured_block, "system.cpu15.l1d.cache.m_demand_accesses"
-    )
-    cpu15_l1d_misses = stat_value(
-        measured_block, "system.cpu15.l1d.cache.m_demand_misses"
-    )
-
-    read_unique_total = stat_value(
-        measured_block, "system.ruby.Cache_Controller.ReadUnique::total"
-    )
-    store_total = stat_value(
-        measured_block, "system.ruby.Cache_Controller.Store::total"
-    )
-    comp_ack_total = stat_value(
-        measured_block, "system.ruby.Cache_Controller.CompAck::total"
-    )
-    send_comp_ack_total = stat_value(
-        measured_block, "system.ruby.Cache_Controller.SendCompAck::total"
-    )
 
     errors: list[str] = []
 
@@ -248,43 +300,57 @@ def analyze_run(m5out_dir: str, console_path: str) -> AnalysisResult:
         errors.append(
             f"benchmark reported CPU15={metrics['CPU15']} instead of 15"
         )
+    if control_value0 != iterations or control_value1 != iterations:
+        errors.append(
+            "control ping-pong values do not match iterations "
+            f"({control_value0}, {control_value1}) vs {iterations}"
+        )
     if value0 != iterations or value1 != iterations:
         errors.append(
-            f"final values ({value0}, {value1}) do not match iterations ({iterations})"
+            f"false-sharing values ({value0}, {value1}) do not match "
+            f"iterations ({iterations})"
         )
 
-    if cpu0_l1d_accesses <= 0:
-        errors.append("measured block has no CPU0 L1D demand accesses")
-    if cpu15_l1d_accesses <= 0:
-        errors.append("measured block has no CPU15 L1D demand accesses")
-    if cpu0_l1d_misses <= 0:
-        errors.append("measured block has no CPU0 L1D demand misses")
-    if cpu15_l1d_misses <= 0:
-        errors.append("measured block has no CPU15 L1D demand misses")
-
-    if read_unique_total <= 0:
-        errors.append("measured block has no ReadUnique traffic")
-    if comp_ack_total <= 0:
-        errors.append("measured block has no CompAck traffic")
-    if send_comp_ack_total <= 0:
-        errors.append("measured block has no SendCompAck traffic")
-    if store_total < 2 * iterations:
+    if control_avg <= 0.0:
+        errors.append("control average latency is not positive")
+    if false_avg <= 0.0:
+        errors.append("false-sharing average latency is not positive")
+    if false_avg <= control_avg:
         errors.append(
-            f"store total ({store_total:.0f}) is smaller than 2 * iterations ({2 * iterations})"
+            "false-sharing average latency is not larger than the control "
+            "average"
         )
+    if delta_avg <= 0.0:
+        errors.append("latency delta is not positive")
 
-    missing_forward = [name for name, value in forward_path if value <= 0]
-    if missing_forward:
+    for window in (control_window, false_window):
+        if window.cpu0_l1d_accesses <= 0:
+            errors.append(f"{window.name} window has no CPU0 L1D accesses")
+        if window.cpu15_l1d_accesses <= 0:
+            errors.append(f"{window.name} window has no CPU15 L1D accesses")
+
+    if false_window.comp_ack_total <= control_window.comp_ack_total:
         errors.append(
-            "measured block missed forward diagonal links: "
-            + ", ".join(missing_forward)
+            "false-sharing window does not increase CompAck traffic over "
+            "the control window"
         )
-
-    missing_reverse = [name for name, value in reverse_path if value <= 0]
-    if missing_reverse:
+    if false_window.send_comp_ack_total <= control_window.send_comp_ack_total:
         errors.append(
-            "measured block missed reverse diagonal links: "
-            + ", ".join(missing_reverse)
+            "false-sharing window does not increase SendCompAck traffic over "
+            "the control window"
+        )
+    if false_window.forward_sum <= control_window.forward_sum:
+        errors.append(
+            "false-sharing window does not increase forward diagonal flits "
+            "over the control window"
+        )
+    if (
+        false_window.forward_sum + false_window.reverse_sum
+        <= control_window.forward_sum + control_window.reverse_sum
+    ):
+        errors.append(
+            "false-sharing window does not increase total diagonal flits "
+            "over the control window"
         )
 
     return AnalysisResult(
@@ -296,21 +362,20 @@ def analyze_run(m5out_dir: str, console_path: str) -> AnalysisResult:
         shared_offset=metrics.get("SHARED_OFFSET", ""),
         cpu0=parse_int_metric(metrics, "CPU0"),
         cpu15=parse_int_metric(metrics, "CPU15"),
-        cpu0_cycles=parse_int_metric(metrics, "CPU0_CYCLES"),
-        cpu15_cycles=parse_int_metric(metrics, "CPU15_CYCLES"),
+        control_avg=control_avg,
+        control_min=parse_int_metric(metrics, "CONTROL_MIN"),
+        control_max=parse_int_metric(metrics, "CONTROL_MAX"),
+        false_avg=false_avg,
+        false_min=parse_int_metric(metrics, "FALSE_MIN"),
+        false_max=parse_int_metric(metrics, "FALSE_MAX"),
+        delta_avg=delta_avg,
+        control_value0=control_value0,
+        control_value1=control_value1,
         value0=value0,
         value1=value1,
         stats_block_count=len(blocks),
-        cpu0_l1d_accesses=cpu0_l1d_accesses,
-        cpu0_l1d_misses=cpu0_l1d_misses,
-        cpu15_l1d_accesses=cpu15_l1d_accesses,
-        cpu15_l1d_misses=cpu15_l1d_misses,
-        read_unique_total=read_unique_total,
-        store_total=store_total,
-        comp_ack_total=comp_ack_total,
-        send_comp_ack_total=send_comp_ack_total,
-        forward_path=forward_path,
-        reverse_path=reverse_path,
+        control_window=control_window,
+        false_window=false_window,
         errors=errors,
     )
 
@@ -319,28 +384,40 @@ def format_path_lines(path: list[tuple[str, float]]) -> list[str]:
     return [f"  {name}: {value:.0f}" for name, value in path]
 
 
+def format_window_report(window: WindowMetrics) -> list[str]:
+    return [
+        f"{window.name.capitalize()} window",
+        f"  cpu0 accesses={window.cpu0_l1d_accesses:.0f} "
+        f"misses={window.cpu0_l1d_misses:.0f}",
+        f"  cpu15 accesses={window.cpu15_l1d_accesses:.0f} "
+        f"misses={window.cpu15_l1d_misses:.0f}",
+        f"  Store::total = {window.store_total:.0f}",
+        f"  ReadUnique::total = {window.read_unique_total:.0f}",
+        f"  CompAck::total = {window.comp_ack_total:.0f}",
+        f"  SendCompAck::total = {window.send_comp_ack_total:.0f}",
+        f"  forward flits = {window.forward_sum:.0f}",
+        f"  reverse flits = {window.reverse_sum:.0f}",
+    ]
+
+
 def format_text_report(result: AnalysisResult) -> str:
     lines = [
         f"Iterations: {result.iterations}",
-        f"CPU0 cycles:  {result.cpu0_cycles}",
-        f"CPU15 cycles: {result.cpu15_cycles}",
-        f"Final values: value0={result.value0} value1={result.value1}",
+        f"Control avg: {result.control_avg:.2f}",
+        f"False avg:   {result.false_avg:.2f}",
+        f"Delta avg:   {result.delta_avg:.2f}",
+        ("Control range: " f"{result.control_min}..{result.control_max}"),
+        ("False range:   " f"{result.false_min}..{result.false_max}"),
         "",
-        "CPU L1D demand activity",
-        f"  cpu0 accesses={result.cpu0_l1d_accesses:.0f} misses={result.cpu0_l1d_misses:.0f}",
-        f"  cpu15 accesses={result.cpu15_l1d_accesses:.0f} misses={result.cpu15_l1d_misses:.0f}",
+        *format_window_report(result.control_window),
         "",
-        "CHI counters",
-        f"  Store::total = {result.store_total:.0f}",
-        f"  ReadUnique::total = {result.read_unique_total:.0f}",
-        f"  CompAck::total = {result.comp_ack_total:.0f}",
-        f"  SendCompAck::total = {result.send_comp_ack_total:.0f}",
+        *format_window_report(result.false_window),
         "",
-        "Forward path flits",
-        *format_path_lines(result.forward_path),
+        "False forward path flits",
+        *format_path_lines(result.false_window.forward_path),
         "",
-        "Reverse path flits",
-        *format_path_lines(result.reverse_path),
+        "False reverse path flits",
+        *format_path_lines(result.false_window.reverse_path),
     ]
 
     if result.errors:
@@ -350,7 +427,8 @@ def format_text_report(result: AnalysisResult) -> str:
         lines.extend(
             [
                 "",
-                "PASS -- false-sharing traffic exercised both CPUs and both diagonal path directions",
+                "PASS -- false-sharing ping-pong is slower than the control "
+                "ping-pong and shows stronger coherence traffic",
             ]
         )
 
@@ -366,7 +444,8 @@ def format_markdown_report(result: AnalysisResult) -> str:
         f"- Status: `{'PASS' if result.passed else 'FAIL'}`",
         f"- m5out directory: `{result.m5out_dir}`",
         f"- Console log: `{result.console_path}`",
-        f"- Stats blocks observed: `{result.stats_block_count}`",
+        f"- Stats blocks observed: `{result.stats_block_count}` "
+        "(checker uses the first two dumped windows)",
         f"- Iterations per participant: `{result.iterations}`",
         f"- Shared-line offset: `{result.shared_offset}`",
     ]
@@ -383,48 +462,72 @@ def format_markdown_report(result: AnalysisResult) -> str:
             "",
             f"- CPU 0 participant: `{result.cpu0}`",
             f"- CPU 15 participant: `{result.cpu15}`",
-            f"- CPU 0 loop cycles: `{result.cpu0_cycles}`",
-            f"- CPU 15 loop cycles: `{result.cpu15_cycles}`",
-            f"- Final value0: `{result.value0}`",
-            f"- Final value1: `{result.value1}`",
+            f"- Control ping-pong average: `{result.control_avg:.2f}` cycles",
+            f"- False-sharing ping-pong average: "
+            f"`{result.false_avg:.2f}` cycles",
+            f"- Average latency delta: `{result.delta_avg:.2f}` cycles",
+            f"- Control range: `{result.control_min}` .. "
+            f"`{result.control_max}`",
+            f"- False-sharing range: `{result.false_min}` .. "
+            f"`{result.false_max}`",
             "",
-            "## L1D Demand Activity",
+            "## Control vs False-Sharing Latency",
             "",
-            "| CPU | Accesses | Misses |",
-            "| --- | ---: | ---: |",
-            f"| `cpu0` | {result.cpu0_l1d_accesses:.0f} | {result.cpu0_l1d_misses:.0f} |",
-            f"| `cpu15` | {result.cpu15_l1d_accesses:.0f} | {result.cpu15_l1d_misses:.0f} |",
+            "| Phase | Average | Min | Max |",
+            "| --- | ---: | ---: | ---: |",
+            f"| `control` | {result.control_avg:.2f} | "
+            f"{result.control_min} | {result.control_max} |",
+            f"| `false-sharing` | {result.false_avg:.2f} | "
+            f"{result.false_min} | {result.false_max} |",
             "",
-            "## CHI Counters",
+            "## Control Window",
             "",
-            "| Counter | Total |",
+            "| Metric | Value |",
             "| --- | ---: |",
-            f"| `Store::total` | {result.store_total:.0f} |",
-            f"| `ReadUnique::total` | {result.read_unique_total:.0f} |",
-            f"| `CompAck::total` | {result.comp_ack_total:.0f} |",
-            f"| `SendCompAck::total` | {result.send_comp_ack_total:.0f} |",
+            f"| `cpu0 L1D accesses` | "
+            f"{result.control_window.cpu0_l1d_accesses:.0f} |",
+            f"| `cpu15 L1D accesses` | "
+            f"{result.control_window.cpu15_l1d_accesses:.0f} |",
+            f"| `Store::total` | {result.control_window.store_total:.0f} |",
+            f"| `ReadUnique::total` | "
+            f"{result.control_window.read_unique_total:.0f} |",
+            f"| `CompAck::total` | "
+            f"{result.control_window.comp_ack_total:.0f} |",
+            f"| `SendCompAck::total` | "
+            f"{result.control_window.send_comp_ack_total:.0f} |",
+            f"| `forward diagonal flits` | "
+            f"{result.control_window.forward_sum:.0f} |",
+            f"| `reverse diagonal flits` | "
+            f"{result.control_window.reverse_sum:.0f} |",
             "",
-            "## Forward Diagonal Path",
+            "## False-Sharing Window",
+            "",
+            "| Metric | Value |",
+            "| --- | ---: |",
+            f"| `cpu0 L1D accesses` | "
+            f"{result.false_window.cpu0_l1d_accesses:.0f} |",
+            f"| `cpu15 L1D accesses` | "
+            f"{result.false_window.cpu15_l1d_accesses:.0f} |",
+            f"| `Store::total` | {result.false_window.store_total:.0f} |",
+            f"| `ReadUnique::total` | "
+            f"{result.false_window.read_unique_total:.0f} |",
+            f"| `CompAck::total` | "
+            f"{result.false_window.comp_ack_total:.0f} |",
+            f"| `SendCompAck::total` | "
+            f"{result.false_window.send_comp_ack_total:.0f} |",
+            f"| `forward diagonal flits` | "
+            f"{result.false_window.forward_sum:.0f} |",
+            f"| `reverse diagonal flits` | "
+            f"{result.false_window.reverse_sum:.0f} |",
+            "",
+            "## False-Sharing Path Detail",
             "",
             "| Link | Flits |",
             "| --- | ---: |",
         ]
     )
 
-    for name, value in result.forward_path:
-        lines.append(f"| `{name.split('.')[-1]}` | {value:.0f} |")
-
-    lines.extend(
-        [
-            "",
-            "## Reverse Diagonal Path",
-            "",
-            "| Link | Flits |",
-            "| --- | ---: |",
-        ]
-    )
-
-    for name, value in result.reverse_path:
+    for name, value in result.false_window.forward_path:
         lines.append(f"| `{name.split('.')[-1]}` | {value:.0f} |")
 
     lines.extend(
@@ -432,9 +535,14 @@ def format_markdown_report(result: AnalysisResult) -> str:
             "",
             "## Interpretation",
             "",
-            "- Both participants touched the same cache line from opposite corners of the mesh.",
-            "- Nonzero `ReadUnique` and `CompAck` counters indicate coherence-mediated ownership transfers.",
-            "- Nonzero flits on both diagonal directions show that requests and invalidation/response traffic crossed the mesh rather than staying local.",
+            "- The control ping-pong measures the cost of the turn-taking "
+            "protocol itself.",
+            "- The false-sharing ping-pong adds one ownership transfer of the "
+            "hot line in each direction.",
+            "- The average latency delta therefore estimates the extra "
+            "coherence cost of bouncing that line between CPU 0 and CPU 15.",
+            "- The false-sharing stats window should show stronger CHI and "
+            "overall diagonal-link activity than the control window.",
         ]
     )
 
@@ -448,7 +556,11 @@ def format_markdown_report(result: AnalysisResult) -> str:
                 "## Conclusion",
                 "",
                 "- Stage 3c passes for this run.",
-                "- The measured window shows the expected two-core false-sharing pattern: both L1s participate, CHI ownership changes occur, and mesh traffic appears in both diagonal directions.",
+                "- The ping-pong benchmark reports a positive latency delta "
+                "between the control and false-sharing phases.",
+                "- The false-sharing window also shows stronger coherence "
+                "traffic than the control window, which matches the expected "
+                "ownership-bounce behavior.",
             ]
         )
 

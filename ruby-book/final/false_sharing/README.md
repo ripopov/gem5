@@ -2,23 +2,38 @@
 
 ## Goal
 
-`rbook_test_false_sharing` creates repeated write-write contention on one
-cache line shared between CPU 0 and CPU 15.
+`rbook_test_false_sharing` measures the extra round-trip latency caused by
+false sharing between CPU 0 and CPU 15.
 
-The benchmark is meant to make the CHI invalidation path visible in both the
-cache statistics and the mesh link statistics.
+It does that by comparing two ping-pong phases that use the same turn-taking
+protocol:
+
+- a control ping-pong with only separate control/data lines
+- a false-sharing ping-pong where both cores also write adjacent `int` values
+  in the same 64-byte cache line
+
+The difference between those two averages is the cleanest latency estimate for
+the ownership-bounce cost on the false-shared line.
 
 ## Placement Model
 
-The test follows the repository's documented SE-mode placement rule.
+The benchmark follows the repository's documented SE-mode placement rule.
 
-- `main()` runs on CPU 0.
-- Fifteen pthreads are created.
-- In this configuration, one deterministic worker lands on CPU 15.
-- All other workers exit before the measured stats window begins.
+- `main()` runs on CPU 0
+- fifteen pthreads are created
+- one deterministic worker lands on CPU 15
+- all other workers exit before the measured phases begin
 
-This avoids unsupported affinity syscalls while still producing a true
-corner-to-corner coherence path.
+No affinity syscalls are needed.
+Placement comes from creation order plus `getcpu()`.
+
+The companion probe binary `rbook_probe_pthreads.c` validates that the Chapter
+17 setup really behaves this way under static RISC-V SE mode:
+
+- `main()` starts on CPU 0
+- workers fill CPUs 1 through 15 in order
+- `pthread_barrier_t` works
+- `pthread_join()` completes cleanly
 
 ## Shared-Line Layout
 
@@ -36,85 +51,101 @@ Two adjacent `int` values on that line are updated independently:
 The words are different C objects, but they occupy the same 64-byte line, so
 the writes create false sharing.
 
-## Measured Window
+## Measurement Model
 
-Before the stats window:
+The benchmark has two measured windows.
 
-1. both shared words are initialized to zero
-2. fifteen pthread workers are created
-3. a `pthread_barrier_t` confirms that every worker has started and recorded its
-   `getcpu()` result
-4. the worker that landed on CPU 15 becomes the far-corner participant
-5. all non-participant workers are joined
-6. CPU 0 and CPU 15 each read the hot line once so both private caches hold it
+### Control ping-pong
 
-The benchmark then does:
+CPU 0 and CPU 15 exchange a token using `req_flag` and `ack_flag`, both placed
+on separate cache lines.
+Each side also increments a private word on its own cache line.
 
-1. `m5_reset_stats(0, 0)`
-2. release CPU 15 from a start flag on a separate cache line
-3. CPU 0 and CPU 15 each run `128` iterations of `word += 1` by default
-4. wait for CPU 15 to finish
-5. `m5_dump_reset_stats(0, 0)`
+For each round:
 
-Because the synchronization flags live on separate cache lines, the measured
-window is dominated by the ownership transfers on the false-shared line.
+1. CPU 0 increments its private word
+2. CPU 0 stores `req_flag = round`
+3. CPU 15 waits for that round number
+4. CPU 15 increments its private word
+5. CPU 15 stores `ack_flag = round`
+6. CPU 0 waits for the matching acknowledgement and records the round-trip
+   `rdcycle` delta
 
-The benchmark accepts an optional iteration count as `argv[1]`.
-The `run` target passes that through `--options=...`, so you can scale the run
-without recompiling:
+This phase measures the control-plane cost of turn-taking across the mesh
+without false sharing on the data line.
 
-```bash
-make -C ruby-book/final/false_sharing run ITERATIONS=64
-```
+### False-sharing ping-pong
 
-The run harness also launches `monitor_false_sharing.py`, which prints sparse
-phase changes plus measured-window progress with elapsed time and ETA.
-That monitor reads the console log from the host side, so the terminal stays
-informative even when gem5 spends a long time in the coherence-heavy section.
+The turn-taking protocol stays the same, but each side now increments its word
+inside the shared hot line.
 
-## Confirmed SE-Mode pthread behavior
+For each round:
 
-The companion probe binary `rbook_probe_pthreads.c` validates the assumptions
-that Stage 3c relies on.
+1. CPU 0 increments `shared_words[0]`
+2. CPU 0 stores `req_flag = round`
+3. CPU 15 waits for that round number
+4. CPU 15 increments `shared_words[1]`
+5. CPU 15 stores `ack_flag = round`
+6. CPU 0 waits for the acknowledgement and records the round-trip `rdcycle`
+   delta
 
-- `main()` starts on CPU 0
-- 15 `pthread_create()` calls fill CPUs 1 through 15 in order
-- `pthread_barrier_t` works under static RISC-V SE mode
-- `pthread_join()` completes cleanly for every worker
+Because both data updates hit the same cache line, every round forces the line
+to change ownership in both directions.
 
-That probe exists because plain `fork()` is the wrong primitive for this
-benchmark.
-Stage 3c needs one shared address space (`CLONE_VM`) so that both participants
-touch the same false-shared cache line.
+## Why This Produces A Cleaner Latency Estimate
 
-Two RISC-V SE-mode pitfalls matter here:
+The earlier free-running version measured contention throughput, not a clean
+per-handoff latency.
+One core could get ahead and perform several writes while it still owned the
+line.
 
-- `sched_setaffinity()` is not available, so thread placement must use creation
+The ping-pong design fixes that.
+Each round has one explicit handoff from CPU 0 to CPU 15 and one return
+handoff.
+Subtracting the control average from the false-sharing average removes most of
+the cost of the turn-taking protocol itself and leaves the extra coherence cost
+of the shared line bounce.
+
+## Stats Windows
+
+The benchmark wraps both phases with isolated stats windows:
+
+1. control ping-pong window
+2. false-sharing ping-pong window
+
+The checker compares those two windows instead of expecting the control case to
+be zero-traffic.
+The control window already includes mesh traffic from the turn-taking flags.
+
+The strongest expected signals are:
+
+- false-sharing average latency is larger than control average latency
+- `CompAck` / `SendCompAck` totals are larger in the false-sharing window
+- total diagonal-path flits are larger in the false-sharing window
+- both windows show activity on CPU 0 and CPU 15
+
+`ReadUnique` is still reported, but it is not used as a strict pass/fail gate.
+In practice it can vary depending on the exact ownership state reached at the
+start of the window.
+
+## Runtime Visibility
+
+The run harness launches `monitor_false_sharing.py`, which prints sparse phase
+changes plus a low-noise heartbeat with elapsed time.
+
+The benchmark intentionally does **not** print per-iteration markers inside the
+measured loop.
+That keeps the final latency estimate clean.
+
+## RISC-V SE-Mode Pitfalls
+
+Two pitfalls matter here:
+
+- `sched_setaffinity()` is not available in RISC-V SE mode, so use creation
   order plus `getcpu()`
-- pthread barriers and condition variables are futex-backed, so keep them
-  outside the measured window if you want the stats block to reflect coherence
-  traffic instead of suspension/wakeup behavior
-
-The reported `CPU0_CYCLES` and `CPU15_CYCLES` values are therefore diagnostic
-only.
-`CPU0_CYCLES` includes the small cost of emitting sparse progress markers from
-the main thread, so it is not meant to be compared directly against the worker
-cycle count as a latency metric.
-
-## Expected Signals
-
-In the isolated stats block you should see all of the following:
-
-- nonzero L1D demand activity on both `cpu0` and `cpu15`
-- nonzero coherence counters such as `ReadUnique` and `CompAck`
-- nonzero flits on the forward diagonal path from router 0 to router 15
-- nonzero flits on the reverse diagonal path from router 15 back to router 0
-
-The forward path is:
-
-- `0 -> 1 -> 2 -> 3 -> 7 -> 11 -> 15`
-
-The reverse path is the same links in the opposite direction.
+- pthread synchronization is futex-backed, so keep barriers outside the
+  measured region if you want the measured window to reflect coherence and mesh
+  traffic instead of suspension/wakeup effects
 
 ## Typical Workflow
 
@@ -124,16 +155,22 @@ The reverse path is the same links in the opposite direction.
 make -C ruby-book/final/false_sharing build
 ```
 
+### Probe pthread placement
+
+```bash
+make -C ruby-book/final/false_sharing probe_run
+```
+
 ### Run
 
 ```bash
 make -C ruby-book/final/false_sharing run
 ```
 
-### Probe pthread placement
+The iteration count is runtime-configurable:
 
 ```bash
-make -C ruby-book/final/false_sharing probe_run
+make -C ruby-book/final/false_sharing run ITERATIONS=64
 ```
 
 ### Check

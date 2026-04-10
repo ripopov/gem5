@@ -2,13 +2,17 @@
  * rbook_test_false_sharing.c -- Stage 3c false-sharing benchmark.
  *
  * Main runs on CPU 0. Fifteen pthreads are created so one deterministic worker
- * lands on CPU 15 in gem5 SE mode. Those two participants repeatedly update
- * adjacent ints on the same 64-byte line, forcing ownership to bounce across
- * the mesh diagonal.
+ * lands on CPU 15 in gem5 SE mode. Those two participants exchange a
+ * ping-pong token across the mesh.
  *
- * Setup uses pthread barriers before the measured window because the probe
- * binary shows they behave correctly in RISC-V SE mode. The measured region
- * itself uses only a shared start flag and the false-shared line.
+ * The benchmark measures two round-trip latencies:
+ * 1. a control ping-pong that uses only separate cache-line control/data words
+ * 2. a false-sharing ping-pong where both cores also write adjacent ints in
+ *    the same 64-byte cache line
+ *
+ * The latency delta between those phases is the cleanest estimate of the
+ * additional coherence cost caused by ownership bouncing on the false-shared
+ * line.
  */
 
 #include <inttypes.h>
@@ -27,7 +31,6 @@
 #define PAGE_BYTES 4096
 #define SHARED_OFFSET (15 * CACHE_LINE)
 #define DEFAULT_ITERATIONS 128
-#define PROGRESS_UPDATES 8
 #define NUM_WORKERS 15
 
 static volatile uint64_t sink;
@@ -41,21 +44,28 @@ struct AlignedInt
 struct SharedState
 {
     volatile int *shared_words;
+    struct AlignedInt private_words[2];
+    struct AlignedInt req_flag;
+    struct AlignedInt ack_flag;
     int iterations;
     int worker_cpu;
     int participant_index;
-    uint64_t worker_cycles;
     int worker_cpus[NUM_WORKERS];
     pthread_barrier_t ready_barrier;
     pthread_barrier_t pair_barrier;
-    struct AlignedInt start_flag;
-    struct AlignedInt participant_done;
 };
 
 struct WorkerArg
 {
     struct SharedState *state;
     int thread_index;
+};
+
+struct SampleSummary
+{
+    uint64_t min;
+    uint64_t max;
+    double avg;
 };
 
 static inline uint64_t
@@ -122,16 +132,16 @@ wait_for_flag(const struct AlignedInt *flag, int expected)
 }
 
 static void
-log_phase(const char *phase)
+reset_ping_pong_flags(struct SharedState *state)
 {
-    printf("RBOOK_FALSE_PHASE %s\n", phase);
-    fflush(stdout);
+    store_flag(&state->req_flag, 0);
+    store_flag(&state->ack_flag, 0);
 }
 
 static void
-log_progress(int completed, int total)
+log_phase(const char *phase)
 {
-    printf("RBOOK_FALSE_PROGRESS %d/%d\n", completed, total);
+    printf("RBOOK_FALSE_PHASE %s\n", phase);
     fflush(stdout);
 }
 
@@ -157,32 +167,6 @@ fault_in_pages(volatile uint8_t *buf, size_t size)
     }
 }
 
-static __attribute__((noinline)) void
-run_updates(volatile int *slot, int iterations, int emit_progress)
-{
-    int next_progress = 0;
-    int progress_stride = 0;
-
-    if (emit_progress) {
-        progress_stride = iterations / PROGRESS_UPDATES;
-        if (progress_stride <= 0) {
-            progress_stride = 1;
-        }
-        next_progress = progress_stride;
-    }
-
-    for (int i = 0; i < iterations; ++i) {
-        *slot = *slot + 1;
-
-        if (emit_progress && (i + 1 >= next_progress || i + 1 == iterations)) {
-            log_progress(i + 1, iterations);
-            next_progress += progress_stride;
-        }
-    }
-
-    asm volatile("" ::: "memory");
-}
-
 static void
 wait_barrier(pthread_barrier_t *barrier, const char *name)
 {
@@ -194,14 +178,88 @@ wait_barrier(pthread_barrier_t *barrier, const char *name)
     }
 }
 
+static struct SampleSummary
+summarize_samples(const uint64_t *samples, int count)
+{
+    struct SampleSummary summary;
+    uint64_t total = 0;
+
+    summary.min = samples[0];
+    summary.max = samples[0];
+    summary.avg = 0.0;
+
+    for (int i = 0; i < count; ++i) {
+        if (samples[i] < summary.min) {
+            summary.min = samples[i];
+        }
+        if (samples[i] > summary.max) {
+            summary.max = samples[i];
+        }
+        total += samples[i];
+    }
+
+    summary.avg = (double)total / (double)count;
+    return summary;
+}
+
+static void
+run_control_cpu0(struct SharedState *state, uint64_t *samples)
+{
+    for (int round = 1; round <= state->iterations; ++round) {
+        uint64_t start = rdcycle();
+        uint64_t end;
+
+        state->private_words[0].value += 1;
+        store_flag(&state->req_flag, round);
+        wait_for_flag(&state->ack_flag, round);
+        end = rdcycle();
+
+        samples[round - 1] = end - start;
+    }
+}
+
+static void
+run_false_cpu0(struct SharedState *state, uint64_t *samples)
+{
+    for (int round = 1; round <= state->iterations; ++round) {
+        uint64_t start = rdcycle();
+        uint64_t end;
+
+        state->shared_words[0] += 1;
+        store_flag(&state->req_flag, round);
+        wait_for_flag(&state->ack_flag, round);
+        end = rdcycle();
+
+        samples[round - 1] = end - start;
+    }
+}
+
+static void
+run_control_cpu15(struct SharedState *state)
+{
+    for (int round = 1; round <= state->iterations; ++round) {
+        wait_for_flag(&state->req_flag, round);
+        state->private_words[1].value += 1;
+        store_flag(&state->ack_flag, round);
+    }
+}
+
+static void
+run_false_cpu15(struct SharedState *state)
+{
+    for (int round = 1; round <= state->iterations; ++round) {
+        wait_for_flag(&state->req_flag, round);
+        state->shared_words[1] += 1;
+        store_flag(&state->ack_flag, round);
+    }
+}
+
 static void *
 worker_main(void *arg)
 {
     struct WorkerArg *worker = arg;
     struct SharedState *state = worker->state;
     int cpu = gem5_cpu_id();
-    uint64_t start;
-    uint64_t end;
 
     if (cpu < 0) {
         fprintf(stderr, "worker getcpu failed\n");
@@ -220,16 +278,16 @@ worker_main(void *arg)
         return NULL;
     }
 
+    sink += state->private_words[1].value;
+    wait_barrier(&state->pair_barrier, "control pair barrier");
+    run_control_cpu15(state);
+    wait_barrier(&state->pair_barrier, "control done barrier");
+
     sink += state->shared_words[1];
-    wait_barrier(&state->pair_barrier, "pair barrier");
+    wait_barrier(&state->pair_barrier, "false pair barrier");
+    run_false_cpu15(state);
+    wait_barrier(&state->pair_barrier, "false done barrier");
 
-    wait_for_flag(&state->start_flag, 1);
-    start = rdcycle();
-    run_updates(&state->shared_words[1], state->iterations, 0);
-    end = rdcycle();
-
-    state->worker_cycles = end - start;
-    store_flag(&state->participant_done, 1);
     return NULL;
 }
 
@@ -241,16 +299,24 @@ main(int argc, char **argv)
     pthread_t threads[NUM_WORKERS];
     struct WorkerArg worker_args[NUM_WORKERS];
     struct SharedState state;
+    struct SampleSummary control_summary;
+    struct SampleSummary false_summary;
+    uint64_t *control_samples = NULL;
+    uint64_t *false_samples = NULL;
     int main_cpu;
-    uint64_t cpu0_cycles_start;
-    uint64_t cpu0_cycles_end;
-    uint64_t cpu0_cycles;
 
     memset(&state, 0, sizeof(state));
     state.shared_words = shared_words;
     state.iterations = parse_iterations(argc, argv);
     state.worker_cpu = -1;
     state.participant_index = -1;
+
+    control_samples = calloc(state.iterations, sizeof(*control_samples));
+    false_samples = calloc(state.iterations, sizeof(*false_samples));
+    if (!control_samples || !false_samples) {
+        fprintf(stderr, "sample allocation failed\n");
+        return 1;
+    }
 
     if (pthread_barrier_init(&state.ready_barrier, NULL, NUM_WORKERS + 1) !=
         0) {
@@ -265,8 +331,11 @@ main(int argc, char **argv)
     log_phase("START");
     fault_in_pages(target_page, PAGE_BYTES);
 
+    state.private_words[0].value = 0;
+    state.private_words[1].value = 0;
     shared_words[0] = 0;
     shared_words[1] = 0;
+    reset_ping_pong_flags(&state);
 
     main_cpu = gem5_cpu_id();
     if (main_cpu != 0) {
@@ -304,49 +373,75 @@ main(int argc, char **argv)
         pthread_join(threads[i], NULL);
     }
 
-    /* Warm the line into both private caches before the measured window. */
-    sink += shared_words[0];
-    wait_barrier(&state.pair_barrier, "pair barrier");
-    log_phase("WARMUP_DONE");
+    reset_ping_pong_flags(&state);
+    sink += state.private_words[0].value;
+    wait_barrier(&state.pair_barrier, "control pair barrier");
+    log_phase("CONTROL_WARMUP_DONE");
 
-    printf("RBOOK_FALSE READY 1\n");
-    fflush(stdout);
-
-    log_phase("MEASURED_START");
+    log_phase("CONTROL_MEASURED_START");
     m5_reset_stats(0, 0);
-
-    cpu0_cycles_start = rdcycle();
-    store_flag(&state.start_flag, 1);
-    run_updates(&shared_words[0], state.iterations, 1);
-    cpu0_cycles_end = rdcycle();
-    cpu0_cycles = cpu0_cycles_end - cpu0_cycles_start;
-
-    wait_for_flag(&state.participant_done, 1);
+    run_control_cpu0(&state, control_samples);
+    wait_barrier(&state.pair_barrier, "control done barrier");
     m5_dump_reset_stats(0, 0);
-    log_phase("MEASURED_DONE");
+    log_phase("CONTROL_MEASURED_DONE");
+
+    reset_ping_pong_flags(&state);
+    sink += state.shared_words[0];
+    wait_barrier(&state.pair_barrier, "false pair barrier");
+    log_phase("FALSE_WARMUP_DONE");
+
+    log_phase("FALSE_MEASURED_START");
+    m5_reset_stats(0, 0);
+    run_false_cpu0(&state, false_samples);
+    wait_barrier(&state.pair_barrier, "false done barrier");
+    m5_dump_reset_stats(0, 0);
+    log_phase("FALSE_MEASURED_DONE");
 
     pthread_join(threads[state.participant_index], NULL);
 
-    if (shared_words[0] != state.iterations ||
-        shared_words[1] != state.iterations) {
+    if (state.private_words[0].value != state.iterations ||
+        state.private_words[1].value != state.iterations) {
         fprintf(stderr,
-                "unexpected final values: value0=%d value1=%d expected=%d\n",
-                shared_words[0], shared_words[1], state.iterations);
+                "unexpected control values: value0=%d value1=%d expected=%d\n",
+                state.private_words[0].value, state.private_words[1].value,
+                state.iterations);
         return 1;
     }
+
+    if (state.shared_words[0] != state.iterations ||
+        state.shared_words[1] != state.iterations) {
+        fprintf(stderr,
+                "unexpected shared values: value0=%d value1=%d expected=%d\n",
+                state.shared_words[0], state.shared_words[1],
+                state.iterations);
+        return 1;
+    }
+
+    control_summary = summarize_samples(control_samples, state.iterations);
+    false_summary = summarize_samples(false_samples, state.iterations);
 
     printf("RBOOK_FALSE ITERATIONS %d\n", state.iterations);
     printf("RBOOK_FALSE SHARED_OFFSET 0x%x\n", SHARED_OFFSET);
     printf("RBOOK_FALSE CPU0 %d\n", main_cpu);
     printf("RBOOK_FALSE CPU15 %d\n", state.worker_cpu);
-    printf("RBOOK_FALSE CPU0_CYCLES %" PRIu64 "\n", cpu0_cycles);
-    printf("RBOOK_FALSE CPU15_CYCLES %" PRIu64 "\n", state.worker_cycles);
-    printf("RBOOK_FALSE VALUE0 %d\n", shared_words[0]);
-    printf("RBOOK_FALSE VALUE1 %d\n", shared_words[1]);
+    printf("RBOOK_FALSE CONTROL_AVG %.2f\n", control_summary.avg);
+    printf("RBOOK_FALSE CONTROL_MIN %" PRIu64 "\n", control_summary.min);
+    printf("RBOOK_FALSE CONTROL_MAX %" PRIu64 "\n", control_summary.max);
+    printf("RBOOK_FALSE FALSE_AVG %.2f\n", false_summary.avg);
+    printf("RBOOK_FALSE FALSE_MIN %" PRIu64 "\n", false_summary.min);
+    printf("RBOOK_FALSE FALSE_MAX %" PRIu64 "\n", false_summary.max);
+    printf("RBOOK_FALSE DELTA_AVG %.2f\n",
+           false_summary.avg - control_summary.avg);
+    printf("RBOOK_FALSE CONTROL_VALUE0 %d\n", state.private_words[0].value);
+    printf("RBOOK_FALSE CONTROL_VALUE1 %d\n", state.private_words[1].value);
+    printf("RBOOK_FALSE VALUE0 %d\n", state.shared_words[0]);
+    printf("RBOOK_FALSE VALUE1 %d\n", state.shared_words[1]);
     printf("PASS\n");
     fflush(stdout);
 
     pthread_barrier_destroy(&state.pair_barrier);
     pthread_barrier_destroy(&state.ready_barrier);
+    free(control_samples);
+    free(false_samples);
     return 0;
 }
