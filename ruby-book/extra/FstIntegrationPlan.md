@@ -1,5 +1,39 @@
 # Plan: Integrate libfst Waveform Tracing into gem5
 
+## Implementation Status
+
+| Item | Status | Commits |
+|------|--------|---------|
+| **libfst vendored + unit tests** | Done | `13256b32ae` |
+| **Stage 1: Event tracing** | Done | `cd9f49113e` |
+| **Stage 1: Traffic trace regression** | Done | `3689d27c2a` |
+| **Stage 1: Clock counters** | Done | `a8f8ee91bf` |
+| **Stage 2: Stat sampling (plan)** | Done | `655c17720c` |
+| **Deprecation plan** | Done | `ad3a32e811` |
+| **Deprecate ownerless constructors** | Done | `349953cb71` — `[[deprecated]]` on `EventFunctionWrapper` and `MemberEventWrapper` ownerless ctors |
+| **P1 migration: memory + Ruby** | Done | `349953cb71` — xbar, simple\_mem, dram\_interface, nvm\_interface, hbm\_ctrl, bridge, packet\_queue, comm\_monitor, Consumer, Sequencer, RubySystem |
+| **P2 migration: CPU + sim core** | Done | `091925be9b` — base CPU, atomic, timing, minor, O3, LSQ, TraceCPU, Root, Ticked |
+| **P3 migration: RISC-V devices** | Done | `f978b90713` — PLIC, LupioBLK, LupioTMR, Uart8250, DmaPort, CopyEngine, IdeDisk |
+| **Stage 3: Probe listeners** | Not started | — |
+
+### Remaining ownerless call sites
+
+The following still use deprecated ownerless constructors (outside the RISC-V build path or lacking SimObject access):
+
+- `DmaCallback::getChunkEvent()` (`src/dev/dma_device.hh`) — no SimObject ref available, used by GPU/ARM `DmaVirtDevice`
+- `src/mem/cache/compressors/frequent_values.cc` — 1 ownerless call
+- ARM devices (`src/dev/arm/*`) — ~25 members across ~15 files
+- AMD GPU (`src/dev/amdgpu/*`, `src/gpu-compute/*`) — ~5 files
+- x86 (`src/arch/x86/*`) — ~2 files
+- MIPS (`src/arch/mips/*`) — ~1 file
+- Network devices (`src/dev/net/*`) — ~6 files
+- SystemC bridges (`src/systemc/*`) — ~1 file
+- Learning gem5 tutorials (`src/learning_gem5/*`) — ~2 files
+
+These produce deprecation warnings only when building their respective ISA targets.
+
+---
+
 ## Context
 
 gem5 has no built-in waveform dump capability.
@@ -567,15 +601,15 @@ GTest('fst_trace_hier.test', 'fst_trace_hier.test.cc', skip_lib=True)
 
 ---
 
-## Files to Modify (Stage 1)
+## Files Modified (Stage 1) — All Done
 
-| File | Change |
-|------|--------|
-| `src/sim/sim_object.hh` | Add `static const vector<SimObject*> &getSimObjectList()` |
-| `src/sim/eventq.hh` | Add `static vector<Event*> allEvents` in Event; add `dispatchHook` / `dispatchHookArg` raw pointers on EventQueue |
-| `src/sim/eventq.cc` | Register/deregister in Event ctor/dtor; call `dispatchHook` in `serviceOne()` immediately before `process()` |
-| `src/sim/eventq.hh` / `src/sim/eventq.cc` | Add side registry for static event ownership; erase entries on destruction |
-| `src/sim/eventq.hh` | Change static event wrappers so they require owning `SimObject` as the first constructor argument |
+| File | Change | Status |
+|------|--------|--------|
+| `src/sim/sim_object.hh` | Add `static const vector<SimObject*> &getSimObjectList()` | Done |
+| `src/sim/eventq.hh` | Add `static vector<Event*> allEvents` in Event; add `dispatchHook` / `dispatchHookArg` raw pointers on EventQueue; `[[deprecated]]` on ownerless constructors | Done |
+| `src/sim/eventq.cc` | Register/deregister in Event ctor/dtor; call `dispatchHook` in `serviceOne()`; side registry for static event ownership | Done |
+| `src/sim/fst_trace/` | `FstTrace` SimObject: hierarchy dump, event dispatch tracing, clock counters, stat sampling | Done |
+| Priority 1–3 migration | 29 files migrated to pass `SimObject&` owner to event constructors | Done |
 
 ---
 
