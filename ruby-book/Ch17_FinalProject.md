@@ -379,65 +379,7 @@ The Ruby `create_system` call receives `full_system=False`, so `CHI.py` skips th
 Baremetal mode replaces this with a complete RISC-V SoC model.
 The diagram below shows every component and how traffic flows between them:
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│ RiscvSystem                                                             │
-│                                                                         │
-│  ┌──────────┐   RiscvBareMetal workload                                 │
-│  │ ELF file │──→ loads binary to physmem at 0x80000000                  │
-│  └──────────┘   sets all 16 PCs to entry point, M-mode                  │
-│                                                                         │
-│  ┌────────────────── 4×4 Garnet Mesh (CHI) ──────────────────────┐      │
-│  │                                                                │      │
-│  │   Router 0        Router 1    ...    Router 7                  │      │
-│  │   ┌─────┐         ┌─────┐            ┌─────┐                  │      │
-│  │   │RN-F │ CPU 0   │RN-F │ CPU 1      │RN-F │ CPU 7           │      │
-│  │   │HN-F │ LLC 0   │HN-F │ LLC 1      │HN-F │ LLC 7           │      │
-│  │   │SN-F │ DDR 0   │     │            │RN-I │ ← I/O bridge     │      │
-│  │   └─────┘         └─────┘            └──┬──┘                  │      │
-│  │      ...             ...          ...    │       ...           │      │
-│  │   Router 12       Router 13       Router 15                   │      │
-│  │   ┌─────┐         ┌─────┐         ┌─────┐                    │      │
-│  │   │RN-F │ CPU 12  │RN-F │ CPU 13  │RN-F │ CPU 15            │      │
-│  │   │HN-F │ LLC 12  │HN-F │ LLC 13  │HN-F │ LLC 15            │      │
-│  │   │     │         │     │         │SN-F │ DDR 1              │      │
-│  │   └─────┘         └─────┘         └─────┘                    │      │
-│  └────────────────────────────────────────┬──────────────────────┘      │
-│                                           │                             │
-│                            RN-I (CHI_RNI_IO) sequencer                  │
-│                                           │                             │
-│                                    ┌──────┴──────┐                      │
-│                                    │   IO XBar    │ (system.iobus)      │
-│                                    └──┬───┬───┬──┘                      │
-│                        ┌──────────────┤   │   ├──────────────┐          │
-│                        │              │   │                   │          │
-│                   ┌────┴────┐   ┌─────┴───┐           ┌──────┴─────┐   │
-│                   │  UART   │   │ Bridge  │           │  IOCache/  │   │
-│                   │ 8250    │   │ (iobus  │           │  Bridge    │   │
-│                   │@0x1000_ │   │  ↔      │           │ (iobus →   │   │
-│                   │  0000   │   │  membus)│           │  membus)   │   │
-│                   └─────────┘   └─────┬───┘           └──────┬─────┘   │
-│                                       │                      │          │
-│                                    ┌──┴──────────────────────┴──┐      │
-│                                    │         MemBus             │      │
-│                                    │     (system.membus)        │      │
-│                                    └──┬─────────────────────┬───┘      │
-│                                       │                     │          │
-│                                 ┌─────┴─────┐        ┌──────┴──────┐   │
-│                                 │   CLINT    │        │    PLIC     │   │
-│                                 │ @0x200_0000│        │ @0xC00_0000 │   │
-│                                 │ timer, IPI │        │ ext. IRQ    │   │
-│                                 └─────┬─────┘        └─────────────┘   │
-│                                       │                                 │
-│                                 ┌─────┴─────┐                          │
-│                                 │ RiscvRTC   │ (drives CLINT mtime)    │
-│                                 │ 100 MHz    │                          │
-│                                 └───────────┘                          │
-│                                                                         │
-│  PMAChecker (per CPU MMU): marks CLINT + PLIC + UART ranges            │
-│  as uncacheable → loads/stores bypass L1, go through IO path            │
-└─────────────────────────────────────────────────────────────────────────┘
-```
+![Baremetal SoC — 4×4 CHI mesh with HiFive platform, I/O buses, and platform devices](resources/baremetal_soc.svg)
 
 **Key architectural points:**
 
