@@ -42,6 +42,7 @@ GTest('cprintf.test', 'cprintf.test.cc')
 Executable('cprintftime', 'cprintftime.cc', 'cprintf.cc')
 Source('debug.cc', tags=['gem5 trace', 'gem5 events'])
 GTest('debug.test', 'debug.test.cc', 'debug.cc')
+GTest('fstapi.test', 'fstapi.test.cc', skip_lib=True)
 Source('fenv.cc', tags=['fenv'])
 if env['CONF']['HAVE_PNG']:
     SourceLib('png', tags=['png'])
