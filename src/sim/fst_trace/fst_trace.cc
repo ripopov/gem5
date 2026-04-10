@@ -31,12 +31,14 @@
 #include <algorithm>
 #include <cctype>
 #include <functional>
+#include <map>
 #include <string_view>
 #include <utility>
 
 #include "base/logging.hh"
 #include "base/output.hh"
 #include "debug/FstTrace.hh"
+#include "sim/clocked_object.hh"
 #include "sim/eventq.hh"
 #include "sim/sim_exit.hh"
 
@@ -78,6 +80,14 @@ sanitizeSignalName(std::string_view raw_name)
     }
 
     return sanitized;
+}
+
+uint64_t
+clockPeriodToMHz(Tick period)
+{
+    fatal_if(period == 0, "FST trace encountered a zero-length clock period");
+
+    return (sim_clock::Frequency / period) / 1000000;
 }
 
 enum fstWriterPackType
@@ -127,6 +137,7 @@ FstTrace::startup()
     fatal_if(activeTrace && activeTrace != this,
              "Only one FstTrace SimObject can be active at a time");
 
+    collectClockSignals();
     collectOwnedEvents();
 
     resolvedTracePath = simout.resolve(params().trace_file);
@@ -204,6 +215,32 @@ FstTrace::closeTrace()
 }
 
 void
+FstTrace::collectClockSignals()
+{
+    clockSignals.clear();
+
+    std::map<uint64_t, Tick> period_by_mhz;
+    for (const auto *sim_object : simObjects) {
+        auto *clocked = dynamic_cast<const ClockedObject *>(sim_object);
+        if (!clocked) {
+            continue;
+        }
+
+        const Tick period = clocked->clockPeriod();
+        const uint64_t mhz = clockPeriodToMHz(period);
+        period_by_mhz.emplace(mhz, period);
+    }
+
+    for (const auto &[mhz, period] : period_by_mhz) {
+        ClockSignal clock_signal;
+        clock_signal.period = period;
+        clock_signal.mhz = mhz;
+        clock_signal.signalName = "clk_" + std::to_string(mhz) + "_mhz";
+        clockSignals.push_back(std::move(clock_signal));
+    }
+}
+
+void
 FstTrace::collectOwnedEvents()
 {
     ownerEventMap.clear();
@@ -272,6 +309,17 @@ FstTrace::emitHierarchy()
         fstWriterSetUpscope(fstCtx);
         current_scope.pop_back();
     }
+
+    fstWriterSetScope(fstCtx, FST_ST_VCD_MODULE, "clocks", nullptr);
+    for (auto &clock_signal : clockSignals) {
+        clock_signal.handle =
+            fstWriterCreateVar(fstCtx, FST_VT_VCD_INTEGER, FST_VD_IMPLICIT, 64,
+                               clock_signal.signalName.c_str(), 0);
+        fatal_if(clock_signal.handle == 0,
+                 "Failed to create FST clock variable for %s",
+                 clock_signal.signalName.c_str());
+    }
+    fstWriterSetUpscope(fstCtx);
 }
 
 void
@@ -304,6 +352,10 @@ FstTrace::emitTimeChangeLocked(Tick tick)
 {
     if (!hasWrittenTime || tick != lastWrittenTick) {
         fstWriterEmitTimeChange(fstCtx, tick);
+        for (const auto &clock_signal : clockSignals) {
+            fstWriterEmitValueChange64(fstCtx, clock_signal.handle, 64,
+                                       tick / clock_signal.period);
+        }
         lastWrittenTick = tick;
         hasWrittenTime = true;
     }

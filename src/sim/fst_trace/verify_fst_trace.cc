@@ -67,14 +67,20 @@ require(bool condition, const std::string &message)
 
 struct CallbackState
 {
-    std::unordered_map<fstHandle, std::vector<uint64_t>> changeTimes;
+    std::unordered_map<fstHandle,
+                       std::vector<std::pair<uint64_t, std::string>>>
+        changes;
 };
 
 struct TraceData
 {
     std::unordered_set<std::string> scopes;
     std::unordered_map<std::string, fstHandle> eventHandles;
+    std::unordered_map<std::string, fstHandle> integerHandles;
     std::unordered_map<fstHandle, std::vector<uint64_t>> changeTimes;
+    std::unordered_map<fstHandle,
+                       std::vector<std::pair<uint64_t, std::string>>>
+        changes;
     std::vector<std::pair<uint64_t, uint32_t>> dumpActivityChanges;
 };
 
@@ -103,6 +109,39 @@ formatTimes(const std::vector<uint64_t> &times)
     return out.str();
 }
 
+std::string
+formatTimedValues(const std::vector<std::pair<uint64_t, uint64_t>> &values)
+{
+    std::ostringstream out;
+    out << "[";
+
+    for (size_t idx = 0; idx < values.size(); ++idx) {
+        if (idx != 0) {
+            out << ", ";
+        }
+        out << "(" << values[idx].first << ", " << values[idx].second << ")";
+    }
+
+    out << "]";
+    return out.str();
+}
+
+uint64_t
+parseUnsignedValue(const std::string &value)
+{
+    require(!value.empty(), "encountered empty FST value");
+
+    bool binary = true;
+    for (char ch : value) {
+        if (ch != '0' && ch != '1') {
+            binary = false;
+            break;
+        }
+    }
+
+    return std::stoull(value, nullptr, binary ? 2 : 10);
+}
+
 TraceData
 loadTrace(const char *trace_path)
 {
@@ -126,14 +165,20 @@ loadTrace(const char *trace_path)
                 break;
 
             case FST_HT_VAR:
-                if (hier->u.var.typ == FST_VT_VCD_EVENT) {
+                if (hier->u.var.typ == FST_VT_VCD_EVENT ||
+                    hier->u.var.typ == FST_VT_VCD_INTEGER) {
                     auto full_name = joinScope(scope_stack);
                     if (!full_name.empty()) {
                         full_name += '.';
                     }
                     full_name += hier->u.var.name;
-                    trace.eventHandles.emplace(std::move(full_name),
-                                               hier->u.var.handle);
+                    if (hier->u.var.typ == FST_VT_VCD_EVENT) {
+                        trace.eventHandles.emplace(std::move(full_name),
+                                                   hier->u.var.handle);
+                    } else {
+                        trace.integerHandles.emplace(std::move(full_name),
+                                                     hier->u.var.handle);
+                    }
                 }
                 break;
 
@@ -145,18 +190,28 @@ loadTrace(const char *trace_path)
     for (const auto &[name, handle] : trace.eventHandles) {
         fstReaderSetFacProcessMask(reader, handle);
     }
+    for (const auto &[name, handle] : trace.integerHandles) {
+        fstReaderSetFacProcessMask(reader, handle);
+    }
 
     CallbackState callback_state;
     fstReaderIterBlocks(
         reader,
         [](void *data, uint64_t time, fstHandle handle,
-           const unsigned char *) {
+           const unsigned char *value) {
             auto *state = static_cast<CallbackState *>(data);
-            state->changeTimes[handle].push_back(time);
+            state->changes[handle].emplace_back(
+                time, std::string(reinterpret_cast<const char *>(value)));
         },
         &callback_state, nullptr);
 
-    trace.changeTimes = std::move(callback_state.changeTimes);
+    trace.changes = std::move(callback_state.changes);
+    for (const auto &[handle, changes] : trace.changes) {
+        auto &times = trace.changeTimes[handle];
+        for (const auto &[time, _] : changes) {
+            times.push_back(time);
+        }
+    }
 
     const uint32_t dump_changes =
         fstReaderGetNumberDumpActivityChanges(reader);
@@ -189,8 +244,36 @@ requireEventTimes(const TraceData &trace, const std::string &event_name,
 }
 
 void
+requireClockValues(
+    const TraceData &trace, const std::string &signal_name,
+    const std::vector<std::pair<uint64_t, uint64_t>> &expected_values)
+{
+    auto handle_it = trace.integerHandles.find(signal_name);
+    require(handle_it != trace.integerHandles.end(),
+            "missing clock signal: " + signal_name);
+
+    auto changes_it = trace.changes.find(handle_it->second);
+    const auto &changes =
+        changes_it != trace.changes.end()
+            ? changes_it->second
+            : std::vector<std::pair<uint64_t, std::string>>{};
+
+    std::vector<std::pair<uint64_t, uint64_t>> observed_values;
+    observed_values.reserve(changes.size());
+    for (const auto &[time, value] : changes) {
+        observed_values.emplace_back(time, parseUnsignedValue(value));
+    }
+
+    require(observed_values == expected_values,
+            "unexpected values for " + signal_name + ": got " +
+                formatTimedValues(observed_values) + ", expected " +
+                formatTimedValues(expected_values));
+}
+
+void
 verifyStage1Events(const TraceData &trace)
 {
+    require(trace.scopes.count("clocks") == 1, "missing clocks scope");
     require(trace.scopes.count("goodbye") == 1, "missing goodbye scope");
     require(trace.scopes.count("hello") == 1, "missing hello scope");
     require(trace.scopes.count("root") == 1, "missing root scope");
@@ -231,6 +314,7 @@ verifyTraffic(const TraceData &trace)
             "missing board.processor.cores scope");
     require(trace.scopes.count("board.processor.cores.generator") == 1,
             "missing traffic generator scope");
+    require(trace.scopes.count("clocks") == 1, "missing clocks scope");
     require(trace.scopes.count("root") == 1, "missing root scope");
     require(trace.scopes.count("trace") == 1, "missing trace scope");
 
@@ -248,12 +332,25 @@ verifyTraffic(const TraceData &trace)
                       "board.processor.cores.generator.noProgressEvent_"
                       "wrapped_function_event",
                       {});
+    requireClockValues(trace, "clocks.clk_3003_mhz",
+                       {{3725, 11},
+                        {7450, 22},
+                        {8332, 25},
+                        {11175, 33},
+                        {13332, 40},
+                        {14900, 44},
+                        {18332, 55},
+                        {45812, 137},
+                        {50812, 152},
+                        {55812, 167},
+                        {60812, 182},
+                        {1000000, 3003}});
 
     require(trace.dumpActivityChanges.empty(),
             "traffic trace unexpectedly toggled dump activity");
 
     std::cout << "FST traffic trace verified: updates=5 nextReq=8 "
-                 "respond=4"
+                 "respond=4 clk_3003_mhz=3003"
               << std::endl;
 }
 
@@ -261,6 +358,8 @@ void
 dumpTrace(const TraceData &trace)
 {
     std::map<std::string, std::vector<uint64_t>> events_by_name;
+    std::map<std::string, std::vector<std::pair<uint64_t, std::string>>>
+        integers_by_name;
 
     for (const auto &[name, handle] : trace.eventHandles) {
         auto times_it = trace.changeTimes.find(handle);
@@ -268,6 +367,16 @@ dumpTrace(const TraceData &trace)
             events_by_name.emplace(name, times_it->second);
         } else {
             events_by_name.emplace(name, std::vector<uint64_t>{});
+        }
+    }
+
+    for (const auto &[name, handle] : trace.integerHandles) {
+        auto changes_it = trace.changes.find(handle);
+        if (changes_it != trace.changes.end()) {
+            integers_by_name.emplace(name, changes_it->second);
+        } else {
+            integers_by_name.emplace(
+                name, std::vector<std::pair<uint64_t, std::string>>{});
         }
     }
 
@@ -284,6 +393,19 @@ dumpTrace(const TraceData &trace)
     std::cout << "Events:\n";
     for (const auto &[name, times] : events_by_name) {
         std::cout << "  " << name << " " << formatTimes(times) << "\n";
+    }
+
+    std::cout << "Integers:\n";
+    for (const auto &[name, changes] : integers_by_name) {
+        std::cout << "  " << name << " [";
+        for (size_t idx = 0; idx < changes.size(); ++idx) {
+            if (idx != 0) {
+                std::cout << ", ";
+            }
+            std::cout << "(" << changes[idx].first << ", "
+                      << changes[idx].second << ")";
+        }
+        std::cout << "]\n";
     }
 
     std::cout << "Dump activity changes:\n";

@@ -64,6 +64,15 @@ class FstTrace : public SimObject
 
     std::vector<const SimObject *> simObjects;
     std::vector<EventQueue *> hookedQueues;
+    struct ClockSignal
+    {
+        Tick period = 0;
+        uint64_t mhz = 0;
+        fstHandle handle = 0;
+        std::string signalName;
+    };
+
+    std::vector<ClockSignal> clockSignals;
     std::unordered_map<const SimObject *, std::vector<const Event *>>
         ownerEventMap;
     std::unordered_map<const Event *, fstHandle> eventHandleMap;
@@ -77,6 +86,7 @@ class FstTrace : public SimObject
     bool hooksInstalled = false;
 
     void closeTrace();
+    void collectClockSignals();
     void collectOwnedEvents();
     void emitHierarchy();
     void installHooks();
