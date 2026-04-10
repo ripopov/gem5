@@ -1,5 +1,206 @@
 # Plan: Integrate FTR Transaction Tracing into gem5 and Ruby
 
+## Background: Transaction Traces and the FTR Format
+
+### What Is a Transaction Trace?
+
+Hardware simulators produce enormous volumes of low-level event data — signal toggles, cache-line state changes, queue enqueue/dequeue operations — but the questions engineers actually ask are about *transactions*: "Where did this memory request stall?", "How long did the L2 miss take end-to-end?", "Which path through the network carried the response?"
+
+A **transaction trace** bridges this gap.
+It records the life of a logical operation — a memory request, a bus transfer, a network packet — as a single named, timed entity that carries attributes and participates in causal relationships with other transactions.
+
+Every transaction trace, regardless of the specific format, builds on the same four concepts:
+
+1. **Transaction (Span/Slice).**
+   A time-bounded event with a begin timestamp, an end timestamp, a name, and a parent context.
+   In hardware verification tools the term is "transaction"; in distributed-systems observability the same idea is called a "span" (OpenTelemetry) or a "slice" (Perfetto).
+
+2. **Stream (Track/Service).**
+   A named timeline that groups related transactions.
+   Streams typically correspond to a component — a CPU core, a cache controller, a router — so the viewer can display concurrent activity as horizontal swim-lanes.
+
+3. **Attributes (Properties/Annotations).**
+   Key-value metadata attached to a transaction: address, request type, packet ID, latency breakdown, error status.
+   Some formats distinguish *when* the attribute was captured (at transaction begin, during its lifetime, or at end).
+
+4. **Relations (Links/Flows).**
+   Explicit edges between transactions that express causality:
+   "this L2 miss *caused* that network request," or "this flit *is a child of* that packet."
+   Without relations, the viewer sees isolated bars on separate swim-lanes.
+   With relations, it can draw arrows that turn a flat timeline into a navigable dependency graph.
+
+### Transaction Traces in Practice
+
+The concept appears under different names in several domains.
+Comparing them shows how the same core model adapts to different environments.
+
+**FSDB transaction traces (Synopsys Verdi).**
+The industry-standard tool for hardware verification debug.
+FSDB stores signal-level waveforms and transaction-level data in the same proprietary binary file.
+UVM testbenches call `begin_tr` / `end_tr` during simulation; Verdi's nWave viewer then displays transactions as colored bars on stream swim-lanes.
+Parent-child relationships are expressed by passing a parent transaction handle when beginning a child.
+Attributes are typed key-value pairs added via the API.
+FSDB is fast and mature but proprietary and closed-source, which makes it unsuitable for an open project like gem5.
+
+**SystemC SCV (Accellera standard).**
+The SystemC Verification library defines `scv_tr_stream`, `scv_tr_generator<T_begin, T_end>`, and `scv_tr_handle` for recording TLM-level transactions.
+A generator is a typed factory that produces transactions on a stream.
+Parent-child links are created by passing a parent handle to `begin_transaction()`.
+SCV itself is only an API; the actual file output is pluggable.
+Back-ends include plain text, SQLite, compressed text, and — most relevant here — the FTR binary format.
+SCV established the stream/generator/transaction vocabulary that FTR inherits directly.
+
+**OpenTelemetry traces (CNCF standard).**
+The dominant open standard for distributed-systems observability.
+A *trace* is a DAG of *spans* sharing a 128-bit trace ID.
+Each span carries a span ID, a parent span ID, typed attributes, timestamped events, and *span links* that reference spans in other traces.
+The wire format is Protocol Buffers (OTLP); viewers like Jaeger and Grafana Tempo render the span tree.
+OpenTelemetry demonstrates that a small, well-defined data model — ID, parent ID, attributes, links — scales from a single process to planet-wide microservice deployments.
+
+**Perfetto traces (Google, open-source).**
+A high-performance system-wide tracing framework used in Android and Chrome.
+Perfetto organizes data into *tracks* (swim-lanes identified by UUID with optional parent track) and *slices* (time-bounded events on a track).
+Cross-track causality is expressed through *flow IDs*: a unique 64-bit ID attached to a begin event on one track and an end event on another, drawing an arrow in the UI.
+The file format is binary protobuf with aggressive string interning and delta encoding.
+Perfetto's track/flow model is a good conceptual match for hardware simulation — tracks map naturally to SimObjects, flows map to request forwarding — but Perfetto's protobuf schema is designed for software profiling, not hardware transaction recording.
+
+### Why FTR?
+
+FTR (Fast Transaction Recording) was created by MINRES Technologies as part of the SystemC-Components (SCC) project.
+It is the modern high-performance back-end for SystemC SCV transaction recording, replacing the older text and SQLite back-ends.
+
+FTR is a good fit for gem5 for several reasons:
+
+- **Open source** (Apache 2.0) — no proprietary dependencies.
+- **Hardware-oriented data model** — streams, generators, and transactions map directly to SimObjects and their operations.
+- **Compact binary format** — CBOR encoding with LZ4 compression and string interning keeps files small even for long simulations.
+- **Explicit relations** — named directed edges between transactions across streams, exactly what is needed to trace a request through Ruby controllers and Garnet routers.
+- **Streaming writes** — transactions are flushed in chunks during simulation, so the writer does not accumulate unbounded state.
+- **Viewable in SCViewer** — an open-source transaction viewer that understands the FTR format.
+
+### FTR Data Model
+
+FTR organizes trace data into five kinds of records, written as chunks in a CBOR-encoded binary file:
+
+```
+┌─────────────────────────────────────────────────────┐
+│                   FTR File Layout                    │
+├──────────┬──────────────────────────────────────────┤
+│ Info     │ Timescale (e.g. 10⁻¹² = picoseconds),   │
+│          │ creation timestamp                        │
+├──────────┼──────────────────────────────────────────┤
+│ Dictionary│ Interned string table (id → string).    │
+│          │ Attribute names, stream names, relation   │
+│          │ types are stored once, referenced by ID.  │
+├──────────┼──────────────────────────────────────────┤
+│ Directory│ Stream definitions (id, name, kind) and  │
+│          │ generator definitions (id, name, stream). │
+├──────────┼──────────────────────────────────────────┤
+│ TX Blocks│ Batches of transactions for one stream,  │
+│          │ with time-range metadata.  Each tx has:  │
+│          │   id, generator, start_time, end_time,   │
+│          │   and typed attributes.                   │
+├──────────┼──────────────────────────────────────────┤
+│ Relations│ Named directed edges:                    │
+│          │   (name, src_stream, src_tx,             │
+│          │    sink_stream, sink_tx)                  │
+└──────────┴──────────────────────────────────────────┘
+```
+
+**Streams and generators.**
+A *stream* is a named timeline — analogous to a Perfetto track or an OpenTelemetry service.
+In gem5 terms, a stream will map to a SimObject (e.g. `system.ruby.l1_cntrl0`).
+A *generator* is a named source of transactions within a stream.
+One controller might have generators for "mandatory queue," "response queue," and "trigger queue," each producing its own transactions on the same stream.
+
+**Transactions.**
+A transaction is a time-bounded event on a generator's stream.
+It has a unique 64-bit ID, a start time, an end time, and zero or more *attributes*.
+Each attribute is a triple of (name, data type, value) tagged with an *event type* that says when the attribute was captured:
+
+| Event Type | CBOR Tag | Meaning |
+|------------|----------|---------|
+| `BEGIN`    | 7        | Captured when the transaction starts (e.g. address, request type) |
+| `RECORD`   | 8        | Captured during the transaction's lifetime (e.g. intermediate state) |
+| `END`      | 9        | Captured when the transaction ends (e.g. final latency, completion status) |
+
+Supported data types include `BOOLEAN`, `INTEGER`, `UNSIGNED`, `FLOATING_POINT_NUMBER`, `STRING`, `ENUMERATION`, `BIT_VECTOR`, `LOGIC_VECTOR`, `TIME`, and `POINTER`.
+
+**Relations.**
+A relation is a named directed edge from one transaction to another, possibly across different streams.
+The name describes the relationship type — for example, `"parent_of"`, `"caused_by"`, or `"split_into"`.
+Relations are how a viewer draws arrows from a CPU request transaction to the Ruby message transactions it spawns, and from those messages to the Garnet flit transactions that carry them.
+
+### FTR Writer API Overview
+
+The C++ API (`ext/ftr/src/ftr/ftr_writer.h`) centers on the `ftr::ftr_writer<COMPRESSED>` class template.
+The template parameter controls whether chunks are LZ4-compressed.
+
+```cpp
+ftr::ftr_writer<true> trace("output.ftr");  // compressed output
+
+// 1. Metadata: set timescale to picoseconds
+trace.writeInfo(-12);   // exponent: 10^-12
+
+// 2. Directory: define streams and generators
+trace.writeStream(/*id=*/0, "system.ruby.l1_cntrl0", "CacheController");
+trace.writeGenerator(/*id=*/0, "mandatoryQueue", /*stream=*/0);
+
+// 3. Transactions: record a cache access
+uint64_t tx = 1;
+trace.startTransaction(tx, /*generator=*/0, /*stream=*/0, /*time=*/1000);
+
+trace.writeAttribute(tx, ftr::event_type::BEGIN,
+    "address", ftr::data_type::UNSIGNED, uint64_t(0x80001000));
+trace.writeAttribute(tx, ftr::event_type::BEGIN,
+    "type", ftr::data_type::STRING, "LD");
+trace.writeAttribute(tx, ftr::event_type::END,
+    "latency", ftr::data_type::UNSIGNED, uint64_t(45));
+
+trace.endTransaction(tx, /*time=*/1045);
+
+// 4. Relations: link parent request to child message
+trace.writeRelation("parent_of",
+    /*sink_stream=*/1, /*sink_tx=*/2,
+    /*src_stream=*/0,  /*src_tx=*/1);
+```
+
+The key API methods are:
+
+| Method | Purpose |
+|--------|---------|
+| `writeInfo(timescale)` | Set the time unit exponent and record creation time |
+| `writeStream(id, name, kind)` | Define a named stream (maps to a SimObject) |
+| `writeGenerator(id, name, stream)` | Define a transaction source within a stream |
+| `startTransaction(id, generator, stream, time)` | Begin a new transaction |
+| `writeAttribute(id, event, name, type, value)` | Attach a typed attribute to a live transaction |
+| `endTransaction(id, time)` | Complete a transaction |
+| `writeRelation(name, sink_stream, sink_tx, src_stream, src_tx)` | Record a directed relationship between two transactions |
+
+The writer handles string interning, chunk batching, and optional LZ4 compression internally.
+Transaction entries are pooled and reused to minimize allocation overhead during simulation.
+The destructor automatically flushes any remaining in-flight transactions and closes the file.
+
+### How This Applies to gem5
+
+The plan that follows designs a gem5-native tracing subsystem that uses FTR as its output format.
+The mapping from FTR concepts to gem5 concepts is:
+
+| FTR Concept | gem5 Mapping |
+|-------------|-------------|
+| Stream | SimObject (controller, router, memory controller) |
+| Generator | A named queue or pipeline stage within a SimObject |
+| Transaction | The lifetime of a request, message, packet, or flit within one component |
+| Relation | Parent-child or causal link between transactions (e.g. request → message → flit) |
+| Attribute | Address, request type, size, requestor ID, latency, state transitions |
+
+A memory request entering Ruby will produce a single root transaction on the sequencer stream that lives until the request retires.
+Child transactions are created only when the request is split into multiple independently-routed Garnet flits — each flit gets its own child transaction because it may take a different path through the network.
+When a request produces only a single flit, there is no need for a separate child: the root transaction covers the entire lifetime, and flit-level attributes (route taken, per-hop timestamps) are recorded directly on it.
+Relations link child flit transactions back to their parent request, so a viewer can follow the fan-out through the network and the eventual convergence back at the requestor.
+
+---
+
 ## Problem Statement
 
 gem5 has strong statistics, debug printing, and some specialized trace outputs, but it does not have one coherent transaction trace that follows a memory request from the CPU-facing Ruby entry point through controllers, queues, network messages, flits, and final retirement.
