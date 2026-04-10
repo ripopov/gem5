@@ -1,0 +1,14 @@
+# -*- mode:python -*-
+
+# lz4 v1.10.0 - Fast LZ compression algorithm library
+# https://github.com/lz4/lz4
+# BSD 2-Clause License
+
+Import('env')
+
+env.Prepend(CPPPATH=Dir('.').srcnode())
+
+env.Library('lz4', [env.SharedObject(File('lz4.c'))])
+
+env.Append(LIBS=['lz4'])
+env.Prepend(LIBPATH=[Dir('.')])

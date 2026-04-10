@@ -1,0 +1,10 @@
+# -*- mode:python -*-
+
+# FTR (Fast Transaction Recording) writer from LWTR4SC
+# https://github.com/Minres/LWTR4SC
+# Apache License 2.0
+
+Import('env')
+
+# ftr_writer.h includes <lz4.h> and <nonstd/string_view.hpp>
+env.Prepend(CPPPATH=Dir('./src').srcnode())
