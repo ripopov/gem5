@@ -111,6 +111,7 @@ for i in range(args.num_cpus):
 # --- Instantiate and run -----------------------------------------------------
 
 root = Root(full_system=False, system=system)
+root.trace = FstTrace(trace_file="trace.fst", start_active=True)
 m5.instantiate()
 exit_event = m5.simulate()
 
