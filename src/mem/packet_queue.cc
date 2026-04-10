@@ -43,18 +43,22 @@
 #include "base/trace.hh"
 #include "debug/Drain.hh"
 #include "debug/PacketQueue.hh"
+#include "sim/sim_object.hh"
 
 namespace gem5
 {
 
-PacketQueue::PacketQueue(EventManager& _em, const std::string& _label,
-                         const std::string& _sendEventName,
-                         bool force_order,
+PacketQueue::PacketQueue(EventManager &_em, const std::string &_label,
+                         const std::string &_sendEventName, bool force_order,
                          bool disable_sanity_check)
-    : em(_em), sendEvent([this]{ processSendEvent(); }, _sendEventName),
+    : em(_em),
+      sendEvent(
+          static_cast<const SimObject &>(_em), [this] { processSendEvent(); },
+          _sendEventName),
       _disableSanityCheck(disable_sanity_check),
       forceOrder(force_order),
-      label(_label), waitingOnRetry(false)
+      label(_label),
+      waitingOnRetry(false)
 {
 }
 

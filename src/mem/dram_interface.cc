@@ -1116,21 +1116,39 @@ DRAMInterface::minBankPrep(const MemPacketQueue& queue,
     return std::make_pair(bank_mask, hidden_bank_prep);
 }
 
-DRAMInterface::Rank::Rank(const DRAMInterfaceParams &_p,
-                         int _rank, DRAMInterface& _dram)
-    : EventManager(&_dram), dram(_dram),
-      pwrStateTrans(PWR_IDLE), pwrStatePostRefresh(PWR_IDLE),
-      pwrStateTick(0), refreshDueAt(0), pwrState(PWR_IDLE),
-      refreshState(REF_IDLE), inLowPowerState(false), rank(_rank),
-      readEntries(0), writeEntries(0), outstandingEvents(0),
-      wakeUpAllowedAt(0), power(_p, false), banks(_p.banks_per_rank),
-      numBanksActive(0), actTicks(_p.activation_limit, 0), lastBurstTick(0),
-      writeDoneEvent([this]{ processWriteDoneEvent(); }, name()),
-      activateEvent([this]{ processActivateEvent(); }, name()),
-      prechargeEvent([this]{ processPrechargeEvent(); }, name()),
-      refreshEvent([this]{ processRefreshEvent(); }, name()),
-      powerEvent([this]{ processPowerEvent(); }, name()),
-      wakeUpEvent([this]{ processWakeUpEvent(); }, name()),
+DRAMInterface::Rank::Rank(const DRAMInterfaceParams &_p, int _rank,
+                          DRAMInterface &_dram)
+    : EventManager(&_dram),
+      dram(_dram),
+      pwrStateTrans(PWR_IDLE),
+      pwrStatePostRefresh(PWR_IDLE),
+      pwrStateTick(0),
+      refreshDueAt(0),
+      pwrState(PWR_IDLE),
+      refreshState(REF_IDLE),
+      inLowPowerState(false),
+      rank(_rank),
+      readEntries(0),
+      writeEntries(0),
+      outstandingEvents(0),
+      wakeUpAllowedAt(0),
+      power(_p, false),
+      banks(_p.banks_per_rank),
+      numBanksActive(0),
+      actTicks(_p.activation_limit, 0),
+      lastBurstTick(0),
+      writeDoneEvent(
+          dram, [this] { processWriteDoneEvent(); }, name()),
+      activateEvent(
+          dram, [this] { processActivateEvent(); }, name()),
+      prechargeEvent(
+          dram, [this] { processPrechargeEvent(); }, name()),
+      refreshEvent(
+          dram, [this] { processRefreshEvent(); }, name()),
+      powerEvent(
+          dram, [this] { processPowerEvent(); }, name()),
+      wakeUpEvent(
+          dram, [this] { processWakeUpEvent(); }, name()),
       stats(_dram, *this)
 {
     for (int b = 0; b < _p.banks_per_rank; b++) {

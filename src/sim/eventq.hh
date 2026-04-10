@@ -1119,7 +1119,8 @@ public:
       : MemberEventWrapper(owner, *object, del, p)
   {}
 
-  [[deprecated("Use reference version of this constructor instead")]]
+  [[deprecated("Pass owning SimObject as first argument "
+               "for FST traceability")]]
   MemberEventWrapper(CLASS *object, bool del = false, Priority p = Default_Pri)
       : MemberEventWrapper{*object, del, p}
   {}
@@ -1143,16 +1144,16 @@ public:
       gem5_assert(mObject);
   }
 
-    MemberEventWrapper(CLASS &object,
-                       bool del = false,
-                       Priority p = Default_Pri):
-        Event(p),
-        Named(object.name() + ".wrapped_event"),
-        mObject(&object)
-    {
-        if (del) setFlags(AutoDelete);
-        gem5_assert(mObject);
-    }
+  [[deprecated("Pass owning SimObject as first argument "
+               "for FST traceability")]]
+  MemberEventWrapper(CLASS &object, bool del = false, Priority p = Default_Pri)
+      : Event(p), Named(object.name() + ".wrapped_event"), mObject(&object)
+  {
+      if (del) {
+          setFlags(AutoDelete);
+      }
+      gem5_assert(mObject);
+  }
 
     void process() override {
         (mObject->*F)();
@@ -1191,9 +1192,10 @@ class EventFunctionWrapper : public Event
         }
     }
 
+    [[deprecated("Pass owning SimObject as first argument "
+                 "for FST traceability")]]
     EventFunctionWrapper(const std::function<void(void)> &callback,
-                         const std::string &name,
-                         bool del = false,
+                         const std::string &name, bool del = false,
                          Priority p = Default_Pri)
         : Event(p), callback(callback), _name(name)
     {

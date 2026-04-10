@@ -54,22 +54,28 @@ namespace gem5
 {
 
 BridgeBase::BridgeResponsePort::BridgeResponsePort(
-    const std::string& _name, BridgeBase& _bridge,
-    BridgeRequestPort& _memSidePort, Cycles _delay, int _resp_limit)
-    : ResponsePort(_name), bridge(_bridge),
-      memSidePort(_memSidePort), delay(_delay),
-      outstandingResponses(0), retryReq(false), respQueueLimit(_resp_limit),
-      sendEvent([this]{ trySendTiming(); }, _name)
+    const std::string &_name, BridgeBase &_bridge,
+    BridgeRequestPort &_memSidePort, Cycles _delay, int _resp_limit)
+    : ResponsePort(_name),
+      bridge(_bridge),
+      memSidePort(_memSidePort),
+      delay(_delay),
+      outstandingResponses(0),
+      retryReq(false),
+      respQueueLimit(_resp_limit),
+      sendEvent(_bridge, [this] { trySendTiming(); }, _name)
 {
 }
 
 BridgeBase::BridgeRequestPort::BridgeRequestPort(
-    const std::string& _name, BridgeBase& _bridge,
-    BridgeResponsePort& _cpuSidePort, Cycles _delay, int _req_limit)
-    : RequestPort(_name), bridge(_bridge),
+    const std::string &_name, BridgeBase &_bridge,
+    BridgeResponsePort &_cpuSidePort, Cycles _delay, int _req_limit)
+    : RequestPort(_name),
+      bridge(_bridge),
       cpuSidePort(_cpuSidePort),
-      delay(_delay), reqQueueLimit(_req_limit),
-      sendEvent([this]{ trySendTiming(); }, _name)
+      delay(_delay),
+      reqQueueLimit(_req_limit),
+      sendEvent(_bridge, [this] { trySendTiming(); }, _name)
 {
 }
 

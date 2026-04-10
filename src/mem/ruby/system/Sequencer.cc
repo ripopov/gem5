@@ -64,8 +64,10 @@ namespace ruby
 {
 
 Sequencer::Sequencer(const Params &p)
-    : RubyPort(p), m_IncompleteTimes(MachineType_NUM),
-      deadlockCheckEvent([this]{ wakeup(); }, "Sequencer deadlock check")
+    : RubyPort(p),
+      m_IncompleteTimes(MachineType_NUM),
+      deadlockCheckEvent(
+          *this, [this] { wakeup(); }, "Sequencer deadlock check")
 {
     m_outstanding_count = 0;
 

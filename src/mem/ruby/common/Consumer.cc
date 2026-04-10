@@ -47,8 +47,9 @@ namespace ruby
 {
 
 Consumer::Consumer(ClockedObject *_em, Event::Priority ev_prio)
-    : m_wakeup_event([this]{ processCurrentEvent(); },
-                    "Consumer Event", false, ev_prio),
+    : m_wakeup_event(
+          *_em, [this] { processCurrentEvent(); }, "Consumer Event", false,
+          ev_prio),
       em(_em)
 { }
 

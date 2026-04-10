@@ -143,13 +143,20 @@ BaseXBar::calcPacketTiming(PacketPtr pkt, Tick header_delay)
 }
 
 template <typename SrcType, typename DstType>
-BaseXBar::Layer<SrcType, DstType>::Layer(DstType& _port, BaseXBar& _xbar,
-                                       const std::string& _name) :
-    statistics::Group(&_xbar, _name.c_str()),
-    port(_port), xbar(_xbar), _name(xbar.name() + "." + _name), state(IDLE),
-    waitingForPeer(NULL), releaseEvent([this]{ releaseLayer(); }, name()),
-    ADD_STAT(occupancy, statistics::units::Tick::get(), "Layer occupancy (ticks)"),
-    ADD_STAT(utilization, statistics::units::Ratio::get(), "Layer utilization")
+BaseXBar::Layer<SrcType, DstType>::Layer(DstType &_port, BaseXBar &_xbar,
+                                         const std::string &_name)
+    : statistics::Group(&_xbar, _name.c_str()),
+      port(_port),
+      xbar(_xbar),
+      _name(xbar.name() + "." + _name),
+      state(IDLE),
+      waitingForPeer(NULL),
+      releaseEvent(
+          _xbar, [this] { releaseLayer(); }, name()),
+      ADD_STAT(occupancy, statistics::units::Tick::get(),
+               "Layer occupancy (ticks)"),
+      ADD_STAT(utilization, statistics::units::Ratio::get(),
+               "Layer utilization")
 {
     occupancy
         .flags(statistics::nozero);

@@ -58,11 +58,17 @@ NVMInterface::NVMInterface(const NVMInterfaceParams &_p)
       maxPendingWrites(_p.max_pending_writes),
       maxPendingReads(_p.max_pending_reads),
       twoCycleRdWr(_p.two_cycle_rdwr),
-      tREAD(_p.tREAD), tWRITE(_p.tWRITE), tSEND(_p.tSEND),
+      tREAD(_p.tREAD),
+      tWRITE(_p.tWRITE),
+      tSEND(_p.tSEND),
       stats(*this),
-      writeRespondEvent([this]{ processWriteRespondEvent(); }, name()),
-      readReadyEvent([this]{ processReadReadyEvent(); }, name()),
-      nextReadAt(0), numPendingReads(0), numReadDataReady(0),
+      writeRespondEvent(
+          *this, [this] { processWriteRespondEvent(); }, name()),
+      readReadyEvent(
+          *this, [this] { processReadReadyEvent(); }, name()),
+      nextReadAt(0),
+      numPendingReads(0),
+      numReadDataReady(0),
       numReadsToIssue(0)
 {
     DPRINTF(NVM, "Setting up NVM Interface\n");

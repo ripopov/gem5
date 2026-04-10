@@ -52,7 +52,8 @@ CommMonitor::CommMonitor(const Params &params)
     : SimObject(params),
       memSidePort(name() + "-mem_side_port", *this),
       cpuSidePort(name() + "-cpu_side_port", *this),
-      samplePeriodicEvent([this]{ samplePeriodic(); }, name()),
+      samplePeriodicEvent(
+          *this, [this] { samplePeriodic(); }, name()),
       samplePeriodTicks(params.sample_period),
       samplePeriod(params.sample_period / sim_clock::as_float::s),
       stats(this, params)

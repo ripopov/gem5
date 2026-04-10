@@ -115,7 +115,7 @@ class RubySystem : public ClockedObject
     void enqueueRubyEvent(Tick tick)
     {
         auto e = new EventFunctionWrapper(
-            [this]{ processRubyEvent(); }, "RubyEvent");
+            *this, [this] { processRubyEvent(); }, "RubyEvent");
         schedule(e, tick);
     }
 
