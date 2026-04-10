@@ -412,6 +412,9 @@ Without this, the L1 controller would attempt to cache MMIO accesses, causing pr
 `RiscvBareMetal(bootloader=args.cmd)` loads the ELF binary's segments into physical memory at the addresses specified in the ELF headers (starting at `0x80000000`).
 During `initState()`, each thread context is reset via a `Reset` fault that sets the privilege mode to M-mode and the PC to the ELF entry point.
 All 16 cores activate simultaneously — there is no staggered boot.
+The program image lives in main DRAM — the same memory served by the two SN-F controllers on the mesh.
+There is no separate boot ROM: gem5's host-side ELF loader writes the binary into simulated physical memory via `system->physProxy` *before the first simulated cycle*, as if firmware had already placed it there.
+On real hardware a mask ROM or flash at the reset vector would perform this copy; gem5 skips that step entirely, which is why `bootmem=None` is correct.
 
 **Ruby/CHI call.**
 The call changes from `Ruby.create_system(args, False, system)` (SE mode) to:

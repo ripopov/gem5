@@ -372,7 +372,7 @@
         <!-- ============================================================ -->
 
         <!-- Arrow from RN-I down the right side to IO XBar -->
-        <mxCell id="e_rni_iobus" style="endArrow=block;endFill=1;strokeWidth=2;strokeColor=#d6b656;" edge="1" source="rni" target="iobus" parent="1">
+        <mxCell id="e_rni_iobus" style="endArrow=none;strokeWidth=2;strokeColor=#d6b656;" edge="1" source="rni" target="iobus" parent="1">
           <mxGeometry relative="1" as="geometry">
             <Array as="points">
               <mxPoint x="1075" y="1040"/>
@@ -393,38 +393,38 @@
         <mxCell id="uart" value="&lt;b&gt;UART 8250&lt;/b&gt;&lt;br&gt;@ 0x1000_0000" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8EAF6;strokeColor=#5C6BC0;fontSize=9;" vertex="1" parent="1">
           <mxGeometry x="310" y="1130" width="140" height="45" as="geometry"/>
         </mxCell>
-        <mxCell id="e_io_uart" style="endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#b85450;exitX=0.2;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" source="iobus" target="uart" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_io_uart" style="endArrow=none;strokeWidth=1.5;strokeColor=#b85450;exitX=0.2;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" source="iobus" target="uart" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
 
-        <!-- Bridge -->
-        <mxCell id="bridge" value="&lt;b&gt;Bridge&lt;/b&gt;&lt;br&gt;(iobus ↔ membus)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#999999;fontSize=9;" vertex="1" parent="1">
+        <!-- Bridge: forwards iobus requests to membus (CPU → CLINT/PLIC) -->
+        <mxCell id="bridge" value="&lt;b&gt;Bridge&lt;/b&gt;&lt;br&gt;(iobus → membus)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#999999;fontSize=9;" vertex="1" parent="1">
           <mxGeometry x="520" y="1130" width="130" height="45" as="geometry"/>
         </mxCell>
-        <mxCell id="e_io_bridge" style="endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#b85450;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" source="iobus" target="bridge" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_io_bridge" style="endArrow=none;strokeWidth=1.5;strokeColor=#b85450;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" source="iobus" target="bridge" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
 
-        <!-- IOCache/Bridge -->
-        <mxCell id="iocache" value="&lt;b&gt;IOCache/Bridge&lt;/b&gt;&lt;br&gt;(iobus → membus)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#999999;fontSize=9;" vertex="1" parent="1">
+        <!-- IOCache: allows iobus devices to access memory via membus -->
+        <mxCell id="iocache" value="&lt;b&gt;IOCache&lt;/b&gt;&lt;br&gt;(device → memory)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#999999;fontSize=9;" vertex="1" parent="1">
           <mxGeometry x="710" y="1130" width="140" height="45" as="geometry"/>
         </mxCell>
-        <mxCell id="e_io_iocache" style="endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#b85450;exitX=0.8;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" source="iobus" target="iocache" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_io_iocache" style="endArrow=none;strokeWidth=1.5;strokeColor=#b85450;exitX=0.8;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" source="iobus" target="iocache" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
 
         <!-- MemBus -->
         <mxCell id="membus" value="&lt;b&gt;MemBus&lt;/b&gt; (system.membus)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;" vertex="1" parent="1">
           <mxGeometry x="380" y="1220" width="420" height="35" as="geometry"/>
         </mxCell>
-        <mxCell id="e_br_mem" style="endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#999999;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.4;entryY=0;entryDx=0;entryDy=0;" edge="1" source="bridge" target="membus" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
-        <mxCell id="e_ioc_mem" style="endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#999999;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.7;entryY=0;entryDx=0;entryDy=0;" edge="1" source="iocache" target="membus" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_br_mem" style="endArrow=none;strokeWidth=1.5;strokeColor=#999999;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.4;entryY=0;entryDx=0;entryDy=0;" edge="1" source="bridge" target="membus" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_ioc_mem" style="endArrow=none;strokeWidth=1.5;strokeColor=#999999;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.7;entryY=0;entryDx=0;entryDy=0;" edge="1" source="iocache" target="membus" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
 
         <!-- CLINT -->
         <mxCell id="clint" value="&lt;b&gt;CLINT&lt;/b&gt;&lt;br&gt;@ 0x200_0000&lt;br&gt;timer, IPI" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8EAF6;strokeColor=#5C6BC0;fontSize=9;" vertex="1" parent="1">
           <mxGeometry x="370" y="1295" width="140" height="55" as="geometry"/>
         </mxCell>
-        <mxCell id="e_mem_clint" style="endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#b85450;exitX=0.3;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" source="membus" target="clint" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_mem_clint" style="endArrow=none;strokeWidth=1.5;strokeColor=#b85450;exitX=0.3;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" source="membus" target="clint" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
 
         <!-- PLIC -->
         <mxCell id="plic" value="&lt;b&gt;PLIC&lt;/b&gt;&lt;br&gt;@ 0xC00_0000&lt;br&gt;ext. IRQ" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8EAF6;strokeColor=#5C6BC0;fontSize=9;" vertex="1" parent="1">
           <mxGeometry x="570" y="1295" width="140" height="55" as="geometry"/>
         </mxCell>
-        <mxCell id="e_mem_plic" style="endArrow=block;endFill=1;strokeWidth=1.5;strokeColor=#b85450;exitX=0.65;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" source="membus" target="plic" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e_mem_plic" style="endArrow=none;strokeWidth=1.5;strokeColor=#b85450;exitX=0.65;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" source="membus" target="plic" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
 
         <!-- RiscvRTC -->
         <mxCell id="rtc" value="&lt;b&gt;RiscvRTC&lt;/b&gt;&lt;br&gt;100 MHz (drives mtime)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8EAF6;strokeColor=#5C6BC0;fontSize=9;" vertex="1" parent="1">
