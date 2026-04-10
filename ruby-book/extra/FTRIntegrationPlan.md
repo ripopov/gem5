@@ -746,6 +746,25 @@ Garnet should explicitly create child nodes during flitisization.
 
 That combination gives a useful first implementation now and a clean path to future O3 instruction tracing later.
 
+## Future Consideration: Perfetto As An Alternative Or Complementary Trace Backend
+
+The internal trace model described in this plan (hierarchical spans with begin/end ticks, parent-child relationships, and key-value attributes) is structurally very close to what Google's Perfetto tracing system represents natively.
+
+Perfetto's data model supports nested spans (slices), flow events (causal links between spans), track-scoped events, and arbitrary debug annotations, which map naturally onto the transaction nodes and events described here.
+
+Before finalizing the internal schema and serialization, it is worth evaluating whether adopting Perfetto's protobuf-based trace format as an output backend (alongside or instead of raw FTR) would be beneficial.
+
+Potential advantages:
+
+1. Perfetto UI provides a mature, interactive trace viewer out of the box with hierarchical span visualization, search, and filtering.
+2. The trace format is well-documented and battle-tested at scale.
+3. Causal links between spans (Perfetto flow events) would allow expressing "this miss caused that network message" relationships that pure parent-child trees cannot capture.
+4. During development of the tracing framework itself, having a second viewer for free would accelerate debugging of the trace output.
+
+This evaluation should happen after the core recorder API and the first vertical slice of instrumentation are working.
+The internal recorder design should not hard-wire itself to one output format.
+A narrow writer interface (as already recommended) would allow adding a Perfetto backend later without changing instrumentation code.
+
 ## If You Remember One Thing
 
 Do not design FTR as a Ruby-specific log.
