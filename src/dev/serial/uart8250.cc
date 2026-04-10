@@ -99,10 +99,12 @@ Uart8250::clearIntr(int intrBit)
 }
 
 Uart8250::Uart8250(const Params &p)
-    : Uart(p, p.pio_size), registers(this, name() + ".registers"),
+    : Uart(p, p.pio_size),
+      registers(this, name() + ".registers"),
       lastTxInt(0),
-      txIntrEvent([this]{ processIntrEvent(TX_INT); }, "TX"),
-      rxIntrEvent([this]{ processIntrEvent(RX_INT); }, "RX")
+      txIntrEvent(
+          *this, [this] { processIntrEvent(TX_INT); }, "TX"),
+      rxIntrEvent(*this, [this] { processIntrEvent(RX_INT); }, "RX")
 {
 }
 

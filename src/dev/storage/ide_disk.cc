@@ -64,14 +64,22 @@ namespace gem5
 {
 
 IdeDisk::IdeDisk(const Params &p)
-    : SimObject(p), image(p.image), diskDelay(p.delay), dataBuffer(nullptr),
+    : SimObject(p),
+      image(p.image),
+      diskDelay(p.delay),
+      dataBuffer(nullptr),
       ideDiskStats(this),
-      dmaTransferEvent([this]{ doDmaTransfer(); }, name()),
-      dmaReadWaitEvent([this]{ doDmaRead(); }, name()),
-      dmaWriteWaitEvent([this]{ doDmaWrite(); }, name()),
-      dmaPrdReadEvent([this]{ dmaPrdReadDone(); }, name()),
-      dmaReadEvent([this]{ dmaReadDone(); }, name()),
-      dmaWriteEvent([this]{ dmaWriteDone(); }, name())
+      dmaTransferEvent(
+          *this, [this] { doDmaTransfer(); }, name()),
+      dmaReadWaitEvent(
+          *this, [this] { doDmaRead(); }, name()),
+      dmaWriteWaitEvent(
+          *this, [this] { doDmaWrite(); }, name()),
+      dmaPrdReadEvent(
+          *this, [this] { dmaPrdReadDone(); }, name()),
+      dmaReadEvent(
+          *this, [this] { dmaReadDone(); }, name()),
+      dmaWriteEvent(*this, [this] { dmaWriteDone(); }, name())
 {
     // Reset the device state
     reset(p.driveID);

@@ -53,13 +53,13 @@ namespace gem5
 
 using namespace RiscvISA;
 
-Plic::Plic(const Params &params) :
-    PlicBase(params),
-    system(params.system),
-    nSrc(params.n_src),
-    outputLatency(params.output_latency),
-    registers(params.name, pioAddr, this),
-    update([this]{updateOutput();}, name() + ".update")
+Plic::Plic(const Params &params)
+    : PlicBase(params),
+      system(params.system),
+      nSrc(params.n_src),
+      outputLatency(params.output_latency),
+      registers(params.name, pioAddr, this),
+      update(*this, [this] { updateOutput(); }, name() + ".update")
 {
     fatal_if(params.hart_config != "" && params.n_contexts != 0,
              "the hart_config and n_contexts can't be set simultaneously");

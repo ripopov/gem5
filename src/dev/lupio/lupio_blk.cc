@@ -50,14 +50,15 @@
 namespace gem5
 {
 
-LupioBLK::LupioBLK(const Params &params) :
-    DmaDevice(params),
-    platform(params.platform),
-    dmaEvent([this]{ dmaEventDone(); }, name()),
-    pioAddr(params.pio_addr),
-    pioSize(params.pio_size),
-    image(*params.image),
-    lupioBLKIntID(params.int_id)
+LupioBLK::LupioBLK(const Params &params)
+    : DmaDevice(params),
+      platform(params.platform),
+      dmaEvent(
+          *this, [this] { dmaEventDone(); }, name()),
+      pioAddr(params.pio_addr),
+      pioSize(params.pio_size),
+      image(*params.image),
+      lupioBLKIntID(params.int_id)
 {
     static_assert(SECTOR_SIZE == SectorSize, "Sector size of disk image must"
                     " match LupIO device\n");

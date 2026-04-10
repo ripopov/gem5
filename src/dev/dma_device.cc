@@ -56,12 +56,17 @@
 namespace gem5
 {
 
-DmaPort::DmaPort(ClockedObject *dev, System *s,
-                 std::optional<uint32_t> sid, std::optional<uint32_t> ssid)
+DmaPort::DmaPort(ClockedObject *dev, System *s, std::optional<uint32_t> sid,
+                 std::optional<uint32_t> ssid)
     : RequestPort(dev->name() + ".dma"),
-      device(dev), sys(s), requestorId(s->getRequestorId(dev)),
-      sendEvent([this]{ sendDma(); }, dev->name()),
-      defaultSid(sid), defaultSSid(ssid), cacheLineSize(s->cacheLineSize())
+      device(dev),
+      sys(s),
+      requestorId(s->getRequestorId(dev)),
+      sendEvent(
+          *dev, [this] { sendDma(); }, dev->name()),
+      defaultSid(sid),
+      defaultSSid(ssid),
+      cacheLineSize(s->cacheLineSize())
 { }
 
 void
