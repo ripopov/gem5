@@ -11,7 +11,7 @@ and records dispatches of statically owned SimObject events during simulation.
 Unlike RTL simulators that toggle clock signals every cycle, gem5 is event-driven:
 computation happens only when events fire.
 Rather than synthesizing fake clock toggles, we trace **actual event dispatches** —
-each event becomes a 1-bit pulse signal inside its hosting SimObject's FST scope.
+each event becomes an `FST_VT_VCD_EVENT` signal inside its hosting SimObject's FST scope.
 
 The implementation is split into three stages, each independently testable.
 
@@ -108,7 +108,7 @@ src/sim/fst_trace/
     FstTrace.py              # Python SimObject definition
     fst_trace.hh             # C++ header
     fst_trace.cc             # C++ implementation
-    fst_trace_hier.test.cc   # GTest: hierarchy + event pulse round-trips
+    fst_trace_hier.test.cc   # GTest: hierarchy + event signal round-trips
     SConscript               # Build rules
 
 tests/gem5/fst_trace/
@@ -155,7 +155,7 @@ construction mandatory for static events rather than optional.
 - Track `vector<string> currentScope`; compute push/pop per object:
   - `fstWriterSetScope(ctx, FST_ST_VCD_MODULE, component, NULL)` per new level
   - `fstWriterSetUpscope(ctx)` per level to pop
-- Within each scope, create 1-bit wire per explicitly owned static event belonging to that SimObject
+- Within each scope, create an `FST_VT_VCD_EVENT` variable per explicitly owned static event belonging to that SimObject
 - Signal names come from `event->name()` after replacing spaces and dots with `_`
 
 ### 1.3 FST File Lifecycle
@@ -165,7 +165,7 @@ construction mandatory for static events rather than optional.
 | Constructor | Store params, register exit callback for `fstWriterClose()` |
 | `init()` | Collect and sort SimObjects for hierarchy emission |
 | `startup()` | Walk `Event::allEvents`, require explicit ownership for static events, open FST file, write hierarchy + signals, install dispatch hooks on all EventQueues, set `dumpActive` from `start_active` param |
-| Simulation | Dispatch hook checks `dumpActive` flag, emits 1-bit pulses (1→0 pairs) to FST just before functional event processing; Python or ROI markers can toggle tracing |
+| Simulation | Dispatch hook checks `dumpActive` flag, emits event toggles to FST just before functional event processing; Python or ROI markers can toggle tracing |
 | Exit callback | Close FST file |
 
 All `fstWriterCreateVar()` calls complete in `startup()` before any value changes.
@@ -189,16 +189,16 @@ void FstTrace::dispatchTrampoline(const Event *event, void *arg) {
     if (it == self->eventHandleMap.end()) return;   // dynamic/unresolved, skip
     self->emitTimeChange(curTick());
     fstWriterEmitValueChange(self->fstCtx, it->second, "1");
-    fstWriterEmitValueChange(self->fstCtx, it->second, "0");
 }
 ```
 
-The `"1"` → `"0"` pair at the same timestamp produces a clean pulse in waveform
-viewers. FST preserves ordering within the same time step.
+The `FST_VT_VCD_EVENT` type is purpose-built for instantaneous occurrences —
+waveform viewers render each value change as a marker rather than a level.
+A single `"1"` emit per dispatch is sufficient; no `"1"` → `"0"` pair needed.
 
 The hook must run after `setCurTick(event->when())` and after the squashed-event check,
 but immediately before `event->process()`. That placement matches the intended meaning:
-the waveform pulse indicates that gem5 is about to execute the functional code for this event.
+the event marker indicates that gem5 is about to execute the functional code for this event.
 
 Because multiple event queues may advance at different rates, the callback must always
 emit the current queue's `curTick()` before writing any value changes.
@@ -272,10 +272,10 @@ split every ROI into separate `simulate()` calls.
 **GTest** (`src/sim/fst_trace/fst_trace_hier.test.cc`, `skip_lib=True`):
 - Test hierarchy push/pop algorithm: feed sorted dotted names into scope builder,
   write to FST, read back with `fstReaderIterateHier()`, assert scope tree matches.
-- Test event pulse signals: create 1-bit wires, emit pulses at known times,
+- Test event signals: create `FST_VT_VCD_EVENT` vars, emit values at known times,
   read back with `fstReaderIterBlocks()`, verify values + timestamps.
-- Test blackout regions: emit pulses, call `fstWriterEmitDumpActive(ctx, 0)`,
-  emit more pulses, call `fstWriterEmitDumpActive(ctx, 1)`, read back and verify
+- Test blackout regions: emit events, call `fstWriterEmitDumpActive(ctx, 0)`,
+  emit more events, call `fstWriterEmitDumpActive(ctx, 1)`, read back and verify
   blackout count and timestamps via `fstReaderGetNumberDumpActivityChanges()`.
 
 **Python system test** (`tests/gem5/fst_trace/configs/fst_events.py`):
@@ -290,25 +290,229 @@ split every ROI into separate `simulate()` calls.
 
 ## Stage 2: Periodic Stat Sampling
 
-**Status:** Future extension, not part of the current implementation scope.
+**Goal:** Auto-discover the entire gem5 stat hierarchy, mirror it as a dedicated
+FST scope tree, and periodically sample every stat during simulation.
 
-**Goal:** Add `FstStatBinding` configuration; periodically sample selected stats
-and emit value changes to the FST file.
+### 2.1 Design Overview
 
-### 2.1 Design
+No user-specified stat bindings. At `startup()`, `FstTrace` recursively walks
+the `statistics::Group` tree starting from `Root::root()`, creates a parallel
+FST scope tree under a top-level `stats` scope, and creates FST signals for
+every stat it encounters. A periodic event samples all registered stats and
+emits value changes to the FST file.
 
-- User configures `FstStatBinding` objects: target SimObject + stat name
-- In `startup()`, resolve each stat via `statistics::Group::resolveStat()`
-- Create FST real-valued signals (`FST_VT_VCD_REAL`) alongside event signals
-- Schedule periodic `sampleStats` event (configurable period, default 10000 ticks)
-- Handler reads `ScalarInfo::result()`, emits value change only when value differs
+The resulting FST hierarchy mirrors `stats.txt` exactly:
+```
+stats                          (top-level scope)
+  system                       (Group scope)
+    cpu0                       (Group scope)
+      numCycles                (FST_VT_VCD_REAL)
+      numInsts                 (FST_VT_VCD_REAL)
+      committedInstsPerCycle   (FST_VT_VCD_REAL, from Formula)
+      ...
+    mem_ctrl                   (Group scope)
+      bytesRead                (FST_VT_VCD_REAL)
+      ...
+```
 
-### 2.2 Stage 2 Tests
+This is controlled by a single parameter — the sampling period.
+A period of 0 disables stat sampling entirely (pure Stage 1 event tracing).
 
-**GTest** (`skip_lib=True`): Write FST real-valued signals, read back, verify.
+### 2.2 Stat Type → FST Signal Mapping
 
-**Python system test**: Reuse traffic-gen + memory config, add stat bindings,
-verify stat samples in FST output.
+The `Group::getStats()` method returns `Info*` pointers. Each `Info` subclass
+maps to FST signals differently:
+
+| Info subclass | FST representation |
+|---|---|
+| **ScalarInfo** | Single `FST_VT_VCD_REAL` signal — call `result()` |
+| **VectorInfo** | One `FST_VT_VCD_REAL` per element, named from `subnames[i]` if available, else `_<i>`. Plus a `_total` signal from `total()`. |
+| **FormulaInfo** | Same as VectorInfo (FormulaInfo inherits VectorInfo). |
+| **DistInfo** | Two summary signals: `_mean` (computed as `sum / samples`) and `_samples`. |
+| **Vector2dInfo** | One `FST_VT_VCD_REAL` per cell, named `_<x>_<y>`. |
+| **VectorDistInfo** | Sub-scope per element, each with `_mean` and `_samples`. |
+| **SparseHistInfo** | Single `_samples` signal (sparse map is dynamic, cannot pre-declare buckets). |
+
+All signals use `FST_VT_VCD_REAL` (IEEE 754 double), which matches `Result`
+(`typedef double Result`) exactly.
+
+### 2.3 Hierarchy Walk and Signal Creation
+
+At `startup()`, after Stage 1 event hierarchy is written, `FstTrace` builds
+the stat scope tree:
+
+```cpp
+void FstTrace::createStatHierarchy()
+{
+    fstWriterSetScope(fstCtx, FST_ST_VCD_MODULE, "stats", NULL);
+    walkStatGroup(Root::root());
+    fstWriterSetUpscope(fstCtx);
+}
+
+void FstTrace::walkStatGroup(const statistics::Group *group)
+{
+    // Create signals for stats directly in this group
+    for (auto *info : group->getStats()) {
+        createStatSignals(info);
+    }
+
+    // Recurse into named child groups (creates FST scopes)
+    for (auto &[name, child] : group->getStatGroups()) {
+        fstWriterSetScope(fstCtx, FST_ST_VCD_MODULE, name.c_str(), NULL);
+        walkStatGroup(child);
+        fstWriterSetUpscope(fstCtx);
+    }
+}
+```
+
+`createStatSignals()` dispatches on Info subclass via `dynamic_cast`:
+
+```cpp
+void FstTrace::createStatSignals(const statistics::Info *info)
+{
+    if (auto *si = dynamic_cast<const statistics::ScalarInfo*>(info)) {
+        fstHandle h = fstWriterCreateVar(fstCtx, FST_VT_VCD_REAL,
+            FST_VD_OUTPUT, 64, sanitize(info->name).c_str(), 0);
+        statHandles.push_back({h, info, StatKind::Scalar});
+    }
+    else if (auto *vi = dynamic_cast<const statistics::VectorInfo*>(info)) {
+        // One signal per element + total
+        for (size_t i = 0; i < vi->size(); ++i) {
+            std::string ename = vi->subnames.size() > i && !vi->subnames[i].empty()
+                ? sanitize(vi->subnames[i])
+                : sanitize(info->name) + "_" + std::to_string(i);
+            fstHandle h = fstWriterCreateVar(fstCtx, FST_VT_VCD_REAL,
+                FST_VD_OUTPUT, 64, ename.c_str(), 0);
+            statHandles.push_back({h, info, StatKind::VectorElem, i});
+        }
+        fstHandle ht = fstWriterCreateVar(fstCtx, FST_VT_VCD_REAL,
+            FST_VD_OUTPUT, 64,
+            (sanitize(info->name) + "_total").c_str(), 0);
+        statHandles.push_back({ht, info, StatKind::VectorTotal});
+    }
+    else if (auto *di = dynamic_cast<const statistics::DistInfo*>(info)) {
+        // Mean and samples
+        fstHandle hm = fstWriterCreateVar(fstCtx, FST_VT_VCD_REAL,
+            FST_VD_OUTPUT, 64,
+            (sanitize(info->name) + "_mean").c_str(), 0);
+        statHandles.push_back({hm, info, StatKind::DistMean});
+        fstHandle hs = fstWriterCreateVar(fstCtx, FST_VT_VCD_REAL,
+            FST_VD_OUTPUT, 64,
+            (sanitize(info->name) + "_samples").c_str(), 0);
+        statHandles.push_back({hs, info, StatKind::DistSamples});
+    }
+    // ... Vector2dInfo, VectorDistInfo, SparseHistInfo similarly
+}
+```
+
+### 2.4 Periodic Sampling
+
+`FstTrace` schedules a recurring `EventFunctionWrapper` at the configured
+period:
+
+```cpp
+// In FstTrace:
+EventFunctionWrapper sampleStatsEvent;
+Tick statSamplePeriod;
+std::vector<StatEntry> statHandles;   // {fstHandle, Info*, kind, index}
+std::vector<double> lastValues;       // parallel to statHandles, for delta detection
+
+void FstTrace::startup()
+{
+    // ... Stage 1 setup ...
+
+    if (statSamplePeriod > 0) {
+        createStatHierarchy();
+        lastValues.resize(statHandles.size(),
+                          std::numeric_limits<double>::quiet_NaN());
+        schedule(sampleStatsEvent, curTick() + statSamplePeriod);
+    }
+}
+
+void FstTrace::sampleStats()
+{
+    // Prepare all stats (formulas, averages recompute)
+    Root::root()->preDumpStats();
+    for (auto *info : Root::root()->getStats())
+        info->prepare();
+    // prepare() is called recursively through groups in preDumpStats
+
+    emitTimeChange(curTick());
+
+    for (size_t i = 0; i < statHandles.size(); ++i) {
+        double val = readStatValue(statHandles[i]);
+        if (val != lastValues[i]) {
+            char buf[64];
+            snprintf(buf, sizeof(buf), "%.17g", val);
+            fstWriterEmitValueChange(fstCtx, statHandles[i].handle, buf);
+            lastValues[i] = val;
+        }
+    }
+
+    schedule(sampleStatsEvent, curTick() + statSamplePeriod);
+}
+```
+
+`readStatValue()` dispatches on `StatKind`:
+
+```cpp
+double FstTrace::readStatValue(const StatEntry &entry)
+{
+    switch (entry.kind) {
+      case StatKind::Scalar:
+        return static_cast<const ScalarInfo*>(entry.info)->result();
+      case StatKind::VectorElem:
+        return static_cast<const VectorInfo*>(entry.info)->result()[entry.index];
+      case StatKind::VectorTotal:
+        return static_cast<const VectorInfo*>(entry.info)->total();
+      case StatKind::DistMean: {
+        auto *di = static_cast<const DistInfo*>(entry.info);
+        return di->data.samples ? di->data.sum / di->data.samples : 0.0;
+      }
+      case StatKind::DistSamples:
+        return static_cast<const DistInfo*>(entry.info)->data.samples;
+      // ... other kinds
+    }
+}
+```
+
+**Delta-only writes:** Each signal tracks its last emitted value in
+`lastValues`. Only changed values produce FST output, keeping files compact
+when most stats are stable between samples.
+
+**ROI interaction:** The sampling event always fires on schedule regardless of
+`dumpActive`. Stat sampling is orthogonal to the Stage 1 event-dispatch
+blackout mechanism — stats represent cumulative counters and their values are
+meaningful even when event tracing is paused.
+
+### 2.5 FST File Lifecycle (Updated for Stage 2)
+
+| gem5 Phase | Action |
+|------------|--------|
+| Constructor | Store params, register exit callback for `fstWriterClose()` |
+| `init()` | Collect and sort SimObjects for hierarchy emission |
+| `startup()` | Open FST file; write Stage 1 event hierarchy + signals; if `stat_sample_period > 0`: walk `Group` tree, write `stats` scope tree + signals, schedule first sample event; install dispatch hooks |
+| Simulation | Dispatch hook emits event markers (Stage 1); periodic sample event emits stat value changes (Stage 2) |
+| Exit callback | Close FST file |
+
+### 2.6 Stage 2 Tests
+
+**GTest** (`src/sim/fst_trace/fst_trace_hier.test.cc`, `skip_lib=True`):
+- Test real-valued signal round-trip: create `FST_VT_VCD_REAL` signals,
+  emit known double values at known timestamps, read back with
+  `fstReaderIterBlocks()`, verify values match within floating-point tolerance.
+- Test delta-only encoding: emit same value twice at different times,
+  verify only one value change appears in FST output.
+- Test stat scope hierarchy: create nested scopes under `stats`,
+  read back with `fstReaderIterateHier()`, assert scope tree is correct.
+
+**Python system test** (`tests/gem5/fst_trace/configs/fst_stats.py`):
+- Minimal config: traffic generator → crossbar → simple memory.
+- Attach `FstTrace(stat_sample_period=1000)`.
+- Run for a small number of ticks.
+- Post-check: verify `stats` scope exists and contains expected groups
+  (e.g., `stats.system.mem_ctrl`), stat signals have non-zero values,
+  and samples are spaced at the configured period.
 
 ---
 
@@ -333,7 +537,7 @@ verify stat samples in FST output.
 
 ---
 
-## Python Configuration Interface (Stage 1)
+## Python Configuration Interface
 
 ```python
 class FstTrace(SimObject):
@@ -344,6 +548,8 @@ class FstTrace(SimObject):
     start_active = Param.Bool(True, "Start with dump enabled")
     use_work_item_roi = Param.Bool(False,
         "Toggle tracing from work item ROI markers when available")
+    stat_sample_period = Param.Tick(0,
+        "Stat sampling period in ticks (0 = disabled)")
 ```
 
 ---
@@ -383,6 +589,12 @@ GTest('fst_trace_hier.test', 'fst_trace_hier.test.cc', skip_lib=True)
 - `src/base/output.hh:305` — `extern OutputDirectory simout`
 - `src/sim/sim_exit.hh:45` — `registerExitCallback()`
 - `src/base/fstapi.test.cc` — GTest pattern for FST round-trips
+- `src/base/stats/group.hh` — `Group` class: `getStatGroups()`, `getStats()`, `resolveStat()`
+- `src/base/stats/group.cc` — Group hierarchy walk, merged groups
+- `src/base/stats/info.hh` — `ScalarInfo`, `VectorInfo`, `DistInfo`, `FormulaInfo`, etc.
+- `src/base/statistics.hh` — Concrete stat types (`Scalar`, `Vector`, `Distribution`, `Formula`)
+- `src/base/stats/text.cc` — Text dumper visitor pattern (reference for stat value extraction)
+- `src/sim/root.hh:92` — `Root::root()` singleton (top of stat Group hierarchy)
 
 ---
 
@@ -396,3 +608,6 @@ GTest('fst_trace_hier.test', 'fst_trace_hier.test.cc', skip_lib=True)
 | **Dispatch hook overhead** | Raw function pointer: single null check when disabled; O(1) hash lookup when enabled |
 | **Event destructor cost** | Linear scan of `allEvents` to erase; acceptable for rare destruction |
 | **Thread safety** | `allEvents` populated before simulation (single-threaded); callbacks installed on all EventQueues |
+| **Stat sampling overhead** | Delta-only writes skip unchanged stats; `prepare()` cost is unavoidable but matches normal stat dump path |
+| **Large number of stat signals** | Every stat gets an FST signal; file size mitigated by delta-only writes and FST compression (lz4) |
+| **Stat `prepare()` ordering** | Call `preDumpStats()` on root group before sampling to ensure formulas and derived stats are current |
