@@ -8,7 +8,7 @@
 - [Data Model](#data-model)
   - [Streams and Generators](#streams-and-generators)
   - [Transaction Nodes](#transaction-nodes)
-  - [Transaction Events](#transaction-events)
+  - [Events on Transactions](#events-on-transactions)
   - [Relations](#relations)
   - [Static Attributes Per Node Kind](#static-attributes-per-node-kind)
 - [Trace Identity: Where It Lives](#trace-identity-where-it-lives)
@@ -80,14 +80,15 @@ For a 4-core MESI Two Level system with Garnet:
 
 | Stream name | Kind | Generators |
 |-------------|------|------------|
-| `system.ruby.l1_cntrl0.sequencer` | `Sequencer` | `memreq`, `flit` |
-| `system.ruby.l1_cntrl1.sequencer` | `Sequencer` | `memreq`, `flit` |
-| `system.ruby.l1_cntrl2.sequencer` | `Sequencer` | `memreq`, `flit` |
-| `system.ruby.l1_cntrl3.sequencer` | `Sequencer` | `memreq`, `flit` |
+| `system.ruby.l1_cntrl0.sequencer` | `Sequencer` | `memreq`, `memreq.events`, `flit`, `flit.events` |
+| `system.ruby.l1_cntrl1.sequencer` | `Sequencer` | `memreq`, `memreq.events`, `flit`, `flit.events` |
+| `system.ruby.l1_cntrl2.sequencer` | `Sequencer` | `memreq`, `memreq.events`, `flit`, `flit.events` |
+| `system.ruby.l1_cntrl3.sequencer` | `Sequencer` | `memreq`, `memreq.events`, `flit`, `flit.events` |
 
 The `memreq` generator produces root `MemoryRequest` transactions.
 The `flit` generator produces `Flit` child transactions.
-Both live on the same stream so that a request and its flit children appear together on the same viewer swim-lane.
+The `.events` companion generators produce zero-duration event transactions (see [Events on Transactions](#events-on-transactions)).
+All generators live on the same stream so that a request, its flit children, and all their events appear together on the same viewer swim-lane.
 
 Components that do **not** get their own stream (they appear only as event attributes):
 cache controllers, message buffers, network interfaces, routers, links, memory controllers.
@@ -115,20 +116,27 @@ No separate ID spaces per kind.
 
 **`Flit` child node:** own unique `trace_id`, root request's ID as both `root_trace_id` and `parent_trace_id` (in v1, flits attach directly to the root request).
 
-### Transaction Events
+### Events on Transactions
 
-Timestamped events attached to a transaction node.
+FTR has no native "event" primitive.
+Following the pattern established by LWTR4SC (`feature/record_events` branch), events are implemented as **zero-duration child transactions** on a companion `.events` generator, linked to the parent transaction via a `"parent_of"` relation.
 
-| Field | Description |
-|-------|-------------|
-| `tick` | When it happened |
-| `trace_id` | Which node this event belongs to |
-| `event_kind` | What happened (e.g. `port_crossing`, `enqueue`, `dequeue`, `router_arrive`, `switch_alloc`, `switch_traverse`, `link_traverse`, `issue`, `completion`) |
-| `object_name` | `SimObject::name()` where it happened |
-| `stage_name` | Optional sub-object stage |
-| `attributes` | Optional key-value pairs (queue occupancy, VC, outport, etc.) |
+This means every event is a full FTR transaction with `begin_time == end_time`, carrying its own attributes.
+No changes to the FTR writer or file format are required — events are serialized identically to regular transactions.
 
-Flit pipeline stages (router arrival, switch allocation, crossbar traverse, link traverse) are events stamped onto the flit's own transaction node — not separate nodes.
+Each event transaction carries these attributes:
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `event_kind` | `STRING` | What happened: `port_crossing`, `enqueue`, `dequeue`, `router_arrive`, `switch_alloc`, `switch_traverse`, `link_traverse`, `issue`, `completion` |
+| `object_name` | `STRING` | `SimObject::name()` where it happened |
+| `stage_name` | `STRING` | Optional sub-object stage (e.g. `switch_allocator`) |
+| *(additional)* | varies | Optional key-value pairs (queue occupancy, VC, outport, etc.) |
+
+`event_kind` must always be recorded as an explicit attribute.
+LWTR4SC passes event name as a function parameter but never writes it to the trace — we must not repeat that bug.
+
+Flit pipeline stages (router arrival, switch allocation, crossbar traverse, link traverse) are events on the flit's own transaction — not separate transaction nodes.
 
 ### Relations
 
@@ -384,6 +392,20 @@ void retireTransaction(TraceId id,
                        const EventAttrs &attrs = {});
 ```
 
+#### What `stampEvent` maps to in FTR
+
+`stampEvent()` is a convenience API.
+Internally it maps to FTR primitives following the LWTR4SC pattern:
+
+1. Create a zero-duration transaction on the parent's `.events` companion generator at `tick` (`begin_time == end_time == tick`).
+2. Record `event_kind` as a `STRING` attribute on the event transaction.
+3. Record `object_name` as a `STRING` attribute.
+4. Record all entries from `attrs` as additional attributes.
+5. Add a `"parent_of"` relation from the event transaction to the parent transaction.
+
+The caller does not need to know about companion generators or relations — `stampEvent` handles the mapping.
+Always pass an explicit `tick` (gem5's `curTick()`), matching LWTR4SC's `record_event_at_time` variant rather than the implicit-time `record_event`.
+
 ---
 
 ## Implementation Steps
@@ -559,21 +581,36 @@ It is the modern high-performance backend for SystemC SCV transaction recording.
 ftr::ftr_writer<true> trace("output.ftr");  // compressed
 trace.writeInfo(-12);                        // picoseconds
 trace.writeStream(0, "system.ruby.l1_cntrl0.sequencer", "Sequencer");
-trace.writeGenerator(0, "memreq", 0);
-trace.writeGenerator(1, "flit",   0);
+trace.writeGenerator(0, "memreq",        0);  // root memory requests
+trace.writeGenerator(1, "memreq.events", 0);  // events on memory requests
+trace.writeGenerator(2, "flit",          0);  // flit children
+trace.writeGenerator(3, "flit.events",   0);  // events on flits
 
+// Root memory request transaction
 uint64_t tx = 1;
 trace.startTransaction(tx, /*gen=*/0, /*stream=*/0, /*time=*/1000);
 trace.writeAttribute(tx, ftr::event_type::BEGIN,
     "address", ftr::data_type::UNSIGNED, uint64_t(0x80001000));
 trace.endTransaction(tx, /*time=*/1045);
 
-uint64_t flit_tx = 2;
-trace.startTransaction(flit_tx, /*gen=*/1, /*stream=*/0, /*time=*/1010);
-trace.endTransaction(flit_tx, /*time=*/1040);
+// Event on root request (zero-duration child on memreq.events)
+uint64_t evt = 2;
+trace.startTransaction(evt, /*gen=*/1, /*stream=*/0, /*time=*/1005);
+trace.writeAttribute(evt, ftr::event_type::RECORD,
+    "event_kind", ftr::data_type::STRING, "enqueue");
+trace.writeAttribute(evt, ftr::event_type::RECORD,
+    "object_name", ftr::data_type::STRING,
+    "system.ruby.l1_cntrl0.mandatoryQueue");
+trace.endTransaction(evt, /*time=*/1005);  // begin == end
+trace.writeRelation("parent_of", /*sink_stream=*/0, /*sink_tx=*/1,
+                                  /*src_stream=*/0,  /*src_tx=*/2);
 
-trace.writeRelation("parent_of", /*sink_stream=*/0, /*sink_tx=*/2,
-                                  /*src_stream=*/0,  /*src_tx=*/1);
+// Flit child transaction
+uint64_t flit_tx = 3;
+trace.startTransaction(flit_tx, /*gen=*/2, /*stream=*/0, /*time=*/1010);
+trace.endTransaction(flit_tx, /*time=*/1040);
+trace.writeRelation("parent_of", /*sink_stream=*/0, /*sink_tx=*/1,
+                                  /*src_stream=*/0,  /*src_tx=*/3);
 ```
 
 ### Transaction Traces in Other Systems
@@ -586,3 +623,10 @@ trace.writeRelation("parent_of", /*sink_stream=*/0, /*sink_tx=*/2,
 | Perfetto | Slice | Track | Flow ID |
 
 FTR inherits the SCV vocabulary directly and adds compact binary serialization with LZ4 compression.
+
+### LWTR4SC Events API Reference
+
+The `feature/record_events` branch of [LWTR4SC](https://github.com/Minres/LWTR4SC/tree/feature/record_events) demonstrates how events are implemented on top of the existing FTR primitives.
+Events are zero-duration child transactions on a companion `<generator>.events` generator, linked via `"parent_of"` relations.
+No FTR format changes are required.
+Our `stampEvent()` API follows this pattern directly.
