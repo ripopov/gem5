@@ -1,0 +1,9 @@
+Import('*')
+
+tx_src = Dir('#ext/tx_trace/src/tx_trace').srcnode()
+
+DebugFlag('TxTrace')
+GTest('tx_trace.test', 'tx_trace.test.cc',
+      tx_src.File('tx_trace.cc'),
+      tx_src.File('tx_text_writer.cc'),
+      skip_lib=True)

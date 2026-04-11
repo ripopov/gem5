@@ -23,6 +23,7 @@
   - [Manual: Domain-Specific](#manual-domain-specific)
   - [SimpleNetwork](#simplenetwork)
 - [FtrTrace SimObject](#ftrtrace-simobject)
+  - [Output Format](#output-format)
   - [Singleton Access](#singleton-access)
   - [Root Creation Filter Policy](#root-creation-filter-policy)
   - [Recorder API](#recorder-api)
@@ -335,6 +336,32 @@ If finer-grain tracing is needed later, add ProbePoints to `PerfectSwitch` and `
 
 It owns: the output file, the monotonic ID allocator (`std::atomic<uint64_t>` for thread safety), the live transaction table, configuration, and final serialization.
 
+### Output Format
+
+`FtrTrace` supports two output backends, selected by a Python parameter:
+
+```python
+class FtrTrace(SimObject):
+    type = 'FtrTrace'
+    cxx_header = 'sim/transaction_trace/ftr_trace.hh'
+
+    output_format = Param.String('ftr', "Output format: 'ftr' (binary) or 'text'")
+    output_file = Param.String('transactions', "Base filename (extension added automatically)")
+```
+
+| Format | Extension | Description |
+|--------|-----------|-------------|
+| `ftr` | `.ftr` | Binary CBOR with LZ4 compression via `ftr::ftr_writer<true>`. Compact, suitable for production runs. Viewable in SCViewer. |
+| `text` | `.txlog` | Human-readable text dump via LWTR4SC's text backend. One line per transaction/event/relation. Useful for initial bringup, debugging, and `grep`/`diff`-based validation. |
+
+Both backends implement the same internal writer interface, so the recorder API and all instrumentation code are format-agnostic.
+The writer is instantiated once during `FtrTrace` construction based on the `output_format` parameter.
+
+The text format is especially valuable during development:
+- Readable without a viewer — `grep`, `tail -f`, `diff` against expected output.
+- Eliminates the question "is the binary output wrong or is my viewer misinterpreting it?"
+- Makes integration test assertions trivial: match lines in the text output.
+
 ### Singleton Access
 
 ```cpp
@@ -414,10 +441,12 @@ Always pass an explicit `tick` (gem5's `curTick()`), matching LWTR4SC's `record_
 
 Create `src/sim/transaction_trace/` with:
 - `FtrTrace.py`, `ftr_trace.hh`, `ftr_trace.cc`
+- Writer interface abstraction with two backends: binary FTR (`ftr::ftr_writer<true>`) and text dump
 - Common header for trace IDs and attribute types
 - Build integration (SConscript) and one debug flag
 
-Implement: file lifecycle, ID allocator, live transaction table, node creation/stamping/retirement API, flush on exit and drain-safe flush.
+Implement: file lifecycle, ID allocator, live transaction table, node creation/stamping/retirement API, writer backend selection from `output_format` parameter, flush on exit and drain-safe flush.
+Start development with the text backend — it makes bringup and debugging much easier before binary output is validated.
 
 ### Step 2. Trace Identity Fields
 

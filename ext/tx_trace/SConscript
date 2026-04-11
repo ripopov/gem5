@@ -1,0 +1,5 @@
+# tx_trace: Transaction trace recorder with text and FTR backends
+
+Import('env')
+
+env.Prepend(CPPPATH=Dir('./src').srcnode())
