@@ -260,7 +260,9 @@ Port hook (sendResp)
 **Phase 1 — Pending.**
 `TimingRequestProtocol::sendReq()` detects a request entering a traced subsystem for the first time (no `TraceContext` on `pkt->req`, filter policy matches).
 It creates a pending root node and attaches `TraceContext` to `pkt->req`.
-If Ruby rejects the request for retry, the pending context is removed — no committed transaction leaks.
+If Ruby rejects the request for retry, the `sendResp` hook detects the root is still in pending state (never finalized by the Sequencer) and removes the `TraceContext` extension from `pkt->req`, discarding the pending root from the live transaction table.
+No committed transaction is written to the trace file.
+This keeps cleanup symmetric with creation — both happen in the port layer, requiring no changes to the Sequencer.
 
 **Phase 2 — Live.**
 `Sequencer::makeRequest()` finalizes the pending root as live.
@@ -428,7 +430,7 @@ Internally it maps to FTR primitives following the LWTR4SC pattern:
 2. Record `event_kind` as a `STRING` attribute on the event transaction.
 3. Record `object_name` as a `STRING` attribute.
 4. Record all entries from `attrs` as additional attributes.
-5. Add a `"parent_of"` relation from the event transaction to the parent transaction.
+5. Add a `"parent_of"` relation with the parent as `src` and the event as `sink` (matching LWTR4SC's convention where `add_relation` caller = sink, argument = source).
 
 The caller does not need to know about companion generators or relations — `stampEvent` handles the mapping.
 Always pass an explicit `tick` (gem5's `curTick()`), matching LWTR4SC's `record_event_at_time` variant rather than the implicit-time `record_event`.
@@ -498,8 +500,9 @@ void MessageBuffer::enqueue(MsgPtr message, ...)
 }
 ```
 
-Covers all queue timestamps for all protocols and all controllers.
-Messages with `m_rootTraceId == 0` are skipped at zero cost.
+Covers all queue crossings for messages that carry a nonzero `m_rootTraceId` — in v1 this means `RubyRequest` and its clones.
+Protocol-generated messages (responses, forwards, writebacks) that are constructed fresh rather than cloned will have `m_rootTraceId == 0` and are silently skipped.
+Full protocol-message coverage requires the per-protocol propagation work in Step 8.
 
 ### Step 6. NetworkInterface Flit Children
 
