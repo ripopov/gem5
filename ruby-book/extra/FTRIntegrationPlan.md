@@ -17,7 +17,8 @@ Every transaction trace, regardless of the specific format, builds on the same f
 
 2. **Stream (Track/Service).**
    A named timeline that groups related transactions.
-   Streams typically correspond to a component — a CPU core, a cache controller, a router — so the viewer can display concurrent activity as horizontal swim-lanes.
+   Streams correspond to transaction originators — the component where a transaction is born — so the viewer can display each originator's activity as a horizontal swim-lane.
+   A CPU core's sequencer, for example, is a single stream; the routers and queues the request passes through are not separate streams but appear as event attributes on the transaction.
 
 3. **Attributes (Properties/Annotations).**
    Key-value metadata attached to a transaction: address, request type, packet ID, latency breakdown, error status.
@@ -72,9 +73,9 @@ It is the modern high-performance back-end for SystemC SCV transaction recording
 FTR is a good fit for gem5 for several reasons:
 
 - **Open source** (Apache 2.0) — no proprietary dependencies.
-- **Hardware-oriented data model** — streams, generators, and transactions map directly to SimObjects and their operations.
+- **Hardware-oriented data model** — streams map to transaction originators, generators distinguish transaction kinds within an originator, and events carry SimObject names of the components a transaction passes through.
 - **Compact binary format** — CBOR encoding with LZ4 compression and string interning keeps files small even for long simulations.
-- **Explicit relations** — named directed edges between transactions across streams, exactly what is needed to trace a request through Ruby controllers and Garnet routers.
+- **Explicit relations** — named directed edges between transactions, within a stream or across streams, exactly what is needed to link parent requests to child flits and, in the future, instructions to their memory requests.
 - **Streaming writes** — transactions are flushed in chunks during simulation, so the writer does not accumulate unbounded state.
 - **Viewable in SCViewer** — an open-source transaction viewer that understands the FTR format.
 
@@ -109,9 +110,11 @@ FTR organizes trace data into five kinds of records, written as chunks in a CBOR
 
 **Streams and generators.**
 A *stream* is a named timeline — analogous to a Perfetto track or an OpenTelemetry service.
-In gem5 terms, a stream will map to a SimObject (e.g. `system.ruby.l1_cntrl0`).
+In gem5 terms, a stream maps to a transaction originator: the component where transactions are born.
+For memory requests entering Ruby, the originator is the sequencer, so the stream is named after it (e.g. `system.ruby.l1_cntrl0.sequencer`).
 A *generator* is a named source of transactions within a stream.
-One controller might have generators for "mandatory queue," "response queue," and "trigger queue," each producing its own transactions on the same stream.
+One sequencer stream has a `memreq` generator for root memory-request transactions and a `flit` generator for the flit child transactions created when those requests are flitisized into Garnet.
+The intermediate components a transaction passes through — controllers, message buffers, routers, links — do not own separate streams; they appear as event attributes (object name, timestamp) stamped onto transactions living on the originator's stream.
 
 **Transactions.**
 A transaction is a time-bounded event on a generator's stream.
@@ -129,7 +132,7 @@ Supported data types include `BOOLEAN`, `INTEGER`, `UNSIGNED`, `FLOATING_POINT_N
 **Relations.**
 A relation is a named directed edge from one transaction to another, possibly across different streams.
 The name describes the relationship type — for example, `"parent_of"`, `"caused_by"`, or `"split_into"`.
-Relations are how a viewer draws arrows from a CPU request transaction to the Ruby message transactions it spawns, and from those messages to the Garnet flit transactions that carry them.
+Relations are how a viewer draws arrows from a root memory-request transaction to its flit child transactions (within the same originator stream), or from an instruction transaction on the CPU fetch stream to its memory-request child on the sequencer stream.
 
 ### FTR Writer API Overview
 
@@ -142,11 +145,12 @@ ftr::ftr_writer<true> trace("output.ftr");  // compressed output
 // 1. Metadata: set timescale to picoseconds
 trace.writeInfo(-12);   // exponent: 10^-12
 
-// 2. Directory: define streams and generators
-trace.writeStream(/*id=*/0, "system.ruby.l1_cntrl0", "CacheController");
-trace.writeGenerator(/*id=*/0, "mandatoryQueue", /*stream=*/0);
+// 2. Directory: define stream and generators for one core's sequencer
+trace.writeStream(/*id=*/0, "system.ruby.l1_cntrl0.sequencer", "Sequencer");
+trace.writeGenerator(/*id=*/0, "memreq", /*stream=*/0);  // memory requests
+trace.writeGenerator(/*id=*/1, "flit",   /*stream=*/0);  // flit children
 
-// 3. Transactions: record a cache access
+// 3. Transactions: record a cache access (root memory request)
 uint64_t tx = 1;
 trace.startTransaction(tx, /*generator=*/0, /*stream=*/0, /*time=*/1000);
 
@@ -154,14 +158,21 @@ trace.writeAttribute(tx, ftr::event_type::BEGIN,
     "address", ftr::data_type::UNSIGNED, uint64_t(0x80001000));
 trace.writeAttribute(tx, ftr::event_type::BEGIN,
     "type", ftr::data_type::STRING, "LD");
+trace.writeAttribute(tx, ftr::event_type::RECORD,
+    "object", ftr::data_type::STRING, "system.ruby.l1_cntrl0.mandatoryQueue");
 trace.writeAttribute(tx, ftr::event_type::END,
     "latency", ftr::data_type::UNSIGNED, uint64_t(45));
 
 trace.endTransaction(tx, /*time=*/1045);
 
-// 4. Relations: link parent request to child message
+// 4. Record a flit child on the same stream, different generator
+uint64_t flit_tx = 2;
+trace.startTransaction(flit_tx, /*generator=*/1, /*stream=*/0, /*time=*/1010);
+trace.endTransaction(flit_tx, /*time=*/1040);
+
+// 5. Relations: link parent request to child flit (same stream)
 trace.writeRelation("parent_of",
-    /*sink_stream=*/1, /*sink_tx=*/2,
+    /*sink_stream=*/0, /*sink_tx=*/2,
     /*src_stream=*/0,  /*src_tx=*/1);
 ```
 
@@ -170,7 +181,7 @@ The key API methods are:
 | Method | Purpose |
 |--------|---------|
 | `writeInfo(timescale)` | Set the time unit exponent and record creation time |
-| `writeStream(id, name, kind)` | Define a named stream (maps to a SimObject) |
+| `writeStream(id, name, kind)` | Define a named stream (maps to a transaction originator) |
 | `writeGenerator(id, name, stream)` | Define a transaction source within a stream |
 | `startTransaction(id, generator, stream, time)` | Begin a new transaction |
 | `writeAttribute(id, event, name, type, value)` | Attach a typed attribute to a live transaction |
@@ -188,16 +199,17 @@ The mapping from FTR concepts to gem5 concepts is:
 
 | FTR Concept | gem5 Mapping |
 |-------------|-------------|
-| Stream | SimObject (controller, router, memory controller) |
-| Generator | A named queue or pipeline stage within a SimObject |
+| Stream | Transaction originator (sequencer for memory requests, CPU fetch stage for instructions) |
+| Generator | A transaction kind within an originator (`memreq`, `flit`, future `instruction`) |
 | Transaction | The lifetime of a request, message, packet, or flit within one component |
 | Relation | Parent-child or causal link between transactions (e.g. request → flit in v1, later request → message → flit) |
 | Attribute | Address, request type, size, requestor ID, latency, state transitions |
 
-A memory request entering Ruby will produce a single root transaction on the sequencer stream that lives until the request retires.
-In the first version, Garnet child transactions are created only at the flit level.
+A memory request entering Ruby will produce a single root transaction on the sequencer stream (e.g. `system.ruby.l1_cntrl0.sequencer`) under the `memreq` generator.
+That transaction lives until the request retires.
+In the first version, Garnet child transactions are created only at the flit level under the `flit` generator on the same sequencer stream.
 Each flit gets its own child transaction because it may take a different path through the network and accumulate different per-hop timing.
-Relations link child flit transactions directly back to their parent request, so a viewer can follow the fan-out through the network and the eventual convergence back at the requestor.
+Relations link child flit transactions directly back to their parent request within the same stream, so a viewer can follow the fan-out through the network and the eventual convergence back at the requestor.
 Distinct `RubyMessage` and `NetworkPacket` transaction nodes are deferred to a later phase, when the framework can represent them with their own stable identities instead of overloading one message-local ID.
 
 ---
@@ -491,6 +503,76 @@ Examples are:
 
 This keeps the primary hierarchy stable and viewer-friendly while still distinguishing internal pipeline stages.
 
+## Stream Hierarchy In A Typical Configuration
+
+Streams correspond to transaction originators — the component where a transaction is born — not to every SimObject the transaction passes through.
+Intermediate components (controllers, message buffers, routers, links) appear as `object_name` attributes on events stamped onto transactions, but do not own separate streams.
+
+This means the viewer shows one swim-lane per originator, and a request's entire life — queue hops, router traversals, callbacks — appears as events within a single transaction bar on that lane.
+
+### Memory Request Streams
+
+For a 4-core MESI Two Level system with Garnet, there are four memory-request streams, one per sequencer:
+
+| Stream name | Kind | Generators |
+|-------------|------|------------|
+| `system.ruby.l1_cntrl0.sequencer` | `Sequencer` | `memreq`, `flit` |
+| `system.ruby.l1_cntrl1.sequencer` | `Sequencer` | `memreq`, `flit` |
+| `system.ruby.l1_cntrl2.sequencer` | `Sequencer` | `memreq`, `flit` |
+| `system.ruby.l1_cntrl3.sequencer` | `Sequencer` | `memreq`, `flit` |
+
+The `memreq` generator produces root `MemoryRequest` transactions — one per CPU request accepted into Ruby.
+The `flit` generator produces `Flit` child transactions — one per flit created when a message originating from this core's request is flitisized into Garnet.
+
+Both generators live on the same stream so that a request and its flit children appear together on the same viewer swim-lane, making it easy to see the full lifetime of one core's traffic.
+
+Events on these transactions carry the `object_name` of the component where they occur.
+For example, a single `MemoryRequest` transaction on `system.ruby.l1_cntrl0.sequencer` might accumulate events with `object_name` values such as:
+
+- `system.ruby.l1_cntrl0.mandatoryQueue` (enqueue)
+- `system.ruby.l2_cntrl0.L1RequestToL2Cache` (enqueue at L2)
+- `system.ruby.network.routers0` (router arrive, for a flit child)
+- `system.ruby.network.int_links01.network_link` (link traverse, for a flit child)
+- `system.ruby.dir_cntrl0.requestToDir` (enqueue at directory)
+
+These intermediate SimObject names appear as event attributes, not as separate streams.
+
+### Future Instruction Streams
+
+Instruction lifetime transactions originate in the CPU pipeline, not at the sequencer.
+They belong on a separate stream at the fetch or decode stage:
+
+| Stream name | Kind | Generators |
+|-------------|------|------------|
+| `system.cpu0.fetch` | `Fetch` | `instruction` |
+| `system.cpu1.fetch` | `Fetch` | `instruction` |
+| ... | | |
+
+An instruction transaction on `system.cpu0.fetch` would parent a memory-request transaction on `system.ruby.l1_cntrl0.sequencer` via an explicit FTR relation.
+The two transactions live on different streams because they have different originators, but the relation arrow connects them in the viewer.
+
+### CHI Protocol Variant
+
+For CHI-based configurations, the same stream-per-originator pattern applies.
+The stream is named after the RNF's sequencer:
+
+| Stream name | Kind | Generators |
+|-------------|------|------------|
+| `system.ruby.hnf00.cntrl.sequencer` | `Sequencer` | `memreq`, `flit` |
+
+### What Does Not Get Its Own Stream
+
+The following components appear only as event attributes, never as streams:
+
+- Cache controllers (`system.ruby.l1_cntrl0`, `system.ruby.l2_cntrl0`, `system.ruby.dir_cntrl0`)
+- Message buffers (`system.ruby.l1_cntrl0.mandatoryQueue`, `system.ruby.l2_cntrl0.responseToL2Cache`, etc.)
+- Network interfaces (`system.ruby.network.netifs00`)
+- Routers (`system.ruby.network.routers00`)
+- Links (`system.ruby.network.int_links00.network_link`)
+- Memory controllers (`system.mem_ctrls0`)
+
+All of these stamp events onto existing transactions — they do not originate transactions.
+
 ## ID Model
 
 Use one global 64-bit monotonic ID space for all transaction nodes.
@@ -601,6 +683,8 @@ This policy avoids requiring a full protocol-wide SLICC metadata retrofit on day
 ### Flit Nodes
 
 In `NetworkInterface::flitisizeMessage()`, create a `Flit` child node for each constructed flit.
+The flit transaction is created on the same sequencer stream as its parent root request, under the `flit` generator.
+The originator's stream is determined by looking up the root request's `root_trace_id` from `msg_ptr->m_traceId`.
 
 In the first version, flits attach directly to the root `MemoryRequest` node carried by `msg_ptr->m_traceId`.
 This avoids inventing an ambiguous message-local ID that would have to represent both the root request and multiple packet or flit descendants during multicast fan-out.
@@ -1087,7 +1171,8 @@ That is valuable, but it should not block the first usable version.
 
 This architecture is intentionally not Ruby-specific.
 
-Later, an O3 instruction transaction can be created at fetch or rename using the same recorder.
+Later, an O3 instruction transaction can be created at fetch or decode using the same recorder.
+The instruction transaction lives on a separate stream at the CPU pipeline front-end (e.g. `system.cpu0.fetch`), because instructions originate in the pipeline, not at the sequencer.
 
 That instruction transaction would then parent child nodes such as:
 
@@ -1095,6 +1180,9 @@ That instruction transaction would then parent child nodes such as:
 2. LSQ memory request
 3. cache miss request
 4. Ruby message tree
+
+A memory-request transaction on `system.ruby.l1_cntrl0.sequencer` becomes a child of the instruction transaction on `system.cpu0.fetch` via an explicit FTR relation.
+The two transactions live on different streams (different originators), but the relation arrow connects them in the viewer.
 
 The same event vocabulary remains useful.
 
