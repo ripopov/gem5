@@ -448,26 +448,10 @@ Recommended event payload fields are:
 - optional `stage_name`
 - optional key-value attributes
 
-Examples of `event_kind` are:
-
-1. `Created`
-2. `Accepted`
-3. `Enqueue`
-4. `Dequeue`
-5. `Issued`
-6. `Split`
-7. `Inject`
-8. `Arrive`
-9. `RouteCompute`
-10. `SwitchAlloc`
-11. `SwitchTraverse`
-12. `LinkTraverse`
-13. `Reassemble`
-14. `Callback`
-15. `Retire`
-16. `Destroy`
-
-This event vocabulary is intentionally generic so O3 can later reuse it.
+The exact event vocabulary is not fixed by this plan.
+The framework primitives define the automatic event kinds they emit (port crossings, queue operations, flit pipeline stages).
+Domain-specific hooks add their own event kinds as needed during implementation.
+The vocabulary should remain small and generic enough to reuse across subsystems (Ruby, future O3, DMA).
 
 ### Why Separate Nodes And Events
 
@@ -624,7 +608,7 @@ The recommended detection rule is:
 
 1. Check whether `pkt->req` already has a `TraceContext` extension.
 2. If it does not, and the recorder is configured to trace this request (based on filtering criteria such as requestor ID, address range, or the receiving port's owner), create a root `MemoryRequest` transaction and attach the `TraceContext` extension to `pkt->req`.
-3. If it already has a `TraceContext`, stamp a `PortCrossing` event on the existing transaction.
+3. If it already has a `TraceContext`, stamp a port-crossing event on the existing transaction.
 
 This avoids the need for the port protocol to know whether it is entering Ruby specifically.
 
@@ -722,15 +706,16 @@ For the first version, record at least these timestamps on the root `MemoryReque
 
 Automatic timestamps (captured by primitive-level hooks, no manual code needed):
 
-1. `PortCrossing` — every port boundary the request crosses, including entry into Ruby and exit back toward the CPU (port-level hook)
-2. `Enqueue` / `Dequeue` — every `MessageBuffer` operation the associated message passes through (`MessageBuffer` hook)
+1. Port crossing — every port boundary the request crosses, including entry into Ruby and exit back toward the CPU (port-level hook)
+2. Enqueue / dequeue — every `MessageBuffer` operation the associated message passes through (`MessageBuffer` hook)
 
 Manual timestamps (captured by the three Sequencer hooks):
 
-3. `RubyIssued` — when `Sequencer::issueRequest()` hands the request to the protocol controller
-4. `SequencerCallback` — when `readCallback()`, `writeCallback()`, or `atomicCallback()` fires with hit/miss information
+3. Issue — when `Sequencer::issueRequest()` hands the request to the protocol controller
+4. Completion callback — when `readCallback()`, `writeCallback()`, or `atomicCallback()` fires with hit/miss information, and transaction retirement
 
-The automatic port-crossing stamps subsume the old manual `RubyAccepted`, `RubyResponseSent`, and `Retired` events because entry and exit port crossings are captured by the port-level primitive.
+The automatic port-crossing events subsume the need for manual entry and exit timestamps because every port boundary is captured by the primitive.
+Transaction retirement is stamped by the Sequencer callback hook, which knows the semantic completion reason (hit type, data source).
 
 ### Required Queue Timestamps
 
@@ -739,7 +724,7 @@ Captured automatically by the `MessageBuffer` primitive hook.
 For every `enqueue()` and `dequeue()` call on any `MessageBuffer` in the system:
 
 1. Look up `m_traceId` on the message being queued.
-2. If non-zero, stamp an `Enqueue` or `Dequeue` event on that trace node.
+2. If non-zero, stamp an enqueue or dequeue event on that trace node.
 3. Include the buffer's `SimObject::name()`, `curTick()`, queue occupancy, and vnet.
 
 No per-protocol and no per-controller instrumentation is needed.
@@ -750,18 +735,19 @@ For `Flit` nodes, record at least:
 
 Automatic timestamps (captured by `NetworkInterface` instrumentation and router ProbePoints):
 
-1. `Created` at flit construction in `flitisizeMessage()`
-2. `Inject` when scheduled onto the outgoing NI path
-3. `RouterArrive` at `InputUnit::wakeup()` (ProbePoint)
-4. `SwitchAlloc` at `SwitchAllocator` (ProbePoint)
-5. `SwitchTraverse` at `CrossbarSwitch` (ProbePoint)
-6. `LinkTraverse` at `NetworkLink::wakeup()` (ProbePoint)
-7. `Eject` at destination NI arrival
-8. `Destroy` when the flit retires from NI processing
+1. Flit construction in `flitisizeMessage()`
+2. Injection when scheduled onto the outgoing NI path
+3. Router arrival at `InputUnit::wakeup()` (ProbePoint)
+4. Switch allocation at `SwitchAllocator` (ProbePoint)
+5. Switch traverse at `CrossbarSwitch` (ProbePoint)
+6. Link traverse at `NetworkLink::wakeup()` (ProbePoint)
+7. Ejection at destination NI arrival
+8. Flit retirement when the flit completes NI processing
 
 All of these are captured by the four framework-level changes (NI instrumentation + four ProbePoints).
 
 These timestamps align with Garnet's real pipeline stages and give enough fidelity to explain contention and routing delay.
+The exact event kind names are determined during implementation.
 
 ### SimpleNetwork Considerations
 
@@ -901,7 +887,7 @@ The benefits are:
 
 Two categories of instrumentation cannot be fully automated through primitives.
 
-1. **Domain-specific attribute capture and lifecycle events at the Sequencer.** Recording request attributes (address, type, size, flags), finalizing the pending root transaction, stamping `RubyIssued` and `SequencerCallback` events, propagating `m_traceId` from `Request` to `RubyRequest`, and closing the root transaction on retirement all require explicit code in the Sequencer (three hook points total).
+1. **Domain-specific attribute capture and lifecycle events at the Sequencer.** Recording request attributes (address, type, size, flags), finalizing the pending root transaction, stamping issue and completion events, propagating `m_traceId` from `Request` to `RubyRequest`, and closing the root transaction on retirement all require explicit code in the Sequencer (three hook points total).
 
 2. **Protocol-specific message child nodes and trace ID propagation to newly constructed messages.** Creating `RubyMessage` child transactions for protocol messages that have semantic significance (such as upgrade requests or invalidations) requires understanding protocol semantics that the framework cannot infer. Propagating `m_traceId` to newly constructed (not cloned) protocol response messages requires SLICC action code changes per protocol.
 
@@ -1113,8 +1099,8 @@ If `FtrTrace` is not instantiated, these probes fire to zero listeners at neglig
 These points require explicit instrumentation because they capture domain-specific attributes that the framework primitives cannot infer.
 
 1. `Sequencer::makeRequest()` — attach `TraceContext` extension to `Request`, record address, type, size, requestor ID, PC, instruction sequence number.
-2. `Sequencer::issueRequest()` — stamp `RubyIssued` event with protocol-specific issue details.
-3. `Sequencer::readCallback()` / `writeCallback()` / `atomicCallback()` — stamp `SequencerCallback` event with hit/miss type and data source.
+2. `Sequencer::issueRequest()` — stamp an issue event with protocol-specific issue details.
+3. `Sequencer::readCallback()` / `writeCallback()` / `atomicCallback()` — stamp a completion event with hit/miss type and data source, and retire the root transaction.
 
 These are approximately three manual hook points compared to the nine in a purely manual approach.
 
@@ -1184,9 +1170,7 @@ That instruction transaction would then parent child nodes such as:
 A memory-request transaction on `system.ruby.l1_cntrl0.sequencer` becomes a child of the instruction transaction on `system.cpu0.fetch` via an explicit FTR relation.
 The two transactions live on different streams (different originators), but the relation arrow connects them in the viewer.
 
-The same event vocabulary remains useful.
-
-`Created`, `Accepted`, `Enqueue`, `Dequeue`, `Issued`, `Callback`, and `Retire` all map naturally onto pipeline stages.
+The same event vocabulary remains useful — the concepts of creation, queue motion, issue, completion, and retirement map naturally onto pipeline stages.
 
 This is why the core framework should live under a generic simulation tracing location rather than under a Ruby-only directory.
 
@@ -1267,14 +1251,14 @@ The logic for requests is:
 
 1. Check `FtrTrace::get()`. If null, skip (zero-cost when tracing is off).
 2. Check whether `pkt->req` already carries a `TraceContext` extension.
-3. If it does, stamp a `PortCrossing` event with the peer port's owner `SimObject::name()` and `curTick()`.
+3. If it does, stamp a port-crossing event with the peer port's owner `SimObject::name()` and `curTick()`.
 4. If it does not, check whether the recorder's filter policy matches this request (see below). If it matches, create a pending root `MemoryRequest` transaction and attach a `TraceContext` extension to `pkt->req`.
 
 The logic for responses is:
 
 1. Check `FtrTrace::get()` and `pkt->req->getExtension<TraceContext>()`. If either is null, skip.
-2. Stamp a `PortCrossing` event.
-3. The `Retire` event is not stamped here — it is stamped by the Sequencer callback hook (Step 4), which knows the semantic completion reason (hit type, data source). The final port crossing is simply the last `PortCrossing` event in the trace.
+2. Stamp a port-crossing event.
+3. Transaction retirement is not stamped here — it is stamped by the Sequencer callback hook (Step 4), which knows the semantic completion reason (hit type, data source). The final port crossing is simply the last port-crossing event in the trace.
 
 #### Root Creation Filter Policy
 
@@ -1306,8 +1290,8 @@ The trace shows request entry into Ruby, internal port crossings, and response p
 Instrument the Sequencer to record domain-specific attributes that the port-level primitive cannot infer.
 
 1. `Sequencer::makeRequest()` — finalize the pending root transaction as live. Record static attributes (address, request type, size, flags) by reading them from `pkt->req` directly. Set `m_traceId` on the `RubyRequest` being created so that trace identity flows into Ruby's `Message` layer.
-2. `Sequencer::issueRequest()` — stamp `RubyIssued` event.
-3. `Sequencer::readCallback()` / `writeCallback()` / `atomicCallback()` — stamp `SequencerCallback` event with hit/miss type and data source. Stamp `Retire` event to close the root transaction.
+2. `Sequencer::issueRequest()` — stamp an issue event with protocol-specific details.
+3. `Sequencer::readCallback()` / `writeCallback()` / `atomicCallback()` — stamp a completion event with hit/miss type and data source. Retire the root transaction.
 
 The `m_traceId` propagation in point 1 is critical: it bridges trace identity from `Request` (port world) into `Message` (Ruby world), enabling the automatic `MessageBuffer` hooks in Step 5.
 
@@ -1323,8 +1307,8 @@ Add an optional `FtrTrace*` recorder pointer set during configuration.
 
 When non-null:
 
-1. `enqueue()` emits an `Enqueue` event with the buffer's `SimObject::name()`, `curTick()`, queue occupancy, and vnet.
-2. `dequeue()` emits a `Dequeue` event with the same fields.
+1. `enqueue()` emits an enqueue event with the buffer's `SimObject::name()`, `curTick()`, queue occupancy, and vnet.
+2. `dequeue()` emits a dequeue event with the same fields.
 
 The event is stamped on the root request node identified by `message->m_traceId`.
 
