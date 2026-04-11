@@ -42,6 +42,7 @@
 #include "mem/ruby/network/garnet/flitBuffer.hh"
 #include "mem/ruby/slicc_interface/Message.hh"
 #include "mem/ruby/system/RubySystem.hh"
+#include "sim/transaction_trace/ftr_trace.hh"
 
 namespace gem5
 {
@@ -254,6 +255,13 @@ NetworkInterface::wakeup()
                     Credit *cFlit = new Credit(t_flit->get_vc(),
                                                true, curTick());
                     iPort->sendCredit(cFlit);
+                    // FTR tracing: retire flit transaction at ejection
+                    if (auto *ftr = FtrTrace::get();
+                        ftr && t_flit->getTraceId() != 0) {
+                        ftr->retireTransaction(t_flit->getTraceId(), name(),
+                                               curTick());
+                    }
+
                     // Update stats and delete flit pointer
                     incrementStats(t_flit);
                     delete t_flit;
@@ -275,6 +283,13 @@ NetworkInterface::wakeup()
                 // Simply send a credit back since we are not buffering
                 // this flit in the NI
                 iPort->sendCredit(cFlit);
+
+                // FTR tracing: retire non-tail flit transaction
+                if (auto *ftr = FtrTrace::get();
+                    ftr && t_flit->getTraceId() != 0) {
+                    ftr->retireTransaction(t_flit->getTraceId(), name(),
+                                           curTick());
+                }
 
                 // Update stats and delete flit pointer.
                 incrementStats(t_flit);
@@ -344,6 +359,13 @@ NetworkInterface::checkStallQueue()
                     Credit *cFlit = new Credit(stallFlit->get_vc(), true,
                                                    curTick());
                     iPort->sendCredit(cFlit);
+
+                    // FTR tracing: retire stalled flit transaction
+                    if (auto *ftr = FtrTrace::get();
+                        ftr && stallFlit->getTraceId() != 0) {
+                        ftr->retireTransaction(stallFlit->getTraceId(), name(),
+                                               curTick());
+                    }
 
                     // Update Stats
                     incrementStats(stallFlit);
@@ -455,6 +477,21 @@ NetworkInterface::flitisizeMessage(MsgPtr msg_ptr, int vnet)
                 oPort->bitWidth(), curTick());
 
             fl->set_src_delay(curTick() - msg_ptr->getTime());
+
+            // FTR tracing: create flit child transaction
+            if (auto *ftr = FtrTrace::get();
+                ftr && new_msg_ptr->getRootTraceId() != 0) {
+                TraceId flit_id = ftr->createFlitChild(
+                    new_msg_ptr->getRootTraceId(), name(), curTick(),
+                    {{"flit_index", uint64_t(i)},
+                     {"packet_id", uint64_t(packet_id)},
+                     {"vnet", uint64_t(vnet)},
+                     {"vc", uint64_t(vc)},
+                     {"num_flits", uint64_t(num_flits)},
+                     {"dest_ni", uint64_t(destID)}});
+                fl->setTraceId(flit_id);
+            }
+
             niOutVcs[vc].insert(fl);
         }
 

@@ -44,10 +44,13 @@
 #include "debug/Config.hh"
 #include "debug/Drain.hh"
 #include "debug/RubyPort.hh"
+#include "mem/protocol/timing.hh"
 #include "mem/ruby/slicc_interface/AbstractController.hh"
 #include "mem/simple_mem.hh"
 #include "sim/full_system.hh"
 #include "sim/system.hh"
+#include "sim/transaction_trace/ftr_trace.hh"
+#include "sim/transaction_trace/trace_context.hh"
 
 namespace gem5
 {
@@ -94,6 +97,17 @@ RubyPort::init()
         response_port->sendRangeChange();
     if (gotAddrRanges == 0 && FullSystem) {
         pioResponsePort.sendRangeChange();
+    }
+
+    // FTR tracing: register root filter so only requests entering
+    // Ruby through MemResponsePort start root transactions.
+    if (auto *ftr = FtrTrace::get()) {
+        ftr->setRootFilter(
+            [](PacketPtr pkt, TimingResponseProtocol *peer) -> bool {
+                return dynamic_cast<RubyPort::MemResponsePort *>(peer) !=
+                           nullptr &&
+                       !pkt->req->getExtension<TraceContext>();
+            });
     }
 }
 

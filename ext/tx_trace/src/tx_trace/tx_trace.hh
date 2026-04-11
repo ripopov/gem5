@@ -108,6 +108,28 @@ class TxTrace
     /** End a transaction and record its retirement. */
     void retireTransaction(TraceId id, Tick tick, const AttrList &attrs = {});
 
+    /**
+     * Reserve a globally unique TraceId without starting a transaction.
+     * Used for deferred (pending) root creation where the actual
+     * startTransaction call is deferred until finalization.
+     */
+    TraceId reserveId();
+
+    /**
+     * Create a root transaction using a pre-reserved TraceId.
+     * The caller must have obtained @p id from reserveId().
+     */
+    void createRootTransactionWithId(TraceId id, uint64_t gen_id, Tick tick,
+                                     const AttrList &attrs = {});
+
+    /**
+     * Create a child transaction using a pre-reserved TraceId.
+     * The caller must have obtained @p id from reserveId().
+     */
+    void createChildTransactionWithId(TraceId id, uint64_t gen_id,
+                                      TraceId parent, Tick tick,
+                                      const AttrList &attrs = {});
+
     /** Flush any buffered output. */
     void flush();
 

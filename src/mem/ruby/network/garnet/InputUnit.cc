@@ -34,6 +34,7 @@
 #include "debug/RubyNetwork.hh"
 #include "mem/ruby/network/garnet/Credit.hh"
 #include "mem/ruby/network/garnet/Router.hh"
+#include "sim/transaction_trace/ftr_trace.hh"
 
 namespace gem5
 {
@@ -86,6 +87,13 @@ InputUnit::wakeup()
         assert(t_flit->m_width == m_router->getBitWidth());
         int vc = t_flit->get_vc();
         t_flit->increment_hops(); // for stats
+
+        // FTR tracing: stamp router arrival event
+        if (auto *ftr = FtrTrace::get(); ftr && t_flit->getTraceId() != 0) {
+            ftr->stampEvent(t_flit->getTraceId(), "router_arrive",
+                            m_router->name(), curTick(),
+                            {{"vc", uint64_t(vc)}});
+        }
 
         if ((t_flit->get_type() == HEAD_) ||
             (t_flit->get_type() == HEAD_TAIL_)) {

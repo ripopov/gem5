@@ -439,98 +439,177 @@ Always pass an explicit `tick` (gem5's `curTick()`), matching LWTR4SC's `record_
 
 ## Implementation Steps
 
-### Step 1. Generic Trace Core
+### Step 1. Generic Trace Core — DONE
 
-Create `src/sim/transaction_trace/` with:
-- `FtrTrace.py`, `ftr_trace.hh`, `ftr_trace.cc`
-- Writer interface abstraction with two backends: binary FTR (`ftr::ftr_writer<true>`) and text dump
-- Common header for trace IDs and attribute types
-- Build integration (SConscript) and one debug flag
+Created `src/sim/transaction_trace/` with:
+- `FtrTrace.py` — SimObject definition with `output_format` and `output_file` parameters
+- `ftr_trace.hh` / `ftr_trace.cc` — `FtrTrace` SimObject wrapping `tx_trace::TxTrace`; singleton access via `get()`; lazy per-sequencer stream/generator creation; pending-root lifecycle (reserve ID → finalize or discard); root filter policy; drain-safe flush
+- `trace_context.hh` — `TraceContext` extension on `Request` (traceId, rootTraceId, parentTraceId, originTick)
+- `SConscript` updated with `SimObject()`, `Source()`, `DebugFlag('TxTrace')`
 
-Implement: file lifecycle, ID allocator, live transaction table, node creation/stamping/retirement API, writer backend selection from `output_format` parameter, flush on exit and drain-safe flush.
-Start development with the text backend — it makes bringup and debugging much easier before binary output is validated.
+Extended `ext/tx_trace/` library with:
+- `reserveId()` — allocate ID without writing to the trace (for deferred pending roots)
+- `createRootTransactionWithId()` / `createChildTransactionWithId()` — use pre-reserved IDs
 
-### Step 2. Trace Identity Fields
+Unit tests: 12 tests pass (4 new tests for reserved-ID API).
 
-**2a.** Define `TraceContext` extension on `Request` (fields: `trace_id`, `root_trace_id`, `parent_trace_id`, `origin_tick`).
+### Step 2. Trace Identity Fields — DONE
 
-**2b.** Add `TraceId m_rootTraceId = 0` to `Message` base class.
+**2a.** `TraceContext` extension on `Request` via `Extension<Request, TraceContext>` in `src/sim/transaction_trace/trace_context.hh`.
 
-**2c.** Add `TraceId m_traceId = 0` to `flit` class.
+**2b.** `uint64_t m_rootTraceId = 0` added to `Message` base class in `src/mem/ruby/slicc_interface/Message.hh` with `getRootTraceId()` / `setRootTraceId()` accessors. Default copy propagates automatically via `Message(const Message&) = default`, so `clone()` works.
 
-### Step 3. Port-Level Instrumentation
+**2c.** `uint64_t m_traceId = 0` added to `flit` class in `src/mem/ruby/network/garnet/flit.hh` with `getTraceId()` / `setTraceId()` accessors.
 
-Add FTR calls to `TimingRequestProtocol::sendReq()` and `TimingResponseProtocol::sendResp()`.
+### Step 3. Port-Level Instrumentation — DONE
 
-Request path:
+FTR calls added to `TimingRequestProtocol::sendReq()` and `TimingResponseProtocol::sendResp()` in `src/mem/protocol/timing.cc`.
+
+Request path (`sendReq`):
 1. `FtrTrace::get()` null → skip.
-2. `pkt->req` has `TraceContext` → stamp port-crossing event.
+2. `pkt->req` has `TraceContext` → stamp `port_crossing` event.
 3. No `TraceContext` + filter matches → create pending root, attach `TraceContext`.
+4. If `recvTimingReq` returns false (rejected) and we created a pending root → `discardPendingRoot()`, remove `TraceContext`.
 
-Response path:
+Response path (`sendResp`):
 1. `FtrTrace::get()` null or no `TraceContext` → skip.
-2. Stamp port-crossing event. (Retirement is handled by Sequencer callback in Step 4.)
+2. Stamp `port_crossing` event.
 
-After this step, every port crossing in the system is traced automatically.
+### Step 4. Sequencer Hooks — DONE
 
-### Step 4. Sequencer Hooks
+Three manual hooks in `src/mem/ruby/system/Sequencer.cc`:
+1. `makeRequest()`: after `insertRequest()` succeeds, finalize pending root as live, record static attributes (address, line_address, size, type, requestor_id, PC).
+2. `issueRequest()`: after `RubyRequest` msg is constructed, bridge trace ID into Message layer (`msg->setRootTraceId()`), stamp `issue` event.
+3. `hitCallback()`: stamp `completion` event with `external_hit` and `machine` attributes, retire root transaction. Placed before `ruby_hit_callback(pkt)`.
 
-Three manual hooks:
-1. `makeRequest()`: finalize pending root as live, record static attributes, set `m_rootTraceId` on `RubyRequest`.
-2. `issueRequest()`: stamp issue event.
-3. `readCallback()` / `writeCallback()` / `atomicCallback()`: stamp completion, retire root.
+Filter registration in `RubyPort::init()` (`src/mem/ruby/system/RubyPort.cc`): only requests entering Ruby through `MemResponsePort` that don't already have a `TraceContext` get root transactions.
 
-After this step, every Ruby request has a useful end-to-end lifetime trace (attributes, port crossings, issue, completion) before any Garnet work.
+After this step, every accepted Ruby request produces a complete root transaction with static attributes, issue event, completion event, and retirement.
 
-### Step 5. MessageBuffer Instrumentation
+### Step 5. MessageBuffer Instrumentation — DONE
 
-Add trace-awareness to `MessageBuffer::enqueue()` and `dequeue()`:
+Trace-awareness added to `MessageBuffer::enqueue()` and `dequeue()` in `src/mem/ruby/network/MessageBuffer.cc`:
 
 ```cpp
-void MessageBuffer::enqueue(MsgPtr message, ...)
-{
-    // ... existing logic ...
-    if (auto *recorder = FtrTrace::get();
-        recorder && message->m_rootTraceId != 0) {
-        recorder->stampEvent(message->m_rootTraceId, "enqueue",
-                             name(), curTick(),
-                             {{"occupancy", m_prio_heap.size()},
-                              {"vnet", message->getVnet()}});
-    }
+// In enqueue(), after push_heap:
+if (auto *ftr = FtrTrace::get();
+    ftr && message->getRootTraceId() != 0) {
+    ftr->stampEvent(message->getRootTraceId(), "enqueue",
+                    name(), current_time,
+                    {{"occupancy", uint64_t(m_prio_heap.size())},
+                     {"vnet", uint64_t(message->getVnet())}});
 }
 ```
 
-Covers all queue crossings for messages that carry a nonzero `m_rootTraceId` — in v1 this means `RubyRequest` and its clones.
+Covers queue crossings for messages that carry a nonzero `m_rootTraceId` — in v1 this means `RubyRequest` and its clones.
 Protocol-generated messages (responses, forwards, writebacks) that are constructed fresh rather than cloned will have `m_rootTraceId == 0` and are silently skipped.
 Full protocol-message coverage requires the per-protocol propagation work in Step 8.
 
-### Step 6. NetworkInterface Flit Children
+### Step 6. NetworkInterface Flit Children — DONE
 
-In `flitisizeMessage()`: create one `Flit` child transaction per flit, record parent-child relation, stamp creation event, record static attributes (flit index, packet ID, vnet, VC, width, source NI, destination node).
+In `flitisizeMessage()` (`src/mem/ruby/network/garnet/NetworkInterface.cc`): after each `flit` object is created, if `new_msg_ptr->getRootTraceId() != 0`, create a child transaction via `FtrTrace::createFlitChild()` with attributes (flit_index, packet_id, vnet, vc, num_flits, dest_ni) and set `fl->setTraceId()`.
 
-In destination-side `wakeup()`: stamp ejection event, retire flit transaction.
+In destination-side `wakeup()`: retire flit transaction at all three ejection paths (normal tail-flit ejection, non-tail flit consumption, stall-queue unstall).
 
-### Step 7. Router Stage ProbePoints
+### Step 7. Router Stage Events — DONE
 
-Add one `ProbePointArg<FlitTraceStamp>` to each of the four Garnet pipeline stages.
-`FtrTrace` registers as listener during `regProbeListeners()`.
-Each probe stamps an event on the flit's transaction node.
+Direct `FtrTrace::get()` calls (not ProbePoints) in the four Garnet pipeline stages — simpler, same zero-cost-when-disabled guarantee:
 
-### Step 8. Protocol-Aware Message Nodes (Later)
+| Stage | File | Event | Extra attributes |
+|-------|------|-------|-----------------|
+| `InputUnit::wakeup()` | `InputUnit.cc` | `router_arrive` | vc |
+| `SwitchAllocator::arbitrate_outports()` | `SwitchAllocator.cc` | `switch_alloc` | invc, outvc, outport |
+| `CrossbarSwitch::wakeup()` | `CrossbarSwitch.cc` | `switch_traverse` | — |
+| `NetworkLink::wakeup()` | `NetworkLink.cc` | `link_traverse` | — |
 
-After primitive-level instrumentation is proven useful, optionally add `RubyMessage` child nodes at key protocol emission sites.
-Start with MESI Two Level.
-This is the only step requiring per-protocol work.
+### Step 8. Protocol-Aware Trace ID Propagation — NOT STARTED
 
-### Step 9. Validation and Documentation
+**Status: This is the critical next step for enabling flit and router-stage tracing.**
 
-Unit tests: ID allocation, parent-child relationships, retirement, serialization.
+Steps 6–7 are fully implemented but produce no output because they gate on `m_rootTraceId != 0` / `getTraceId() != 0`, and currently no messages reaching the network carry a nonzero trace ID.
 
-Integration tests: one root per accepted request, port-crossing events appear automatically, queue events appear for traced messages, flit child count matches expected decomposition, `m_rootTraceId` survives `clone()`.
+**Root cause:** SLICC protocol state machines construct new protocol messages (e.g., `RequestMsg`, `ResponseMsg`) at emission sites rather than cloning the original `RubyRequest`. These fresh messages have `m_rootTraceId == 0` by default. The trace ID set on the `RubyRequest` in `Sequencer::issueRequest()` is consumed by the L1 controller but never copied into outgoing protocol messages.
 
-Smoke config: small FTR file from a Ruby random test or synthetic Garnet traffic run.
+**The propagation gap in detail:**
+1. `Sequencer::issueRequest()` creates a `RubyRequest` with `m_rootTraceId` set ✓
+2. `RubyRequest` is enqueued into the mandatory queue → `enqueue` event fires ✓
+3. L1 controller dequeues the `RubyRequest`, processes it via SLICC state machine
+4. SLICC code constructs a **new** `RequestMsg` (not a clone) to send to the directory
+5. This new `RequestMsg` has `m_rootTraceId == 0` ✗
+6. When this message reaches `NetworkInterface::flitisizeMessage()`, the zero check skips flit creation
 
-Human inspection: open trace in SCViewer, verify dotted names match SimObject hierarchy.
+**Approaches to fix (in order of preference):**
+
+1. **SLICC compiler change:** Modify the SLICC `enqueue` statement to auto-propagate `m_rootTraceId` from the triggering message to the outgoing message. This is protocol-agnostic but requires changes to `src/mem/slicc/ast/EnqueueStatementAST.py` and the generated C++ code. The SLICC enqueue statement already has access to the triggering message via `in_msg_ptr` — the generated code could insert `out_msg->setRootTraceId(in_msg_ptr->getRootTraceId())` after message construction.
+
+2. **Per-protocol SLICC annotation:** Add explicit `out_msg.m_rootTraceId := in_msg.m_rootTraceId;` lines at key emission sites in `.sm` files. Start with MI_example, then MESI Two Level. Requires manual work per protocol but no compiler changes.
+
+3. **Controller-level hook:** Add a hook in `AbstractController` that intercepts outgoing messages and copies `m_rootTraceId` from the most recently dequeued message on the same address. Heuristic but protocol-agnostic.
+
+### Step 9. Validation and Documentation — PARTIAL
+
+**Done:**
+- Unit tests: 12 tests covering ID allocation, parent-child relationships, retirement, serialization, reserved-ID API.
+- Smoke test: `ruby-book/final/smoke/ftr_smoke_test.py` — 2-CPU Garnet Mesh_XY with MI_example, produces `transactions.txlog` with root transactions, issue/completion/enqueue/dequeue events.
+- Build verification: `scons build/RISCV/gem5.opt` compiles cleanly; `scons build/NULL/unittests.opt` passes all tests.
+
+**Remaining:**
+- Integration tests for flit child count (blocked on Step 8).
+- SCViewer inspection of binary FTR output (blocked on binary backend).
+- Smoke test validation of flit and router-stage events (blocked on Step 8).
+
+---
+
+### Smoke Test Results (v1, Steps 1–7)
+
+Run: `gem5.opt ftr_smoke_test.py --protocol=MI_example --num-cpus=2 --num-dirs=2 --network=garnet --topology=Mesh_XY --mesh-rows=2`
+
+| Metric | Value |
+|--------|-------|
+| Output file | `transactions.txlog` (983 KB) |
+| Streams | 2 (one per sequencer) |
+| Generators | 8 (memreq, memreq.events, flit, flit.events × 2) |
+| Transactions started | 3,462 |
+| Transactions ended | 3,431 (31 in-flight at simulation end) |
+| Parent-child relations | 2,713 |
+| `issue` events | 677 |
+| `completion` events | 718 (includes coalesced requests) |
+| `enqueue` events | 676 (mandatory queue only — RubyRequest) |
+| `dequeue` events | 642 |
+| `port_crossing` events | 0 (see note below) |
+| Flit child transactions | 0 (blocked on Step 8) |
+| Router stage events | 0 (blocked on Step 8) |
+
+**Note on `port_crossing`:** Zero port-crossing events due to a bug — see Known Bugs below.
+
+---
+
+### Known Bugs
+
+#### BUG: `stampEvent` fails after `retireTransaction` — breaks response-path `port_crossing` events
+
+The plan's transaction lifecycle defines four phases:
+
+```
+Phase 1 (PENDING)  → sendReq creates pending root
+Phase 2 (LIVE)     → Sequencer::makeRequest finalizes root
+Phase 3 (RETIRED)  → Sequencer::hitCallback retires root
+Phase 4 (FINAL)    → sendResp stamps last port_crossing event
+```
+
+Phase 4 should stamp a `port_crossing` event **after** the root is retired.
+This fails because `FtrTrace::retireTransaction()` erases the TraceId from `liveTxs_`, and `stampEvent()` uses `liveTxs_` to look up the `.events` companion generator ID. Once the entry is gone, `stampEvent` silently skips.
+
+The `TraceContext` extension is still on `pkt->req` (never removed), so the TraceId is available. The problem is purely that the generator mapping is lost.
+
+**Timeline:**
+1. `hitCallback()` → `ftr->retireTransaction(id)` → writes `tx_end`, **erases `liveTxs_[id]`**
+2. `ruby_hit_callback(pkt)` → `schedTimingResp(pkt)`
+3. `sendResp()` → `ftr->stampEvent(ctx->traceId, "port_crossing", ...)` → `liveTxs_.find(id)` returns `end()` → **skipped**
+
+**Fix:** Keep the generator mapping available after retirement.
+`stampEvent` creates its own independent zero-duration child transaction on the `.events` generator — it does not need the parent transaction to be open in the writer. It only needs the generator ID.
+Options: (a) don't erase from `liveTxs_` in `retireTransaction`, add a `retired` flag instead and erase lazily; (b) move retired entries to a separate `retiredTxs_` map that preserves only the generator mapping; (c) store the generator ID in `TraceContext` on `pkt->req` so `stampEvent` doesn't need the lookup at all.
 
 ---
 

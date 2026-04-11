@@ -36,6 +36,7 @@
 #include "mem/ruby/network/garnet/InputUnit.hh"
 #include "mem/ruby/network/garnet/OutputUnit.hh"
 #include "mem/ruby/network/garnet/Router.hh"
+#include "sim/transaction_trace/ftr_trace.hh"
 
 namespace gem5
 {
@@ -215,6 +216,16 @@ SwitchAllocator::arbitrate_outports()
 
                 // decrement credit in outvc
                 output_unit->decrement_credit(outvc);
+
+                // FTR tracing: stamp switch allocation event
+                if (auto *ftr = FtrTrace::get();
+                    ftr && t_flit->getTraceId() != 0) {
+                    ftr->stampEvent(t_flit->getTraceId(), "switch_alloc",
+                                    m_router->name(), curTick(),
+                                    {{"invc", uint64_t(invc)},
+                                     {"outvc", uint64_t(outvc)},
+                                     {"outport", uint64_t(outport)}});
+                }
 
                 // flit ready for Switch Traversal
                 t_flit->advance_stage(ST_, curTick());

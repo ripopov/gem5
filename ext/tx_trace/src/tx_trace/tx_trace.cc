@@ -97,6 +97,32 @@ TxTrace::retireTransaction(TraceId id, Tick tick, const AttrList &attrs)
     liveTxs_.erase(it);
 }
 
+TraceId
+TxTrace::reserveId()
+{
+    return allocateId();
+}
+
+void
+TxTrace::createRootTransactionWithId(TraceId id, uint64_t gen_id, Tick tick,
+                                     const AttrList &attrs)
+{
+    writer_->startTransaction(id, gen_id, tick);
+    writeAttrs(id, attrs);
+    liveTxs_[id] = {gen_id, 0};
+}
+
+void
+TxTrace::createChildTransactionWithId(TraceId id, uint64_t gen_id,
+                                      TraceId parent, Tick tick,
+                                      const AttrList &attrs)
+{
+    writer_->startTransaction(id, gen_id, tick);
+    writeAttrs(id, attrs);
+    writer_->writeRelation("parent_of", id, parent);
+    liveTxs_[id] = {gen_id, parent};
+}
+
 void
 TxTrace::flush()
 {

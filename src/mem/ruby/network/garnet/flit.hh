@@ -79,6 +79,17 @@ class flit
     void set_dequeue_time(Tick time) { m_dequeue_time = time; }
     void set_enqueue_time(Tick time) { m_enqueue_time = time; }
 
+    uint64_t
+    getTraceId() const
+    {
+        return m_traceId;
+    }
+    void
+    setTraceId(uint64_t id)
+    {
+        m_traceId = id;
+    }
+
     void increment_hops() { m_route.hops_traversed++; }
     virtual void print(std::ostream& out) const;
 
@@ -129,6 +140,7 @@ class flit
     int m_outport;
     Tick src_delay;
     std::pair<flit_stage, Tick> m_stage;
+    uint64_t m_traceId = 0;
 };
 
 inline std::ostream&

@@ -35,6 +35,7 @@
 #include "base/trace.hh"
 #include "debug/RubyNetwork.hh"
 #include "mem/ruby/network/garnet/CreditLink.hh"
+#include "sim/transaction_trace/ftr_trace.hh"
 
 namespace gem5
 {
@@ -111,6 +112,12 @@ NetworkLink::wakeup()
                 t_flit->get_vnet()) != mVnets.end()) ||
                 (mVnets.size() == 0));
         }
+        // FTR tracing: stamp link traversal event
+        if (auto *ftr = FtrTrace::get(); ftr && t_flit->getTraceId() != 0) {
+            ftr->stampEvent(t_flit->getTraceId(), "link_traverse", name(),
+                            curTick());
+        }
+
         t_flit->set_time(clockEdge(m_latency));
         linkBuffer.insert(t_flit);
         link_consumer->scheduleEventAbsolute(clockEdge(m_latency));

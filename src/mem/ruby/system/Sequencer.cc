@@ -56,6 +56,8 @@
 #include "mem/ruby/slicc_interface/RubyRequest.hh"
 #include "mem/ruby/slicc_interface/RubySlicc_Util.hh"
 #include "mem/ruby/system/RubySystem.hh"
+#include "sim/transaction_trace/ftr_trace.hh"
+#include "sim/transaction_trace/trace_context.hh"
 
 namespace gem5
 {
@@ -795,6 +797,18 @@ Sequencer::hitCallback(SequencerRequest* srequest, DataBlock& data,
         testerSenderState->subBlock.mergeFrom(data);
     }
 
+    // FTR tracing: stamp completion event and retire root transaction
+    if (auto *ftr = FtrTrace::get()) {
+        auto ctx = pkt->req->getExtension<TraceContext>();
+        if (ctx) {
+            ftr->stampEvent(
+                ctx->traceId, "completion", name(), curTick(),
+                {{"external_hit", externalHit},
+                 {"machine", std::string(MachineType_to_string(mach))}});
+            ftr->retireTransaction(ctx->traceId, name(), curTick());
+        }
+    }
+
     RubySystem *rs = m_ruby_system;
     if (m_ruby_system->getWarmupEnabled()) {
         assert(pkt->req);
@@ -1075,6 +1089,28 @@ Sequencer::makeRequest(PacketPtr pkt)
     // It is OK to receive RequestStatus_Aliased, it can be considered Issued
     if (status != RequestStatus_Ready && status != RequestStatus_Aliased)
         return status;
+
+    // FTR tracing: finalize pending root as live, record static attributes
+    if (auto *ftr = FtrTrace::get()) {
+        auto ctx = pkt->req->getExtension<TraceContext>();
+        if (ctx && ftr->isPending(ctx->traceId)) {
+            tx_trace::AttrList attrs;
+            attrs.push_back({"address", uint64_t(pkt->req->getPaddr())});
+            attrs.push_back({"line_address",
+                             uint64_t(makeLineAddress(pkt->req->getPaddr()))});
+            attrs.push_back({"size", uint64_t(pkt->req->getSize())});
+            attrs.push_back({"type", std::string(RubyRequestType_to_string(
+                                         secondary_type))});
+            attrs.push_back(
+                {"requestor_id", uint64_t(pkt->req->requestorId())});
+            if (pkt->req->hasPC()) {
+                attrs.push_back({"pc", uint64_t(pkt->req->getPC())});
+            }
+
+            ftr->finalizeRoot(ctx->traceId, this, name(), curTick(), attrs);
+        }
+    }
+
     // non-aliased with any existing request in the request table, just issue
     // to the cache
     if (status != RequestStatus_Aliased)
@@ -1156,6 +1192,15 @@ Sequencer::issueRequest(PacketPtr pkt, RubyRequestType secondary_type)
                 curTick(), m_version, "Seq", "Begin", "", "",
                 printAddress(msg->getPhysicalAddress()),
                 RubyRequestType_to_string(secondary_type));
+    }
+
+    // FTR tracing: bridge trace ID into Message layer and stamp issue event
+    if (auto *ftr = FtrTrace::get()) {
+        auto ctx = pkt->req->getExtension<TraceContext>();
+        if (ctx) {
+            msg->setRootTraceId(ctx->rootTraceId);
+            ftr->stampEvent(ctx->traceId, "issue", name(), curTick());
+        }
     }
 
     // hardware transactional memory

@@ -47,6 +47,7 @@
 #include "base/random.hh"
 #include "base/stl_helpers.hh"
 #include "debug/RubyQueue.hh"
+#include "sim/transaction_trace/ftr_trace.hh"
 
 namespace gem5
 {
@@ -292,6 +293,14 @@ MessageBuffer::enqueue(MsgPtr message, Tick current_time, Tick delta,
     assert((m_max_size == 0) ||
            ((m_prio_heap.size() + m_stall_map_size) <= m_max_size));
 
+    // FTR tracing: stamp enqueue event for traced messages
+    if (auto *ftr = FtrTrace::get(); ftr && message->getRootTraceId() != 0) {
+        ftr->stampEvent(message->getRootTraceId(), "enqueue", name(),
+                        current_time,
+                        {{"occupancy", uint64_t(m_prio_heap.size())},
+                         {"vnet", uint64_t(message->getVnet())}});
+    }
+
     DPRINTF(RubyQueue, "Enqueue arrival_time: %lld, Message: %s\n",
             arrival_time, *(message.get()));
 
@@ -326,6 +335,13 @@ MessageBuffer::dequeue(Tick current_time, bool decrement_messages)
 
     pop_heap(m_prio_heap.begin(), m_prio_heap.end(), std::greater<MsgPtr>());
     m_prio_heap.pop_back();
+
+    // FTR tracing: stamp dequeue event for traced messages
+    if (auto *ftr = FtrTrace::get(); ftr && message->getRootTraceId() != 0) {
+        ftr->stampEvent(message->getRootTraceId(), "dequeue", name(),
+                        current_time);
+    }
+
     if (decrement_messages) {
         // Record how much time is passed since the message was enqueued
         m_stall_time += curTick() - message->getLastEnqueueTime();

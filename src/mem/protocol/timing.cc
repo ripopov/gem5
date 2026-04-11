@@ -40,6 +40,10 @@
 
 #include "mem/protocol/timing.hh"
 
+#include "sim/cur_tick.hh"
+#include "sim/transaction_trace/ftr_trace.hh"
+#include "sim/transaction_trace/trace_context.hh"
+
 namespace gem5
 {
 
@@ -49,7 +53,42 @@ bool
 TimingRequestProtocol::sendReq(TimingResponseProtocol *peer, PacketPtr pkt)
 {
     assert(pkt->isRequest());
-    return peer->recvTimingReq(pkt);
+
+    // FTR tracing: create a pending root for untraced requests
+    // entering a traced subsystem, or stamp a port-crossing event
+    // for already-traced requests.
+    bool ftrCreatedPending = false;
+    if (auto *ftr = FtrTrace::get()) {
+        auto ctx = pkt->req->getExtension<TraceContext>();
+        if (ctx) {
+            ftr->stampEvent(ctx->traceId, "port_crossing", "", curTick());
+        } else if (ftr->shouldTrace(pkt, peer)) {
+            TraceId id = ftr->createPendingRoot(nullptr, curTick());
+            auto tc = std::make_shared<TraceContext>();
+            tc->traceId = id;
+            tc->rootTraceId = id;
+            tc->parentTraceId = 0;
+            tc->originTick = curTick();
+            pkt->req->setExtension(tc);
+            ftrCreatedPending = true;
+        }
+    }
+
+    bool success = peer->recvTimingReq(pkt);
+
+    // If the request was rejected and we created a pending root,
+    // discard it and remove the TraceContext extension.
+    if (!success && ftrCreatedPending) {
+        if (auto *ftr = FtrTrace::get()) {
+            auto ctx = pkt->req->getExtension<TraceContext>();
+            if (ctx) {
+                ftr->discardPendingRoot(ctx->traceId);
+                pkt->req->removeExtension<TraceContext>();
+            }
+        }
+    }
+
+    return success;
 }
 
 bool
@@ -80,6 +119,15 @@ bool
 TimingResponseProtocol::sendResp(TimingRequestProtocol *peer, PacketPtr pkt)
 {
     assert(pkt->isResponse());
+
+    // FTR tracing: stamp a port-crossing event on the response path.
+    if (auto *ftr = FtrTrace::get()) {
+        auto ctx = pkt->req->getExtension<TraceContext>();
+        if (ctx) {
+            ftr->stampEvent(ctx->traceId, "port_crossing", "", curTick());
+        }
+    }
+
     return peer->recvTimingResp(pkt);
 }
 

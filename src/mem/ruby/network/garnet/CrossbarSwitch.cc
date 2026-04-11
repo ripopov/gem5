@@ -34,6 +34,7 @@
 #include "debug/RubyNetwork.hh"
 #include "mem/ruby/network/garnet/OutputUnit.hh"
 #include "mem/ruby/network/garnet/Router.hh"
+#include "sim/transaction_trace/ftr_trace.hh"
 
 namespace gem5
 {
@@ -77,6 +78,13 @@ CrossbarSwitch::wakeup()
         flit *t_flit = switch_buffer.peekTopFlit();
         if (t_flit->is_stage(ST_, curTick())) {
             int outport = t_flit->get_outport();
+
+            // FTR tracing: stamp crossbar traversal event
+            if (auto *ftr = FtrTrace::get();
+                ftr && t_flit->getTraceId() != 0) {
+                ftr->stampEvent(t_flit->getTraceId(), "switch_traverse",
+                                m_router->name(), curTick());
+            }
 
             // flit performs LT_ in the next cycle
             t_flit->advance_stage(LT_, m_router->clockEdge(Cycles(1)));

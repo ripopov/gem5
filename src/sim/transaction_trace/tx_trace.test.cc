@@ -378,4 +378,112 @@ TEST(TxTextWriterTest, EmptyStreamKind)
                              " kind \"<no_stream_kind>\")"));
 }
 
+// ==================================================================
+// reserveId returns unique monotonic IDs
+// ==================================================================
+
+TEST(TxTraceTest, ReserveIdMonotonic)
+{
+    auto [trace, ss] = makeTrace();
+
+    TraceId a = trace->reserveId();
+    TraceId b = trace->reserveId();
+    TraceId c = trace->reserveId();
+
+    EXPECT_EQ(a, 1u);
+    EXPECT_EQ(b, 2u);
+    EXPECT_EQ(c, 3u);
+
+    // Reserving IDs should not produce any output
+    EXPECT_EQ(ss->str(), "");
+}
+
+// ==================================================================
+// createRootTransactionWithId uses a pre-reserved ID
+// ==================================================================
+
+TEST(TxTraceTest, CreateRootTransactionWithId)
+{
+    auto [trace, ss] = makeTrace();
+
+    uint64_t sid = trace->addStream("seq0", "Sequencer");
+    uint64_t gen = trace->addGeneratorPair(sid, "memreq");
+
+    TraceId reserved = trace->reserveId();
+    EXPECT_EQ(reserved, 1u);
+
+    // Nothing written yet for this transaction
+    std::string before = ss->str();
+    EXPECT_EQ(countMatches(before, "tx_begin"), 0);
+
+    trace->createRootTransactionWithId(reserved, gen, 1000,
+                                       {{"address", uint64_t(0x80001000)}});
+    trace->retireTransaction(reserved, 1045);
+
+    std::string out = ss->str();
+
+    EXPECT_TRUE(containsLine(out, "tx_begin 1 0 1000"));
+    EXPECT_TRUE(containsLine(
+        out, "tx_record_attribute 1 \"address\" UNSIGNED = 2147487744"));
+    EXPECT_TRUE(containsLine(out, "tx_end 1 0 1045"));
+}
+
+// ==================================================================
+// createChildTransactionWithId uses a pre-reserved ID
+// ==================================================================
+
+TEST(TxTraceTest, CreateChildTransactionWithId)
+{
+    auto [trace, ss] = makeTrace();
+
+    uint64_t sid = trace->addStream("seq0", "Sequencer");
+    uint64_t memreq_gen = trace->addGeneratorPair(sid, "memreq");
+    uint64_t flit_gen = trace->addGeneratorPair(sid, "flit");
+
+    TraceId root = trace->createRootTransaction(memreq_gen, 1000);
+
+    TraceId flit_id = trace->reserveId();
+    trace->createChildTransactionWithId(flit_id, flit_gen, root, 1010,
+                                        {{"flit_index", uint64_t(0)}});
+    trace->retireTransaction(flit_id, 1040);
+    trace->retireTransaction(root, 1045);
+
+    std::string out = ss->str();
+
+    // Flit child transaction with reserved ID
+    EXPECT_TRUE(containsLine(out, "tx_begin 2 2 1010"));
+    EXPECT_TRUE(containsLine(out, "tx_end 2 2 1040"));
+    EXPECT_TRUE(containsLine(out, "tx_relation \"parent_of\" 2 1"));
+}
+
+// ==================================================================
+// reserveId interleaves correctly with allocateId
+// ==================================================================
+
+TEST(TxTraceTest, ReserveIdInterleaveWithCreate)
+{
+    auto [trace, ss] = makeTrace();
+
+    uint64_t sid = trace->addStream("seq0", "Sequencer");
+    uint64_t gen = trace->addGeneratorPair(sid, "memreq");
+
+    // Reserve an ID first
+    TraceId reserved = trace->reserveId();
+    EXPECT_EQ(reserved, 1u);
+
+    // Create a normal root — should get the next ID
+    TraceId root = trace->createRootTransaction(gen, 100);
+    EXPECT_EQ(root, 2u);
+
+    // Now finalize the reserved ID
+    trace->createRootTransactionWithId(reserved, gen, 50);
+
+    trace->retireTransaction(root, 200);
+    trace->retireTransaction(reserved, 150);
+
+    std::string out = ss->str();
+    EXPECT_TRUE(containsLine(out, "tx_begin 2 0 100"));
+    EXPECT_TRUE(containsLine(out, "tx_begin 1 0 50"));
+}
+
 } // anonymous namespace

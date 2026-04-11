@@ -122,6 +122,17 @@ class Message
     int getVnet() const { return vnet; }
     void setVnet(int net) { vnet = net; }
 
+    uint64_t
+    getRootTraceId() const
+    {
+        return m_rootTraceId;
+    }
+    void
+    setRootTraceId(uint64_t id)
+    {
+        m_rootTraceId = id;
+    }
+
   protected:
     int m_block_size = 0;
 
@@ -130,6 +141,8 @@ class Message
     Tick m_LastEnqueueTime; // my last enqueue time
     Tick m_DelayedTicks; // my delayed cycles
     uint64_t m_msg_counter; // FIXME, should this be a 64-bit value?
+
+    uint64_t m_rootTraceId = 0;
 
     // Variables for required network traversal
     int incoming_link;
