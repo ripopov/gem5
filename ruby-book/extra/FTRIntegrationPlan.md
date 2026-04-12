@@ -522,29 +522,128 @@ Direct `FtrTrace::get()` calls (not ProbePoints) in the four Garnet pipeline sta
 | `CrossbarSwitch::wakeup()` | `CrossbarSwitch.cc` | `switch_traverse` | — |
 | `NetworkLink::wakeup()` | `NetworkLink.cc` | `link_traverse` | — |
 
-### Step 8. Protocol-Aware Trace ID Propagation — NOT STARTED
+### Step 8. Protocol-Aware Trace ID Propagation via SLICC Compiler — NOT STARTED
 
-**Status: This is the critical next step for enabling flit and router-stage tracing.**
+**Status: Critical next step. Unblocks flit, router-stage, and per-protocol queue events.**
 
-Steps 6–7 are fully implemented but produce no output because they gate on `m_rootTraceId != 0` / `getTraceId() != 0`, and currently no messages reaching the network carry a nonzero trace ID.
+#### Problem
 
-**Root cause:** SLICC protocol state machines construct new protocol messages (e.g., `RequestMsg`, `ResponseMsg`) at emission sites rather than cloning the original `RubyRequest`. These fresh messages have `m_rootTraceId == 0` by default. The trace ID set on the `RubyRequest` in `Sequencer::issueRequest()` is consumed by the L1 controller but never copied into outgoing protocol messages.
+Steps 5–7 are fully implemented but produce no flit/router output because all instrumentation gates on `m_rootTraceId != 0`, and no messages reaching the network carry a nonzero trace ID.
 
-**The propagation gap in detail:**
-1. `Sequencer::issueRequest()` creates a `RubyRequest` with `m_rootTraceId` set ✓
-2. `RubyRequest` is enqueued into the mandatory queue → `enqueue` event fires ✓
-3. L1 controller dequeues the `RubyRequest`, processes it via SLICC state machine
-4. SLICC code constructs a **new** `RequestMsg` (not a clone) to send to the directory
-5. This new `RequestMsg` has `m_rootTraceId == 0` ✗
-6. When this message reaches `NetworkInterface::flitisizeMessage()`, the zero check skips flit creation
+SLICC state machines construct fresh protocol messages at emission sites:
 
-**Approaches to fix (in order of preference):**
+```
+RubyRequest (m_rootTraceId = N)        ─ dequeued by L1 controller
+    ▼
+SLICC transition fires
+    ▼
+out_msg = std::make_shared<RequestMsg>(...)   ← fresh object, m_rootTraceId = 0
+    ▼
+requestNetwork_out.enqueue(out_msg, ...)       ← trace ID lost here
+    ▼
+Garnet NetworkInterface                        ← getRootTraceId() == 0, skip
+```
 
-1. **SLICC compiler change:** Modify the SLICC `enqueue` statement to auto-propagate `m_rootTraceId` from the triggering message to the outgoing message. This is protocol-agnostic but requires changes to `src/mem/slicc/ast/EnqueueStatementAST.py` and the generated C++ code. The SLICC enqueue statement already has access to the triggering message via `in_msg_ptr` — the generated code could insert `out_msg->setRootTraceId(in_msg_ptr->getRootTraceId())` after message construction.
+#### Design decision: propagate the ID, not a pointer
 
-2. **Per-protocol SLICC annotation:** Add explicit `out_msg.m_rootTraceId := in_msg.m_rootTraceId;` lines at key emission sites in `.sm` files. Start with MI_example, then MESI Two Level. Requires manual work per protocol but no compiler changes.
+- `Message::m_rootTraceId` (uint64_t) is the durable identity. The trace recorder holds the metadata keyed by this ID.
+- A pointer to the original `Message` adds nothing for tracing and introduces lifetime/serialization problems (MsgPtr is shared_ptr — extends root lifetime arbitrarily; breaks checkpointing).
+- The ID is globally unique, monotonic, and functionally equivalent to a pointer for identity purposes.
 
-3. **Controller-level hook:** Add a hook in `AbstractController` that intercepts outgoing messages and copies `m_rootTraceId` from the most recently dequeued message on the same address. Heuristic but protocol-agnostic.
+#### Design decision: compiler auto-propagation over per-protocol annotation
+
+- **Per-protocol `.sm` annotation** (add `out_msg.m_rootTraceId := in_msg.m_rootTraceId;` at every emission site): works but requires modifying every protocol, risks being forgotten, and fails for protocols added later.
+- **Controller-level hook** (copy by address lookup): fragile, can't distinguish coalesced requests, doesn't handle writebacks/forwards cleanly.
+- **SLICC compiler auto-propagation**: localized change in one AST node, covers all current and future protocols automatically, correct by construction.
+
+#### Implementation
+
+**Where:** `src/mem/slicc/ast/EnqueueStatementAST.py` (the AST node that generates C++ for `enqueue(network_out, MessageType, latency) { ... }` blocks).
+
+**What to inject:** after `out_msg` construction and before the generated `buffer.enqueue(out_msg, ...)` call, emit:
+
+```cpp
+if (in_msg_ptr) {
+    out_msg->setRootTraceId(in_msg_ptr->getRootTraceId());
+}
+```
+
+**Scoping rules (for the generator):**
+
+| Triggering context | Behavior |
+|---|---|
+| `enqueue` inside a `peek(in_port, InMsgType) { ... }` scope | Inject — `in_msg_ptr` is in scope |
+| `enqueue` in an action called from a transition whose enclosing in_port peek provided `in_msg` | Inject — SLICC already threads `in_msg` through, follow the same path |
+| `enqueue` with no triggering message (timer-driven, wakeup-driven) | No injection — `m_rootTraceId` stays 0, correctly skipped |
+
+**Fanout semantics (for v1):** when one input triggers N output messages (e.g., directory invalidating N sharers), all N carry the same trace ID. Sub-transactions with explicit `parent_of` relations per fanout branch are a future extension.
+
+**Edge cases that fall out correctly:**
+
+| Scenario | Triggering `in_msg` | Result |
+|---|---|---|
+| L1 miss issues GETS to directory | RubyRequest with trace ID | Propagated ✓ |
+| Directory forwards to owner | Forward request carrying ID | Propagated ✓ |
+| Directory fans out invalidations to sharers | Original request | All invalidations share ID ✓ |
+| Writeback from L1 eviction | No triggering in_msg | ID stays 0 — correctly skipped ✓ |
+| Hardware prefetch | No CPU-originated trace | ID stays 0 — correctly skipped ✓ |
+
+**Non-goals for this step:**
+- Adding new message fields (already covered — `m_rootTraceId` lives on `Message` base class).
+- Supporting non-SLICC controllers (CHI, etc.) — separate step.
+- Sub-transaction nodes for protocol message stages — future extension (Step 10).
+
+#### Testing methodology
+
+**Test 1: SLICC codegen unit test**
+
+Compile a minimal `.sm` fragment and inspect the generated C++ output. Assert:
+- Actions inside a peek scope that call `enqueue` produce the `setRootTraceId` injection
+- Actions outside any peek scope produce no injection
+- The injection is placed after `out_msg` construction but before the `enqueue(...)` call
+- Code compiles cleanly for all existing protocols (MI_example, MESI_Two_Level, MESI_Three_Level, MOESI_CMP_directory, MOESI_AMD_Base, MOESI_hammer, CHI)
+
+Implementation: add a GTest under `src/mem/slicc/` that invokes the SLICC parser on a fixture `.sm` file and greps the generated `.cc` file for the expected pattern.
+
+**Test 2: Protocol regression**
+
+Build gem5 with each existing protocol and run the matching test configuration:
+```sh
+scons build/RISCV/gem5.opt PROTOCOL=<proto>
+./tests/main.py run --length=quick -j 6
+```
+No behavioral change expected — the injected line only writes a field that's otherwise zero. Stats outputs should match bit-for-bit with the pre-change build for all Ruby tests.
+
+**Test 3: End-to-end smoke test on MI_example**
+
+Re-run `ruby-book/final/smoke/ftr_smoke_test.py` after the fix. Expected deltas from the pre-fix trace:
+
+| Metric | Before | After (expected) |
+|---|---|---|
+| Flit child transactions | 0 | > 0, roughly `num_flits_per_request × completed_requests` |
+| `router_arrive` events | 0 | > 0, matches `m_router_stats.m_flits_received.total()` |
+| `switch_alloc` events | 0 | > 0, matches `SwitchAllocator` activity count |
+| `switch_traverse` events | 0 | > 0, matches crossbar activity count |
+| `link_traverse` events | 0 | > 0, matches `m_link_utilized` across all links |
+| Queue `enqueue`/`dequeue` events | only mandatoryQueue | all Ruby queues that carry traced messages |
+
+The Garnet stats in `stats.txt` provide ground truth for expected event counts.
+
+**Test 4: Counting invariant**
+
+For each completed root transaction, count child flits in the trace and compare to the expected number of flits per request (function of message size and link width, available from GarnetNetwork params). Assert:
+```
+total_flit_children == sum over roots of expected_flits_per_request
+```
+within a tolerance for requests still in flight at simulation end.
+
+**Test 5: Fanout correctness**
+
+Configure a multicast-heavy scenario (e.g., MOESI_CMP_directory with shared-line reads from multiple cores). Assert that invalidations to different sharers carry the same `rootTraceId` and appear as separate flit children of the same root.
+
+#### Effort estimate
+
+1–2 days including SLICC parser archaeology, the codegen change, test fixtures, and protocol regression runs.
 
 ### Step 9. Validation and Documentation — PARTIAL
 
