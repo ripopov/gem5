@@ -28,6 +28,13 @@ struct Attr
 
 using AttrList = std::vector<Attr>;
 
+enum class AttrPhase
+{
+    Begin,
+    Record,
+    End,
+};
+
 /**
  * Abstract writer interface.  The recorder calls these methods;
  * concrete backends (text, FTR binary) implement them.
@@ -46,9 +53,10 @@ class TxWriter
     virtual void endTransaction(uint64_t tx_id, uint64_t gen_id,
                                 Tick tick) = 0;
     virtual void writeAttribute(uint64_t tx_id, std::string_view name,
-                                const AttrValue &value) = 0;
+                                const AttrValue &value, AttrPhase phase) = 0;
     virtual void writeRelation(std::string_view name, uint64_t src_tx_id,
-                               uint64_t sink_tx_id) = 0;
+                               uint64_t sink_tx_id, uint64_t src_stream_id,
+                               uint64_t sink_stream_id) = 0;
     virtual void flush() = 0;
 };
 
@@ -141,12 +149,14 @@ class TxTrace
     };
 
     TraceId allocateId();
-    void writeAttrs(uint64_t tx_id, const AttrList &attrs);
+    void writeAttrs(uint64_t tx_id, const AttrList &attrs, AttrPhase phase);
 
     std::unique_ptr<TxWriter> writer_;
     std::atomic<uint64_t> nextId_{1};
     uint64_t nextStreamId_{0};
     uint64_t nextGenId_{0};
+    std::unordered_map<uint64_t, uint64_t> generatorStreamIds_;
+    std::unordered_map<TraceId, uint64_t> transactionStreamIds_;
     std::unordered_map<TraceId, LiveTx> liveTxs_;
 };
 

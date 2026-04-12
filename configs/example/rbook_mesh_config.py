@@ -34,7 +34,13 @@ parser.add_argument(
     "--trace-output",
     type=str,
     default=None,
-    help="Enable FTR text tracing with the given output basename",
+    help="Enable FTR tracing with the given output basename",
+)
+parser.add_argument(
+    "--trace-format",
+    choices=("ftr", "text"),
+    default="ftr",
+    help="Trace output format when --trace-output is set",
 )
 
 # This script only supports CHI. MULTIPLE.define_options() scans sys.argv for
@@ -116,7 +122,7 @@ for i in range(args.num_cpus):
 
 if args.trace_output is not None:
     system.ftr_trace = FtrTrace(
-        output_format="text", output_file=args.trace_output
+        output_format=args.trace_format, output_file=args.trace_output
     )
 
 # --- Instantiate and run -----------------------------------------------------

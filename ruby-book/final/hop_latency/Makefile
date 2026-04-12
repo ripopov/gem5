@@ -12,6 +12,8 @@ BIN = rbook_test_hop_latency
 BIN_PATH = $(abspath $(BIN))
 LAST_OUTDIR = .last_outdir
 REPORT = ValidatedRunReport.md
+TRACE_OUTPUT ?=
+TRACE_FORMAT ?= ftr
 
 all: report
 
@@ -23,11 +25,30 @@ $(BIN): rbook_test_hop_latency.c
 run: $(BIN)
 	@set -euo pipefail; \
 	outdir="$(M5OUT_ROOT)/rbook-hop-latency-$$(date +%Y%m%d-%H%M%S)"; \
+	trace_arg=(); \
+	trace_path=""; \
+	if [[ -n "$(TRACE_OUTPUT)" ]]; then \
+	    trace_arg+=(--trace-output="$(TRACE_OUTPUT)"); \
+	    trace_arg+=(--trace-format="$(TRACE_FORMAT)"); \
+	    trace_ext=".ftr"; \
+	    if [[ "$(TRACE_FORMAT)" == "text" ]]; then \
+	        trace_ext=".txlog"; \
+	    fi; \
+	    if [[ "$(TRACE_OUTPUT)" = /* ]]; then \
+	        trace_path="$(TRACE_OUTPUT)$$trace_ext"; \
+	    else \
+	        trace_path="$$outdir/$(TRACE_OUTPUT)$$trace_ext"; \
+	    fi; \
+	fi; \
 	mkdir "$$outdir"; \
 	"$(GEM5_BIN)" -d "$$outdir" "$(GEM5_CONFIG)" \
-	    --cmd="$(BIN_PATH)" > "$$outdir/console.log" 2>&1; \
+	    --cmd="$(BIN_PATH)" "$${trace_arg[@]}" \
+	    > "$$outdir/console.log" 2>&1; \
 	printf '%s\n' "$$outdir" > "$(LAST_OUTDIR)"; \
-	printf 'Run directory: %s\n' "$$outdir"
+	printf 'Run directory: %s\n' "$$outdir"; \
+	if [[ -n "$$trace_path" ]]; then \
+	    printf 'Trace file: %s\n' "$$trace_path"; \
+	fi
 
 check: run
 	@set -euo pipefail; \

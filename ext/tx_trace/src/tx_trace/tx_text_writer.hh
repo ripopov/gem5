@@ -37,9 +37,10 @@ class TxTextWriter : public TxWriter
     void startTransaction(uint64_t tx_id, uint64_t gen_id, Tick tick) override;
     void endTransaction(uint64_t tx_id, uint64_t gen_id, Tick tick) override;
     void writeAttribute(uint64_t tx_id, std::string_view name,
-                        const AttrValue &value) override;
+                        const AttrValue &value, AttrPhase phase) override;
     void writeRelation(std::string_view name, uint64_t src_tx_id,
-                       uint64_t sink_tx_id) override;
+                       uint64_t sink_tx_id, uint64_t src_stream_id,
+                       uint64_t sink_stream_id) override;
     void flush() override;
 
   private:

@@ -43,8 +43,9 @@ TxTextWriter::endTransaction(uint64_t tx_id, uint64_t gen_id, Tick tick)
 
 void
 TxTextWriter::writeAttribute(uint64_t tx_id, std::string_view name,
-                             const AttrValue &value)
+                             const AttrValue &value, AttrPhase phase)
 {
+    (void)phase;
     *os_ << "tx_record_attribute " << tx_id << " \"" << name << "\" ";
 
     std::visit(
@@ -69,8 +70,11 @@ TxTextWriter::writeAttribute(uint64_t tx_id, std::string_view name,
 
 void
 TxTextWriter::writeRelation(std::string_view name, uint64_t src_tx_id,
-                            uint64_t sink_tx_id)
+                            uint64_t sink_tx_id, uint64_t src_stream_id,
+                            uint64_t sink_stream_id)
 {
+    (void)src_stream_id;
+    (void)sink_stream_id;
     *os_ << "tx_relation \"" << name << "\" " << src_tx_id << " " << sink_tx_id
          << "\n";
 }

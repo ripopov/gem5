@@ -1,8 +1,14 @@
 #include <gtest/gtest.h>
+#include <unistd.h>
 
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <sstream>
 #include <string>
+#include <vector>
 
+#include "tx_trace/tx_ftr_writer.hh"
 #include "tx_trace/tx_text_writer.hh"
 #include "tx_trace/tx_trace.hh"
 
@@ -341,11 +347,15 @@ TEST(TxTextWriterTest, AllAttributeTypes)
     auto *ss_ptr = ss.get();
     TxTextWriter writer(std::move(ss));
 
-    writer.writeAttribute(1, "flag", AttrValue{true});
-    writer.writeAttribute(1, "count", AttrValue{int64_t(-42)});
-    writer.writeAttribute(1, "addr", AttrValue{uint64_t(4096)});
-    writer.writeAttribute(1, "rate", AttrValue{double(0.95)});
-    writer.writeAttribute(1, "cmd", AttrValue{std::string("ReadReq")});
+    writer.writeAttribute(1, "flag", AttrValue{true}, AttrPhase::Record);
+    writer.writeAttribute(1, "count", AttrValue{int64_t(-42)},
+                          AttrPhase::Record);
+    writer.writeAttribute(1, "addr", AttrValue{uint64_t(4096)},
+                          AttrPhase::Record);
+    writer.writeAttribute(1, "rate", AttrValue{double(0.95)},
+                          AttrPhase::Record);
+    writer.writeAttribute(1, "cmd", AttrValue{std::string("ReadReq")},
+                          AttrPhase::Record);
 
     std::string out = ss_ptr->str();
 
@@ -376,6 +386,55 @@ TEST(TxTextWriterTest, EmptyStreamKind)
     EXPECT_TRUE(containsLine(ss_ptr->str(),
                              "scv_tr_stream (ID 0, name \"test_stream\","
                              " kind \"<no_stream_kind>\")"));
+}
+
+// ==================================================================
+// FTR writer emits a binary file and supports late parent relations
+// ==================================================================
+
+TEST(TxFtrWriterTest, WritesBinaryFileForLateParentRelations)
+{
+    char path_template[] = "/tmp/tx_trace_ftrXXXXXX";
+    int fd = mkstemp(path_template);
+    ASSERT_NE(fd, -1);
+    close(fd);
+
+    std::filesystem::path path(path_template);
+
+    {
+        auto writer = std::make_unique<TxFtrWriter>(path.string());
+        TxTrace trace(std::move(writer));
+
+        uint64_t sid = trace.addStream("seq0", "Sequencer");
+        uint64_t memreq_gen = trace.addGeneratorPair(sid, "memreq");
+        uint64_t memreq_evt = memreq_gen + 1;
+        uint64_t flit_gen = trace.addGeneratorPair(sid, "flit");
+
+        TraceId root = trace.createRootTransaction(
+            memreq_gen, 1000,
+            {{"address", uint64_t(0x80001000)}, {"type", std::string("LD")}});
+        trace.retireTransaction(root, 1010, {{"hit", true}});
+        trace.stampEvent(root, memreq_evt, "port_crossing", "seq0.out_port",
+                         1015);
+
+        TraceId flit = trace.createChildTransaction(
+            flit_gen, root, 1020, {{"flit_index", uint64_t(0)}});
+        trace.retireTransaction(flit, 1030);
+        trace.flush();
+    }
+
+    std::ifstream ifs(path, std::ios::binary);
+    ASSERT_TRUE(ifs.good());
+
+    std::vector<unsigned char> bytes((std::istreambuf_iterator<char>(ifs)),
+                                     std::istreambuf_iterator<char>());
+    ASSERT_GE(bytes.size(), 3U);
+    EXPECT_EQ(bytes[0], 0xd9U);
+    EXPECT_EQ(bytes[1], 0xd9U);
+    EXPECT_EQ(bytes[2], 0xf7U);
+    EXPECT_GT(bytes.size(), 64U);
+
+    std::filesystem::remove(path);
 }
 
 // ==================================================================

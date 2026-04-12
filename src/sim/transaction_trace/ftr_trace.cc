@@ -6,6 +6,7 @@
 #include "base/output.hh"
 #include "base/trace.hh"
 #include "debug/TxTrace.hh"
+#include "tx_trace/tx_ftr_writer.hh"
 #include "tx_trace/tx_text_writer.hh"
 
 namespace gem5
@@ -20,18 +21,23 @@ FtrTrace::FtrTrace(const Params &p) : SimObject(p)
     const std::string &format = p.output_format;
     const std::string &base = p.output_file;
 
-    if (format == "text") {
+    if (format == "ftr") {
+        std::string path = simout.resolve(base + ".ftr");
+        auto writer = std::make_unique<tx_trace::TxFtrWriter>(path);
+        trace_ = std::make_unique<tx_trace::TxTrace>(std::move(writer));
+    } else if (format == "text") {
         std::string path = simout.resolve(base + ".txlog");
         auto writer = std::make_unique<tx_trace::TxTextWriter>(path);
         trace_ = std::make_unique<tx_trace::TxTrace>(std::move(writer));
     } else {
         fatal("FtrTrace: unsupported output_format '%s'. "
-              "Use 'text'.",
+              "Use 'ftr' or 'text'.",
               format);
     }
 
     instance = this;
-    DPRINTF(TxTrace, "FtrTrace initialized, output: %s.txlog\n", base);
+    const char *suffix = format == "ftr" ? ".ftr" : ".txlog";
+    DPRINTF(TxTrace, "FtrTrace initialized, output: %s%s\n", base, suffix);
 }
 
 FtrTrace::~FtrTrace()

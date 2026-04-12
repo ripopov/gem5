@@ -7,7 +7,7 @@ class FtrTrace(SimObject):
     cxx_header = "sim/transaction_trace/ftr_trace.hh"
     cxx_class = "gem5::FtrTrace"
 
-    output_format = Param.String("text", "Output format: 'text'")
+    output_format = Param.String("ftr", "Output format: 'ftr' or 'text'")
     output_file = Param.String(
         "transactions", "Base filename (extension added automatically)"
     )

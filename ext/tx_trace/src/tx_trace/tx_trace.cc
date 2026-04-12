@@ -28,6 +28,8 @@ TxTrace::addGeneratorPair(uint64_t stream_id, std::string_view name)
 {
     uint64_t gen_id = nextGenId_++;
     uint64_t evt_gen_id = nextGenId_++;
+    generatorStreamIds_[gen_id] = stream_id;
+    generatorStreamIds_[evt_gen_id] = stream_id;
     writer_->writeGenerator(gen_id, name, stream_id);
     std::string evt_name = std::string(name) + ".events";
     writer_->writeGenerator(evt_gen_id, evt_name, stream_id);
@@ -41,10 +43,10 @@ TxTrace::allocateId()
 }
 
 void
-TxTrace::writeAttrs(uint64_t tx_id, const AttrList &attrs)
+TxTrace::writeAttrs(uint64_t tx_id, const AttrList &attrs, AttrPhase phase)
 {
     for (const auto &attr : attrs) {
-        writer_->writeAttribute(tx_id, attr.name, attr.value);
+        writer_->writeAttribute(tx_id, attr.name, attr.value, phase);
     }
 }
 
@@ -54,7 +56,8 @@ TxTrace::createRootTransaction(uint64_t gen_id, Tick tick,
 {
     TraceId id = allocateId();
     writer_->startTransaction(id, gen_id, tick);
-    writeAttrs(id, attrs);
+    transactionStreamIds_[id] = generatorStreamIds_.at(gen_id);
+    writeAttrs(id, attrs, AttrPhase::Begin);
     liveTxs_[id] = {gen_id, 0};
     return id;
 }
@@ -65,8 +68,11 @@ TxTrace::createChildTransaction(uint64_t gen_id, TraceId parent, Tick tick,
 {
     TraceId id = allocateId();
     writer_->startTransaction(id, gen_id, tick);
-    writeAttrs(id, attrs);
-    writer_->writeRelation("parent_of", id, parent);
+    transactionStreamIds_[id] = generatorStreamIds_.at(gen_id);
+    writeAttrs(id, attrs, AttrPhase::Begin);
+    writer_->writeRelation("parent_of", id, parent,
+                           transactionStreamIds_.at(id),
+                           transactionStreamIds_.at(parent));
     liveTxs_[id] = {gen_id, parent};
     return id;
 }
@@ -78,12 +84,17 @@ TxTrace::stampEvent(TraceId parent, uint64_t evt_gen_id,
 {
     TraceId evt_id = allocateId();
     writer_->startTransaction(evt_id, evt_gen_id, tick);
+    transactionStreamIds_[evt_id] = generatorStreamIds_.at(evt_gen_id);
     writer_->writeAttribute(evt_id, "event_kind",
-                            AttrValue{std::string(event_kind)});
+                            AttrValue{std::string(event_kind)},
+                            AttrPhase::Record);
     writer_->writeAttribute(evt_id, "object_name",
-                            AttrValue{std::string(object_name)});
-    writeAttrs(evt_id, attrs);
-    writer_->writeRelation("parent_of", evt_id, parent);
+                            AttrValue{std::string(object_name)},
+                            AttrPhase::Record);
+    writeAttrs(evt_id, attrs, AttrPhase::Record);
+    writer_->writeRelation("parent_of", evt_id, parent,
+                           transactionStreamIds_.at(evt_id),
+                           transactionStreamIds_.at(parent));
     writer_->endTransaction(evt_id, evt_gen_id, tick);
 }
 
@@ -92,7 +103,7 @@ TxTrace::retireTransaction(TraceId id, Tick tick, const AttrList &attrs)
 {
     auto it = liveTxs_.find(id);
     assert(it != liveTxs_.end());
-    writeAttrs(id, attrs);
+    writeAttrs(id, attrs, AttrPhase::End);
     writer_->endTransaction(id, it->second.gen_id, tick);
     liveTxs_.erase(it);
 }
@@ -108,7 +119,8 @@ TxTrace::createRootTransactionWithId(TraceId id, uint64_t gen_id, Tick tick,
                                      const AttrList &attrs)
 {
     writer_->startTransaction(id, gen_id, tick);
-    writeAttrs(id, attrs);
+    transactionStreamIds_[id] = generatorStreamIds_.at(gen_id);
+    writeAttrs(id, attrs, AttrPhase::Begin);
     liveTxs_[id] = {gen_id, 0};
 }
 
@@ -118,8 +130,11 @@ TxTrace::createChildTransactionWithId(TraceId id, uint64_t gen_id,
                                       const AttrList &attrs)
 {
     writer_->startTransaction(id, gen_id, tick);
-    writeAttrs(id, attrs);
-    writer_->writeRelation("parent_of", id, parent);
+    transactionStreamIds_[id] = generatorStreamIds_.at(gen_id);
+    writeAttrs(id, attrs, AttrPhase::Begin);
+    writer_->writeRelation("parent_of", id, parent,
+                           transactionStreamIds_.at(id),
+                           transactionStreamIds_.at(parent));
     liveTxs_[id] = {gen_id, parent};
 }
 

@@ -6,11 +6,13 @@ SimObject('FtrTrace.py', sim_objects=['FtrTrace'])
 
 Source('ftr_trace.cc')
 Source(tx_src.File('tx_trace.cc'))
+Source(tx_src.File('tx_ftr_writer.cc'))
 Source(tx_src.File('tx_text_writer.cc'))
 
 DebugFlag('TxTrace')
 
 GTest('tx_trace.test', 'tx_trace.test.cc',
       tx_src.File('tx_trace.cc'),
+      tx_src.File('tx_ftr_writer.cc'),
       tx_src.File('tx_text_writer.cc'),
       skip_lib=True)
