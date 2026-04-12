@@ -528,21 +528,33 @@ Direct `FtrTrace::get()` calls (not ProbePoints) in the four Garnet pipeline sta
 
 #### Problem
 
-Steps 5–7 are fully implemented but produce no flit/router output because all instrumentation gates on `m_rootTraceId != 0`, and no messages reaching the network carry a nonzero trace ID.
+Steps 5–7 are fully implemented but still produce no flit/router output for most protocol traffic because fresh SLICC messages default to `m_rootTraceId == 0`.
 
-SLICC state machines construct fresh protocol messages at emission sites:
+The naive fix is to teach each generated `enqueue(...)` block to copy from a lexically visible `in_msg_ptr`.
+That is **not** robust enough for real protocols.
+
+SLICC actions are emitted as standalone controller methods, so many `enqueue(...)` sites do not have a usable `in_msg_ptr` in scope even though they are still causally downstream of a traced input message.
+CHI is the clearest counterexample:
 
 ```
-RubyRequest (m_rootTraceId = N)        ─ dequeued by L1 controller
+RubyRequest (trace=N)
     ▼
-SLICC transition fires
+peek(seqInPort, RubyRequest)
     ▼
-out_msg = std::make_shared<RequestMsg>(...)   ← fresh object, m_rootTraceId = 0
+enqueue(reqRdyOutPort, CHIRequestMsg)          // first propagation hop
     ▼
-requestNetwork_out.enqueue(out_msg, ...)       ← trace ID lost here
+peek(reqRdyPort, CHIRequestMsg)
     ▼
-Garnet NetworkInterface                        ← getRootTraceId() == 0, skip
+Initiate_Request allocates TBE and schedules TriggerMsg
+    ▼
+peek(triggerInPort, TriggerMsg)
+    ▼
+Send_ReadShared / Send_ReadNoSnp / Send_Snp*   // no original RubyRequest in scope
+    ▼
+enqueue(reqOutPort / snpOutPort / rspOutPort / datOutPort)
 ```
+
+Any Step 8 design that only works when the final emission site can directly name `in_msg_ptr` will fail for CHI and for similar multi-stage SLICC controllers that bounce through internal ready/trigger queues.
 
 #### Design decision: propagate the ID, not a pointer
 
@@ -550,69 +562,153 @@ Garnet NetworkInterface                        ← getRootTraceId() == 0, skip
 - A pointer to the original `Message` adds nothing for tracing and introduces lifetime/serialization problems (MsgPtr is shared_ptr — extends root lifetime arbitrarily; breaks checkpointing).
 - The ID is globally unique, monotonic, and functionally equivalent to a pointer for identity purposes.
 
-#### Design decision: compiler auto-propagation over per-protocol annotation
+#### Design decision: compiler-managed controller trace context
 
 - **Per-protocol `.sm` annotation** (add `out_msg.m_rootTraceId := in_msg.m_rootTraceId;` at every emission site): works but requires modifying every protocol, risks being forgotten, and fails for protocols added later.
 - **Controller-level hook** (copy by address lookup): fragile, can't distinguish coalesced requests, doesn't handle writebacks/forwards cleanly.
-- **SLICC compiler auto-propagation**: localized change in one AST node, covers all current and future protocols automatically, correct by construction.
+- **Lexical `in_msg_ptr` injection in `EnqueueStatementAST` only**: insufficient because actions are generated as standalone methods and later-stage emissions often do not have the original input message in lexical scope.
+- **SLICC compiler + controller trace context**: `peek(...)` establishes the current root trace ID on the controller, and every later `enqueue(...)` / `deferEnqueueing(...)` inherits from that context.
+  This covers all current and future SLICC protocols automatically, including CHI's ready/trigger queue pipeline.
 
 #### Implementation
 
-**Where:** `src/mem/slicc/ast/EnqueueStatementAST.py` (the AST node that generates C++ for `enqueue(network_out, MessageType, latency) { ... }` blocks).
+**1. Add controller trace-context support in `AbstractController`.**
 
-**What to inject:** after `out_msg` construction and before the generated `buffer.enqueue(out_msg, ...)` call, emit:
+Files:
+- `src/mem/ruby/slicc_interface/AbstractController.hh`
+- `src/mem/ruby/slicc_interface/AbstractController.cc`
+
+Add:
+- `uint64_t m_currentRootTraceId = 0;`
+- `uint64_t getCurrentRootTraceId() const;`
+- a small RAII helper such as `ScopedRootTraceContext` that saves the previous value, installs a new one on construction, and restores the previous value on destruction
+
+The helper must support:
+- nested `peek(...)` scopes
+- exception-safe restoration when `RejectException` is thrown
+- zero-cost behavior when the current ID is zero
+
+**2. Teach `PeekStatementAST` to establish controller context from the message being processed.**
+
+File:
+- `src/mem/slicc/ast/PeekStatementAST.py`
+
+After the successful `dynamic_cast`, emit generated C++ equivalent to:
 
 ```cpp
-if (in_msg_ptr) {
-    out_msg->setRootTraceId(in_msg_ptr->getRootTraceId());
-}
+auto trace_guard = scopedRootTraceContext(in_msg_ptr->getRootTraceId());
 ```
 
-**Scoping rules (for the generator):**
+This makes the currently processed message's root ID available to the whole generated body, including:
+- direct `enqueue(...)` calls inside the same `peek(...)`
+- helper-function calls that later enqueue messages
+- standalone action methods invoked by the current transition
 
-| Triggering context | Behavior |
+**3. Stamp fresh messages from controller context in `EnqueueStatementAST`.**
+
+File:
+- `src/mem/slicc/ast/EnqueueStatementAST.py`
+
+After the generated body statements and immediately before the generated queue operation, emit:
+
+```cpp
+out_msg->setRootTraceId(getCurrentRootTraceId());
+```
+
+Stamping at the end of the block is deliberate.
+It ensures helper code and field assignments run first, and the trace field is finalized just before the message becomes visible to the queue/network.
+
+**4. Apply the same rule to deferred messages.**
+
+File:
+- `src/mem/slicc/ast/DeferEnqueueingStatementAST.py`
+
+Before `deferEnqueueingMessage(addr, out_msg)`, emit:
+
+```cpp
+out_msg->setRootTraceId(getCurrentRootTraceId());
+```
+
+This keeps deferred-message paths consistent with normal enqueue paths.
+
+**5. Define the propagation rule in terms of active controller context, not lexical scope.**
+
+| Situation | Behavior |
 |---|---|
-| `enqueue` inside a `peek(in_port, InMsgType) { ... }` scope | Inject — `in_msg_ptr` is in scope |
-| `enqueue` in an action called from a transition whose enclosing in_port peek provided `in_msg` | Inject — SLICC already threads `in_msg` through, follow the same path |
-| `enqueue` with no triggering message (timer-driven, wakeup-driven) | No injection — `m_rootTraceId` stays 0, correctly skipped |
+| `enqueue(...)` or `deferEnqueueing(...)` executed while processing a message whose `peek(...)` installed root ID `N` | Stamp `out_msg->m_rootTraceId = N` |
+| Nested `peek(...)` on another message while already inside a traced flow | Temporarily override with the nested message's root ID, then restore on scope exit |
+| Internal queues (`reqRdy`, `snpRdy`, `triggerQueue`, `retryTriggerQueue`, etc.) carrying traced messages | Their messages inherit the active root ID and later re-establish it when peeked |
+| Timer-driven / wakeup-driven / maintenance work with no active traced input | `getCurrentRootTraceId() == 0`, so the new message remains untraced |
 
 **Fanout semantics (for v1):** when one input triggers N output messages (e.g., directory invalidating N sharers), all N carry the same trace ID. Sub-transactions with explicit `parent_of` relations per fanout branch are a future extension.
 
-**Edge cases that fall out correctly:**
+#### Why this works for CHI
+
+CHI is explicitly **in scope** for this step because its request, response, data, trigger, retry-trigger, and replacement messages are all SLICC `interface="Message"` types.
+
+The revised rule works cleanly across CHI's multi-stage pipeline:
+
+1. `peek(seqInPort, RubyRequest)` accepts the traced sequencer request and installs its root ID on the controller.
+   `enqueue(reqRdyOutPort, CHIRequestMsg, ...)` therefore stamps the first internal `CHIRequestMsg` with the same root ID.
+2. Later, `peek(reqRdyPort, CHIRequestMsg)` re-establishes that same root ID.
+   Any `TriggerMsg`, `RetryTriggerMsg`, or other internal messages created while handling the request inherit it automatically.
+3. When CHI later processes `peek(triggerInPort, TriggerMsg)` and executes actions such as `Send_ReadShared`, `Send_ReadNoSnp`, `Send_Snp*`, `Send_*Rsp`, or `Send_*Data`, the controller context is again active, so the final `reqOutPort`, `snpOutPort`, `rspOutPort`, and `datOutPort` messages inherit the same root ID.
+
+This is exactly why a lexical `in_msg_ptr` solution is insufficient and why the controller-context design is the right implementation boundary.
+
+CHI-specific expected outcomes:
+- traced sequencer requests propagate through `reqRdy` and later network outports without any per-protocol `.sm` edits
+- trigger-driven downstream emissions retain the original root trace ID
+- internally generated maintenance work that starts with no traced input still stays untraced
+
+**Representative scenarios that must work after the change:**
 
 | Scenario | Triggering `in_msg` | Result |
 |---|---|---|
 | L1 miss issues GETS to directory | RubyRequest with trace ID | Propagated ✓ |
 | Directory forwards to owner | Forward request carrying ID | Propagated ✓ |
 | Directory fans out invalidations to sharers | Original request | All invalidations share ID ✓ |
+| CHI `RubyRequest -> reqRdy -> triggerQueue -> reqOutPort` | RubyRequest, then CHIRequestMsg, then TriggerMsg | Same root ID survives every hop ✓ |
+| CHI snoop/data/response paths | CHIRequestMsg / TriggerMsg / CHIDataMsg / CHIResponseMsg | Same root ID preserved across ready and trigger queues ✓ |
 | Writeback from L1 eviction | No triggering in_msg | ID stays 0 — correctly skipped ✓ |
 | Hardware prefetch | No CPU-originated trace | ID stays 0 — correctly skipped ✓ |
 
 **Non-goals for this step:**
 - Adding new message fields (already covered — `m_rootTraceId` lives on `Message` base class).
-- Supporting non-SLICC controllers (CHI, etc.) — separate step.
+- Non-SLICC controller stacks outside Ruby's SLICC-generated protocol machines.
+- Changing the transaction model from "one root ID per causal protocol flow" to explicit per-message child transactions.
 - Sub-transaction nodes for protocol message stages — future extension (Step 10).
 
 #### Testing methodology
 
-**Test 1: SLICC codegen unit test**
+**Test 1: SLICC codegen pyunit**
 
-Compile a minimal `.sm` fragment and inspect the generated C++ output. Assert:
-- Actions inside a peek scope that call `enqueue` produce the `setRootTraceId` injection
-- Actions outside any peek scope produce no injection
-- The injection is placed after `out_msg` construction but before the `enqueue(...)` call
-- Code compiles cleanly for all existing protocols (MI_example, MESI_Two_Level, MESI_Three_Level, MOESI_CMP_directory, MOESI_AMD_Base, MOESI_hammer, CHI)
+Use the existing Python unit-test harness instead of a new GTest.
+Parse fixture `.sm` files into a temporary output directory and inspect the generated controller C++.
 
-Implementation: add a GTest under `src/mem/slicc/` that invokes the SLICC parser on a fixture `.sm` file and greps the generated `.cc` file for the expected pattern.
+Assert:
+- `PeekStatementAST` emits the scoped controller-trace guard immediately after a successful cast
+- `EnqueueStatementAST` emits `out_msg->setRootTraceId(getCurrentRootTraceId())` immediately before `buffer.enqueue(...)`
+- `DeferEnqueueingStatementAST` emits the same stamping before `deferEnqueueingMessage(...)`
+- nested `peek(...)` scopes generate nested guards
+- fixture code that has no active `peek(...)` context still compiles and uses `getCurrentRootTraceId()` safely
 
-**Test 2: Protocol regression**
+Include one fixture specifically modeling the CHI-style two-hop case:
+- first `peek(seqInPort, RubyRequest)` enqueues to an internal ready queue
+- later `peek(reqRdyPort, SomeMsg)` triggers a standalone action that enqueues again without a direct `RubyRequest` in lexical scope
 
-Build gem5 with each existing protocol and run the matching test configuration:
-```sh
-scons build/RISCV/gem5.opt PROTOCOL=<proto>
-./tests/main.py run --length=quick -j 6
-```
-No behavioral change expected — the injected line only writes a field that's otherwise zero. Stats outputs should match bit-for-bit with the pre-change build for all Ruby tests.
+**Test 2: Protocol compile regression**
+
+Build at least:
+- `MI_example`
+- `MESI_Two_Level`
+- `MESI_Three_Level`
+- `MOESI_CMP_directory`
+- `MOESI_AMD_Base`
+- `MOESI_hammer`
+- `CHI`
+
+No protocol behavior should change except for trace metadata becoming nonzero on propagated messages.
 
 **Test 3: End-to-end smoke test on MI_example**
 
@@ -629,7 +725,22 @@ Re-run `ruby-book/final/smoke/ftr_smoke_test.py` after the fix. Expected deltas 
 
 The Garnet stats in `stats.txt` provide ground truth for expected event counts.
 
-**Test 4: Counting invariant**
+**Test 4: CHI-specific validation**
+
+Run an existing CHI harness such as:
+- `tests/gem5/chi_protocol/configs/chi-with-isa.py`
+
+Assertions:
+- traced requests produce nonzero `enqueue` / `dequeue` events on CHI internal queues such as `reqRdy`, `triggerQueue`, and `retryTriggerQueue` when those queues participate in the flow
+- later `reqOut`, `snpOut`, `rspOut`, and `datOut` messages carry the same root trace ID as the originating traced request
+- Garnet flit child transactions and router-stage events become nonzero for traced CHI traffic
+- a sampled CHI flow can be reconstructed as:
+  `RubyRequest -> reqRdy CHIRequestMsg -> TriggerMsg -> reqOut/snpOut/rspOut/datOut`
+  with one stable `rootTraceId` across all hops
+
+This is the explicit double-check that the revised Step 8 design works with CHI and not only with the simpler MESI/MI protocols.
+
+**Test 5: Counting invariant**
 
 For each completed root transaction, count child flits in the trace and compare to the expected number of flits per request (function of message size and link width, available from GarnetNetwork params). Assert:
 ```
@@ -637,13 +748,13 @@ total_flit_children == sum over roots of expected_flits_per_request
 ```
 within a tolerance for requests still in flight at simulation end.
 
-**Test 5: Fanout correctness**
+**Test 6: Fanout correctness**
 
 Configure a multicast-heavy scenario (e.g., MOESI_CMP_directory with shared-line reads from multiple cores). Assert that invalidations to different sharers carry the same `rootTraceId` and appear as separate flit children of the same root.
 
 #### Effort estimate
 
-1–2 days including SLICC parser archaeology, the codegen change, test fixtures, and protocol regression runs.
+2–3 days including SLICC compiler changes, `AbstractController` runtime support, pyunit fixtures, CHI validation, and protocol regression runs.
 
 ### Step 9. Validation and Documentation — PARTIAL
 
