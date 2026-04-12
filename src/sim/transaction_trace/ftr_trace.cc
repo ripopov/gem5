@@ -124,8 +124,8 @@ FtrTrace::stampEvent(TraceId id, std::string_view eventKind,
                      std::string_view objectName, Tick tick,
                      const tx_trace::AttrList &attrs)
 {
-    auto it = liveTxs_.find(id);
-    if (it == liveTxs_.end()) {
+    const TxInfo *info = findTxInfo(id);
+    if (info == nullptr) {
         DPRINTF(TxTrace,
                 "stampEvent: TraceId %lu not in live table, "
                 "skipping '%s'\n",
@@ -133,8 +133,7 @@ FtrTrace::stampEvent(TraceId id, std::string_view eventKind,
         return;
     }
 
-    trace_->stampEvent(id, it->second.evtGenId, eventKind, objectName, tick,
-                       attrs);
+    trace_->stampEvent(id, info->evtGenId, eventKind, objectName, tick, attrs);
 }
 
 void
@@ -151,7 +150,12 @@ FtrTrace::retireTransaction(TraceId id, std::string_view objectName, Tick tick,
     }
 
     trace_->retireTransaction(id, tick, attrs);
-    liveTxs_.erase(it);
+    if (it->second.isFlit) {
+        liveTxs_.erase(it);
+    } else {
+        retiredRoots_[id] = it->second;
+        liveTxs_.erase(it);
+    }
 
     DPRINTF(TxTrace, "Transaction %lu retired at %s tick %lu\n", id,
             objectName, tick);
@@ -163,13 +167,19 @@ TraceId
 FtrTrace::createFlitChild(TraceId parentRoot, std::string_view objectName,
                           Tick tick, const tx_trace::AttrList &attrs)
 {
-    auto it = liveTxs_.find(parentRoot);
-    assert(it != liveTxs_.end());
+    const TxInfo *info = findTxInfo(parentRoot);
+    if (info == nullptr) {
+        DPRINTF(TxTrace,
+                "createFlitChild: parent TraceId %lu not available, "
+                "skipping child creation at %s\n",
+                parentRoot, objectName);
+        return 0;
+    }
 
     TraceId flitId = trace_->reserveId();
-    trace_->createChildTransactionWithId(flitId, it->second.flitGenId,
-                                         parentRoot, tick, attrs);
-    liveTxs_[flitId] = {it->second.flitEvtGenId, 0, 0, true};
+    trace_->createChildTransactionWithId(flitId, info->flitGenId, parentRoot,
+                                         tick, attrs);
+    liveTxs_[flitId] = {info->flitEvtGenId, 0, 0, true};
 
     DPRINTF(TxTrace, "Flit %lu (parent %lu) created at %s tick %lu\n", flitId,
             parentRoot, objectName, tick);
@@ -177,6 +187,22 @@ FtrTrace::createFlitChild(TraceId parentRoot, std::string_view objectName,
 }
 
 // ---- Stream management ----
+
+const FtrTrace::TxInfo *
+FtrTrace::findTxInfo(TraceId id) const
+{
+    auto live = liveTxs_.find(id);
+    if (live != liveTxs_.end()) {
+        return &live->second;
+    }
+
+    auto retired = retiredRoots_.find(id);
+    if (retired != retiredRoots_.end()) {
+        return &retired->second;
+    }
+
+    return nullptr;
+}
 
 const FtrTrace::StreamInfo &
 FtrTrace::getOrCreateStream(SimObject *sequencer)

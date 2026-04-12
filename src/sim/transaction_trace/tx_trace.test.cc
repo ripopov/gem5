@@ -457,6 +457,39 @@ TEST(TxTraceTest, CreateChildTransactionWithId)
 }
 
 // ==================================================================
+// Retired parents can still receive late events and children
+// ==================================================================
+
+TEST(TxTraceTest, RetiredParentAllowsLateEventAndChild)
+{
+    auto [trace, ss] = makeTrace();
+
+    uint64_t sid = trace->addStream("seq0", "Sequencer");
+    uint64_t memreq_gen = trace->addGeneratorPair(sid, "memreq");
+    uint64_t memreq_evt = memreq_gen + 1;
+    uint64_t flit_gen = trace->addGeneratorPair(sid, "flit");
+
+    TraceId root = trace->createRootTransaction(memreq_gen, 1000);
+    trace->retireTransaction(root, 1010);
+
+    trace->stampEvent(root, memreq_evt, "port_crossing", "seq0.out_port",
+                      1015);
+
+    TraceId flit_id = trace->createChildTransaction(
+        flit_gen, root, 1020, {{"flit_index", uint64_t(0)}});
+    trace->retireTransaction(flit_id, 1030);
+
+    std::string out = ss->str();
+
+    EXPECT_TRUE(containsLine(out, "tx_end 1 0 1010"));
+    EXPECT_TRUE(containsLine(out, "tx_record_attribute 2 \"event_kind\" "
+                                  "STRING = \"port_crossing\""));
+    EXPECT_TRUE(containsLine(out, "tx_relation \"parent_of\" 2 1"));
+    EXPECT_TRUE(containsLine(out, "tx_begin 3 2 1020"));
+    EXPECT_TRUE(containsLine(out, "tx_relation \"parent_of\" 3 1"));
+}
+
+// ==================================================================
 // reserveId interleaves correctly with allocateId
 // ==================================================================
 

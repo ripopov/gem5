@@ -30,6 +30,12 @@ parser = argparse.ArgumentParser(
 )
 Options.addCommonOptions(parser)
 Options.addSEOptions(parser)
+parser.add_argument(
+    "--trace-output",
+    type=str,
+    default=None,
+    help="Enable FTR text tracing with the given output basename",
+)
 
 # This script only supports CHI. MULTIPLE.define_options() scans sys.argv for
 # --protocol before parse_args() runs, so inject it unconditionally.
@@ -107,6 +113,11 @@ system.ruby.clk_domain = SrcClockDomain(
 for i in range(args.num_cpus):
     system.cpu[i].createInterruptController()
     system.ruby._cpu_ports[i].connectCpuPorts(system.cpu[i])
+
+if args.trace_output is not None:
+    system.ftr_trace = FtrTrace(
+        output_format="text", output_file=args.trace_output
+    )
 
 # --- Instantiate and run -----------------------------------------------------
 

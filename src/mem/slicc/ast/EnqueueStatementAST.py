@@ -83,6 +83,7 @@ class EnqueueStatementAST(StatementAST):
         # The other statements
         t = self.statements.generate(code, None)
         self.queue_name.assertType("OutPort")
+        code("out_msg->setRootTraceId(getCurrentRootTraceId());")
 
         if self.latexpr != None:
             ret_type, rcode = self.latexpr.inline(True)

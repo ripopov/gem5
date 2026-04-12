@@ -108,7 +108,8 @@ class FtrTrace : public SimObject
 
     /**
      * Create a flit child transaction linked to a root.
-     * Returns the flit's own TraceId.
+     * Returns the flit's own TraceId, or 0 if the parent root
+     * is no longer available for tracing.
      */
     TraceId createFlitChild(TraceId parentRoot, std::string_view objectName,
                             Tick tick, const tx_trace::AttrList &attrs = {});
@@ -140,6 +141,9 @@ class FtrTrace : public SimObject
         bool isFlit;
     };
 
+    /** Look up generator info for a live or retired transaction. */
+    const TxInfo *findTxInfo(TraceId id) const;
+
     /** Get or lazily create the stream for a sequencer. */
     const StreamInfo &getOrCreateStream(SimObject *sequencer);
 
@@ -151,6 +155,7 @@ class FtrTrace : public SimObject
     std::unordered_map<SimObject *, StreamInfo> streams_;
     std::unordered_map<TraceId, PendingRoot> pendingRoots_;
     std::unordered_map<TraceId, TxInfo> liveTxs_;
+    std::unordered_map<TraceId, TxInfo> retiredRoots_;
 };
 
 } // namespace gem5

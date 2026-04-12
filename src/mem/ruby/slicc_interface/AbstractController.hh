@@ -41,6 +41,7 @@
 #ifndef __MEM_RUBY_SLICC_INTERFACE_ABSTRACTCONTROLLER_HH__
 #define __MEM_RUBY_SLICC_INTERFACE_ABSTRACTCONTROLLER_HH__
 
+#include <cstdint>
 #include <exception>
 #include <iostream>
 #include <string>
@@ -85,6 +86,48 @@ class RejectException: public std::exception
 class AbstractController : public ClockedObject, public Consumer
 {
   public:
+    class ScopedRootTraceContext
+    {
+      public:
+        ScopedRootTraceContext(const ScopedRootTraceContext &) = delete;
+        ScopedRootTraceContext &
+        operator=(const ScopedRootTraceContext &) = delete;
+        ScopedRootTraceContext(ScopedRootTraceContext &&other)
+            : controller(other.controller),
+              previousRootTraceId(other.previousRootTraceId),
+              changed(other.changed)
+        {
+            other.controller = nullptr;
+            other.changed = false;
+        }
+        ScopedRootTraceContext &operator=(ScopedRootTraceContext &&) = delete;
+
+        ~ScopedRootTraceContext()
+        {
+            if (controller != nullptr && changed) {
+                controller->m_currentRootTraceId = previousRootTraceId;
+            }
+        }
+
+      private:
+        friend class AbstractController;
+
+        explicit ScopedRootTraceContext(AbstractController &controller,
+                                        uint64_t root_trace_id)
+            : controller(&controller),
+              previousRootTraceId(controller.m_currentRootTraceId),
+              changed(controller.m_currentRootTraceId != root_trace_id)
+        {
+            if (changed) {
+                controller.m_currentRootTraceId = root_trace_id;
+            }
+        }
+
+        AbstractController *controller;
+        uint64_t previousRootTraceId;
+        bool changed;
+    };
+
     PARAMS(RubyController);
     AbstractController(const Params &p);
     void init();
@@ -245,6 +288,18 @@ class AbstractController : public ClockedObject, public Consumer
     std::string printAddress(Addr addr) const;
 
   protected:
+    uint64_t
+    getCurrentRootTraceId() const
+    {
+        return m_currentRootTraceId;
+    }
+
+    ScopedRootTraceContext
+    scopedRootTraceContext(uint64_t root_trace_id)
+    {
+        return ScopedRootTraceContext(*this, root_trace_id);
+    }
+
     //! Profiles original cache requests including PUTs
     void profileRequest(const std::string &request);
     //! Profiles the delay associated with messages.
@@ -430,6 +485,7 @@ class AbstractController : public ClockedObject, public Consumer
     const Cycles m_mandatory_queue_latency;
     bool m_waiting_mem_retry;
     bool m_mem_ctrl_waiting_retry;
+    uint64_t m_currentRootTraceId = 0;
 
     /**
      * Port that forwards requests and receives responses from the

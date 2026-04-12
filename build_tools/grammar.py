@@ -118,15 +118,14 @@ class Grammar:
     def parse_file(self, f, **kwargs):
         if isinstance(f, str):
             source = f
-            f = open(f)
-        elif isinstance(f, file):
-            source = f.name
-        else:
-            raise AttributeError(
-                "argument must be either a string or file, was '%s'" % type(f)
-            )
+            with open(f) as handle:
+                return self.parse_string(handle.read(), source, **kwargs)
+        if hasattr(f, "read") and hasattr(f, "name"):
+            return self.parse_string(f.read(), f.name, **kwargs)
 
-        return self.parse_string(f.read(), source, **kwargs)
+        raise AttributeError(
+            "argument must be either a string or file, was '%s'" % type(f)
+        )
 
     def p_error(self, t):
         if t:

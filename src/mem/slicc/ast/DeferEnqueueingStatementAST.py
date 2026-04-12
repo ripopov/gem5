@@ -75,6 +75,7 @@ class DeferEnqueueingStatementAST(StatementAST):
         # The other statements
         t = self.statements.generate(code, None)
         self.queue_name.assertType("OutPort")
+        code("out_msg->setRootTraceId(getCurrentRootTraceId());")
 
         code(
             "(${{self.queue_name.var.code}}).deferEnqueueingMessage(addr, "

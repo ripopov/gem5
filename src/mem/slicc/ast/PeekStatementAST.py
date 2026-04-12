@@ -82,6 +82,8 @@ class PeekStatementAST(StatementAST):
         // different inport or punt.
         throw RejectException();
     }
+    [[maybe_unused]] auto root_trace_guard =
+        scopedRootTraceContext(in_msg_ptr->getRootTraceId());
 """)
 
         if "block_on" in self.pairs:
