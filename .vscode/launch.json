@@ -184,6 +184,48 @@
                 }
             ],
             "postDebugTask": "ch17: check smoke stats"
+        },
+        {
+            "name": "gem5: ch17-trivial-ftr (4x4 CHI mesh, FTR dump)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/RISCV/${input:gem5Build}",
+            "args": [
+                "-d",
+                "m5out/trivial-ftr",
+                "configs/example/rbook_mesh_config.py",
+                "--cmd=ruby-book/final/trivial",
+                "--trace-output=trivial",
+                "--trace-format=ftr"
+            ],
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "text": "handle SIGSEGV nostop noprint pass",
+                    "description": "gem5 uses SIGSEGV for null checks"
+                }
+            ]
+        },
+        {
+            "name": "gem5: ch17-trivial-ftr (CodeLLDB)",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/RISCV/${input:gem5Build}",
+            "args": [
+                "-d",
+                "m5out/trivial-ftr",
+                "configs/example/rbook_mesh_config.py",
+                "--cmd=ruby-book/final/trivial",
+                "--trace-output=trivial",
+                "--trace-format=ftr"
+            ],
+            "cwd": "${workspaceFolder}",
+            "preRunCommands": [
+                "process handle SIGSEGV -n false -p true -s false"
+            ]
         }
     ]
 }
