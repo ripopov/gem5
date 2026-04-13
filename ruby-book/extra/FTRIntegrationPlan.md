@@ -91,6 +91,8 @@ The `flit` generator produces `Flit` child transactions.
 The `.events` companion generators produce zero-duration event transactions (see [Events on Transactions](#events-on-transactions)).
 All generators live on the same stream so that a request, its flit children, and all their events appear together on the same viewer swim-lane.
 
+Note: CHI configurations give each CPU split L1s and therefore **two** sequencers — e.g. `system.cpu00.inst_sequencer` (bound to the L1I controller, handling fetches from `icache_port`) and `system.cpu00.data_sequencer` (bound to the L1D controller, handling loads/stores/AMOs from `dcache_port`). Each appears as its own stream in the FTR dump. MESI Two Level uses a single unified sequencer per core, hence one stream per L1 controller.
+
 Components that do **not** get their own stream (they appear only as event attributes):
 cache controllers, message buffers, network interfaces, routers, links, memory controllers.
 
