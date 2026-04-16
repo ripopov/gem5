@@ -17,6 +17,12 @@ PAGES ?= 1536
 MEM_SIZE ?= 512MiB
 PER_VNET_LINKS ?=
 RUN_TAG ?= rbook-link-pressure
+L1D_TBES ?=
+L1D_SEQ_OUTSTANDING ?=
+L2_TBES ?=
+HNF_TBES ?=
+CPU_LQ_ENTRIES ?=
+CPU_IQ_ENTRIES ?=
 
 all: report
 
@@ -29,8 +35,27 @@ run: $(BIN)
 	@set -euo pipefail; \
 	outdir="$(M5OUT_ROOT)/$(RUN_TAG)-$$(date +%Y%m%d-%H%M%S)"; \
 	mesh_arg=(); \
+	cpu_arg=(); \
 	if [[ -n "$(PER_VNET_LINKS)" ]]; then \
 	    mesh_arg+=(--per-vnet-links); \
+	fi; \
+	if [[ -n "$(L1D_TBES)" ]]; then \
+	    cpu_arg+=(--l1d-tbes="$(L1D_TBES)"); \
+	fi; \
+	if [[ -n "$(L1D_SEQ_OUTSTANDING)" ]]; then \
+	    cpu_arg+=(--l1d-seq-outstanding="$(L1D_SEQ_OUTSTANDING)"); \
+	fi; \
+	if [[ -n "$(L2_TBES)" ]]; then \
+	    cpu_arg+=(--l2-tbes="$(L2_TBES)"); \
+	fi; \
+	if [[ -n "$(HNF_TBES)" ]]; then \
+	    cpu_arg+=(--hnf-tbes="$(HNF_TBES)"); \
+	fi; \
+	if [[ -n "$(CPU_LQ_ENTRIES)" ]]; then \
+	    cpu_arg+=(--cpu-lq-entries="$(CPU_LQ_ENTRIES)"); \
+	fi; \
+	if [[ -n "$(CPU_IQ_ENTRIES)" ]]; then \
+	    cpu_arg+=(--cpu-iq-entries="$(CPU_IQ_ENTRIES)"); \
 	fi; \
 	mkdir "$$outdir"; \
 	printf 'Starting link-pressure simulation: %s (pages=%s mem=%s per_vnet=%s)\n' \
@@ -40,6 +65,7 @@ run: $(BIN)
 	    --cmd="$(BIN_PATH)" \
 	    --options="$(PAGES)" \
 	    "$${mesh_arg[@]}" \
+	    "$${cpu_arg[@]}" \
 	    > "$$outdir/console.log" 2>&1; \
 	printf '%s\n' "$$outdir" > "$(LAST_OUTDIR)"; \
 	printf 'Run directory: %s\n' "$$outdir"

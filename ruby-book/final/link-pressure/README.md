@@ -192,43 +192,73 @@ artifact of a too-small buffer.
 ### Current bottleneck (16 threads, per-vnet-links)
 
 With the DAT head-of-line block removed, the next binding constraint
-at `1.10` line ops/cycle is the **L1D TBE pool** (MSHRs), *not* the
-HNF service rate or physical link bandwidth. From the v1b 16-thread
-per-vnet stats block:
+at `1.10` line ops/cycle is **the mesh itself** — specifically the
+steady-state round-trip latency per L1D miss, not any per-CPU queue
+cap. This was validated by a widening sweep (v3 below) that showed
+larger L1D TBE / sequencer pools did *not* raise throughput.
+
+From the v1b 16-thread per-vnet stats block:
 
 | Resource | Cap | Avg size | Avg utilization |
 |---|---:|---:|---:|
-| L1D TBEs (per CPU, sampled cpu0/1/7/15) | 32 | 23.5–24.1 | **0.74–0.75** |
+| L1D TBEs (per CPU, sampled cpu0/1/7/15) | 32 | 23.5–24.1 | 0.74–0.75 |
 | L2 TBEs (per CPU) | 64 | ~23.3 | 0.36 |
 | HNF TBEs (per HNF, sampled 0/5/10/15) | 64 | 12.0–16.7 | 0.19–0.26 |
 | Sequencer max outstanding | 32 | ~24 (tracks L1D TBE) | ~0.75 |
 
-Network-side, queueing-latency / network-latency = `26531 / 15209 =
-1.74x` — flits still spend ~1.7 cycles waiting for a channel for
-every cycle of actual transit, so per-vnet-links did not fully drain
-the queues. But the HNFs are only ~20% occupied and L2 TBEs under
-40%, so downstream of the L1D there is headroom: the 32-slot L1D
-TBE cap is what gates MLP per core.
+The `74%` L1D TBE utilization *looked* like a binding constraint at
+first glance, but v3 widening to 48 and 64 slots shows it is not: the
+average occupancy barely moves when the cap is lifted. That tells us
+per-core MLP sits at a **Little's-Law equilibrium** with the mesh:
+
+$$ N_{\text{in-flight}} = R_{\text{miss}} \cdot T_{\text{round-trip}} $$
+
+With `N` stuck at ~24 per core and `T_round-trip` = queueing
+(`26.5 kticks`) + transit (`15.2 kticks`) ≈ `42 kticks` ≈ `83` CPU
+cycles @ 2 GHz, the issue rate `R` is already maxed out — adding more
+cap to L1D just lets `N` rise slightly, and `T` grows in step, so
+`R` doesn't. This is the mesh link / router buffer bandwidth ceiling.
+
+### v3 — L1D TBE widening sweep (confirms mesh is the ceiling)
+
+`2026-04-17`, pages=`1024` (4 MiB buffer), per-vnet-links enabled.
+
+- v1b baseline: L1D TBE=32, seq=32 → `1.10306` ops/cy
+- v3 TBE=48: `m5out/rbook-link-pressure-v3-tbe48-20260417-003146`
+- v3 TBE=64: `m5out/rbook-link-pressure-v3-tbe64-20260417-003740`
+
+| L1D TBE / seq | 16t ops/cy | Δ vs v1b | 16t qlat (ticks) | L1D avg occupancy |
+|---:|---:|---:|---:|---:|
+| **32 / 32** (v1b) | **1.10306** | — | 26,532 | 23.7 / 32 (74%) |
+| 48 / 48 | 1.07245 | **−2.78%** | 30,580 | 25.5 / 48 (53%) |
+| 64 / 64 | 1.09145 | **−1.05%** | 30,873 | 25.6 / 64 (40%) |
+
+Key signal: average L1D TBE occupancy grew only from `23.7` to `25.5`
+to `25.6` across 32/48/64 slots — essentially flat. If the cap had
+been binding, doubling it would fill the new slots. Instead the mesh
+just soaks up more latency (`qlat 26532 → 30873`, `+16%`), and
+throughput regresses because each miss now takes longer to return.
+This is the Little's-Law tell: the cap isn't the knob; the round-trip
+is.
 
 **What this implies for next steps**
 
-- Widening `--l1d-tbes` beyond 32 would let each core hold more in
-  flight. That lets throughput climb only until the mesh links
-  resaturate or HNF TBEs fill — both currently have headroom, so
-  the next sweep point is *probably* a further `+N%` at a higher L1D
-  TBE budget. This has not been measured yet and is not part of v2.
-- Widening HNF TBEs or adding more HNF slices would not help here:
-  HNF occupancy is ~20% of capacity, not the binding resource.
-- Removing or flattening the L1D TBE cap would expose the **mesh
-  link bandwidth** as the real ceiling — at 1.1 line ops/cycle the
-  mesh is carrying `62%` DAT traffic at `128 bits/cycle/link/vnet`,
-  close to the physical saturation point.
+- Widening L1D TBEs, L2 TBEs, or HNF TBEs will not raise 16-thread
+  throughput on this mesh — all three have headroom, the cap is
+  mesh round-trip.
+- Real levers: (a) faster routers (`router_latency` = `4` cycles
+  in `rbook_4x4.py`, could be lowered for a what-if), (b) wider
+  links (`link_width_bits` = `128`, try `256` for a 2x DAT
+  payload/cycle), (c) shorter Manhattan distance (a `2x2` topology
+  instead of `4x4`), (d) more home-node slices per column so REQs
+  cross fewer hops on average.
+- The `--per-vnet-links` benefit already measured here (`+13.4%`)
+  is roughly the best Garnet can offer on link arbitration alone
+  for this CHI config at this working-set size.
 
-The link-pressure workload has done its job: it reduced the network
-to a predictable many-to-many streaming load so that `--per-vnet-links`
-could move the HoL block out of the way, and with that gone the L1D
-MSHR/TBE cap is now the thing to push on — the classic "fix one
-bottleneck, find the next."
+`v1b` (L1D TBE=32) is kept as the canonical operating point because
+raising the cap only makes things worse and gives misleadingly low
+TBE utilization numbers.
 
 ### Lessons learned
 
