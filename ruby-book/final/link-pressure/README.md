@@ -153,6 +153,42 @@ single-flit REQ and SNP. `--per-vnet-links` splits each adjacent-router
 link into 4 independent physical links (one per vnet), so REQ and SNP
 no longer queue behind DAT bursts — exactly the +13.4% at 16 threads.
 
+### v2 — 8 MiB buffer (plateau check)
+
+`2026-04-17`, pages=`2048` (buffer `8 MiB`, exactly half of the 16 MiB LLC)
+
+- shared: `m5out/rbook-link-pressure-v2-shared-20260416-234114`
+- per-vnet: `m5out/rbook-link-pressure-v2-pervnet-20260416-234330`
+
+#### Throughput
+
+| Threads | Shared ops/cy | Per-vnet ops/cy | Delta |
+|---:|---:|---:|---:|
+| 1 | 0.08196 | 0.08216 | +0.24% |
+| 2 | 0.18410 | 0.18509 | +0.54% |
+| 4 | 0.36509 | 0.36811 | +0.83% |
+| 8 | 0.59311 | 0.60406 | +1.85% |
+| 16 | 0.97035 | **1.09858** | **+13.22%** |
+
+#### Queueing latency (16 threads)
+
+| Shared | Per-vnet | Delta |
+|---:|---:|---:|
+| 31237.43 | 25935.26 | −16.97% |
+
+Doubling the buffer from 4 MiB to 8 MiB changes nothing meaningful at 16
+threads: the per-vnet gain lands at `+13.22%` vs v1b's `+13.39%`, and the
+queueing-latency reduction is the same `~−15–17%`. The 1-thread window
+did get ~12% faster (0.0730 → 0.0820 ops/cy) because the larger buffer
+forces a higher fraction of L2 misses, producing more steady-state mesh
+traffic per thread — but that does not move the 16-thread saturation
+plateau, which is already link-bound at 4 MiB.
+
+Conclusion: **4 MiB (`PAGES=1024`) is kept as the default** because it
+hits the plateau at lower simulation wall time. Use `PAGES=2048` only
+when wanting to cross-check that the plateau is real rather than an
+artifact of a too-small buffer.
+
 ### Lessons learned
 
 1. A workload must overflow private L2 or single-thread windows see no
@@ -165,6 +201,10 @@ no longer queue behind DAT bursts — exactly the +13.4% at 16 threads.
    have substantial shared-link traffic. In v1b at 16 threads, REQ
    (19%), SNP (19%), DAT (62%) together flood each link — per-vnet
    separation removes the DAT head-of-line block and regains +13.4%.
+4. Per-vnet benefit plateaus once mesh link contention is fully
+   saturated. v2 (8 MiB) shows the same `+13%` as v1b (4 MiB); a
+   larger working set raises raw LLC traffic but does not increase
+   the vnet-contention headroom `--per-vnet-links` can recover.
 
 ---
 
