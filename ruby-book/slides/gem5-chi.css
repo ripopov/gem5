@@ -273,6 +273,13 @@ blockquote p,
   border-top: 5px solid var(--chi-red);
 }
 
+/* Neutral accent for infrastructure roles (MN, SN-F) that must not
+   collide with channel colors (REQ=blue, SNP=gold, RSP=green, DAT=violet)
+   or the warning color (red). */
+.accent-slate {
+  border-top: 5px solid var(--chi-muted);
+}
+
 .channel-card.req {
   border-top: 5px solid var(--chi-blue);
 }

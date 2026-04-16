@@ -147,9 +147,9 @@ home node, and the home node talks to memory. Every link is independent and pipe
 <h3>NoC-native coherence</h3>
 <p>Packetized channels, targeted snoops, and credit flow control for large meshes.</p>
 <span class="pill req">REQ</span>
-<span class="pill.snp">SNP</span>
-<span class="pill.rsp">RSP</span>
-<span class="pill.dat">DAT</span>
+<span class="pill snp">SNP</span>
+<span class="pill rsp">RSP</span>
+<span class="pill dat">DAT</span>
 </div>
 </div>
 
@@ -217,13 +217,13 @@ CHI is like a messaging system where you send targeted messages on dedicated lan
 <p>Serialization point for address ownership, snoop targeting, and optimizations.</p>
 <p><code>CHI_HNF</code></p>
 </div>
-<div class="card compact accent-red">
+<div class="card compact accent-slate">
 <p class="eyebrow">MN</p>
 <h3>Misc node</h3>
 <p>Coordinates DVM and TLB maintenance traffic across the coherent domain.</p>
 <p><code>CHI_MN</code></p>
 </div>
-<div class="card compact accent-green">
+<div class="card compact accent-slate">
 <p class="eyebrow">SN-F</p>
 <h3>Memory-side slave</h3>
 <p>Gateway from CHI requests into DRAM service and memory timing models.</p>
@@ -1219,7 +1219,7 @@ under load spikes — exactly when you need the protocol to not crash.
 </div>
 <div>
 
-<div class="card accent-green smaller">
+<div class="card accent-teal smaller">
 <p class="eyebrow">gem5 knobs</p>
 <h3>Allocation and deallocation are explicit</h3>
 <p><code>alloc_on_readshared</code>, <code>alloc_on_readunique</code>, <code>alloc_on_readonce</code>, and <code>alloc_on_writeback</code> decide when an upstream level keeps a line.</p>

@@ -312,6 +312,60 @@ Practical budget rules:
 - one table or one diagram, not both unless one is very small
 - if you need `.smaller`, ask whether the slide should split
 
+## Speaker Notes
+
+Keep slides visually light by moving the narration off-slide.
+Every substantive slide should carry a block of speaker notes — the slide is the scaffold, the notes are the lecture.
+
+### Canonical format
+
+Use an HTML comment that starts with the literal marker `Speaker Notes:` and end it immediately before the `---` slide separator:
+
+```markdown
+## ReadShared Transaction
+
+<!-- slide body: diagram + takeaway -->
+
+<!-- Speaker Notes:
+Let's trace a complete ReadShared transaction — the most common operation
+in any multi-core system. This is what happens when a CPU core does a
+load that misses its L1 cache.
+
+Step 1: The CPU issues a load that misses. The RN-F allocates a
+Transaction Buffer Entry (TBE) to track this in-flight operation...
+-->
+
+---
+```
+
+### Why this convention over Marp's native notes
+
+Marp supports an HTML comment directive for notes, but it is strictly a per-slide metadata field.
+Plain HTML comments are more robust for long-form narration:
+
+- Multi-paragraph prose with code, colons, and apostrophes needs no escaping.
+- Comments are invisible in every renderer (PDF, HTML, PPTX) — zero risk of leaking into the exported deck.
+- Grep-friendly: `grep -c "Speaker Notes:" deck.md` counts covered slides; a diff of the speaker-notes hunks reviews cleanly in PRs.
+- Portable across Marp, Pandoc, and plain Markdown viewers.
+
+Trade-off: the notes do not appear in Marp's presenter-mode notes pane.
+For workflows that produce a PDF for distribution and a written narration track, that does not matter.
+If live presenter-mode notes are required, mirror a one-paragraph summary into a `<!-- _notes: ... -->` directive as well.
+
+### Content guidance
+
+- **Prose, not bullets.** Notes are meant to be read aloud. Bullets reward scanning, sentences reward delivery.
+- **Budget 30–60 lines (~200–400 words) per substantive slide.** Cover *why this slide exists*, the mechanics not shown on the slide, one concrete example, and a gotcha or misconception.
+- **Extend, don't repeat.** If the slide already says it, don't say it again in notes. Say the thing the slide can't fit.
+- **Anchor to code and files.** Speaker notes are the right place for `src/mem/ruby/protocol/chi/CHI-cache-actions.sm`-style references that would be noise on the slide.
+- **Skip notes on pure dividers and title slides.** If the slide is one sentence, the notes are one sentence, which is not worth the block.
+
+### Why this helps slide layout
+
+Speaker notes relieve pressure on the slide itself.
+If you find yourself shrinking type, adding a fourth column, or extending bullets past five items, the real fix is usually to move that content into the notes and keep one clean idea on the slide.
+The notes block is effectively an overflow buffer that also improves the delivered presentation.
+
 ## Build Pipeline
 
 ### Recommended script structure
@@ -348,6 +402,7 @@ Before calling a deck “done,” check:
 5. Is there one visual focal point per slide?
 6. Did we split dense slides instead of shrinking everything?
 7. Does the PDF export look identical in tone to the HTML preview?
+8. Does every substantive slide carry a `<!-- Speaker Notes: ... -->` block?
 
 ## Common Pitfalls
 
@@ -361,3 +416,4 @@ Before calling a deck “done,” check:
 | Base64 bg image missing | Background does not appear in PDF | Use file reference + `--allow-local-files` |
 | `mmdc` sandbox crash | `No usable sandbox!` error | `puppeteer-config.json` with `--no-sandbox` |
 | SVG rendered too wide in a column | Diagram feels cramped or clipped | Render with a narrower viewport such as `--width 600` |
+| Slide is crowded because narration lives on it | Type shrinks, bullets grow past five items | Move the detail into `<!-- Speaker Notes: ... -->` |
