@@ -32,12 +32,22 @@ for src in "${files[@]}"; do
     xvfb-run drawio --export --format svg --svg-theme light \
         --output "$tmp" "$src" >/dev/null 2>&1
 
-    # Post-process: white background, resolve light-dark() to light values.
+    # Post-process:
+    #   - white background
+    #   - resolve light-dark() to light values
+    #   - strip embedded base64 PNG fallbacks (drawio adds them as a
+    #     fallback for viewers that can't render SVG foreignObject; they
+    #     balloon the file 30-50x and are unneeded for modern browsers,
+    #     GitHub, and markdown rendering).
     perl -pe '
         s/background:\s*transparent/background: #ffffff/g;
         s/background-color:\s*transparent/background-color: #ffffff/g;
         while (s/light-dark\(([^,()]*(?:\([^()]*\)[^,()]*)*),\s*[^()]*(?:\([^()]*\)[^()]*)*\)/\1/g) {}
+        s{<image x="[^"]*" y="[^"]*" width="[^"]*" height="[^"]*" xlink:href="data:image/png[^"]*"\s*/?>}{}g;
     ' "$tmp" > "$dst"
+
+    # Ensure trailing newline so pre-commit end-of-file-fixer is a no-op.
+    [[ -n "$(tail -c 1 "$dst")" ]] && printf '\n' >> "$dst"
 
     rm -f "$tmp"
 done

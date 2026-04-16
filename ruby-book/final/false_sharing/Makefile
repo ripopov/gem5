@@ -6,6 +6,7 @@ REPO_ROOT = $(abspath ../../..)
 GEM5_INCLUDE = $(REPO_ROOT)/include
 M5OPS_RISCV = $(REPO_ROOT)/util/m5/src/abi/riscv/m5op.S
 GEM5_BIN = $(REPO_ROOT)/build/RISCV/gem5.opt
+RUN_WITH_TIMEOUT = $(REPO_ROOT)/util/run_with_timeout.sh
 GEM5_CONFIG = $(REPO_ROOT)/configs/example/rbook_mesh_config.py
 M5OUT_ROOT = $(REPO_ROOT)/m5out
 BIN = rbook_test_false_sharing
@@ -51,7 +52,7 @@ probe_run: $(PTHREAD_PROBE_BIN)
 	fi; \
 	mkdir "$$outdir"; \
 	printf 'Starting pthread probe: %s\n' "$$outdir"; \
-	"$(GEM5_BIN)" -d "$$outdir" "$(GEM5_CONFIG)" \
+	"$(RUN_WITH_TIMEOUT)" "$(GEM5_BIN)" -d "$$outdir" "$(GEM5_CONFIG)" \
 	    --cmd="$(PTHREAD_PROBE_BIN_PATH)" "$${trace_arg[@]}" \
 	    > "$$outdir/console.log" 2>&1; \
 	printf '%s\n' "$$outdir" > "$(LAST_OUTDIR)"; \
@@ -81,7 +82,7 @@ run: $(BIN) $(MONITOR)
 	mkdir "$$outdir"; \
 	printf 'Starting false-sharing simulation: %s (iterations=%s)\n' \
 	    "$$outdir" "$(ITERATIONS)"; \
-	"$(GEM5_BIN)" -d "$$outdir" "$(GEM5_CONFIG)" \
+	"$(RUN_WITH_TIMEOUT)" "$(GEM5_BIN)" -d "$$outdir" "$(GEM5_CONFIG)" \
 	    --cmd="$(BIN_PATH)" --options="$(ITERATIONS)" \
 	    "$${trace_arg[@]}" \
 	    > "$$outdir/console.log" 2>&1 & \

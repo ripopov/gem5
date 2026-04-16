@@ -1,0 +1,208 @@
+<mxfile host="Electron" modified="2026-04-16T00:00:00.000Z" agent="draw.io" version="24.0.0">
+  <diagram name="Garnet Topology" id="garnet-arch">
+    <mxGraphModel dx="1700" dy="1180" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1180" math="0" shadow="0" background="#ffffff">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <!-- Title -->
+        <mxCell id="title" value="&lt;b&gt;Garnet3.0 Network-on-Chip — System View&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size: 11px&quot;&gt;class composition, 2×2 mesh topology, link/message classes, and per-cycle flow&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=16;" vertex="1" parent="1">
+          <mxGeometry x="440" y="10" width="820" height="46" as="geometry"/>
+        </mxCell>
+
+        <!-- GarnetNetwork outer frame -->
+        <mxCell id="gnet" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#666666;strokeWidth=2;dashed=1;arcSize=2;" vertex="1" parent="1">
+          <mxGeometry x="20" y="60" width="1660" height="640" as="geometry"/>
+        </mxCell>
+        <mxCell id="gnet_label" value="&lt;b&gt;GarnetNetwork&lt;/b&gt; — m_nis, m_routers, m_networklinks, m_creditlinks, m_networkbridges · m_ni_flit_size, m_max_vcs_per_vnet · routing_algorithm ∈ {TABLE_, XY_, CUSTOM_}" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="40" y="66" width="1300" height="22" as="geometry"/>
+        </mxCell>
+
+        <!-- Top-left protocol controller -->
+        <mxCell id="pc0" value="&lt;b&gt;Protocol Ctrl 0&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px;&quot;&gt;(SLICC CHI-cache)&lt;br&gt;CPU0 L1/L2&lt;br&gt;&lt;br&gt;MessageBuffer *reqOut, rspOut, ...&lt;br&gt;MessageBuffer *reqIn, rspIn, ...&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="140" width="170" height="130" as="geometry"/>
+        </mxCell>
+        <!-- Top-right protocol controller -->
+        <mxCell id="pc1" value="&lt;b&gt;Protocol Ctrl 1&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px;&quot;&gt;(SLICC CHI-cache)&lt;br&gt;CPU1 L1/L2&lt;br&gt;&lt;br&gt;MessageBuffer *reqOut, rspOut, ...&lt;br&gt;MessageBuffer *reqIn, rspIn, ...&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1490" y="140" width="170" height="130" as="geometry"/>
+        </mxCell>
+        <!-- Bottom-left protocol controller -->
+        <mxCell id="pc2" value="&lt;b&gt;Protocol Ctrl 2&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px;&quot;&gt;(SLICC CHI-mem)&lt;br&gt;Home Node / DRAM&lt;br&gt;&lt;br&gt;MessageBuffer *reqOut, rspOut, ...&lt;br&gt;MessageBuffer *reqIn, rspIn, ...&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="460" width="170" height="130" as="geometry"/>
+        </mxCell>
+        <!-- Bottom-right protocol controller -->
+        <mxCell id="pc3" value="&lt;b&gt;Protocol Ctrl 3&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px;&quot;&gt;(SLICC CHI-mem)&lt;br&gt;Home Node / DRAM&lt;br&gt;&lt;br&gt;MessageBuffer *reqOut, rspOut, ...&lt;br&gt;MessageBuffer *reqIn, rspIn, ...&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1490" y="460" width="170" height="130" as="geometry"/>
+        </mxCell>
+
+        <!-- NetworkInterfaces (compact, four corners) -->
+        <mxCell id="ni0" value="&lt;b&gt;NetworkInterface 0&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px;&quot;&gt;inNode_ptr[vnet], outNode_ptr[vnet]&lt;br&gt;flitisizeMessage(), calculateVC()&lt;br&gt;niOutVcs[vc] (flitBuffer)&lt;br&gt;outVcState[vc] — credit counts&lt;br&gt;OutputPort / InputPort → links&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="245" y="140" width="180" height="130" as="geometry"/>
+        </mxCell>
+        <mxCell id="ni1" value="&lt;b&gt;NetworkInterface 1&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px;&quot;&gt;inNode_ptr[vnet], outNode_ptr[vnet]&lt;br&gt;flitisizeMessage(), calculateVC()&lt;br&gt;niOutVcs[vc] (flitBuffer)&lt;br&gt;outVcState[vc] — credit counts&lt;br&gt;OutputPort / InputPort → links&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1275" y="140" width="180" height="130" as="geometry"/>
+        </mxCell>
+        <mxCell id="ni2" value="&lt;b&gt;NetworkInterface 2&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px;&quot;&gt;inNode_ptr[vnet], outNode_ptr[vnet]&lt;br&gt;flitisizeMessage(), calculateVC()&lt;br&gt;niOutVcs[vc] (flitBuffer)&lt;br&gt;outVcState[vc] — credit counts&lt;br&gt;OutputPort / InputPort → links&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="245" y="460" width="180" height="130" as="geometry"/>
+        </mxCell>
+        <mxCell id="ni3" value="&lt;b&gt;NetworkInterface 3&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px;&quot;&gt;inNode_ptr[vnet], outNode_ptr[vnet]&lt;br&gt;flitisizeMessage(), calculateVC()&lt;br&gt;niOutVcs[vc] (flitBuffer)&lt;br&gt;outVcState[vc] — credit counts&lt;br&gt;OutputPort / InputPort → links&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1275" y="460" width="180" height="130" as="geometry"/>
+        </mxCell>
+
+        <!-- Routers: 2x2 mesh (simplified; internals in the Router diagram) -->
+        <mxCell id="r0" value="&lt;b&gt;Router 0&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px;&quot;&gt;m_latency = 2 (SA + ST)&lt;br&gt;m_num_vcs, m_vc_per_vnet&lt;br&gt;m_bit_width&lt;br&gt;&lt;br&gt;InputUnit[5], OutputUnit[5]&lt;br&gt;RoutingUnit, SwitchAllocator&lt;br&gt;CrossbarSwitch&lt;br&gt;&lt;br&gt;&lt;i&gt;see Router Internals diagram&lt;/i&gt;&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;fontSize=10;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="570" y="120" width="220" height="170" as="geometry"/>
+        </mxCell>
+        <mxCell id="r1" value="&lt;b&gt;Router 1&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px;&quot;&gt;m_latency = 2 (SA + ST)&lt;br&gt;m_num_vcs, m_vc_per_vnet&lt;br&gt;m_bit_width&lt;br&gt;&lt;br&gt;InputUnit[5], OutputUnit[5]&lt;br&gt;RoutingUnit, SwitchAllocator&lt;br&gt;CrossbarSwitch&lt;br&gt;&lt;br&gt;&lt;i&gt;see Router Internals diagram&lt;/i&gt;&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;fontSize=10;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="910" y="120" width="220" height="170" as="geometry"/>
+        </mxCell>
+        <mxCell id="r2" value="&lt;b&gt;Router 2&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px;&quot;&gt;m_latency = 2 (SA + ST)&lt;br&gt;m_num_vcs, m_vc_per_vnet&lt;br&gt;m_bit_width&lt;br&gt;&lt;br&gt;InputUnit[5], OutputUnit[5]&lt;br&gt;RoutingUnit, SwitchAllocator&lt;br&gt;CrossbarSwitch&lt;br&gt;&lt;br&gt;&lt;i&gt;see Router Internals diagram&lt;/i&gt;&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;fontSize=10;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="570" y="440" width="220" height="170" as="geometry"/>
+        </mxCell>
+        <mxCell id="r3" value="&lt;b&gt;Router 3&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px;&quot;&gt;m_latency = 2 (SA + ST)&lt;br&gt;m_num_vcs, m_vc_per_vnet&lt;br&gt;m_bit_width&lt;br&gt;&lt;br&gt;InputUnit[5], OutputUnit[5]&lt;br&gt;RoutingUnit, SwitchAllocator&lt;br&gt;CrossbarSwitch&lt;br&gt;&lt;br&gt;&lt;i&gt;see Router Internals diagram&lt;/i&gt;&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;fontSize=10;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="910" y="440" width="220" height="170" as="geometry"/>
+        </mxCell>
+
+        <!-- GarnetExtLinks (NI <-> Router) -->
+        <mxCell id="extlink0" value="&lt;b&gt;GarnetExtLink 0&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;NetworkLink ×2&lt;br&gt;CreditLink ×2&lt;br&gt;NetworkBridge ×2 (opt.)&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f3d9fa;strokeColor=#7e3ea3;fontSize=9;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="440" y="160" width="120" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="extlink1" value="&lt;b&gt;GarnetExtLink 1&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;NetworkLink ×2&lt;br&gt;CreditLink ×2&lt;br&gt;NetworkBridge ×2 (opt.)&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f3d9fa;strokeColor=#7e3ea3;fontSize=9;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1140" y="160" width="120" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="extlink2" value="&lt;b&gt;GarnetExtLink 2&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;NetworkLink ×2&lt;br&gt;CreditLink ×2&lt;br&gt;NetworkBridge ×2 (opt.)&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f3d9fa;strokeColor=#7e3ea3;fontSize=9;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="440" y="480" width="120" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="extlink3" value="&lt;b&gt;GarnetExtLink 3&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;NetworkLink ×2&lt;br&gt;CreditLink ×2&lt;br&gt;NetworkBridge ×2 (opt.)&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f3d9fa;strokeColor=#7e3ea3;fontSize=9;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1140" y="480" width="120" height="90" as="geometry"/>
+        </mxCell>
+
+        <!-- Edges: Protocol <-> NI -->
+        <mxCell id="e_pc0_ni0" style="endArrow=classic;startArrow=classic;strokeWidth=1.5;fontSize=9;" edge="1" source="pc0" target="ni0" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_pc0_lbl" value="MsgPtr" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=9;fontColor=#555555;fontStyle=2;" vertex="1" connectable="0" parent="e_pc0_ni0">
+          <mxGeometry x="-0.1" relative="1" as="geometry"><mxPoint as="offset"/></mxGeometry>
+        </mxCell>
+        <mxCell id="e_pc1_ni1" style="endArrow=classic;startArrow=classic;strokeWidth=1.5;" edge="1" source="pc1" target="ni1" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_pc2_ni2" style="endArrow=classic;startArrow=classic;strokeWidth=1.5;" edge="1" source="pc2" target="ni2" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_pc3_ni3" style="endArrow=classic;startArrow=classic;strokeWidth=1.5;" edge="1" source="pc3" target="ni3" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Edges: NI <-> ExtLink <-> Router -->
+        <mxCell id="e_ni0_ext0" style="endArrow=none;strokeWidth=1.5;strokeColor=#7e3ea3;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" source="ni0" target="extlink0" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_ext0_r0" style="endArrow=none;strokeWidth=1.5;strokeColor=#7e3ea3;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" source="extlink0" target="r0" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_ni1_ext1" style="endArrow=none;strokeWidth=1.5;strokeColor=#7e3ea3;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" source="ni1" target="extlink1" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_ext1_r1" style="endArrow=none;strokeWidth=1.5;strokeColor=#7e3ea3;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" source="extlink1" target="r1" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_ni2_ext2" style="endArrow=none;strokeWidth=1.5;strokeColor=#7e3ea3;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" source="ni2" target="extlink2" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_ext2_r2" style="endArrow=none;strokeWidth=1.5;strokeColor=#7e3ea3;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" source="extlink2" target="r2" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_ni3_ext3" style="endArrow=none;strokeWidth=1.5;strokeColor=#7e3ea3;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" source="ni3" target="extlink3" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_ext3_r3" style="endArrow=none;strokeWidth=1.5;strokeColor=#7e3ea3;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" source="extlink3" target="r3" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- IntLinks between routers -->
+        <!-- R0 <-> R1 (horizontal, top) -->
+        <mxCell id="intlink_01" value="&lt;b&gt;GarnetIntLink&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;NetworkLink + CreditLink&lt;br&gt;src/dst NetworkBridge (opt.)&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f3d9fa;strokeColor=#7e3ea3;fontSize=9;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="800" y="170" width="100" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_r0_il01" style="endArrow=none;strokeWidth=1.5;strokeColor=#7e3ea3;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" source="r0" target="intlink_01" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_il01_r1" style="endArrow=none;strokeWidth=1.5;strokeColor=#7e3ea3;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" source="intlink_01" target="r1" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <!-- R2 <-> R3 (horizontal, bottom) -->
+        <mxCell id="intlink_23" value="&lt;b&gt;GarnetIntLink&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;NetworkLink + CreditLink&lt;br&gt;src/dst NetworkBridge (opt.)&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f3d9fa;strokeColor=#7e3ea3;fontSize=9;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="800" y="490" width="100" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_r2_il23" style="endArrow=none;strokeWidth=1.5;strokeColor=#7e3ea3;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" source="r2" target="intlink_23" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_il23_r3" style="endArrow=none;strokeWidth=1.5;strokeColor=#7e3ea3;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" source="intlink_23" target="r3" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <!-- R0 <-> R2 (vertical, left) -->
+        <mxCell id="intlink_02" value="&lt;b&gt;GarnetIntLink&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;NetLink + CreditLink&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f3d9fa;strokeColor=#7e3ea3;fontSize=9;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="605" y="320" width="150" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_r0_il02" style="endArrow=none;strokeWidth=1.5;strokeColor=#7e3ea3;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" source="r0" target="intlink_02" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_il02_r2" style="endArrow=none;strokeWidth=1.5;strokeColor=#7e3ea3;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" source="intlink_02" target="r2" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <!-- R1 <-> R3 (vertical, right) -->
+        <mxCell id="intlink_13" value="&lt;b&gt;GarnetIntLink&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;NetLink + CreditLink&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f3d9fa;strokeColor=#7e3ea3;fontSize=9;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="945" y="320" width="150" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_r1_il13" style="endArrow=none;strokeWidth=1.5;strokeColor=#7e3ea3;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" source="r1" target="intlink_13" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_il13_r3" style="endArrow=none;strokeWidth=1.5;strokeColor=#7e3ea3;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" source="intlink_13" target="r3" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Topology / routing footer note -->
+        <mxCell id="topo_note" value="&lt;font style=&quot;font-size:10px&quot;&gt;&lt;b&gt;Topology&lt;/b&gt; (2×2 mesh shown) wired by scripts in &lt;i&gt;configs/topologies/*.py&lt;/i&gt; via makeExtInLink / makeExtOutLink / makeInternalLink. &amp;nbsp;Each router owns 4 mesh ports + 1 &quot;Local&quot; port for its NI. &amp;nbsp;VNETs (e.g. CHI: REQ=0, SNP=1, RSP=2, DAT=3) are deadlock-isolated: each has its own VC pool per port.&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=10;fontColor=#555555;" vertex="1" parent="1">
+          <mxGeometry x="40" y="640" width="1620" height="40" as="geometry"/>
+        </mxCell>
+
+        <!-- Link / class details section -->
+        <mxCell id="link_frame" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fafafa;strokeColor=#cccccc;strokeWidth=1;" vertex="1" parent="1">
+          <mxGeometry x="20" y="720" width="1660" height="220" as="geometry"/>
+        </mxCell>
+        <mxCell id="link_title" value="&lt;b&gt;Link &amp; Message classes&lt;/b&gt;" style="text;html=1;align=left;verticalAlign=top;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="35" y="728" width="300" height="20" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="nl" value="&lt;b&gt;NetworkLink&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;(ClockedObject + Consumer)&lt;br&gt;&lt;br&gt;m_latency cycles&lt;br&gt;flitBuffer linkBuffer&lt;br&gt;setLinkConsumer(NI|Router)&lt;br&gt;wakeup(): peek linkBuffer →&lt;br&gt;&amp;nbsp;&amp;nbsp;schedule consumer&lt;br&gt;mVnets[] — allowed vnets&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#7e3ea3;fontSize=11;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="35" y="755" width="300" height="175" as="geometry"/>
+        </mxCell>
+        <mxCell id="cl" value="&lt;b&gt;CreditLink&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;(subclass of NetworkLink)&lt;br&gt;&lt;br&gt;carries Credit objects&lt;br&gt;per-VC back-pressure&lt;br&gt;&lt;br&gt;&lt;b&gt;Credit&lt;/b&gt; : flit&lt;br&gt;&amp;nbsp;&amp;nbsp;m_vc,&lt;br&gt;&amp;nbsp;&amp;nbsp;m_is_free_signal&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#7e3ea3;fontSize=11;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="350" y="755" width="290" height="175" as="geometry"/>
+        </mxCell>
+        <mxCell id="nb" value="&lt;b&gt;NetworkBridge&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;(extends CreditLink)&lt;br&gt;&lt;br&gt;HeteroGarnet glue; optional.&lt;br&gt;&lt;b&gt;enCdc&lt;/b&gt;: clock-domain crossing&lt;br&gt;&lt;b&gt;enSerDes&lt;/b&gt;: serializer/deserializer&lt;br&gt;(links of different bit widths)&lt;br&gt;flitisizeAndSend(flit)&lt;br&gt;neutralize(vc, eCredit) — credit fixup&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#7e3ea3;fontSize=11;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="655" y="755" width="330" height="175" as="geometry"/>
+        </mxCell>
+        <mxCell id="flit" value="&lt;b&gt;flit&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;(Message payload carrier)&lt;br&gt;&lt;br&gt;m_packet_id, m_id, m_vnet, m_vc&lt;br&gt;m_type: HEAD/BODY/TAIL/HEAD_TAIL/CREDIT&lt;br&gt;m_stage: (flit_stage, Tick)&lt;br&gt;RouteInfo m_route (src/dst router+ni)&lt;br&gt;MsgPtr m_msg_ptr (shared)&lt;br&gt;m_size, m_width, m_enqueue/dequeue_time&lt;br&gt;serialize / deserialize (SerDes)&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#7e3ea3;fontSize=11;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="1000" y="755" width="320" height="175" as="geometry"/>
+        </mxCell>
+        <mxCell id="flitbuf" value="&lt;b&gt;flitBuffer&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;&lt;br&gt;priority_queue&amp;lt;flit*&amp;gt; by time&lt;br&gt;isReady(tick): any flit due?&lt;br&gt;getTopFlit() / peekTopFlit()&lt;br&gt;&lt;br&gt;used inside:&lt;br&gt;&amp;nbsp;&amp;nbsp;VirtualChannel, CrossbarSwitch,&lt;br&gt;&amp;nbsp;&amp;nbsp;NetworkLink, NI (niOutVcs)&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#7e3ea3;fontSize=11;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="1335" y="755" width="320" height="175" as="geometry"/>
+        </mxCell>
+
+        <!-- Per-cycle flow legend -->
+        <mxCell id="leg_frame" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#cccccc;strokeWidth=1;" vertex="1" parent="1">
+          <mxGeometry x="20" y="960" width="1660" height="200" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg_title" value="&lt;b&gt;Per-cycle flow (one hop, no contention)&lt;/b&gt;" style="text;html=1;align=left;verticalAlign=top;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="35" y="968" width="400" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg_flow" value="&lt;font style=&quot;font-size:11px&quot;&gt;&lt;b&gt;1.&lt;/b&gt; Protocol controller enqueues MsgPtr on MessageBuffer (outbound vnet).&lt;br&gt;&lt;b&gt;2.&lt;/b&gt; NI::wakeup() dequeues; flitisizeMessage() chops msg into HEAD/BODY/TAIL flits sized m_ni_flit_size; calculateVC(vnet) picks a VC.&lt;br&gt;&lt;b&gt;3.&lt;/b&gt; Flits pushed into niOutVcs[vc]; scheduleOutputLink() moves one flit/cycle to OutputPort.outFlitQueue → NetworkLink.&lt;br&gt;&lt;b&gt;4.&lt;/b&gt; NetworkLink::wakeup() delays flit by m_latency cycles, then schedules Router::wakeup() at the next hop.&lt;br&gt;&lt;b&gt;5.&lt;/b&gt; Router::wakeup() → InputUnit::wakeup(): for HEAD, RoutingUnit::outportCompute() writes outport into VirtualChannel.&lt;br&gt;&lt;b&gt;6.&lt;/b&gt; Flit buffered for (m_latency−1) cycles; then SwitchAllocator::wakeup() runs SA-I (inport RR) and SA-II (outport RR); allocates outvc for HEAD.&lt;br&gt;&lt;b&gt;7.&lt;/b&gt; Winning flit passes through CrossbarSwitch into OutputUnit.outBuffer; decrement_credit; InputUnit sends Credit to upstream on CreditLink.&lt;br&gt;&lt;b&gt;8.&lt;/b&gt; GarnetIntLink delivers flit to next router&#39;s InputUnit; on final hop an ExtLink drops it into the destination NI.InputPort.&lt;br&gt;&lt;b&gt;9.&lt;/b&gt; At destination NI::wakeup(): accumulate flits by packet_id; on TAIL, enqueue original MsgPtr into outNode_ptr[vnet] → protocol controller.&lt;/font&gt;" style="text;html=1;align=left;verticalAlign=top;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="35" y="992" width="1620" height="165" as="geometry"/>
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

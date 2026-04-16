@@ -74,10 +74,15 @@ Requires: GCC 11+ or Clang 14+, C++17, Python 3.8+, SCons, zlib, m4.
 ## Running Simulations
 
 Always pass `-d m5out/<description>-<datetime>` so each run gets its own output directory and previous results are never overwritten.
+Always launch gem5 through `util/run_with_timeout.sh` instead of invoking
+`build/RISCV/gem5.*` directly.
+The wrapper defaults to a `5m` timeout and exists to prevent long or wedged
+simulation runs from hanging agentic loops.
+Pass the normal gem5 command line unchanged after the wrapper.
 
 ```sh
 # Use a descriptive name + datetime stamp
-./build/RISCV/gem5.opt -d m5out/mesi-two-level-4cpu-$(date +%Y%m%d-%H%M%S) configs/example/ruby_random_test.py ...
+./util/run_with_timeout.sh ./build/RISCV/gem5.opt -d m5out/mesi-two-level-4cpu-$(date +%Y%m%d-%H%M%S) configs/example/ruby_random_test.py ...
 ```
 
 ## Testing

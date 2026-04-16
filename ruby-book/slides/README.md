@@ -1,4 +1,4 @@
-# Slidev workspace
+# Marp workspace
 
 ## Install
 
@@ -6,23 +6,19 @@
 npm install
 ```
 
-## Run
-
-```sh
-npm run dev
-```
-
-## Build
+## Build PDF
 
 ```sh
 npm run build
 ```
 
-## Export
+The authored source stays in `CHI_Protocol_Deck.md` and keeps Mermaid code
+blocks directly in the markdown.
+`render_mermaid.py` pre-renders those diagrams to SVG, writes
+`CHI_Protocol_Deck_rendered.md`, and then exports the PDF with Marp CLI.
+
+## Export HTML
 
 ```sh
-npm run export
+npm run html
 ```
-
-The `package.json` pulls the current Slidev CLI and default theme at install
-time.

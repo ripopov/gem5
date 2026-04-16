@@ -6,6 +6,7 @@ REPO_ROOT = $(abspath ../../..)
 GEM5_INCLUDE = $(REPO_ROOT)/include
 M5OPS_RISCV = $(REPO_ROOT)/util/m5/src/abi/riscv/m5op.S
 GEM5_BIN = $(REPO_ROOT)/build/RISCV/gem5.opt
+RUN_WITH_TIMEOUT = $(REPO_ROOT)/util/run_with_timeout.sh
 GEM5_CONFIG = $(REPO_ROOT)/configs/example/rbook_mesh_config.py
 M5OUT_ROOT = $(REPO_ROOT)/m5out
 BIN = rbook_test_hop_latency
@@ -41,7 +42,7 @@ run: $(BIN)
 	    fi; \
 	fi; \
 	mkdir "$$outdir"; \
-	"$(GEM5_BIN)" -d "$$outdir" "$(GEM5_CONFIG)" \
+	"$(RUN_WITH_TIMEOUT)" "$(GEM5_BIN)" -d "$$outdir" "$(GEM5_CONFIG)" \
 	    --cmd="$(BIN_PATH)" "$${trace_arg[@]}" \
 	    > "$$outdir/console.log" 2>&1; \
 	printf '%s\n' "$$outdir" > "$(LAST_OUTDIR)"; \

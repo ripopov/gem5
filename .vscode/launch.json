@@ -149,7 +149,7 @@
                 "-d",
                 "m5out/ch17-trivial",
                 "configs/example/rbook_mesh_config.py",
-                "--cmd=ruby-book/final/trivial"
+                "--cmd=ruby-book/final/trivial/trivial"
             ],
             "cwd": "${workspaceFolder}",
             "environment": [],
@@ -194,7 +194,7 @@
                 "-d",
                 "m5out/trivial-ftr",
                 "configs/example/rbook_mesh_config.py",
-                "--cmd=ruby-book/final/trivial",
+                "--cmd=ruby-book/final/trivial/trivial",
                 "--trace-output=trivial",
                 "--trace-format=ftr"
             ],
@@ -218,7 +218,7 @@
                 "-d",
                 "m5out/trivial-ftr",
                 "configs/example/rbook_mesh_config.py",
-                "--cmd=ruby-book/final/trivial",
+                "--cmd=ruby-book/final/trivial/trivial",
                 "--trace-output=trivial",
                 "--trace-format=ftr"
             ],

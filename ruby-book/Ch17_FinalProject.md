@@ -130,14 +130,14 @@ Build gem5 with the CHI protocol enabled:
 scons build/RISCV/gem5.opt -j$(nproc) PROTOCOL=CHI
 ```
 
-A trivial smoke-test binary (`trivial.c`) lives in `ruby-book/final/` alongside a `Makefile` that cross-compiles all test sources (see [File organization](#file-organization) below).
+A trivial smoke-test binary (`trivial/trivial.c`) lives in its own subdirectory under `ruby-book/final/`, and the parent `Makefile` delegates to that local workflow just like the later Chapter 17 tests.
 Build it and run the system:
 
 ```bash
 make -C ruby-book/final
 ./build/RISCV/gem5.opt -d m5out/rbook-topology-$(date +%Y%m%d-%H%M%S) \
     configs/example/rbook_mesh_config.py \
-    --cmd=ruby-book/final/trivial
+    --cmd=ruby-book/final/trivial/trivial
 dot -Tsvg m5out/rbook-topology-*/config.dot -o rbook_topology.svg
 ```
 
@@ -281,6 +281,30 @@ After all rounds complete, core 0 prints "PASS".
 - Compare average flit latency with the single-core smoke test. The increase quantifies the cost of mesh contention.
 - DRAM controller stats should show roughly balanced load between DDR0 and DDR1, confirming that the diagonal placement and interleaving work as designed even under heavy coherence traffic.
 
+#### 3f — Optional hotspot saturation / NI backpressure
+
+This is an optional extension, not a required Stage 3 deliverable.
+
+**Goal:** drive a many-to-one hotspot hard enough that the destination-side path stops scaling linearly and Garnet's queueing behavior becomes visible.
+
+**Recommended shape.**
+Use one software thread per core and synchronize their start with a barrier.
+Give each thread a private stream of cache lines so the experiment measures network pressure rather than false sharing.
+Choose addresses so all of those private lines home at one far HN-F, or at a deliberately tiny set of HN-Fs, so the traffic converges on one region of the mesh.
+Measure only a steady-state window by resetting stats after initialization and dumping them after the hot loop.
+Sweep the number of active threads (`1`, `2`, `4`, `8`, `16`) or the number of outstanding streams per thread so the offered load rises in controlled steps.
+
+**Why this works better than a vectorized microbenchmark.**
+In this Chapter 17 configuration the CPUs are `TimingSimpleCPU` cores, so one core is not an especially strong load generator by itself.
+RVV instructions may change the instruction mix, but they are not the cleanest way to create visible network backpressure here.
+Cross-core concurrency is the more reliable lever because it creates many simultaneous requests that contend for the same destination path.
+
+**What to check in the statistics.**
+- Application throughput should stop growing linearly once the hotspot path saturates.
+- `system.ruby.network.average_flit_queueing_latency` and the per-vnet queueing latencies should rise faster than they do in the earlier Stage 3 tests.
+- The hotspot links and routers should dominate `flits_per_vnet`, buffer reads, and buffer writes.
+- If higher offered load produces much larger queueing latency with only modest throughput improvement, that is the signature you want: the network is applying backpressure somewhere along the injection-to-ejection path.
+
 ### Interpreting the results
 
 After running all five tests, the reader has a complete picture of the system's behavior:
@@ -295,6 +319,54 @@ After running all five tests, the reader has a complete picture of the system's 
 
 The goal is not to optimize anything — it is to **read the statistics and explain what they mean** in terms of the mesh topology, the CHI protocol, and the DRAM placement.
 This is the synthesis exercise: every number in the output connects back to a mechanism the reader studied in a previous chapter.
+
+### Measuring the same hotspot with synthetic traffic
+
+The optional Stage 3f experiment above answers the question in the full CHI system: caches, directories, coherence messages, DRAM placement, and Garnet all interact.
+That is the right experiment when you want to explain what a real Chapter 17 workload experiences.
+
+Sometimes you want a cleaner question first.
+If the goal is "when does the network itself hit the knee of the latency-throughput curve for this hotspot pattern?" then use `configs/example/garnet_synth_traffic.py` as a cross-check.
+
+**What stays the same.**
+Preserve the spatial pattern: many senders targeting one destination near a corner or another intentionally chosen hotspot.
+Use the same 4×4 mesh dimensions and the same routing assumptions when possible.
+Sweep offered load gradually rather than jumping straight to a very high injection rate.
+
+**What changes.**
+Synthetic traffic does not model the Chapter 17 CHI request flow.
+It bypasses cache behavior, directory lookup, snoop responses, and DRAM service time.
+That makes it ideal for isolating network saturation, but it is not a substitute for the full-system run.
+
+**A practical recipe.**
+- Use `configs/example/garnet_synth_traffic.py` with a 4×4 mesh and 16 nodes.
+- Force a hotspot with `--single-dest-id=<dest>` and, if needed, restrict the senders with `--single-sender-id` during debugging.
+- Prefer `--inj-vnet=2` when you want a heavier multi-flit data-like packet stream rather than the lighter control-like vnets.
+- Sweep `--injectionrate` upward and record average flit latency, queueing latency, average hops, and per-link flit counts.
+- The knee in the latency-throughput curve is the synthetic-traffic analogue of the Stage 3f backpressure point.
+
+For example, the following run shape creates a 16-node 4×4 hotspot experiment aimed at destination 15:
+
+```bash
+./build/RISCV/gem5.opt -d m5out/garnet-hotspot-$(date +%Y%m%d-%H%M%S) \
+    configs/example/garnet_synth_traffic.py \
+    --network=garnet \
+    --topology=Mesh_XY \
+    --num-cpus=16 \
+    --num-dirs=16 \
+    --mesh-rows=4 \
+    --inj-vnet=2 \
+    --single-dest-id=15 \
+    --injectionrate=0.10 \
+    --sim-cycles=50000
+```
+
+Then repeat the run at higher injection rates.
+As in Chapter 11, the important output is not a single latency number but the whole curve: throughput rises, then bends, then queueing latency climbs sharply.
+
+Use both experiments together.
+The synthetic-traffic sweep tells you where Garnet itself becomes congested for a hotspot pattern.
+The Stage 3f full-system experiment tells you how that congestion appears after CHI, cache hierarchy effects, and home-node placement are all included.
 
 ## Failure Focus: What Goes Wrong in Configuration
 
@@ -317,6 +389,9 @@ configs/example/
 
 ruby-book/final/
 ├── Makefile                   # delegates build/run/report targets per test
+├── trivial/
+│   ├── Makefile               # Stage 2 local workflow
+│   └── trivial.c              # Stage 2 minimal boot smoke test
 ├── smoke/
 │   ├── Makefile               # Stage 3a local workflow
 │   ├── check_smoke.py         # Stage 3a analysis
@@ -326,6 +401,8 @@ ruby-book/final/
 │   └── ...                    # Stage 3b collateral and report
 ├── false_sharing/
 │   └── ...                    # Stage 3c should follow the same pattern
+├── hotspot/
+│   └── ...                    # Stage 3f optional hotspot/backpressure test
 ├── prodcons/
 │   └── ...                    # Stage 3d should follow the same pattern
 ├── barrier/
@@ -338,7 +415,6 @@ ruby-book/final/
 │   ├── bm_smoke.c            # Stage 4d
 │   ├── bm_hop_latency.c      # Stage 4e
 │   └── bm_contention.c       # Stage 4f
-├── trivial.c                  # Stage 2 — minimal boot smoke test
 ```
 
 Each Stage 3 subdirectory should expose the same local target structure used by

@@ -1,0 +1,160 @@
+<mxfile host="Electron" modified="2026-04-16T00:00:00.000Z" agent="draw.io" version="24.0.0">
+  <diagram name="Garnet Router Internals" id="garnet-router">
+    <mxGraphModel dx="1500" dy="1000" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1500" pageHeight="1000" math="0" shadow="0" background="#ffffff">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <!-- Title -->
+        <mxCell id="title" value="&lt;b&gt;Garnet3.0 Router — Per-Cycle Pipeline and Sub-Objects&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size: 11px&quot;&gt;InputUnit · VirtualChannel · RoutingUnit · SwitchAllocator · CrossbarSwitch · OutputUnit&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=15;" vertex="1" parent="1">
+          <mxGeometry x="350" y="10" width="800" height="46" as="geometry"/>
+        </mxCell>
+
+        <!-- Router outer frame -->
+        <mxCell id="router" value="" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#9673a6;strokeWidth=2;arcSize=2;fillColor=#f7f2fb;" vertex="1" parent="1">
+          <mxGeometry x="30" y="60" width="1440" height="820" as="geometry"/>
+        </mxCell>
+        <mxCell id="router_label" value="&lt;b&gt;Router&lt;/b&gt; &amp;nbsp;(extends BasicRouter + Consumer) &amp;nbsp;—&amp;nbsp; m_latency pipeline stages (default 2 = SA + ST), m_num_vcs = num_vnets × m_vc_per_vnet, m_bit_width" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="50" y="68" width="1400" height="24" as="geometry"/>
+        </mxCell>
+
+        <!-- Router::wakeup() summary -->
+        <mxCell id="r_wake" value="&lt;b&gt;Router::wakeup()&lt;/b&gt; &amp;nbsp;(fired whenever any sub-object schedules it)&lt;br&gt;&lt;font style=&quot;font-size:10px;&quot;&gt;for &amp; iu : m_input_unit &amp;nbsp;iu-&amp;gt;wakeup();&amp;nbsp;&amp;nbsp;|&amp;nbsp;&amp;nbsp;for &amp; ou : m_output_unit &amp;nbsp;ou-&amp;gt;wakeup();&amp;nbsp;&amp;nbsp;|&amp;nbsp;&amp;nbsp;switchAllocator.wakeup();&amp;nbsp;&amp;nbsp;|&amp;nbsp;&amp;nbsp;crossbarSwitch.wakeup();&lt;/font&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8f8f8;strokeColor=#9673a6;fontSize=10;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="50" y="100" width="1400" height="50" as="geometry"/>
+        </mxCell>
+
+        <!-- Column headers -->
+        <mxCell id="iu_title" value="&lt;b&gt;InputUnit[num_inports]&lt;/b&gt; &amp;nbsp;&lt;font style=&quot;font-size:10px;&quot;&gt;— one per physical inport (Local + N / E / S / W / …)&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="60" y="160" width="320" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="ou_title" value="&lt;b&gt;OutputUnit[num_outports]&lt;/b&gt; &amp;nbsp;&lt;font style=&quot;font-size:10px;&quot;&gt;— one per physical outport (Local + N / E / S / W / …)&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="940" y="160" width="320" height="20" as="geometry"/>
+        </mxCell>
+
+        <!-- Single InputUnit box (consolidated) -->
+        <mxCell id="iu" value="&lt;b&gt;InputUnit&lt;/b&gt; &amp;nbsp;(one instance per inport)&lt;br&gt;&lt;font style=&quot;font-size:10px;&quot;&gt;&lt;br&gt;&lt;b&gt;External wiring:&lt;/b&gt;&lt;br&gt;&amp;nbsp;&amp;nbsp;m_in_link &amp;nbsp; NetworkLink ← upstream (flits in)&lt;br&gt;&amp;nbsp;&amp;nbsp;m_credit_link &amp;nbsp; CreditLink → upstream (credits out)&lt;br&gt;&lt;br&gt;&lt;b&gt;virtualChannels[num_vcs]&lt;/b&gt;:&lt;br&gt;&amp;nbsp;&amp;nbsp;flitBuffer inputBuffer&lt;br&gt;&amp;nbsp;&amp;nbsp;m_vc_state (IDLE_ / VC_AB_ / ACTIVE_)&lt;br&gt;&amp;nbsp;&amp;nbsp;m_output_port, m_output_vc&lt;br&gt;&lt;b&gt;creditQueue&lt;/b&gt; — outbound, drains to m_credit_link&lt;br&gt;&lt;br&gt;&lt;b&gt;wakeup()&lt;/b&gt;:&lt;br&gt;&amp;nbsp;&amp;nbsp;read flit from m_in_link&lt;br&gt;&amp;nbsp;&amp;nbsp;virtualChannels[vc].insertFlit(f)&lt;br&gt;&amp;nbsp;&amp;nbsp;HEAD → route_compute → set m_outport&lt;br&gt;&amp;nbsp;&amp;nbsp;buffer (m_latency − 1) cycles&lt;br&gt;&amp;nbsp;&amp;nbsp;mark flit_stage = SA_&lt;br&gt;&lt;br&gt;&lt;b&gt;On SA-II grant&lt;/b&gt; (called by SwitchAllocator):&lt;br&gt;&amp;nbsp;&amp;nbsp;build Credit(vc, is_free_signal, now)&lt;br&gt;&amp;nbsp;&amp;nbsp;push onto creditQueue (→ upstream CreditLink)&lt;br&gt;&amp;nbsp;&amp;nbsp;TAIL / HEAD_TAIL → is_free_signal = true&lt;br&gt;&lt;br&gt;&lt;b&gt;Stats:&lt;/b&gt; m_num_buffer_writes / reads per-vnet&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9673a6;fontSize=10;align=center;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="60" y="185" width="320" height="470" as="geometry"/>
+        </mxCell>
+
+        <!-- RoutingUnit -->
+        <mxCell id="ru" value="&lt;b&gt;RoutingUnit&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px;&quot;&gt;one per Router · no per-cycle state&lt;br&gt;&lt;br&gt;&lt;b&gt;outportCompute(route, inport, dirn)&lt;/b&gt;&lt;br&gt;&amp;nbsp;&amp;nbsp;TABLE_ : lookupRoutingTable(vnet, NetDest)&lt;br&gt;&amp;nbsp;&amp;nbsp;XY_ &amp;nbsp;&amp;nbsp;&amp;nbsp;: outportComputeXY(row, col)&lt;br&gt;&amp;nbsp;&amp;nbsp;CUSTOM_: user-supplied&lt;br&gt;&lt;br&gt;routing_table, weight_table&lt;br&gt;inports_dirn2idx, outports_dirn2idx[vnet]&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fad9d5;strokeColor=#ae4132;fontSize=10;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="440" y="185" width="440" height="180" as="geometry"/>
+        </mxCell>
+
+        <!-- SwitchAllocator -->
+        <mxCell id="sa" value="&lt;b&gt;SwitchAllocator&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px;&quot;&gt;one per Router · runs every router cycle&lt;br&gt;&lt;br&gt;&lt;b&gt;wakeup():&lt;/b&gt;&lt;br&gt;&amp;nbsp;&amp;nbsp;&lt;b&gt;SA-I&lt;/b&gt; arbitrate_inports():&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;each inport picks 1 VC (round-robin)&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;needs credit; HEAD needs free outvc&lt;br&gt;&amp;nbsp;&amp;nbsp;&lt;b&gt;SA-II&lt;/b&gt; arbitrate_outports():&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;each outport picks 1 inport (round-robin)&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;vc_allocate(outport, inport, invc) for HEAD&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;OutputUnit::decrement_credit(outvc)&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;grant_switch(inport, flit) → CrossbarSwitch&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;enqueue Credit back to InputUnit.creditQueue&lt;br&gt;&lt;br&gt;&lt;b&gt;Max grants / cycle:&lt;/b&gt; ≤ min(num_inports, num_outports)&lt;br&gt;(one per inport in SA-I, one per outport in SA-II)&lt;br&gt;&lt;br&gt;&lt;b&gt;state:&lt;/b&gt; m_round_robin_invc[inport],&lt;br&gt;m_round_robin_inport[outport],&lt;br&gt;m_port_requests[], m_vc_winners[]&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fad9d5;strokeColor=#ae4132;fontSize=10;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="440" y="385" width="440" height="270" as="geometry"/>
+        </mxCell>
+
+        <!-- Single OutputUnit box (consolidated) -->
+        <mxCell id="ou" value="&lt;b&gt;OutputUnit&lt;/b&gt; &amp;nbsp;(one instance per outport)&lt;br&gt;&lt;font style=&quot;font-size:10px;&quot;&gt;&lt;br&gt;&lt;b&gt;External wiring:&lt;/b&gt;&lt;br&gt;&amp;nbsp;&amp;nbsp;m_out_link &amp;nbsp; NetworkLink → downstream (flits out)&lt;br&gt;&amp;nbsp;&amp;nbsp;m_credit_link &amp;nbsp; CreditLink ← downstream (credits in)&lt;br&gt;&lt;br&gt;flitBuffer &lt;b&gt;outBuffer&lt;/b&gt; — flits waiting to enter m_out_link&lt;br&gt;&lt;br&gt;&lt;b&gt;outVcState[num_vcs]&lt;/b&gt;:&lt;br&gt;&amp;nbsp;&amp;nbsp;(IDLE_ / VC_AB_ / ACTIVE_)&lt;br&gt;&amp;nbsp;&amp;nbsp;m_credit_count — buffers free at downstream VC&lt;br&gt;has_free_vc(vnet), select_free_vc(vnet)&lt;br&gt;&lt;br&gt;&lt;b&gt;wakeup()&lt;/b&gt; (fires on credit arrival):&lt;br&gt;&amp;nbsp;&amp;nbsp;Credit c = m_credit_link.get()&lt;br&gt;&amp;nbsp;&amp;nbsp;increment_credit(c.vc)&lt;br&gt;&amp;nbsp;&amp;nbsp;if c.is_free_signal:&lt;br&gt;&amp;nbsp;&amp;nbsp;&amp;nbsp;&amp;nbsp;outVcState[c.vc] → IDLE_&lt;br&gt;&amp;nbsp;&amp;nbsp;re-schedule Router for stalled inports&lt;br&gt;&lt;br&gt;&lt;b&gt;On SA-II grant&lt;/b&gt; (called by SwitchAllocator):&lt;br&gt;&amp;nbsp;&amp;nbsp;decrement_credit(outvc)&lt;br&gt;&amp;nbsp;&amp;nbsp;CrossbarSwitch pushes flit to outBuffer&lt;br&gt;&amp;nbsp;&amp;nbsp;m_out_link drains it next cycle → stage LT_&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#9673a6;fontSize=10;align=center;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="940" y="185" width="320" height="470" as="geometry"/>
+        </mxCell>
+
+        <!-- CrossbarSwitch (full width at bottom of frame) -->
+        <mxCell id="xb" value="&lt;b&gt;CrossbarSwitch&lt;/b&gt; &amp;nbsp;&amp;nbsp; &lt;font style=&quot;font-size:10px;&quot;&gt;switchBuffers[inport] (flitBuffer). &amp;nbsp;wakeup(): drain each staged flit to OutputUnit.outBuffer — up to min(num_inports, num_outports) flits per cycle. &amp;nbsp;Contention already resolved in SwitchAllocator one cycle earlier; this stage has no arbitration.&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fad9d5;strokeColor=#ae4132;fontSize=10;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="60" y="685" width="1200" height="80" as="geometry"/>
+        </mxCell>
+
+        <!-- External I/O hint text -->
+        <mxCell id="io_hint" value="&lt;font style=&quot;font-size:10px;color:#555555;&quot;&gt;&lt;i&gt;Credit flow is inter-router, not intra-router: each InputUnit sends credits &lt;b&gt;upstream&lt;/b&gt; (left arrow above), each OutputUnit receives credits &lt;b&gt;from downstream&lt;/b&gt; (right arrow above). Credits do not cross between IU and OU inside the same router.&lt;/i&gt;&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="60" y="790" width="1200" height="40" as="geometry"/>
+        </mxCell>
+
+        <!-- Intra-router arrows (data path only) -->
+        <!-- IU -> RU (HEAD -> route_compute) -->
+        <mxCell id="e_iu_ru" style="endArrow=classic;html=1;strokeWidth=1.5;strokeColor=#ae4132;exitX=1;exitY=0.12;entryX=0;entryY=0.5;" edge="1" source="iu" target="ru" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_iu_ru_lbl" value="HEAD → route_compute" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=10;fontColor=#ae4132;" vertex="1" connectable="0" parent="e_iu_ru">
+          <mxGeometry x="0" relative="1" as="geometry"><mxPoint x="0" y="-14" as="offset"/></mxGeometry>
+        </mxCell>
+
+        <!-- IU -> SA (SA-I request) -->
+        <mxCell id="e_iu_sa" style="endArrow=classic;html=1;strokeWidth=1.5;strokeColor=#ae4132;exitX=1;exitY=0.7;entryX=0;entryY=0.3;" edge="1" source="iu" target="sa" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_iu_sa_lbl" value="SA-I request (ready flit)" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=10;fontColor=#ae4132;" vertex="1" connectable="0" parent="e_iu_sa">
+          <mxGeometry x="0" relative="1" as="geometry"><mxPoint x="0" y="-14" as="offset"/></mxGeometry>
+        </mxCell>
+
+        <!-- SA -> XB (grant_switch) -->
+        <mxCell id="e_sa_xb" style="endArrow=classic;html=1;strokeWidth=1.5;strokeColor=#ae4132;exitX=0.5;exitY=1;entryX=0.3;entryY=0;" edge="1" source="sa" target="xb" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_sa_xb_lbl" value="grant_switch(inport, flit)" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=10;fontColor=#ae4132;" vertex="1" connectable="0" parent="e_sa_xb">
+          <mxGeometry x="-0.2" relative="1" as="geometry"><mxPoint x="0" y="0" as="offset"/></mxGeometry>
+        </mxCell>
+
+        <!-- XB -> OU (ST -> outBuffer) -->
+        <mxCell id="e_xb_ou" style="endArrow=classic;html=1;strokeWidth=1.5;strokeColor=#ae4132;exitX=0.85;exitY=0;entryX=0.5;entryY=1;" edge="1" source="xb" target="ou" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_xb_ou_lbl" value="ST → outBuffer" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=10;fontColor=#ae4132;" vertex="1" connectable="0" parent="e_xb_ou">
+          <mxGeometry x="0" relative="1" as="geometry"><mxPoint x="15" y="0" as="offset"/></mxGeometry>
+        </mxCell>
+
+        <!-- SA -> OU (SA-II: select invc, outvc alloc, decrement_credit) -->
+        <mxCell id="e_sa_ou" style="endArrow=classic;html=1;strokeWidth=1;strokeColor=#ae4132;dashed=1;exitX=1;exitY=0.25;entryX=0;entryY=0.7;" edge="1" source="sa" target="ou" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_sa_ou_lbl" value="SA-II: vc_allocate, decrement_credit" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=10;fontColor=#ae4132;fontStyle=2;" vertex="1" connectable="0" parent="e_sa_ou">
+          <mxGeometry x="0" relative="1" as="geometry"><mxPoint x="0" y="-14" as="offset"/></mxGeometry>
+        </mxCell>
+
+        <!-- Upstream side (left of router, near IU) -->
+        <mxCell id="ext_flits_in_lbl" value="&lt;b&gt;flits in&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px;&quot;&gt;from upstream&lt;br&gt;NetworkLink&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=10;fontColor=#2a7f3f;" vertex="1" parent="1">
+          <mxGeometry x="0" y="250" width="55" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_flits_in" style="endArrow=classic;html=1;strokeWidth=1.5;strokeColor=#2a7f3f;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="0" y="300" as="sourcePoint"/>
+            <mxPoint x="60" y="300" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="ext_credits_out_lbl" value="&lt;b&gt;credits out&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px;&quot;&gt;to upstream&lt;br&gt;CreditLink&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=10;fontColor=#2a7f3f;" vertex="1" parent="1">
+          <mxGeometry x="0" y="540" width="55" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_credits_out" style="endArrow=classic;html=1;strokeWidth=1.5;strokeColor=#2a7f3f;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="60" y="590" as="sourcePoint"/>
+            <mxPoint x="0" y="590" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Downstream side (right of router, near OU) -->
+        <mxCell id="ext_flits_out_lbl" value="&lt;b&gt;flits out&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px;&quot;&gt;to downstream&lt;br&gt;NetworkLink&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=10;fontColor=#2a7f3f;" vertex="1" parent="1">
+          <mxGeometry x="1445" y="250" width="55" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_flits_out" style="endArrow=classic;html=1;strokeWidth=1.5;strokeColor=#2a7f3f;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1260" y="300" as="sourcePoint"/>
+            <mxPoint x="1500" y="300" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="ext_credits_in_lbl" value="&lt;b&gt;credits in&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px;&quot;&gt;from downstream&lt;br&gt;CreditLink&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=10;fontColor=#2a7f3f;" vertex="1" parent="1">
+          <mxGeometry x="1445" y="540" width="55" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_credits_in" style="endArrow=classic;html=1;strokeWidth=1.5;strokeColor=#2a7f3f;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1500" y="590" as="sourcePoint"/>
+            <mxPoint x="1260" y="590" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Pipeline stage legend -->
+        <mxCell id="leg_pipe" value="&lt;b&gt;Per-flit pipeline stages (flit_stage)&lt;/b&gt; &amp;nbsp;&amp;nbsp; &lt;font style=&quot;font-size:11px;&quot;&gt;I_ (init) → VA_ (vc alloc, HEAD only) → SA_ (switch alloc) → ST_ (switch traversal) → LT_ (link traversal)&lt;/font&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff7e6;strokeColor=#cc9933;fontSize=11;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="30" y="900" width="1440" height="40" as="geometry"/>
+        </mxCell>
+
+        <!-- VC states + flit types legend -->
+        <mxCell id="leg_states" value="&lt;b&gt;VC states&lt;/b&gt; (VirtualChannel::m_vc_state, OutVcState): &amp;nbsp;IDLE_ · VC_AB_ (alloc pending) · ACTIVE_ &amp;nbsp;&amp;nbsp;|&amp;nbsp;&amp;nbsp; &lt;b&gt;flit_type&lt;/b&gt;: HEAD_ · BODY_ · TAIL_ · HEAD_TAIL_ · CREDIT_ &amp;nbsp;&amp;nbsp;|&amp;nbsp;&amp;nbsp; &lt;b&gt;VNET_type&lt;/b&gt;: CTRL_VNET_ / DATA_VNET_ / NULL_VNET_" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff7e6;strokeColor=#cc9933;fontSize=11;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="30" y="950" width="1440" height="40" as="geometry"/>
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

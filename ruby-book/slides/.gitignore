@@ -1,6 +1,8 @@
 node_modules/
 dist/
-.slidev/
 .DS_Store
 package-lock.json
 npm-debug.log*
+CHI_Protocol_Deck.html
+CHI_Protocol_Deck.pdf
+CHI_Protocol_Deck_rendered.md

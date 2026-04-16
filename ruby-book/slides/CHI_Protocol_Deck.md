@@ -1,0 +1,1704 @@
+---
+marp: true
+theme: default
+paginate: true
+size: 16:9
+style: |
+  section {
+    font-size: 22px;
+    padding: 30px 50px;
+  }
+  h1 {
+    font-size: 36px;
+    text-align: center;
+    margin-top: 120px;
+  }
+  h2 {
+    font-size: 30px;
+    color: #1a5276;
+    border-bottom: 3px solid #2980b9;
+    padding-bottom: 8px;
+    margin-bottom: 20px;
+  }
+  h3 {
+    font-size: 24px;
+    color: #2c3e50;
+  }
+  table {
+    font-size: 17px;
+    width: 100%;
+    border-collapse: collapse;
+    margin: 10px 0;
+  }
+  th {
+    background-color: #2980b9;
+    color: white;
+    padding: 6px 10px;
+    text-align: left;
+  }
+  td {
+    padding: 5px 10px;
+    border: 1px solid #bdc3c7;
+  }
+  tr:nth-child(even) {
+    background-color: #eaf2f8;
+  }
+  code {
+    font-size: 16px;
+    background-color: #f0f0f0;
+    padding: 1px 4px;
+    border-radius: 3px;
+  }
+  pre {
+    font-size: 14px;
+    background-color: #2c3e50;
+    color: #ecf0f1;
+    border-radius: 6px;
+    padding: 12px;
+  }
+  img {
+    max-width: 100%;
+    max-height: 540px;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+  }
+  .columns img {
+    max-height: 250px;
+  }
+  .columns {
+    display: flex;
+    gap: 30px;
+    align-items: flex-start;
+  }
+  .columns > div {
+    flex: 1;
+    min-width: 0;
+  }
+  .smaller {
+    font-size: 18px;
+  }
+  .key {
+    background-color: #f9e79f;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-weight: bold;
+  }
+  .note {
+    font-size: 16px;
+    color: #7f8c8d;
+    font-style: italic;
+  }
+  blockquote {
+    border-left: 4px solid #e74c3c;
+    background: #fdedec;
+    padding: 8px 15px;
+    margin: 10px 0;
+    font-size: 18px;
+  }
+---
+
+<!-- ================================================================== -->
+<!-- SLIDE 1: Title -->
+<!-- ================================================================== -->
+
+# AMBA 5 CHI Protocol
+## Coherent Hub Interface — Architecture & gem5 Modeling
+
+**Memory Architecture and NoC Modeling in gem5**
+
+_Third-party marks are the property of their respective owners. ARM and AMBA are trademarks of Arm Limited._
+
+![bg right:30% 80%](chi_logo.svg)
+
+<!-- Speaker Notes:
+Welcome everyone. Today we are diving into the AMBA 5 CHI protocol — the Coherent Hub Interface.
+This is Arm's latest interconnect coherence protocol, designed for high-performance, scalable
+multi-core systems. We will cover the protocol specification, its implementation in the gem5
+simulator, and show you how to build and configure CHI-based systems.
+
+CHI is the backbone of modern Arm-based server and mobile SoCs. Understanding it is essential
+for anyone working in cache coherence, NoC design, or system-level simulation. This presentation
+is based on the AMBA 5 CHI Architecture Specification Issue D, and the gem5 implementation
+comprising over 11,000 lines of SLICC protocol description plus C++ infrastructure.
+
+We will proceed from motivation through protocol mechanics to hands-on gem5 modeling.
+-->
+
+---
+
+<!-- ================================================================== -->
+<!-- SLIDE 2: Why CHI? -->
+<!-- ================================================================== -->
+
+## Why CHI? The Scalability Wall
+
+<div class="columns">
+<div>
+
+**The Problem**
+- Traditional bus-based coherence does not scale past 4–8 cores
+- MOESI snooping on a shared wire $\Rightarrow$ bandwidth wall
+- Multi-socket, mesh NoC systems need a *different* protocol
+
+**CHI's Answer**
+- Point-to-point packetized channels (not broadcast wires)
+- Directory-based coherence at the Home Node
+- Separated request, snoop, response, and data lanes
+- Direct transfers bypass intermediate hops (DMT/DCT)
+
+</div>
+<div>
+
+```mermaid
+graph LR
+    subgraph "Traditional Bus"
+        direction TB
+        C1[Core 1] --- Bus[Shared Bus]
+        C2[Core 2] --- Bus
+        C3[Core 3] --- Bus
+        Bus --- MEM[Memory]
+    end
+```
+
+```mermaid
+graph LR
+    subgraph "CHI Mesh NoC"
+        RNF1["RN-F 1"] <--> R1["Router"]
+        RNF2["RN-F 2"] <--> R2["Router"]
+        R1 <--> R2
+        R1 <--> HNF["HN-F"]
+        R2 <--> HNF
+        HNF <--> SNF["SN-F"]
+    end
+```
+
+</div>
+</div>
+
+<!-- Speaker Notes:
+Let's start with why CHI exists. If you have designed or studied multi-core systems with 2 or 4 cores,
+you may have used a shared bus where every coherence transaction is broadcast to all participants.
+This works at small scale — the bus is simple, snooping is straightforward.
+
+But at 16, 64, or 128 cores? That shared bus becomes your bottleneck. Every transaction touches every
+agent, bandwidth is consumed by coherence traffic that most agents do not care about, and latency
+explodes because the bus is a single serialization point.
+
+CHI solves this with three key ideas:
+
+First, packetized channels. Instead of broadcasting on a wire, you send structured packets over
+a network-on-chip. The four channels — REQ, SNP, RSP, DAT — can flow independently, allowing
+out-of-order completion and better link utilization.
+
+Second, directory-based coherence. A Home Node (HN-F) maintains a directory of who has each cache
+line. Snoops are sent only to relevant nodes, not to everyone. This is the fundamental shift from
+snooping to directory protocols.
+
+Third, direct transfers. The Data Direct Transfer (DCT) lets a dirty cache line go straight from
+one core's cache to another, bypassing the home node's cache. Direct Memory Transfer (DMT) lets
+memory data go straight to the requester. These optimizations cut latency and bandwidth
+dramatically.
+
+As you can see in the diagrams, the left shows a traditional shared bus — all cores serialize
+through one wire. The right shows a CHI mesh where cores talk to routers, routers talk to the
+home node, and the home node talks to memory. Every link is independent and pipelined.
+-->
+
+---
+
+<!-- ================================================================== -->
+<!-- SLIDE 3: CHI in the AMBA Family -->
+<!-- ================================================================== -->
+
+## CHI in the AMBA Family
+
+| Protocol | Topology | Coherence | Target Scale |
+|----------|----------|-----------|-------------|
+| **AXI** | Point-to-point | None | Single master per link |
+| **ACE** | Shared bus | Snoop-based | 2–8 cores |
+| **ACE-Lite** | Point-to-point | One-way snoop | I/O coherency |
+| **CHI** | Packetized NoC | Directory + Snoop | 16–256+ cores |
+
+<br>
+
+**CHI is the convergence point** — it subsumes ACE functionality with a scalable architecture:
+
+- 4 independent channels: **REQ**, **SNP**, **RSP**, **DAT**
+- Separate data and response paths allow non-blocking operation
+- Credit-based flow control replaces bus arbitration
+- Designed for mesh, ring, and crossbar topologies
+
+<!-- Speaker Notes:
+This slide places CHI in context. If you have worked with ARM SoCs before, you likely know AXI and ACE.
+
+AXI is the workhorse point-to-point interface. It has no coherence — you use it for memory-mapped
+peripherals, DMA engines, and simple master-slave connections.
+
+ACE extended AXI with full cache coherence. ACE uses a shared bus where all masters snoop every
+transaction. This works up to about 8 cores, but the bus bandwidth is a hard ceiling.
+
+ACE-Lite provides one-way coherency — I/O devices can participate but don't have full caches.
+It is used for things like GPU coherency.
+
+CHI is the next generation. It replaces the shared bus with a packetized network-on-chip. Instead
+of broadcasting, it uses directory-based coherence. Instead of bus arbitration, it uses credit-based
+flow control. And it is designed from the ground up for mesh, ring, and crossbar topologies.
+
+The key architectural difference: CHI separates the four channels completely. In ACE, a response
+might carry data, blocking the bus. In CHI, responses go on the RSP channel and data goes on the
+DAT channel. They can flow in parallel on different physical links. This is a huge throughput win.
+
+Think of it this way: ACE is like a conference call where everyone hears everything.
+CHI is like a messaging system where you send targeted messages on dedicated lanes.
+-->
+
+---
+
+<!-- ================================================================== -->
+<!-- SLIDE 4: Node Types -->
+<!-- ================================================================== -->
+
+## CHI Node Types
+
+<div class="columns">
+<div>
+
+| Node | Role | gem5 Class |
+|------|------|------------|
+| **RN-F** | Fully-coherent Requester | `CHI_RNF` |
+| **RN-I** | I/O Requester | `CHI_RNI_IO` |
+| **RN-D** | DMA Requester | `CHI_RNI_DMA` |
+| **HN-F** | Fully-coherent Home | `CHI_HNF` |
+| **MN** | Misc Node (DVM) | `CHI_MN` |
+| **SN-F** | Fully-coherent Slave | `CHI_SNF_MainMem` |
+
+</div>
+<div>
+
+```mermaid
+graph TB
+    subgraph "Request Layer"
+        RNF1["RN-F<br/>(CPU + L1/L2)"]
+        RNF2["RN-F<br/>(CPU + L1/L2)"]
+        RNID["RN-D<br/>(DMA Engine)"]
+    end
+    subgraph "Coherence Layer"
+        HNF["HN-F<br/>(LLC Slice + Dir)"]
+        MN["MN<br/>(TLB Inv)"]
+    end
+    subgraph "Memory Layer"
+        SNF["SN-F<br/>(DRAM Ctrl)"]
+    end
+    RNF1 <-->|REQ SNP RSP DAT| HNF
+    RNF2 <-->|REQ SNP RSP DAT| HNF
+    RNID -->|REQ RSP DAT| HNF
+    HNF <-->|REQ RSP DAT| SNF
+    HNF <--> MN
+```
+
+</div>
+</div>
+
+<!-- Speaker Notes:
+CHI defines several node types, each with a specific role in the coherence hierarchy.
+Let me walk through them.
+
+RN-F — Request Node Fully-coherent. This is your CPU core with its private caches.
+An RN-F has L1 instruction and data caches, optionally a private L2. It issues coherent
+requests like ReadShared, ReadUnique, WriteUnique. It also responds to snoops from the
+Home Node. In gem5, the CHI_RNF class creates an L1I, L1D, and optional L2 controller.
+
+RN-I — Request Node I/O. This is for I/O devices that need non-coherent access.
+Think of peripherals that read/write memory but don't cache.
+
+RN-D — Request Node DMA. Used for DMA engines. Also non-coherent, but with different
+semantics for scatter-gather operations.
+
+HN-F — Home Node Fully-coherent. This is the heart of the coherence system. Each cache
+line has a designated HN-F based on address hashing. The HN-F maintains the directory
+for its address range, handles snoops, tracks sharers, and manages data movement.
+In gem5, the HNF is configured with is_HN=True and can enable DMT and DCT optimizations.
+
+MN — Misc Node. This handles Distributed Virtual Memory operations, specifically TLB
+invalidation (TLBI) and DVM synchronization. When a core changes a page table, it sends
+a DVM request through the MN which broadcasts to all RN-Fs.
+
+SN-F — Slave Node Fully-coherent. This is the memory controller. It handles ReadNoSnp
+and WriteNoSnp requests from the HN-F. In gem5, this wraps a DRAM controller model.
+
+The diagram shows the layered architecture: request nodes at the top, coherence in the
+middle, memory at the bottom. All communication flows through the four CHI channels.
+-->
+
+---
+
+<!-- ================================================================== -->
+<!-- SLIDE 5: Four Channels -->
+<!-- ================================================================== -->
+
+## The Four CHI Channels
+
+<div class="columns">
+<div>
+
+| Channel | VNet | Direction | Carries |
+|---------|------|-----------|---------|
+| **REQ** | 0 | RN → HN | ReadShared, WriteUnique, ... |
+| **SNP** | 1 | HN → RN | SnpShared, SnpUnique, ... |
+| **RSP** | 2 | Any → Any | Comp, CompAck, DBIDResp, ... |
+| **DAT** | 3 | Any → Any | CompData, CBWrData, ... |
+
+</div>
+<div>
+
+```mermaid
+sequenceDiagram
+    participant RNF as RN-F
+    participant HNF as HN-F
+    participant SNF as SN-F
+
+    RNF->>HNF: REQ: ReadShared(addr)
+    HNF->>RNF: SNP: SnpUnique(other_RNF)
+    Note right of RNF: Snoop other holders
+    HNF->>SNF: REQ: ReadNoSnp(addr)
+    SNF-->>HNF: DAT: Data(payload)
+    HNF-->>RNF: RSP: Comp_SC
+    HNF-->>RNF: DAT: CompData_SC(data)
+    RNF-->>HNF: RSP: CompAck
+```
+
+</div>
+</div>
+
+**Key insight**: RSP and DAT are separate — acknowledgements do not block data transfer.
+
+<!-- Speaker Notes:
+The four-channel design is arguably the most important architectural decision in CHI.
+Let me explain each one and why the separation matters.
+
+REQ channel (Virtual Network 0): Carries requests from requesters to the home node.
+ReadShared, ReadUnique, WriteUnique, CleanUnique, atomics — all go here. This is the
+initiation channel. In gem5, these are CHIRequestMsg objects flowing on vnet 0.
+
+SNP channel (Virtual Network 1): Carries snoop requests from the home node to requesters.
+When the HN-F needs to check if a requester has a line, or needs to invalidate it,
+the snoop goes on this channel. Important: snoops only go to nodes the directory
+knows have the line — this is not a broadcast.
+
+RSP channel (Virtual Network 2): Carries responses — acknowledgements, completions,
+snoop responses, credit grants. Comp means "your request is complete." CompAck confirms
+the requester received the data. DBIDResp grants a write buffer ID. These are lightweight
+messages without data payload.
+
+DAT channel (Virtual Network 3): Carries actual cache line data. CompData combines
+a completion response with data. CBWrData carries writeback data. This channel carries
+the heavy payload — 32 or 64 bytes per message.
+
+Why separate RSP and DAT? In older protocols like ACE, a response might carry data,
+which blocks the response path for other transactions. In CHI, you can send a lightweight
+Comp response immediately and the heavy CompData separately. This allows the home node
+to acknowledge a request before data is ready, improving pipelining.
+
+The sequence diagram shows a typical ReadShared: REQ out, snoop to current holder,
+read from memory, then both RSP and DAT flow back to the requester independently.
+
+In gem5, each channel maps to a Ruby virtual network, and Garnet routes them through
+the NoC as separate flit classes.
+-->
+
+---
+
+<!-- ================================================================== -->
+<!-- SLIDE 6: Message Types Overview -->
+<!-- ================================================================== -->
+
+## Message Types at a Glance
+
+<div class="columns smaller">
+<div>
+
+**Request Types** (44 total in gem5)
+
+| Category | Examples |
+|----------|---------|
+| Reads | `ReadShared`, `ReadUnique`, `ReadOnce`, `ReadNotSharedDirty` |
+| Writes | `WriteUniqueFull`, `WriteUniquePtl`, `WriteBackFull`, `WriteCleanFull` |
+| Atomics | `AtomicReturn`, `AtomicNoReturn` |
+| Evictions | `Evict`, `WriteEvictFull` |
+| DVM | `DvmTlbi_Initiate`, `DvmSync_Initiate` |
+
+</div>
+<div>
+
+**Response Types** (18 total)
+
+| Category | Examples |
+|----------|---------|
+| Completions | `Comp_I`, `Comp_UC`, `Comp_SC`, `Comp_UD_PD` |
+| Write Acks | `DBIDResp`, `CompDBIDResp` |
+| Snoop Resp | `SnpResp_I`, `SnpResp_SC`, `SnpResp_UD_Fwded_I` |
+| Flow Control | `RetryAck`, `PCrdGrant` |
+
+**Data Types** (24 total)
+
+| Category | Examples |
+|----------|---------|
+| Comp+Data | `CompData_I`, `CompData_SC`, `CompData_UD_PD` |
+| Copyback | `CBWrData_UC`, `CBWrData_UD_PD` |
+| Snoop Data | `SnpRespData_*` (12 variants) |
+
+</div>
+</div>
+
+<!-- Speaker Notes:
+This is the full taxonomy of CHI message types as implemented in gem5's CHI-msg.sm file.
+Let me explain the naming convention because it tells you everything about what each
+message does.
+
+Request types follow the pattern: <Action><SharingHint>. For example:
+- ReadShared means "I want to read, I am okay sharing this line"
+- ReadUnique means "I want to write, I need exclusive ownership"
+- ReadOnce means "I want to read once, don't cache it"
+- WriteUniqueFull means "I have exclusive ownership, write the full line"
+
+Response types encode the resulting cache state. Comp_SC means "your request completed,
+you now have the line in Shared Clean state." SnpResp_UD_Fwded_I means "snoop response:
+I had Unique Dirty, I forwarded the data to the requester, and now I am Invalid."
+
+Data types combine completion state with data payload. CompData_SC carries both the
+Shared Clean state indication and the actual cache line data.
+
+The number of variants — 44 requests, 18 responses, 24 data types — reflects the
+richness of the protocol. Every combination of sharing state, data presence, and
+forwarding behavior has its own message type. This eliminates ambiguity at the
+receiving end. The receiver knows exactly what happened without needing additional
+state lookups.
+
+In gem5's CHI-msg.sm, these are SLICC enumerations: CHIRequestType, CHIResponseType,
+and CHIDataType. The SLICC state machine uses these to make decisions in transitions.
+
+A practical note: you rarely use all 44 request types. A typical CPU cache controller
+uses ReadShared, ReadUnique, WriteUniqueFull, WriteBackFull, CleanUnique, and Evict.
+The others exist for I/O, atomics, DVM, and edge cases.
+-->
+
+---
+
+<!-- ================================================================== -->
+<!-- SLIDE 7: Request Opcodes Deep Dive -->
+<!-- ================================================================== -->
+
+## Request Opcodes — Choosing the Right One
+
+<div class="smaller">
+
+| Request | When to Use | Final State | Notes |
+|---------|-------------|-------------|-------|
+| `ReadShared` | Normal load | SC | Most common read |
+| `ReadUnique` | Before store | UC/UD | Get exclusive ownership |
+| `ReadOnce` | Non-allocating read | I | Don't cache the result |
+| `ReadNotSharedDirty` | Read if not SD | SC/UC | Optimized shared read |
+| `CleanUnique` | Have SC, need to write | UC | Upgrade without data |
+| `MakeReadUnique` | Have UC in peer cache | UC | Multi-cast invalidation |
+| `WriteUniqueFull` | Full-line write | UC | Data included in request |
+| `WriteUniquePtl` | Partial-line write | UC | Byte mask included |
+| `WriteBackFull` | Evict dirty line | I | Hand data to HN-F |
+| `Evict` | Evict clean line | I | No data, just notification |
+
+</div>
+
+**Pattern**: Request name encodes both the *action* and the *intent* — the HN-F knows what to do without additional negotiation.
+
+<!-- Speaker Notes:
+Let's spend a moment understanding the most important request opcodes. As a system designer,
+choosing the right request type is critical for performance.
+
+ReadShared is the workhorse. Every normal CPU load generates a ReadShared. It tells the
+HN-F: "I want to read this line and I might cache it." The HN-F will return data in SC
+state if others share it, or UC if the requester is the sole owner.
+
+ReadUnique is what you send before a store. "I need exclusive ownership to write." The
+HN-F will invalidate all other copies and return the line in UC or UD state depending
+on whether any other cache had a dirty copy.
+
+ReadOnce is for non-allocating reads — the CPU wants data but won't cache it. Useful
+for DMA-style reads or debugging.
+
+CleanUnique is an optimization. If you already have the line in SC state and want to
+write, you don't need data — you just need everyone else invalidated. CleanUnique does
+exactly that, saving the DAT channel bandwidth.
+
+WriteUniqueFull and WriteUniquePtl are unique to CHI. In older protocols, writes always
+required a two-step process: get ownership, then write. In CHI, WriteUnique combines
+both: it carries the data (or byte mask) along with the write request. The HN-F processes
+it atomically. This saves a round trip for stores.
+
+WriteBackFull is for eviction of dirty lines. The RN-F hands the dirty data to the HN-F.
+Evict is for clean lines — just a notification, no data transfer needed.
+
+The naming convention is important: each request type carries enough semantic information
+for the HN-F to know exactly what to do. There is no ambiguity. This is a design philosophy
+of CHI — the protocol is explicit, not implicit.
+
+In gem5, the sequencer maps CPU loads/stores to these request types automatically.
+The mapping logic is in CHI-cache-funcs.sm, in functions like processNextState().
+-->
+
+---
+
+<!-- ================================================================== -->
+<!-- SLIDE 8: Coherence States -->
+<!-- ================================================================== -->
+
+## Coherence States — MOESI in CHI
+
+<div class="columns">
+<div>
+
+**Stable States**
+
+| State | Name | Access | Description |
+|-------|------|--------|-------------|
+| `I` | Invalid | None | Line not present |
+| `SC` | Shared Clean | Read | Clean shared copy |
+| `UC` | Unique Clean | Read/Write | Exclusive, clean |
+| `UD` | Unique Dirty | Read/Write | Exclusive, dirty |
+| `SD` | Shared Dirty | Read | Shared, but responsible for writeback |
+
+**Transient States**
+
+| Pattern | Meaning |
+|---------|---------|
+| `BUSY_INTR` | Waiting for data, snoops proceed |
+| `BUSY_BLKD` | Waiting for data, snoops blocked |
+
+</div>
+<div>
+
+```mermaid
+stateDiagram-v2
+    [*] --> I
+    I --> SC : ReadShared
+    I --> UC : ReadUnique\n(no other holder)
+    I --> UD : ReadUnique\n(dirty data returned)
+    SC --> UC : CleanUnique
+    SC --> I : Evict
+    UC --> I : Evict
+    UC --> UD : Store (dirty)
+    UD --> I : WriteBack
+    UD --> SC : ReadShared\n(from other)
+    SD --> I : WriteBack
+    UD --> UD_T : Timeout
+```
+
+</div>
+</div>
+
+<!-- Speaker Notes:
+CHI uses a MOESI-compatible state machine, but the naming is slightly different from
+what you might be used to. Let me walk through each state.
+
+I — Invalid. The line is not in this cache. Any access triggers a new request.
+
+SC — Shared Clean. The line is present and readable, but multiple caches might have it.
+You cannot write in SC — you need to upgrade to UC or UD first.
+
+UC — Unique Clean. Exclusive ownership, but the data is clean (matches memory or
+the home node has the authoritative copy). You can read and write. After writing,
+you transition to UD.
+
+UD — Unique Dirty. Exclusive ownership with dirty data. You are the sole owner
+and the data in memory is stale. When you evict, you must write back.
+
+SD — Shared Dirty. This is the interesting one. It means you are sharing the line
+with others, but you are the one responsible for writing it back. If someone else
+needs exclusive access, the HN-F will snoop you because you have the authoritative
+data. This is gem5's MOESI — the O state is not explicitly named, but SD serves
+the same role.
+
+UD_T — Unique Dirty with Timeout. The line has been dirty for too long without
+being written back. This triggers automatic writeback.
+
+Transient states: BUSY_INTR means a transaction is in flight but snoops from the
+HN-F can still be processed (the cache entry is in an intermediate state but
+snoop processing won't corrupt it). BUSY_BLKD means snoops are blocked because
+processing them would violate protocol invariants.
+
+The state diagram shows the main transitions. The key path is:
+I → ReadShared → SC → CleanUnique → UC → Store → UD → WriteBack → I
+
+In gem5's CHI-cache.sm, these states are defined as SLICC State declarations.
+Each state has an associated AccessPermission used by Ruby for correctness checks.
+-->
+
+---
+
+<!-- ================================================================== -->
+<!-- SLIDE 9: Upstream Tracking States -->
+<!-- ================================================================== -->
+
+## Advanced States — Upstream Tracking & Clusivity
+
+<div class="columns smaller">
+<div>
+
+**Upstream States** (line not local, but tracked)
+
+| State | Meaning |
+|-------|---------|
+| `RU` | Upstream has UD/UC |
+| `RSC` | Upstream has SC |
+| `RSD` | Upstream has SD |
+| `RUSC` | RSC + this node has exclusive |
+| `RUSD` | RSD + this node has exclusive |
+
+**Combined Local + Upstream**
+
+| State | Meaning |
+|-------|---------|
+| `SC_RSC` | Local SC + upstream SC |
+| `SD_RSC` | Local SD + upstream SC |
+| `UD_RU` | Local UD + upstream has copy |
+| `UD_RSC` | Local UD + upstream SC |
+
+</div>
+<div>
+
+**Why track upstream state?**
+
+```mermaid
+graph TB
+    subgraph "Exclusive Hierarchy"
+        L1["L1: SC_RSC<br/>(has data, knows L2 also SC)"]
+        L2["L2: SC<br/>(has data)"]
+        HNF["HN-F: Dir[sharers]"]
+
+        L1 --- L2 --- HNF
+    end
+```
+
+When L1 evicts cleanly:
+- Without upstream tracking → send Evict to L2
+- With `SC_RSC` → skip Evict, L2 already has it
+
+**Benefit**: Eliminates redundant messages on clean eviction in inclusive hierarchies.
+
+</div>
+</div>
+
+<!-- Speaker Notes:
+This slide covers one of the more sophisticated aspects of CHI's state machine in gem5:
+upstream tracking states and clusivity.
+
+In a typical multi-level cache hierarchy, when an L1 cache has a line, the L2 (its upstream
+neighbor toward memory) might also have a copy. In a strictly inclusive hierarchy, L2 always
+has a superset of L1's contents. But even in non-inclusive or exclusive hierarchies, it is
+useful for L1 to know whether L2 also has the line.
+
+Why? Consider a clean eviction from L1. If L1 knows L2 has the line (state SC_RSC), it can
+silently drop the line without sending an Evict message. This saves message bandwidth and
+reduces latency.
+
+The R-prefixed states mean "Remembered" — the line is not in the local cache anymore, but
+the directory entry remembers the upstream state. RU means upstream has Unique (exclusive).
+RSC means upstream has Shared Clean. RSD means upstream has Shared Dirty.
+
+The combined states like SC_RSC mean "I have the line locally in SC state AND I know my
+upstream also has SC." When I evict, I don't need to tell anyone because upstream already
+has a copy.
+
+In gem5, these states are defined in CHI-cache.sm and the transition logic is in
+CHI-cache-transitions.sm. The clusivity parameters — alloc_on_readshared, dealloc_on_shared,
+etc. — control when the cache allocates and deallocates entries, which determines which
+upstream states are used.
+
+This is an optimization that most protocol tutorials skip, but it matters for real
+performance. In a 16-core system, eliminating unnecessary Evict messages on every L1
+clean eviction saves significant network bandwidth.
+-->
+
+---
+
+<!-- ================================================================== -->
+<!-- SLIDE 10: ReadShared Transaction -->
+<!-- ================================================================== -->
+
+## Transaction Flow: ReadShared (Hit in Memory)
+
+```mermaid
+sequenceDiagram
+    participant CPU
+    participant RNF as RN-F (L1)
+    participant NoC as Network-on-Chip
+    participant HNF as HN-F (LLC + Dir)
+    participant SNF as SN-F (DRAM)
+
+    CPU->>RNF: Load miss
+    RNF->>NoC: REQ: ReadShared(addr)
+    Note right of RNF: Allocate TBE, state → BUSY
+    NoC->>HNF: REQ arrives
+    HNF->>HNF: Lookup directory
+    Note right of HNF: No other sharers → go to memory
+    HNF->>NoC: REQ: ReadNoSnp(addr)
+    NoC->>SNF: REQ arrives
+    SNF->>SNF: Read from DRAM
+    SNF->>NoC: DAT: Data(payload)
+    NoC->>HNF: DAT arrives
+    HNF->>HNF: Update directory: add RNF to sharers
+    HNF->>NoC: RSP: Comp_SC
+    HNF->>NoC: DAT: CompData_SC(data)
+    NoC->>RNF: RSP + DAT arrive
+    RNF->>RNF: Fill cache, state → SC
+    RNF->>NoC: RSP: CompAck
+    NoC->>HNF: CompAck arrives
+    Note right of HNF: Transaction complete
+    RNF-->>CPU: Data ready
+```
+
+<!-- Speaker Notes:
+Let's trace a complete ReadShared transaction — the most common operation in any multi-core
+system. This is what happens when a CPU core does a load that misses its L1 cache.
+
+Step 1: The CPU issues a load that misses. The RN-F allocates a Transaction Buffer Entry (TBE)
+to track this in-flight operation and transitions the cache line state to a BUSY transient state.
+
+Step 2: The RN-F sends a ReadShared request on the REQ channel through the NoC to the HN-F.
+The HN-F is determined by address hashing — each cache line maps to exactly one HN-F.
+
+Step 3: The HN-F looks up its directory for this address. In this case, no other RN-F has the
+line, so the HN-F needs to fetch from memory. It sends ReadNoSnp to the SN-F.
+
+Step 4: The SN-F reads from DRAM and returns the data on the DAT channel.
+
+Step 5: The HN-F updates its directory to record that this RN-F now shares the line. Then it
+sends two messages back: Comp_SC on the RSP channel (your request completed, you have SC state)
+and CompData_SC on the DAT channel (here is the data).
+
+Step 6: The RN-F receives both messages, fills its cache with the data in SC state, and sends
+CompAck on the RSP channel to confirm receipt.
+
+Step 7: When the HNF receives CompAck, the transaction is complete.
+
+Key observations:
+- The RSP and DAT messages travel independently on separate channels
+- The HN-F is the serialization point — it ensures ordering
+- The TBE at the RN-F allows the cache to handle other requests while waiting
+- CompAck is the final handshake — without it, the HN-F cannot complete the transaction
+
+In gem5, this entire flow is encoded in the CHI-cache-transitions.sm file as a series of
+(state, event) → action mappings. Each arrow in this diagram corresponds to one or more
+transition rules.
+-->
+
+---
+
+<!-- ================================================================== -->
+<!-- SLIDE 11: ReadShared with Dirty Forwarding (DCT) -->
+<!-- ================================================================== -->
+
+## Transaction Flow: ReadShared with DCT
+
+```mermaid
+sequenceDiagram
+    participant R1 as RN-F 1<br/>(Requester)
+    participant HNF as HN-F<br/>(Home + Dir)
+    participant R2 as RN-F 2<br/>(Dirty Holder)
+    participant SNF as SN-F
+
+    R1->>HNF: REQ: ReadShared
+    HNF->>HNF: Dir shows R2 has UD
+    HNF->>R2: SNP: SnpSharedFwd
+    Note right of R2: DCT enabled → forward<br/>data directly to R1
+    HNF->>R1: RSP: Comp_SC
+    R2->>R1: DAT: CompData_SC(data)
+    Note right of R2: R2 state: UD → SC
+    R1->>R1: Fill cache → SC
+    R1->>HNF: RSP: CompAck
+    HNF->>HNF: Update dir: R1,R2 both SC
+```
+
+**DCT (Direct Cache Transfer)**: Data flows R2 → R1, bypassing HN-F cache. Saves one hop and HN-F bandwidth.
+
+<!-- Speaker Notes:
+Now let's see what happens when another core has the line dirty. This is where CHI's Direct
+Cache Transfer (DCT) optimization shines.
+
+The scenario: RN-F 1 sends ReadShared. The HN-F's directory shows that RN-F 2 has the line
+in Unique Dirty state. The authoritative data is not in memory or the HN-F — it's in RN-F 2's
+cache.
+
+Without DCT, the flow would be: HN-F snoops R2, R2 sends data to HN-F, HN-F sends data to R1.
+That's two hops for the data, and the HN-F cache bandwidth is consumed.
+
+With DCT enabled (the `enable_DCT` flag in gem5), the HN-F sends a special snoop:
+SnpSharedFwd. The "Fwd" suffix means "forward the data directly to the requester."
+R2 sends the data straight to R1, bypassing the HN-F entirely.
+
+The HN-F still sends Comp_SC to R1 on the RSP channel. But the data comes directly
+from R2 on the DAT channel. R1 fills its cache in SC state.
+
+After the transfer: R2 transitions from UD to SC (it still has the line, but it's now
+shared and clean). R1 has SC. The HN-F directory records both as sharers.
+
+The benefit is clear: one less hop for the data path, and the HN-F doesn't need to
+buffer the data at all. In a mesh NoC with multiple hops between R2 and HN-F, this
+can save 3-5 cycles of latency.
+
+However, DCT requires careful ordering. The Comp_SC from HN-F and the CompData from
+R2 must both arrive at R1 before the transaction completes. The TBE at R1 tracks
+which messages are expected using an ExpectedMap data structure.
+
+In gem5, DCT is controlled by the `enable_DCT` parameter on the HN-F controller.
+It defaults to True in the standard configurations.
+-->
+
+---
+
+<!-- ================================================================== -->
+<!-- SLIDE 12: Write Transaction -->
+<!-- ================================================================== -->
+
+## Write Transaction: WriteUnique Flow
+
+<div class="columns">
+<div>
+
+```mermaid
+sequenceDiagram
+    participant CPU
+    participant RNF as RN-F
+    participant HNF as HN-F
+    participant Other as Other RN-Fs
+    participant SNF as SN-F
+
+    CPU->>RNF: Store
+    RNF->>HNF: REQ: WriteUniqueFull<br/>(data included)
+    HNF->>HNF: Allocate dir entry
+    HNF->>Other: SNP: SnpUnique<br/>(invalidate all)
+    Other-->>HNF: RSP: SnpResp_I
+    HNF->>SNF: REQ: WriteNoSnp<br/>(write-through to mem)
+    SNF-->>HNF: RSP: DBIDResp
+    HNF-->>RNF: RSP: CompDBIDResp
+    Note right of RNF: Write committed
+    RNF->>RNF: State → UC
+    RNF-->>HNF: RSP: CompAck
+```
+
+</div>
+<div>
+
+**WriteUnique combines ownership request + data**
+
+Advantages over two-phase write:
+- Single round-trip instead of ReadUnique then Write
+- Data piggybacks on request — saves DAT channel
+- HN-F can write-through to memory immediately
+
+**CompDBIDResp**: Combines completion + write buffer allocation. The RN-F knows the write is committed when it receives this.
+
+</div>
+</div>
+
+<!-- Speaker Notes:
+Now let's look at writes. CHI's WriteUnique is one of its most clever design decisions.
+
+In older protocols like MESI, a write is always two phases: first get exclusive ownership
+(ReadUnique / GetM), then perform the write. This requires two round trips to the home node.
+
+CHI collapses this into one operation: WriteUniqueFull. The RN-F sends both the request AND
+the data in a single message on the REQ channel. The HN-F receives ownership transfer and
+data simultaneously.
+
+Here's the flow:
+1. CPU does a store. RN-F sends WriteUniqueFull with the data included.
+2. HN-F allocates a directory entry and issues SnpUnique to all current sharers.
+3. Each sharer responds with SnpResp_I (I am now Invalid).
+4. HN-F writes the data through to memory (WriteNoSnp to SN-F). This is optional
+   depending on the write policy, but in gem5's default config, writes go to memory.
+5. HN-F sends CompDBIDResp — this combines two things: Comp (your write is complete)
+   and DBIDResp (here is a write buffer ID). The RN-F knows the write is committed.
+6. RN-F transitions to UC (or UD if it was already dirty) and sends CompAck.
+
+The key insight is CompDBIDResp. In CHI, every write needs a DBID (Data Buffer ID)
+from the HN-F to ensure ordering. Combining the completion with the DBID grant saves
+one message.
+
+WriteUniquePtl is the partial-write variant — it includes a byte mask indicating which
+bytes within the cache line are being written. The rest are don't-care or unchanged.
+
+For the RN-F, WriteUnique means "I already know I have unique access (from a previous
+CleanUnique or ReadUnique), so I'm just informing the HN-F of the write."
+If the RN-F doesn't have unique access, it must first obtain it.
+
+In gem5, the cache controller decides between WriteUnique and the two-phase approach
+based on whether it already has ownership. The logic is in CHI-cache-funcs.sm.
+-->
+
+---
+
+<!-- ================================================================== -->
+<!-- SLIDE 13: Snoop Operations -->
+<!-- ================================================================== -->
+
+## Snoop Operations
+
+<div class="columns smaller">
+<div>
+
+**Forwarding Snoops** (DCT — data sent to requester)
+
+| Snoop | Response | Holder's new state |
+|-------|----------|--------------------|
+| `SnpSharedFwd` | `SnpResp_SC_Fwded_SC` | SC |
+| `SnpUniqueFwd` | `SnpResp_UD_Fwded_I` | I |
+| `SnpOnceFwd` | Data forwarded | I |
+| `SnpNotSharedDirtyFwd` | `SnpResp_SD_Fwded_*` | SD or I |
+
+**Non-Forwarding Snoops** (data sent to HN-F)
+
+| Snoop | Purpose |
+|-------|---------|
+| `SnpShared` | Check if holder has clean shared copy |
+| `SnpUnique` | Invalidate — holder must give up line |
+| `SnpOnce` | Return data but don't invalidate |
+| `SnpCleanInvalid` | Clean + invalidate |
+
+</div>
+<div>
+
+```mermaid
+graph LR
+    subgraph "Forwarding Snoop (DCT)"
+        HNF1[HN-F] -->|SnpSharedFwd| R2[RN-F 2]
+        R2 -.->|CompData directly| R1[RN-F 1]
+    end
+
+    subgraph "Non-Forwarding Snoop"
+        HNF2[HN-F] -->|SnpUnique| R3[RN-F 3]
+        R3 -->|CBWrData| HNF2
+    end
+```
+
+**Snoop ordering rule**: Snoops on the same address must be processed in order at the RN-F. This is guaranteed by the SNP channel ordering.
+
+</div>
+</div>
+
+<!-- Speaker Notes:
+Snoop operations are how the Home Node maintains coherence. When a new request arrives for a
+line that other caches might hold, the HN-F sends snoops. Let's distinguish the two categories.
+
+Forwarding snoops are used with DCT. The "Fwd" suffix means "forward your data directly to
+the requester." The HN-F includes the requester's ID in the snoop so the holder knows where
+to send data. This is the key optimization — data bypasses the HN-F entirely.
+
+Non-forwarding snoops are the traditional model. The holder responds to the HN-F, which
+then forwards to the requester. Simpler but slower.
+
+SnpSharedFwd: "Do you have this line? If so, send a copy directly to the requester and
+keep your copy in Shared Clean." Used when the HN-F wants to serve a ReadShared request
+and knows a holder has clean data.
+
+SnpUniqueFwd: "Give up your copy entirely, forward data to the requester, and go Invalid."
+Used when the HN-F needs to grant exclusive ownership to someone else.
+
+SnpUnique: "Invalidate your copy and send data back to me." Used when the HN-F needs to
+collect dirty data before granting exclusive access to a third party.
+
+SnpCleanInvalid: "If your copy is clean, just invalidate silently. If dirty, send data back."
+This is an optimization for clean invalidation — no data transfer needed if the line is clean.
+
+A critical ordering rule: snoops for the same address must be processed in order at each RN-F.
+The SNP channel in CHI guarantees this ordering. If the HN-F sends SnpShared then SnpUnique
+for the same address, the RN-F will process them in that order. This prevents race conditions
+in the coherence protocol.
+
+In gem5, snoop processing is handled by the CHI-cache-actions.sm file, specifically in
+actions like sendSnpResponse, sendDataToReq, and various snoop-specific actions.
+The snoop queues are separate from the request queues to avoid deadlock.
+-->
+
+---
+
+<!-- ================================================================== -->
+<!-- SLIDE 14: DMT - Direct Memory Transfer -->
+<!-- ================================================================== -->
+
+## Direct Memory Transfer (DMT)
+
+```mermaid
+sequenceDiagram
+    participant RNF as RN-F (Requester)
+    participant HNF as HN-F (Home)
+    participant SNF as SN-F (Memory)
+
+    Note over RNF,SNF: Without DMT
+    RNF->>HNF: REQ: ReadShared
+    HNF->>SNF: REQ: ReadNoSnp
+    SNF-->>HNF: DAT: Data
+    HNF-->>RNF: RSP: Comp_SC
+    HNF-->>RNF: DAT: CompData_SC
+    Note right of RNF: 2 hops for data
+
+    Note over RNF,SNF: With DMT (enable_DMT=true)
+    RNF->>HNF: REQ: ReadShared
+    HNF->>SNF: REQ: ReadNoSnp(DMT=1)
+    HNF-->>RNF: RSP: Comp_SC
+    SNF-->>RNF: DAT: CompData_SC
+    Note right of RNF: 1 hop for data!
+    RNF-->>HNF: RSP: CompAck
+```
+
+**DMT eliminates the HN-F hop for data from memory.** Data flows SN-F → RN-F directly.
+
+<!-- Speaker Notes:
+Direct Memory Transfer is the companion optimization to DCT. While DCT bypasses the HN-F
+when another cache has dirty data, DMT bypasses the HN-F when the data comes from memory.
+
+Without DMT: Memory sends data to HN-F, HN-F sends data to RN-F. Two hops.
+With DMT: Memory sends data directly to RN-F. One hop.
+
+In a mesh NoC, the HN-F might be several hops away from both the RN-F and the SN-F.
+Without DMT, data travels SN-F → (N hops) → HN-F → (M hops) → RN-F. With DMT,
+data travels SN-F → (K hops) → RN-F where K is typically less than N+M.
+
+The mechanism: The HN-F sends ReadNoSnp to the SN-F with a flag indicating DMT.
+The SN-F reads from DRAM and sends the data directly to the RN-F (not to the HN-F).
+The HN-F sends Comp_SC to the RN-F on the RSP channel.
+When the RN-F receives both Comp_SC and CompData_SC, the transaction completes.
+
+DMT is controlled by the `enable_DMT` flag on the HN-F controller. In gem5's default
+CHI configuration, it is enabled.
+
+There's an advanced variant: `enable_DMT_early_dealloc`. This uses ReadNoSnpSep (separated
+read) where the SN-F sends the data directly to the RN-F and a separate acknowledgment
+to the HN-F. This allows the HN-F to deallocate its TBE before the data reaches the
+RN-F, saving TBE resources. But it adds complexity because the HN-F must be prepared
+to handle retry and error cases without the TBE.
+
+In gem5, DMT is implemented in CHI-cache-actions.sm. The key action is sendReadToMemory
+which checks enable_DMT and chooses between ReadNoSnp (no DMT) and ReadNoSnp with
+direct data routing.
+
+Performance impact: DMT typically saves 5-10 cycles on memory reads in a 4x4 mesh,
+depending on the placement of the RN-F, HN-F, and SN-F.
+-->
+
+---
+
+<!-- ================================================================== -->
+<!-- SLIDE 15: Retry & Credit Flow Control -->
+<!-- ================================================================== -->
+
+## Retry Mechanism & Protocol Credits
+
+<div class="columns">
+<div>
+
+**Problem**: What if the HN-F is overwhelmed?
+
+**Solution**: CHI uses a credit-based retry mechanism.
+
+```
+RN-F                        HN-F
+  |                           |
+  |--- REQ: ReadShared ----->| (queue full!)
+  |<-- RSP: RetryAck --------|
+  |   (please retry later)    |
+  |                           |
+  |   ... time passes ...     |
+  |                           |
+  |<-- RSP: PCrdGrant -------| (credit granted)
+  |   (you may retry now)     |
+  |                           |
+  |--- REQ: ReadShared ----->| (re-accepted)
+```
+
+</div>
+<div>
+
+**How it works:**
+
+1. Every request has `allowRetry=true` by default
+2. HN-F sends `RetryAck` if it cannot accept
+3. RN-F queues the request for retry
+4. HN-F sends `PCrdGrant` when capacity frees
+5. RN-F replays the exact same request
+
+**In gem5:**
+- `throttle_req_on_retry` blocks new requests to busy HN-Fs
+- `RetryQueueEntry` tracks pending retries
+- Each HN-F has independent retry queues
+
+</div>
+</div>
+
+> **Design trade-off**: Retry adds latency on congestion but avoids deadlock. Without it, the HN-F would need unbounded buffers.
+
+<!-- Speaker Notes:
+Flow control in CHI is critical. Unlike a shared bus where arbitration naturally throttles
+requesters, a packetized NoC can deliver bursts of requests that overwhelm the HN-F.
+
+CHI's solution is elegant: the RetryAck + PCrdGrant mechanism. Let's walk through it.
+
+Every request message has an `allowRetry` flag. When set to true, the HN-F has the option
+to reject the request if it's too busy. The HN-F sends back a RetryAck, which means
+"I cannot handle this right now, please try again later."
+
+The RN-F queues the original request in a retry queue. It does NOT retry immediately —
+that would just re-congest the HN-F.
+
+When the HN-F has capacity, it sends a PCrdGrant (Protocol Credit Grant) to the RN-F.
+This is the green light to retry. The RN-F then re-sends the exact same request.
+
+PCrdGrant includes a credit type that can specify which category of request can be retried.
+This allows the HN-F to prioritize certain request types during recovery.
+
+In gem5, the implementation is in CHI-cache-actions.sm. The key parameters:
+- `throttle_req_on_retry`: When set, the RN-F blocks ALL new requests to the same
+  destination while a retry is pending. This prevents retry starvation.
+- The `RetryQueueEntry` tracks the original request address, type, and destination.
+- Each HN-F maintains independent retry state per requester.
+
+A subtle point: the retried request must be the EXACT same message. The RN-F cannot
+change the request type or data. This ensures the protocol state machine remains
+consistent. The HN-F knows it's a retry, not a new request.
+
+Deadlock prevention: Without retry, the HN-F would need infinite buffers or would
+deadlock when all buffers fill. Retry provides backpressure without deadlock because
+the PCrdGrant breaks the dependency cycle.
+
+In practice, retries are rare in well-provisioned systems but critical for correctness
+under load spikes — exactly when you need the protocol to not crash.
+-->
+
+---
+
+<!-- ================================================================== -->
+<!-- SLIDE 16: Clusivity -->
+<!-- ================================================================== -->
+
+## Clusivity — Controlling Cache Inclusion
+
+<div class="columns">
+<div>
+
+**Clusivity modes** (configured per controller):
+
+| Mode | Behavior | Example |
+|------|----------|---------|
+| **Strict Inclusive** | All L1 lines must be in L2 | `alloc_on_* = all, dealloc = none` |
+| **Mostly Inclusive** | Allocate on read, not on write | Default gem5 L2 config |
+| **Exclusive** | L1 and L2 never share a line | `dealloc_on_unique = true` |
+| **Non-Inclusive** | No guarantee either way | Custom tuning |
+
+</div>
+<div>
+
+**gem5 clusivity parameters:**
+
+| Parameter | Meaning |
+|-----------|---------|
+| `alloc_on_readshared` | Allocate entry on ReadShared |
+| `alloc_on_readunique` | Allocate entry on ReadUnique |
+| `alloc_on_readonce` | Allocate entry on ReadOnce |
+| `alloc_on_writeback` | Allocate entry on WriteBack |
+| `dealloc_on_unique` | Evict when child gets Unique |
+| `dealloc_on_shared` | Evict when child gets Shared |
+
+**Trade-off**: Inclusive = simpler snoop filtering, more capacity waste. Exclusive = full capacity utilization, complex back-invalidation.
+
+</div>
+</div>
+
+<!-- Speaker Notes:
+Clusivity — whether a cache level is inclusive, exclusive, or non-inclusive with respect
+to the level below it — is one of the most important configuration decisions in a cache
+hierarchy.
+
+Strict inclusive means every line in L1 must also be in L2. When L2 evicts a line, it
+must invalidate the corresponding L1 entry (back-invalidaton). The advantage: when a
+snoop arrives at L2, if L2 doesn't have the line, neither does L1, so no need to snoop
+L1. This is a snoop filter.
+
+Exclusive means L1 and L2 never hold the same line simultaneously. When a line is
+allocated in L1, it is removed from L2. The advantage: total effective cache capacity
+is L1_size + L2_size, not just L2_size. The disadvantage: every snoop must check L1
+because L2 doesn't track L1's contents.
+
+Non-inclusive means no guarantees. The cache can choose to allocate or not based on
+dynamic criteria.
+
+In gem5's CHI implementation, clusivity is controlled by a set of boolean parameters:
+- alloc_on_readshared, alloc_on_readunique, etc.: These control when the cache allocates
+  a directory entry for a transaction. If alloc_on_readshared is true, the cache will
+  keep a copy of the line when a ReadShared is processed.
+- dealloc_on_unique, dealloc_on_shared: These control when the cache evicts a line
+  because its child cache (downstream) has obtained the line. If dealloc_on_unique is
+  true and the L1 gets Unique access, the L2 drops its copy.
+
+The default gem5 CHI HN-F configuration uses "mostly inclusive for shared, exclusive for
+unique": alloc_on_readshared=True, alloc_on_readunique=True, dealloc_on_unique=True.
+This means the LLC keeps copies of shared data (for snoop filtering) but drops copies
+when a core gets exclusive ownership (to save capacity).
+
+This is a pragmatic compromise. Shared reads are the common case, so the snoop filter
+works most of the time. Writes are less common, and giving the LLC capacity back when
+a core is actively writing to a line improves performance.
+
+The clusivity parameters interact with the upstream tracking states we discussed earlier.
+When dealloc_on_unique is true, the HN-F transitions to RU or RSC states instead of
+keeping the line in a local state.
+-->
+
+---
+
+<!-- ================================================================== -->
+<!-- SLIDE 17: DVM - Distributed Virtual Memory -->
+<!-- ================================================================== -->
+
+## DVM — Distributed Virtual Memory Operations
+
+<div class="columns">
+<div>
+
+```mermaid
+sequenceDiagram
+    participant R1 as RN-F 1<br/>(initiator)
+    participant MN as MN<br/>(Misc Node)
+    participant R2 as RN-F 2
+    participant R3 as RN-F 3
+
+    R1->>MN: REQ: DvmTlbi_Initiate
+    MN->>MN: Allocate DVM TBE
+    MN->>R2: SNP: SnpDvmOpNonSync_P1
+    MN->>R3: SNP: SnpDvmOpNonSync_P1
+    R2-->>MN: RSP: Comp
+    R3-->>MN: RSP: Comp
+    MN->>R2: SNP: SnpDvmOpNonSync_P2
+    MN->>R3: SNP: SnpDvmOpNonSync_P2
+    R2-->>MN: RSP: Comp
+    R3-->>MN: RSP: Comp
+    MN-->>R1: RSP: Comp
+    Note right of R1: TLBI complete
+```
+
+</div>
+<div>
+
+**What is DVM?**
+- TLB Invalidation (TLBI) across all cores
+- Page table changes must invalidate stale TLB entries
+- Requires *ordered* delivery to all RN-Fs
+
+**Two-phase snoop:**
+- **P1** (Phase 1): Prepare — RN-F marks TLB entry for invalidation
+- **P2** (Phase 2): Commit — RN-F applies the invalidation
+
+**DVM Sync**: Barrier ensuring all prior TLBIs are visible before proceeding. Required before re-using freed page tables.
+
+**gem5**: `CHI_MNController` handles this via `CHI-dvm-misc-node*.sm`
+
+</div>
+</div>
+
+<!-- Speaker Notes:
+Distributed Virtual Memory operations are CHI's mechanism for maintaining TLB coherence
+across multiple cores. This is essential when an operating system changes page tables.
+
+Consider this scenario: The OS running on core 1 frees a page frame and maps it to a
+different virtual address. Core 2's TLB still has the old mapping. If core 2 accesses
+the old virtual address, it must NOT use the stale TLB entry. DVM ensures all cores
+see the new mapping.
+
+The Misc Node (MN) is the DVM coordinator. When core 1 (RN-F 1) needs to invalidate
+a TLB entry, it sends a DvmTlbi_Initiate request to the MN.
+
+The MN then broadcasts DVM snoops to all RN-Fs. This is done in two phases:
+
+Phase 1 (P1): The MN sends SnpDvmOpNonSync_P1 to each RN-F. This is the "prepare"
+phase. The RN-F identifies the affected TLB entry and marks it as pending invalidation,
+but doesn't actually invalidate yet. The RN-F responds with Comp.
+
+Phase 2 (P2): The MN sends SnpDvmOpNonSync_P2. This is the "commit" phase. The RN-F
+now actually invalidates the TLB entry. After responding with Comp, the entry is gone.
+
+Why two phases? Because some implementations need to quiesce in-flight translations
+before invalidating. Phase 1 says "stop new translations using this entry." Phase 2
+says "now remove it." This ensures no in-flight memory access uses a stale translation.
+
+DVM Sync is a barrier operation. When the OS does a TLB invalidation and then frees
+a page table, it must ensure all cores have completed the invalidation before reusing
+the physical page. DvmSync guarantees this ordering. The MN sends DvmSync snoops,
+waits for all completions, and then confirms to the initiator.
+
+In gem5, the DVM state machine is in CHI-dvm-misc-node.sm (380 lines). The Misc Node
+has its own TBE structure partitioned for sync and non-sync operations. The
+`early_nonsync_comp` parameter allows the MN to complete non-sync operations before
+all P2 responses arrive, improving DVM throughput.
+
+The MN is a unique node type in CHI — it doesn't handle data, only control messages
+for TLB coherence. It's small but critical for virtualized and multi-process workloads.
+-->
+
+---
+
+<!-- ================================================================== -->
+<!-- SLIDE 18: CHI in gem5 — Architecture -->
+<!-- ================================================================== -->
+
+## CHI Implementation in gem5
+
+<div class="columns smaller">
+<div>
+
+**Protocol Source** (`src/mem/ruby/protocol/chi/`)
+
+| File | Lines | Purpose |
+|------|-------|---------|
+| `CHI-msg.sm` | 268 | Message type definitions |
+| `CHI-cache.sm` | 905 | Cache controller states |
+| `CHI-cache-ports.sm` | 490 | Channel ↔ buffer wiring |
+| `CHI-cache-funcs.sm` | 1,532 | Helper functions |
+| `CHI-cache-actions.sm` | 4,157 | Action implementations |
+| `CHI-cache-transitions.sm` | 1,810 | State transition rules |
+| `CHI-mem.sm` | 810 | Memory controller (SN-F) |
+| `CHI-dvm-misc-node*.sm` | ~1,600 | DVM Misc Node |
+| **Total SLICC** | **~11,500** | |
+
+</div>
+<div>
+
+```mermaid
+graph TB
+    subgraph "Ruby Framework"
+        SLICC["SLICC Compiler"]
+        SM["State Machine<br/>(Cache/Memory/MiscNode)"]
+        RB["Ruby MessageBuffers"]
+        NET["Garnet Network"]
+    end
+
+    subgraph "CHI Protocol"
+        MSG["CHI-msg.sm<br/>(Types)"]
+        CA["CHI-cache*.sm<br/>(~9,000 lines)"]
+        MEM["CHI-mem.sm<br/>(SN-F)"]
+        DVM["CHI-dvm*.sm<br/>(MN)"]
+    end
+
+    subgraph "Generic C++ Layer"
+        GC["CHIGenericController<br/>(transport shell)"]
+    end
+
+    MSG --> SLICC
+    CA --> SLICC
+    MEM --> SLICC
+    DVM --> SLICC
+    SLICC --> SM
+    SM --> RB --> NET
+    GC --> RB
+```
+
+</div>
+</div>
+
+<!-- Speaker Notes:
+Let me give you a tour of how CHI is implemented in gem5. This is important if you
+want to modify the protocol or understand its behavior.
+
+The protocol is written in SLICC — a domain-specific language for cache coherence
+state machines. SLICC files have the .sm extension and are compiled by the SLICC
+compiler into C++ code that links with the Ruby framework.
+
+The protocol is split across 13 files totaling about 11,500 lines:
+
+CHI-msg.sm defines all the message types as SLICC structures and enumerations.
+This is the "vocabulary" of the protocol — 44 request types, 18 response types,
+24 data types, and the message structures that carry them.
+
+CHI-cache.sm is the main cache controller. It defines states (I, SC, UC, UD, SD,
+BUSY, etc.), events (request arrivals, snoop arrivals, timeouts), and data
+structures (CacheEntry, DirEntry, TBE).
+
+CHI-cache-actions.sm is the largest file at 4,157 lines. It contains all the
+action code — what to do when a transition fires. Sending messages, allocating
+TBEs, updating directory entries, handling DCT/DMT, etc.
+
+CHI-cache-transitions.sm maps (state, event) pairs to action sequences. This is
+the transition table. Each row says: "when in state X and event Y fires, execute
+actions A, B, C and transition to state Z."
+
+CHI-mem.sm is the memory controller (SN-F) state machine. Much simpler — it
+handles read and write requests from the HN-F.
+
+The CHI-dvm-misc-node files implement the Misc Node for DVM operations.
+
+There's also a C++ layer: CHIGenericController. This is NOT a SLICC machine.
+It's a hand-written C++ abstract class that provides a transport shell — it
+connects four CHI channel ports to the Ruby message buffers and dispatches
+incoming messages to virtual methods. It's used for custom controllers that
+don't use SLICC.
+
+The entire protocol is compiled at build time by SLICC into C++ classes that
+inherit from Ruby's state machine base classes. These classes interact with
+Ruby's MessageBuffers and the Garnet network to move packets through the NoC.
+-->
+
+---
+
+<!-- ================================================================== -->
+<!-- SLIDE 19: Configuring CHI Systems -->
+<!-- ================================================================== -->
+
+## Configuring CHI Systems in gem5
+
+<div class="columns smaller">
+<div>
+
+**Modern stdlib API** (recommended):
+
+```python
+from gem5.components.cachehierarchies.chi import (
+    PrivateL1CacheHierarchy,
+    PrivateL1PrivateL2CacheHierarchy,
+)
+from gem5.components.boards import SimpleBoard
+
+hierarchy = PrivateL1CacheHierarchy()
+board = SimpleBoard(
+    clk_freq="3GHz",
+    processor=processor,
+    memory=memory,
+    cache_hierarchy=hierarchy,
+)
+```
+
+**Legacy Ruby API** (full control):
+
+```python
+from configs.ruby.CHI import create_system
+
+system = create_system(
+    num_rnf=16,          # 16 fully-coherent cores
+    num_hnf=16,          # 16 LLC slices
+    num_snf=2,           # 2 memory controllers
+    topology="CustomMesh",
+    network="garnet",
+    chi_config="rbook_4x4.py",
+)
+```
+
+</div>
+<div>
+
+**Node configuration** (from `CHI_config.py`):
+
+| Node | Key Parameters |
+|------|---------------|
+| **L1 (RN-F)** | MOESI, strict inclusive, 16 TBEs, 4 snoop TBEs |
+| **L2 (RN-F)** | MOESI, strict inclusive, 32 TBEs |
+| **HNF** | `is_HN=True`, DMT+DCT enabled, mostly inclusive |
+| **MN** | 16 DVM TBEs, `early_nonsync_comp` |
+| **SN-F** | Wraps DRAM controller |
+
+**Build & Run:**
+
+```bash
+scons build/RISCV/gem5.opt -j$(nproc)
+./build/RISCV/gem5.opt \
+  configs/example/rbook_mesh_config.py \
+  --num-cpus=16 --topology=CustomMesh
+```
+
+</div>
+</div>
+
+<!-- Speaker Notes:
+Now let's look at how you actually build and run CHI systems in gem5. There are two
+configuration APIs.
+
+The modern stdlib API is the recommended approach. You import cache hierarchy classes
+from gem5.components.cachehierarchies.chi and plug them into a Board. The stdlib handles
+all the wiring — node creation, network setup, address range interleaving. You can be
+running a CHI simulation in about 10 lines of Python.
+
+Two hierarchy types are available: PrivateL1CacheHierarchy gives each core a private
+L1 with a shared directory (HNF). PrivateL1PrivateL2CacheHierarchy adds private L2 caches.
+Both use point-to-point networks by default.
+
+The legacy Ruby API gives you full control over every parameter. You use create_system()
+from configs/ruby/CHI.py and specify the number of each node type, the topology, and
+the network type. This is what the book's 4x4 mesh example uses.
+
+For the 4x4 mesh in the book's final project:
+- 16 RN-Fs (cores with L1 and L2)
+- 16 HN-Fs (LLC slices, each handling 1/16 of the address space)
+- 2 SN-Fs (memory controllers)
+- 1 MN (DVM coordinator)
+- CustomMesh topology with Garnet routers
+
+The key parameters per node type:
+
+L1 controllers use MOESI with strict inclusion. 16 TBEs for in-flight transactions,
+16 replacement TBEs, and 4 snoop TBEs. The low snoop TBE count is fine because
+L1 snoops are rare in a mesh — only the HN-F sends snoops.
+
+L2 controllers have 32 TBEs for their larger transaction window.
+
+HN-F controllers have is_HN=True which enables directory tracking. DMT and DCT
+are enabled by default. Clusivity is "mostly inclusive for shared, exclusive for
+unique."
+
+To build and run: compile for RISC-V, then run the config script. The book's
+rbook_mesh_config.py script sets up the full 16-core mesh.
+
+For testing, there's also tests/gem5/chi_protocol/ which runs CHI across ARM, X86,
+and RISC-V with 1, 2, and 4 cores to validate correctness.
+-->
+
+---
+
+<!-- ================================================================== -->
+<!-- SLIDE 20: Summary & Key Takeaways -->
+<!-- ================================================================== -->
+
+## Summary — What to Remember
+
+<div class="columns">
+<div>
+
+**Five Key Ideas**
+
+1. **Four channels** (REQ/SNP/RSP/DAT) separate concerns and enable parallelism
+2. **Directory at HN-F** targets snoops instead of broadcasting
+3. **DCT + DMT** bypass the home node for latency-critical data paths
+4. **MOESI states** + upstream tracking optimize inclusive hierarchies
+5. **Retry + credits** provide deadlock-free backpressure
+
+</div>
+<div>
+
+```mermaid
+mindmap
+  root((CHI Protocol))
+    Architecture
+      4 Channels
+      6 Node Types
+      Packetized NoC
+    Coherence
+      Directory-based
+      MOESI States
+      DCT / DMT
+    Flow Control
+      RetryAck
+      PCrdGrant
+      Credit-based
+    gem5
+      11,500 lines SLICC
+      Garnet NoC
+      RISC-V / ARM / X86
+```
+
+</div>
+</div>
+
+> **If you remember one thing**: CHI replaces broadcast snooping with targeted directory lookups on four independent channels, enabling scalability to hundreds of cores.
+
+<!-- Speaker Notes:
+Let me close with the five key ideas from this presentation.
+
+First: four channels. This is the architectural foundation. REQ carries requests, SNP
+carries snoops, RSP carries lightweight responses, DAT carries heavy data. They flow
+independently on separate physical links. This separation enables pipelining and
+out-of-order completion that is simply impossible with a shared bus.
+
+Second: directory-based coherence. The HN-F maintains a directory of who has each cache
+line. Snoops are targeted — only sent to nodes that actually have the line. This is the
+fundamental scalability mechanism. A 256-core system does not generate 256 snoop messages
+for every transaction.
+
+Third: direct transfers. DCT lets cache-to-cache data bypass the home node. DMT lets
+memory-to-cache data bypass the home node. These optimizations eliminate the home node
+as a data bottleneck, which is crucial at scale.
+
+Fourth: the state machine is rich but purposeful. MOESI states cover the basic sharing
+semantics. Upstream tracking states optimize inclusive hierarchies. Transient states
+handle in-flight operations safely. Every state exists because it solves a specific
+problem.
+
+Fifth: flow control is deadlock-free by design. The retry mechanism ensures that no
+component needs unbounded buffers. Under load, requests are rejected and retried rather
+than causing deadlock. This is a protocol-level guarantee, not an implementation detail.
+
+In gem5, the CHI protocol is implemented as 11,500 lines of SLICC code compiled into
+C++ state machines. It runs on the Garnet network-on-chip model and supports RISC-V,
+ARM, and X86 ISAs.
+
+If you want to explore further, the book's final project in Chapter 17 walks you through
+building a 4x4 CHI mesh with 16 RISC-V cores, measuring latency, bandwidth, and
+backpressure behavior.
+
+Thank you. Are there any questions?
+-->
+
+---
+
+<!-- ================================================================== -->
+<!-- APPENDIX: Resources -->
+<!-- ================================================================== -->
+
+## Resources & References
+
+**Primary Specification**
+- ARM AMBA 5 CHI Architecture Specification, Issue D
+- `https://developer.arm.com/documentation/ihi0050/latest`
+
+**gem5 Source Code**
+- `src/mem/ruby/protocol/chi/` — Protocol implementation
+- `configs/ruby/CHI.py`, `CHI_config.py` — System configuration
+- `src/python/gem5/components/cachehierarchies/chi/` — Stdlib API
+
+**Book References**
+- *Memory Architecture and NoC Modeling in gem5* — Chapters 12–15
+- `ruby-book/extra/ChiGenericCtrl.md` — CHIGenericController deep dive
+
+**Exercises**
+
+1. Modify the HNF to disable DCT. Measure the latency impact on a 4-core system.
+2. Add a custom snoop type `SnpInvalidateIfClean` and trace its handling.
+3. Build a 4x4 mesh, run the hotspot test, and explain which channels saturate first.
+4. Enable `enable_DMT_early_dealloc` and measure TBE occupancy reduction.
+
+<!-- Speaker Notes:
+This final slide provides resources for further study.
+
+The ARM specification is the definitive reference. All message type names, encoding
+formats, and ordering rules come from this document. The gem5 implementation follows
+Issue D of the specification.
+
+The gem5 source code is the best way to understand the protocol in action. Start with
+CHI-msg.sm to see the message types, then CHI-cache.sm for the state machine structure,
+then CHI-cache-actions.sm for the implementation details.
+
+The book chapters provide a guided walk through the code with diagrams and explanations.
+Chapter 12 covers the protocol structure, Chapter 13 covers system configuration,
+and Chapter 17 is the hands-on final project.
+
+The exercises are designed to force transfer of knowledge — you need to understand
+the protocol well enough to modify it, not just describe it.
+
+Exercise 1: Disabling DCT forces all data through the HN-F. This should increase
+latency for cache-to-cache transfers. Measure the difference and explain why.
+
+Exercise 2: Adding a custom snoop type requires understanding the snoop handling
+actions and transitions. This exercises your knowledge of the state machine.
+
+Exercise 3: The hotspot test targets a single HN-F with many requesters. Which
+channel saturates first and why? This tests your understanding of channel capacity
+and flow control.
+
+Exercise 4: Early deallocation reduces TBE occupancy but adds complexity. Measure
+the occupancy reduction and explain the trade-off.
+
+Thank you for your attention. I'm happy to take questions.
+-->

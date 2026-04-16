@@ -1,9 +1,9 @@
-# Payload Journey: From a RISC-V Load to a Network Flit and DRAM
+# Payload Journey: From a RISC-V Load to a Network Flit and DRAM (CHI)
 
 **Audience:** Engineers studying gem5's Ruby memory system who want to understand
 exactly what data travels through the Garnet network-on-chip and to the memory
-controller — how a CPU instruction becomes protocol messages, then flits, and
-how the directory controller bridges the NoC to DRAM.
+controller — how a CPU instruction becomes CHI protocol messages, then flits, and
+how the CHI Home Node bridges the NoC to DRAM.
 
 ---
 
@@ -14,22 +14,22 @@ how the directory controller bridges the NoC to DRAM.
 3. [Stage 1 — Instruction Execution Creates a Request](#3-stage-1--instruction-execution-creates-a-request)
 4. [Stage 2 — Request Is Wrapped in a Packet](#4-stage-2--request-is-wrapped-in-a-packet)
 5. [Stage 3 — Packet Enters Ruby via the Sequencer](#5-stage-3--packet-enters-ruby-via-the-sequencer)
-6. [Stage 4 — SLICC State Machine Creates a Protocol Message](#6-stage-4--slicc-state-machine-creates-a-protocol-message)
-7. [Protocol Messages in Depth](#7-protocol-messages-in-depth)
+6. [Stage 4 — SLICC State Machine Creates a CHI Message](#6-stage-4--slicc-state-machine-creates-a-chi-message)
+7. [CHI Messages in Depth](#7-chi-messages-in-depth)
 8. [Size Classification: Control vs. Data](#8-size-classification-control-vs-data)
 9. [Stage 5 — Flitization: Messages Become Flits](#9-stage-5--flitization-messages-become-flits)
 10. [What the Router Sees](#10-what-the-router-sees)
 11. [Reassembly at the Destination](#11-reassembly-at-the-destination)
 12. [The Response Path: Flit Back to CPU](#12-the-response-path-flit-back-to-cpu)
-    - [12.5. The Directory-to-Memory-Controller Path](#125-the-directory-to-memory-controller-path)
-13. [Virtual Networks: Traffic Class Separation](#13-virtual-networks-traffic-class-separation)
+    - [12.5. The Home-Node-to-Memory-Controller Path](#125-the-home-node-to-memory-controller-path)
+13. [Virtual Networks: The Four CHI Channels](#13-virtual-networks-the-four-chi-channels)
 14. [Multicast-to-Unicast Conversion](#14-multicast-to-unicast-conversion)
 15. [Serialization and Deserialization (HeteroGarnet)](#15-serialization-and-deserialization-heterogarnet)
 16. [Functional Access: Bypassing the Network](#16-functional-access-bypassing-the-network)
 17. [Statistics: What the NI Measures](#17-statistics-what-the-ni-measures)
-18. [Worked Example: GETX Request (8 Bytes, 1 Flit)](#18-worked-example-getx-request-8-bytes-1-flit)
-19. [Worked Example: Data Response (72 Bytes, 5 Flits)](#19-worked-example-data-response-72-bytes-5-flits)
-20. [Protocol Comparison: Message Types Across Protocols](#20-protocol-comparison-message-types-across-protocols)
+18. [Worked Example: ReadUnique Request (8 Bytes, 1 Flit)](#18-worked-example-readunique-request-8-bytes-1-flit)
+19. [Worked Example: CompData_UC Response (72 Bytes, 5 Flits)](#19-worked-example-compdata_uc-response-72-bytes-5-flits)
+20. [CHI Channel Summary](#20-chi-channel-summary)
 21. [Common Misconceptions](#21-common-misconceptions)
 22. [Key Ideas](#22-key-ideas)
 
@@ -45,12 +45,14 @@ A serialized C++ object?
 Some kind of header plus payload?
 
 And stepping further back: when a RISC-V `lw` instruction executes on a CPU,
-what happens to that load request as it travels through caches, coherence
-controllers, and the network-on-chip?
+what happens to that load request as it travels through caches, CHI
+coherence controllers, and the network-on-chip?
 How many times is it re-packaged, and what is lost at each step?
 
 This chapter answers both questions by tracing the complete path — from
 instruction to flit and back — then zooming into each layer in detail.
+Throughout, we use gem5's CHI (AMBA 5 Coherent Hub Interface) implementation
+as the concrete protocol.
 
 ---
 
@@ -69,10 +71,10 @@ graph LR
     subgraph Ruby["Ruby memory system"]
         B["<b>Request</b><br/><i>Memory operation</i>"]
         C["<b>Packet</b><br/><i>Transport envelope</i>"]
-        D["<b>SLICC Protocol</b><br/><i>Coherence state-machine action</i>"]
+        D["<b>SLICC CHI Cache</b><br/><i>Coherence state-machine action</i>"]
     end
     subgraph Garnet["Garnet NoC"]
-        E["<b>RequestMsg</b><br/>(or Response)<br/><i>Network message</i>"]
+        E["<b>CHIRequestMsg</b><br/>(or CHIResponse/CHIData)<br/><i>CHI channel message</i>"]
         F["<b>flit</b><br/><i>Link timing model</i>"]
     end
 
@@ -89,30 +91,37 @@ Before diving into each stage, here is the summary:
 2. [`Request`](../../src/mem/request.hh#L97) — Memory operation: physical address, size, flags, requestor
 3. [`Packet`](../../src/mem/packet.hh#L294) — Transport envelope: MemCmd, data pointer, SenderState for return routing
 4. [`RubyRequest`](../../src/mem/ruby/slicc_interface/RubyRequest.hh#L61) — Ruby bridge: maps Packet semantics to RubyRequestType, carries Packet back-pointer
-5. [`RequestMsg`](../../src/mem/ruby/protocol/MESI_Two_Level-msg.sm#L66) — Coherence message: GETS/GETX/INV + address + destination; no Packet reference
-6. [`flit`](../../src/mem/ruby/network/garnet/flit.hh#L50) — Network timing unit: carries RequestMsg by pointer, adds routing and VC metadata
+5. [`CHIRequestMsg`](../../src/mem/ruby/protocol/chi/CHI-msg.sm#L103) — CHI channel message: CHIRequestType (ReadShared/ReadUnique/…) + address + transaction ID + destination
+6. [`flit`](../../src/mem/ruby/network/garnet/flit.hh#L50) — Network timing unit: carries CHI message by pointer, adds routing and VC metadata
 
 **The critical insight: the [`Packet`](../../src/mem/packet.hh#L294) never enters the network.**
-The SLICC state machine (boundary ④) is where CPU-world semantics are
-translated into coherence-world semantics.
-Everything the network carries is a coherence message — an address, a type,
-a requestor, and a destination — wrapped in flits for timing-accurate
-transport.
+The CHI cache state machine (boundary ④) is where CPU-world semantics are
+translated into CHI-world semantics.
+Everything the network carries is a CHI channel message — an address, a
+transaction ID, a requestor, and a destination — wrapped in flits for
+timing-accurate transport.
 
-### The Directory-to-Memory Branch
+> **Deep Dive:** CHI's `CHIRequestMsg` is the one protocol message in gem5 that
+> *does* carry a `seqReq` pointer to the original `RequestPtr`
+> ([`CHI-msg.sm:115`](../../src/mem/ruby/protocol/chi/CHI-msg.sm#L115)).
+> This is used for debugging and accAddr propagation, not for network routing —
+> the Packet still stays in the Sequencer's request table, and the network
+> never dereferences `seqReq`.
+
+### The Home-Node-to-Memory Branch
 
 The chain above covers the CPU → NoC path.
-But when a coherence request reaches the **Directory controller** and the data
-is not cached, the directory must fetch from DRAM.
+But when a CHI request reaches the **Home Node (HN)** and the data
+is not cached in the System Level Cache (SLC), the HN must fetch from DRAM.
 This creates a **branch off the main chain** with two additional payload types:
 
 ```mermaid
 graph LR
     subgraph Garnet["Garnet NoC"]
-        A["<b>RequestMsg</b><br/>(GETS)"]
+        A["<b>CHIRequestMsg</b><br/>(ReadShared)"]
         F["<b>flit</b>"]
     end
-    subgraph Dir["Directory controller"]
+    subgraph HN["CHI Home Node / Memory Controller node"]
         B["<b>MemoryMsg</b><br/><i>Memory request</i>"]
         C["<b>Packet</b><br/><i>Re-created</i>"]
     end
@@ -121,17 +130,18 @@ graph LR
     end
 
     F -- "arrive at NI" --> A
-    A -- "⑥ Directory action" --> B
+    A -- "⑥ CHI-mem action" --> B
     B -- "⑦ serviceMemoryQueue" --> C
     C -- "RequestPort" --> D
 ```
 
-The directory acts as a **gateway**: it has MessageBuffers connected to the
-NoC on one side, and a standard `RequestPort` connected directly to `MemCtrl`
-on the other.
-The memory controller is **not** on the Garnet NoC — it sees only `Packet`
+The CHI memory-controller node (the SLICC machine in
+[`CHI-mem.sm`](../../src/mem/ruby/protocol/chi/CHI-mem.sm)) acts as a **gateway**:
+it has MessageBuffers connected to the NoC on one side, and a standard
+`RequestPort` connected directly to `MemCtrl` on the other.
+The DRAM controller is **not** on the Garnet NoC — it sees only `Packet`
 objects, the same interface used by Classic caches.
-See [Section 12.5](#125-the-directory-to-memory-controller-path) for the full
+See [Section 12.5](#125-the-home-node-to-memory-controller-path) for the full
 walkthrough.
 
 ### What Each Conversion Discards and Adds
@@ -144,12 +154,13 @@ and drop what it doesn't (though boundaries ② and ⑤ are lossless wrappers).
 | ① [`StaticInst`](../../src/cpu/static_inst.hh#L88) + [`ExecContext`](../../src/cpu/exec_context.hh#L71) → [`Request`](../../src/mem/request.hh#L97) | Effective address (from registers + immediate), size, access mode | `_requestorId`, `_pc`, `_contextId`, flag encoding | Register operands, instruction encoding, pipeline state |
 | ② [`Request`](../../src/mem/request.hh#L97) → [`Packet`](../../src/mem/packet.hh#L294) | All of Request (by pointer) | `MemCmd`, `data` pointer, `SenderState` stack | Nothing lost — Packet holds `RequestPtr` |
 | ③ [`Packet`](../../src/mem/packet.hh#L294) → [`RubyRequest`](../../src/mem/ruby/slicc_interface/RubyRequest.hh#L61) | Address, size, access type, PC, prefetch | `m_LineAddress` (aligned), `RubyRequestType`, `m_pkt` back-pointer | `MemCmd` mapped to `RubyRequestType` (mostly a rename); SenderState stays in Packet |
-| ④ [`RubyRequest`](../../src/mem/ruby/slicc_interface/RubyRequest.hh#L61) → [`RequestMsg`](../../src/mem/ruby/protocol/MESI_Two_Level-msg.sm#L66) | Address, access mode, prefetch | `CoherenceRequestType`, `Destination`, `Requestor`, `MessageSizeType` | **Packet pointer**, PC, access size, thread context — all stay in Sequencer's request table |
-| ⑤ [`RequestMsg`](../../src/mem/ruby/protocol/MESI_Two_Level-msg.sm#L66) → [`flit`](../../src/mem/ruby/network/garnet/flit.hh#L50) | Entire RequestMsg (by pointer) | `RouteInfo`, `m_vc`, `m_vnet`, `flit_type`, pipeline stage | Nothing lost — flit holds `MsgPtr` |
+| ④ [`RubyRequest`](../../src/mem/ruby/slicc_interface/RubyRequest.hh#L61) → [`CHIRequestMsg`](../../src/mem/ruby/protocol/chi/CHI-msg.sm#L103) | Address, access mode, access size (`accAddr`, `accSize`), `seqReq` pointer | `CHIRequestType` (Load/Store/…), `txnId`, `Destination`, `requestor`, `MessageSizeType` | **Packet pointer**, PC, thread context — retained in Sequencer's request table; the RubyRequest is dequeued after `AllocateTBE_SeqRequest` |
+| ⑤ [`CHIRequestMsg`](../../src/mem/ruby/protocol/chi/CHI-msg.sm#L103) → [`flit`](../../src/mem/ruby/network/garnet/flit.hh#L50) | Entire CHI message (by pointer) | `RouteInfo`, `m_vc`, `m_vnet`, `flit_type`, pipeline stage | Nothing lost — flit holds `MsgPtr` |
 
-The most notable boundary is **④**: this is where the CPU-world information
-(the [`Packet`](../../src/mem/packet.hh#L294), the PC, the thread context) is left behind.
-From this point forward, the network carries only coherence protocol semantics.
+The most notable boundary is **④**: this is where most CPU-world information
+(the [`Packet`](../../src/mem/packet.hh#L294), the PC, the thread context) is
+left behind.
+From this point forward, the network carries only CHI channel semantics.
 
 The rest of this chapter walks through each stage in detail.
 
@@ -290,10 +301,10 @@ Every component — CPU, cache, crossbar, memory controller — speaks `Packet`.
 
 ## 5. Stage 3 — Packet Enters Ruby via the Sequencer
 
-This stage is where the `Packet` crosses the boundary between gem5's generic memory system and Ruby's coherence protocol world.
+This stage is where the `Packet` crosses the boundary between gem5's generic memory system and Ruby's CHI world.
 The `RubyPort` acts as an adapter: it receives the `Packet` from the CPU's port interface (the same interface a Classic cache would use) and hands it to the `Sequencer`, which is Ruby's front door.
-The Sequencer maps the `Packet`'s `MemCmd` to a `RubyRequestType` — for the common cases (`ReadReq` → `LD`, `WriteReq` → `ST`) this is little more than a rename across a subsystem boundary, but `MemCmd` is a much larger enum (~60 values covering writebacks, clean evictions, cache maintenance, and other transport-level operations that never come from the CPU), so the mapping also filters down to just the request types that the SLICC state machines care about (loads, stores, atomics, LL/SC).
-It then creates a `RubyRequest` message and enqueues it into the "mandatory queue" — the `MessageBuffer` that feeds the L1 cache controller's SLICC state machine.
+The Sequencer maps the `Packet`'s `MemCmd` to a `RubyRequestType` — for the common cases (`ReadReq` → `LD`, `WriteReq` → `ST`) this is little more than a rename across a subsystem boundary, but `MemCmd` is a much larger enum (~60 values covering writebacks, clean evictions, cache maintenance, and other transport-level operations that never come from the CPU), so the mapping also filters down to just the request types that the CHI cache state machine cares about (loads, stores, atomics, LL/SC).
+It then creates a `RubyRequest` message and enqueues it into the "mandatory queue" — the `MessageBuffer` that feeds the CHI cache controller's SLICC state machine.
 
 **RubyPort entry** ([`RubyPort.cc:293`](../../src/mem/ruby/system/RubyPort.cc#L293)):
 
@@ -359,7 +370,7 @@ It is a bridge between the Packet world and the SLICC protocol world:
 ```
 
 The `RubyRequest` is enqueued into the **mandatory queue** — a `MessageBuffer`
-that connects the Sequencer to the L1 cache controller's SLICC state machine:
+that connects the Sequencer to the CHI cache controller's SLICC state machine:
 
 ```cpp
 // Sequencer.cc:1172
@@ -375,109 +386,155 @@ m_mandatory_q_ptr->enqueue(msg, clockEdge(), latency, ...);
 
 ---
 
-## 6. Stage 4 — SLICC State Machine Creates a Protocol Message
+## 6. Stage 4 — SLICC State Machine Creates a CHI Message
 
-The L1 cache controller is a SLICC-generated state machine: it receives the `RubyRequest` from the mandatory queue, looks up the cache line's current coherence state, and decides what to do.
-If the line is already present in the right state (e.g., the cache has it in Modified and the CPU wants a store), the request can be satisfied locally with no network traffic at all.
-But on a cache miss, the state machine must ask the rest of the memory system for help by creating a protocol-specific message — a `RequestMsg` for MESI, a `CHIRequestMsg` for CHI — and enqueuing it into a `MessageBuffer` connected to the network.
-This is the boundary where CPU-world information (the `Packet`, the PC, the thread context) is left behind: the `RequestMsg` carries only coherence semantics, and the Sequencer retains everything else for later completion.
+The CHI cache controller is a SLICC-generated state machine
+([`CHI-cache.sm`](../../src/mem/ruby/protocol/chi/CHI-cache.sm)): it receives
+the `RubyRequest` from the mandatory queue, looks up the cache line's current
+coherence state, and decides what to do.
+If the line is already present in the right state (for example, the cache
+has it in UD and the CPU wants a store), the request can be satisfied
+locally with no network traffic at all.
+But on a cache miss, the state machine must ask the rest of the memory system
+for help by creating a CHI request message — a `CHIRequestMsg` — and enqueuing
+it into a `MessageBuffer` connected to the network.
+This is the boundary where most CPU-world information (the `Packet`, the PC,
+the thread context) is left behind: the `CHIRequestMsg` carries only CHI
+semantics, and the Sequencer retains everything else for later completion.
 
-Here is how this looks in MESI_Two_Level.
+### From Mandatory Queue to Internal Ready Queue
 
-**Mandatory queue reception** ([`MESI_Two_Level-L1cache.sm:496`](../../src/mem/ruby/protocol/MESI_Two_Level-L1cache.sm#L496)):
+The CHI cache separates request reception into two stages: a request first
+enters an internal `reqRdy` buffer (with a reserved TBE slot), and only then
+is it turned into an outgoing network message.
+The step from the sequencer's mandatory queue into the internal queue is
+handled by `AllocateTBE_SeqRequest`.
+
+**Mandatory queue reception**
+([`CHI-cache-ports.sm:398`](../../src/mem/ruby/protocol/chi/CHI-cache-ports.sm#L398)):
 
 ```slicc
-in_port(mandatoryQueue_in, RubyRequest, mandatoryQueue, rank = 0) {
-    if (mandatoryQueue_in.isReady(clockEdge())) {
-        peek(mandatoryQueue_in, RubyRequest, block_on="LineAddress") {
-            // Map RubyRequestType → protocol event
-            trigger(mandatory_request_type_to_event(in_msg.Type),
-                    in_msg.LineAddress, ...);
-        }
+in_port(seqInPort, RubyRequest, mandatoryQueue, rank=1) {
+  if (seqInPort.isReady(clockEdge())) {
+    peek(seqInPort, RubyRequest) {
+      trigger(Event:AllocSeqRequest, in_msg.LineAddress,
+              getCacheEntry(in_msg.LineAddress),
+              getCurrentActiveTBE(in_msg.LineAddress));
     }
+  }
 }
 ```
 
-The mapping from `RubyRequestType` to protocol events
-([`MESI_Two_Level-L1cache.sm:288`](../../src/mem/ruby/protocol/MESI_Two_Level-L1cache.sm#L288)):
+**Action `AllocateTBE_SeqRequest`**
+([`CHI-cache-actions.sm:140`](../../src/mem/ruby/protocol/chi/CHI-cache-actions.sm#L140)):
 
 ```slicc
-Event mandatory_request_type_to_event(RubyRequestType type) {
-    if (type == RubyRequestType:LD)          return Event:Load;
-    else if (type == RubyRequestType:IFETCH) return Event:Ifetch;
-    else if (type == RubyRequestType:ST)     return Event:Store;
-    ...
+// Move request to rdy queue
+peek(seqInPort, RubyRequest) {
+  enqueue(reqRdyOutPort, CHIRequestMsg, allocation_latency) {
+    out_msg.addr    := in_msg.LineAddress;
+    out_msg.accAddr := in_msg.PhysicalAddress;
+    out_msg.accSize := in_msg.Size;
+    out_msg.requestor    := machineID;
+    out_msg.fwdRequestor := machineID;
+    out_msg.seqReq       := in_msg.getRequestPtr();
+    out_msg.isSeqReqValid := true;
+    out_msg.txnId := max_outstanding_transactions;
+
+    if ((in_msg.Type == RubyRequestType:LD) ||
+        (in_msg.Type == RubyRequestType:IFETCH)) {
+      out_msg.type := CHIRequestType:Load;
+    } else if (in_msg.Type == RubyRequestType:ST) {
+      if (in_msg.Size == blockSize) {
+        out_msg.type := CHIRequestType:StoreLine;
+      } else {
+        out_msg.type := CHIRequestType:Store;
+      }
+    } else if (in_msg.Type == RubyRequestType:ATOMIC_RETURN) {
+      out_msg.type := CHIRequestType:AtomicLoad;
+    } else if (in_msg.Type == RubyRequestType:ATOMIC_NO_RETURN) {
+      out_msg.type := CHIRequestType:AtomicStore;
+    }
+  }
+}
+seqInPort.dequeue(clockEdge());
+```
+
+Note the subtlety: the CHI cache's internal `CHIRequestType:Load/Store/StoreLine`
+values are *sequencer-facing* and never enter the network.
+They tell the state machine what the CPU originally asked for, so that when
+the transaction eventually completes, the controller knows whether to call
+back a load hit, a store hit, or an atomic.
+
+### From Internal Ready Queue to the Network
+
+A cache miss causes the state machine to issue one of the **CHI request
+types that actually travel on the network** — `ReadShared`, `ReadUnique`,
+`MakeReadUnique`, `CleanUnique`, `WriteBackFull`, etc.
+
+**Action `Send_ReadShared`**
+([`CHI-cache-actions.sm:1553`](../../src/mem/ruby/protocol/chi/CHI-cache-actions.sm#L1553))
+— issued on a clean read miss:
+
+```slicc
+enqueue(reqOutPort, CHIRequestMsg, request_latency) {
+  if (allow_SD) {
+    prepareRequest(tbe, CHIRequestType:ReadShared, out_msg);
+  } else {
+    prepareRequest(tbe, CHIRequestType:ReadNotSharedDirty, out_msg);
+  }
+  out_msg.Destination.add(mapAddressToDownstreamMachine(tbe.addr));
+  out_msg.dataToFwdRequestor := false;
+  allowRequestRetry(tbe, out_msg);
 }
 ```
 
-On a cache miss (e.g., state `I` + event `Load`), the state machine fires the
-`a_issueGETS` action, which creates a **`RequestMsg`** — the actual coherence
-protocol message:
-
-**Action `a_issueGETS`** ([`MESI_Two_Level-L1cache.sm:586`](../../src/mem/ruby/protocol/MESI_Two_Level-L1cache.sm#L586)):
+**Action `Send_ReadUnique`**
+([`CHI-cache-actions.sm:1644`](../../src/mem/ruby/protocol/chi/CHI-cache-actions.sm#L1644))
+— issued on a write miss that needs exclusive ownership:
 
 ```slicc
-action(a_issueGETS, "a", desc="Issue GETS") {
-    peek(mandatoryQueue_in, RubyRequest) {
-        enqueue(requestL1Network_out, RequestMsg, l1_request_latency) {
-            out_msg.addr := address;
-            out_msg.Type := CoherenceRequestType:GETS;
-            out_msg.Requestor := machineID;
-            out_msg.Destination.add(mapAddressToRange(address,
-                MachineType:Directory, ...));
-            out_msg.MessageSize := MessageSizeType:Control;
-            out_msg.Prefetch := in_msg.Prefetch;
-            out_msg.AccessMode := in_msg.AccessMode;
-        }
-    }
-}
-```
-
-Similarly, a store miss fires `b_issueGETX`
-([`MESI_Two_Level-L1cache.sm:657`](../../src/mem/ruby/protocol/MESI_Two_Level-L1cache.sm#L657)):
-
-```slicc
-action(b_issueGETX, "b", desc="Issue GETX") {
-    peek(mandatoryQueue_in, RubyRequest) {
-        enqueue(requestL1Network_out, RequestMsg, l1_request_latency) {
-            out_msg.addr := address;
-            out_msg.Type := CoherenceRequestType:GETX;
-            out_msg.Requestor := machineID;
-            out_msg.Destination.add(mapAddressToRange(address,
-                MachineType:Directory, ...));
-            out_msg.MessageSize := MessageSizeType:Control;
-            ...
-        }
-    }
+enqueue(reqOutPort, CHIRequestMsg, request_latency) {
+  prepareRequest(tbe, CHIRequestType:ReadUnique, out_msg);
+  out_msg.Destination.add(mapAddressToDownstreamMachine(tbe.addr));
+  out_msg.dataToFwdRequestor := false;
+  allowRequestRetry(tbe, out_msg);
 }
 ```
 
 **This is the critical conversion.**
 The `RubyRequest` (which knows about load/store semantics, the original Packet,
-the PC, the access mode) is consumed by the state machine.
-What comes out is a `RequestMsg` — a pure coherence message that knows only
-about addresses, coherence types (GETS/GETX/INV/PUTX), requestor IDs, and
-destinations.
+the PC, the access mode) has been consumed by the sequencer-to-rdy step.
+What eventually leaves the cache is a `CHIRequestMsg` on the `reqOut` channel —
+a pure CHI message that knows only about a cache-line address, a CHI request
+type (ReadShared/ReadUnique/CleanUnique/…), a transaction ID, a requestor ID,
+and a destination.
 
-The `RequestMsg` is enqueued into the `requestL1Network_out` `MessageBuffer`,
+The `CHIRequestMsg` is enqueued into the `reqOut` `MessageBuffer` (vnet 0),
 which is connected to the Garnet `NetworkInterface`.
 
-> **Key point:** The `RequestMsg` does **not** carry a pointer to the original
-> `Packet` or `RubyRequest`.
-> The `Packet` stays in the Sequencer's request table, indexed by address.
-> When the coherence response eventually arrives, the Sequencer looks up the
-> address and completes the original `Packet`.
-> The network never sees the `Packet`.
+> **Key point:** While `CHIRequestMsg` does carry a `seqReq` pointer
+> ([`CHI-msg.sm:115`](../../src/mem/ruby/protocol/chi/CHI-msg.sm#L115)), the
+> network never dereferences it — functional reads on `CHIRequestMsg` always
+> return `false`
+> ([`CHI-msg.sm:131`](../../src/mem/ruby/protocol/chi/CHI-msg.sm#L131)), and
+> routing uses only `Destination` and `MessageSize`.
+> The Packet stays in the Sequencer's request table, indexed by address.
+> When the CHI response eventually arrives and the transaction completes, the
+> Sequencer looks up the address and completes the original `Packet`.
+> The network never sees the `Packet` contents.
 
 ### The Back-Pointer Chain During Network Transit
 
 At any point during network transit, you can follow the pointer chain from
-a flit back to the protocol message, but **not** back to the original Packet:
+a flit back to the CHI message, but the `Packet` is unreachable from the
+network:
 
 ```
-flit.m_msg_ptr ──▶ RequestMsg
+flit.m_msg_ptr ──▶ CHIRequestMsg
                       │
-                      │  (no pointer to Packet or RubyRequest)
+                      │ (carries seqReq pointer but NI never uses it;
+                      │  routing uses only Destination + MessageSize)
                       │
                       ╳  The Packet lives in Sequencer::m_RequestTable,
                          indexed by address, unreachable from the network.
@@ -485,18 +542,24 @@ flit.m_msg_ptr ──▶ RequestMsg
 
 This is by design.
 The network is a **stateless transport** — it doesn't need to know that the
-GETS for address `0x1000` originated from a `lw` instruction at PC `0x8004`
-executed by thread 3.
+ReadUnique for address `0x1000` originated from a `sw` instruction at PC
+`0x8004` executed by thread 3.
 It only needs to move the message from router 0 to router 3 with correct
 timing.
 
 ---
 
-## 7. Protocol Messages in Depth
+## 7. CHI Messages in Depth
 
-Now that we have seen how protocol messages are created, it is worth understanding what they actually look like and how they vary across gem5's coherence protocols.
-Each protocol defines its own concrete message types in SLICC, but they all inherit from a common `Message` base class that provides the minimal interface the network needs.
-This means you can define entirely new protocols with new message formats, and the network will transport them without modification — it never looks beyond the base class interface.
+Now that we have seen how CHI messages are created, it is worth understanding
+what they actually look like.
+CHI defines three concrete `Message` subclasses — one for each of the four
+network channels (REQ and SNP share the same `CHIRequestMsg` structure, just
+enqueued on different vnets).
+All three inherit from the common `Message` base class that provides the
+minimal interface the network needs.
+This means the network transports CHI messages without understanding their
+contents — it only reads the base-class metadata.
 
 ### The Base Class
 
@@ -525,79 +588,136 @@ class Message {
 The key contract: every message knows its **destination** (`NetDest`), its
 **size category** (`MessageSizeType`), and its **virtual network** (`vnet`).
 
-### Protocol-Specific Messages
+### The Three CHI Message Structures
 
-Each coherence protocol defines its own concrete message types in SLICC
-(`.sm` files).
+CHI's SLICC definitions are in
+[`CHI-msg.sm`](../../src/mem/ruby/protocol/chi/CHI-msg.sm).
 The SLICC compiler generates C++ classes that inherit from `Message`.
 
-**MESI_Two_Level** ([`MESI_Two_Level-msg.sm`](../../src/mem/ruby/protocol/MESI_Two_Level-msg.sm))
-defines two message structures:
-
-**RequestMsg** — coherence requests (GETX, GETS, INV, PUTX, etc.):
+**`CHIRequestMsg`** — used on both REQ (vnet 0) and SNP (vnet 1) channels.
+Carries requests and snoops
+([`CHI-msg.sm:103`](../../src/mem/ruby/protocol/chi/CHI-msg.sm#L103)):
 
 ```slicc
-// src/mem/ruby/protocol/MESI_Two_Level-msg.sm, line 66
-structure(RequestMsg, desc="...", interface="Message") {
-  Addr addr,                          // cache line physical address
-  CoherenceRequestType Type,          // GETX, GETS, INV, PUTX, ...
-  RubyAccessMode AccessMode,          // user/supervisor
-  MachineID Requestor,                // who sent this
-  NetDest Destination,                // who receives it
-  MessageSizeType MessageSize,        // Control or Data (size category)
-  DataBlock DataBlk,                  // 64-byte cache line (if PUTX)
-  int Len,
-  bool Dirty,
-  PrefetchBit Prefetch,
+structure(CHIRequestMsg, desc="", interface="Message") {
+  Addr addr,                 // cache line physical address
+  Addr accAddr,              // original access address (Write*Ptl / seq)
+  int  accSize,              // access size (Write*Ptl / seq)
+  CHIRequestType type,       // ReadShared, ReadUnique, SnpUnique, ...
+  MachineID requestor,       // who sent this
+  MachineID fwdRequestor,    // DMT/DCT forward target
+  bool dataToFwdRequestor,
+  bool retToSrc,             // affects whether snoop resp returns data
+  bool allowRetry,           // CHI retry handshake
+  NetDest Destination,
+
+  RequestPtr seqReq,         // optional back-pointer (debug only on the NoC)
+  bool isSeqReqValid,
+
+  bool is_local_pf,
+  bool is_remote_pf,
+
+  WriteMask atomic_op,       // atomic operation wrapper
+
+  bool usesTxnId,            // true if this message uses a transaction ID
+  Addr txnId,                // transaction ID
+  bool ns,                   // NonSecure bit
+  uint8_t lpid,              // logical processor ID
+
+  MessageSizeType MessageSize, default="MessageSizeType_Control";
 }
 ```
 
-**ResponseMsg** — coherence responses (DATA, ACK, INV, UNBLOCK, etc.):
+**`CHIResponseMsg`** — used on the RSP channel (vnet 2).  Carries
+completions, snoop responses, retry acks, and credit grants
+([`CHI-msg.sm:166`](../../src/mem/ruby/protocol/chi/CHI-msg.sm#L166)):
 
 ```slicc
-// src/mem/ruby/protocol/MESI_Two_Level-msg.sm, line 95
-structure(ResponseMsg, desc="...", interface="Message") {
-  Addr addr,                          // cache line physical address
-  CoherenceResponseType Type,         // DATA, DATA_EXCLUSIVE, ACK, INV, ...
-  MachineID Sender,                   // who sent the response
-  NetDest Destination,                // who receives it
-  DataBlock DataBlk,                  // 64-byte cache line (if data response)
-  bool Dirty,
-  int AckCount,                       // number of acks bundled
-  MessageSizeType MessageSize,        // Control or Data
+structure(CHIResponseMsg, desc="", interface="Message") {
+  Addr addr,
+  CHIResponseType type,      // Comp_I/UC/UD_PD, CompAck, DBIDResp,
+                             // SnpResp_*, RetryAck, PCrdGrant, ...
+  MachineID responder,
+  NetDest Destination,
+  bool stale,
+  bool usesTxnId,
+  Addr txnId,
+  Addr dbid,                 // data buffer ID for separated data/resp
+  uint8_t lpid,
+
+  MessageSizeType MessageSize, default="MessageSizeType_Control";
 }
 ```
 
-Notice that both structures carry a `DataBlock DataBlk` field, but not every
-message fills it with meaningful data.
-A GETX request sets `MessageSize = Request_Control` (8 bytes) even though the
-`DataBlock` field exists in the C++ object — the size category determines how
-the network treats the message, not the C++ struct layout.
+**`CHIDataMsg`** — used on the DAT channel (vnet 3).  Carries all payload
+data: completion data, snoop response data, writeback data
+([`CHI-msg.sm:217`](../../src/mem/ruby/protocol/chi/CHI-msg.sm#L217)):
 
-### What Other Protocols Define
+```slicc
+structure(CHIDataMsg, desc="", interface="Message") {
+  Addr addr,
+  CHIDataType type,          // CompData_UC, CompData_UD_PD, CBWrData_*,
+                             // SnpRespData_*, NCBWrData, ...
+  MachineID responder,
+  NetDest Destination,
+  DataBlock dataBlk,         // the bytes of the (partial) cache line
+  WriteMask bitMask,         // which bytes of dataBlk are valid
+  bool usesTxnId,
+  Addr txnId,
 
-Different protocols define different message structures, but they all follow the
-same pattern: fields for address, type enum, sender/destination, data block, and
-a `MessageSizeType`.
+  MessageSizeType MessageSize, default="MessageSizeType_Data";
+}
+```
 
-| Protocol | Message Structures | Notable Fields |
+### Key CHI-Specific Fields
+
+Compared with a minimalist coherence message, CHI adds:
+
+- **Transaction IDs (`txnId`, `usesTxnId`).** Each CHI transaction is
+  identified by a txnId chosen by the requestor.  The ID lets responses
+  reach the right outstanding transaction on the receiver without needing
+  address-based lookup (important for DVM transactions, which have no
+  address, and for partial data transfers that span multiple DAT flits).
+- **Partial data via `WriteMask bitMask`.** A single `CHIDataMsg` may
+  cover only part of a cache line.  The sender sets `bitMask` to the
+  bytes it carries, and the receiver accumulates multiple `CHIDataMsg`s
+  until the line is complete.  Each partial packet's network size still
+  equals `data_msg_size` — this is a modeling choice, see
+  [Section 8](#8-size-classification-control-vs-data).
+- **Separate REQ and SNP channels sharing one structure.** The
+  `CHIRequestType` enum mixes both request-from-requestor types (Read*,
+  Write*, Evict, CleanUnique) and snoop types (Snp*, SnpResp routing).
+  The state machine routes them to different output ports — `reqOutPort`
+  for REQ, `snpOutPort` for SNP — so they land on different vnets even
+  though they share a C++ class.
+
+### What Other Protocols Look Like
+
+| Protocol | Message Structures | CHI Equivalent |
 |----------|-------------------|----------------|
-| **MI_example** ([`MI_example-msg.sm`](../../src/mem/ruby/protocol/MI_example-msg.sm)) | RequestMsg, ResponseMsg, DMARequestMsg, DMAResponseMsg | Simplest; basic invalidation |
-| **MESI_Two_Level** ([`MESI_Two_Level-msg.sm`](../../src/mem/ruby/protocol/MESI_Two_Level-msg.sm)) | RequestMsg, ResponseMsg | Standard two-level hierarchy |
-| **MESI_Three_Level** ([`MESI_Three_Level-msg.sm`](../../src/mem/ruby/protocol/MESI_Three_Level-msg.sm)) | CoherenceMsg | L0-L1 private link message |
-| **MOESI_CMP_token** ([`MOESI_CMP_token-msg.sm`](../../src/mem/ruby/protocol/MOESI_CMP_token-msg.sm)) | PersistentMsg, RequestMsg, ResponseMsg, DMA* | `int Tokens` field for token counting |
-| **CHI** ([`chi/CHI-msg.sm`](../../src/mem/ruby/protocol/chi/CHI-msg.sm)) | CHIRequestMsg, CHIResponseMsg, CHIDataMsg | Transaction IDs, `WriteMask`, partial data |
-| **Garnet_standalone** ([`Garnet_standalone-msg.sm`](../../src/mem/ruby/protocol/Garnet_standalone-msg.sm)) | RequestMsg (type=MSG only) | Synthetic traffic; no real coherence |
+| CHI | **CHIRequestMsg, CHIResponseMsg, CHIDataMsg** | — |
+| Classic coherence protocols (MESI, MOESI, MI) | `RequestMsg` + `ResponseMsg` (sometimes DMA variants) | Fewer vnets, no transaction IDs, `DataBlk` embedded in response |
+
+The rest of this chapter sticks to CHI.
 
 ---
 
 ## 8. Size Classification: Control vs. Data
 
-Before a protocol message can be broken into flits, the network needs to know how large it is — but it does not inspect the message's C++ fields to figure this out.
-Instead, every message carries a `MessageSizeType` tag that the SLICC protocol assigns at creation time.
-Despite a large enum of possible values, they all resolve to just two byte sizes: "control" (~8 bytes) and "data" (~72 bytes).
+Before a CHI message can be broken into flits, the network needs to know how large it is — but it does not inspect the message's C++ fields to figure this out.
+Instead, every CHI message carries a `MessageSizeType` tag that the SLICC protocol assigns at creation time.
+Despite a large enum of possible values, they all resolve to just two byte sizes: "control" (~8 bytes) and "data" (~72 bytes with a 64-byte cache line).
 This is a modeling abstraction: the byte sizes represent what a real NoC would need to transfer on its physical links, not the size of the simulator's C++ objects.
-A `RequestMsg` might occupy hundreds of bytes on the heap (with its `DataBlock` field, vtable pointer, and padding), but the network treats it as 8 bytes because its tag says "control."
+A `CHIDataMsg` might occupy hundreds of bytes on the heap (with its `DataBlock` field, vtable pointer, and padding), but the network treats it as 72 bytes because its tag says "data."
+
+In CHI, the defaults line up naturally:
+
+- `CHIRequestMsg` defaults to `MessageSizeType_Control`
+  ([`CHI-msg.sm:128`](../../src/mem/ruby/protocol/chi/CHI-msg.sm#L128))
+- `CHIResponseMsg` defaults to `MessageSizeType_Control`
+  ([`CHI-msg.sm:178`](../../src/mem/ruby/protocol/chi/CHI-msg.sm#L178))
+- `CHIDataMsg` defaults to `MessageSizeType_Data`
+  ([`CHI-msg.sm:227`](../../src/mem/ruby/protocol/chi/CHI-msg.sm#L227))
 
 ### The MessageSizeType Enum
 
@@ -686,33 +806,49 @@ So with default settings:
 
 | Message Category | Byte Size | What It Represents |
 |------------------|-----------|--------------------|
-| Control | 8 bytes | Address + coherence command overhead |
-| Data | 72 bytes | 64-byte cache line + 8-byte header |
+| Control (CHIRequestMsg, CHIResponseMsg) | 8 bytes | Address + CHI command/header overhead |
+| Data (CHIDataMsg) | 72 bytes | 64-byte cache line + 8-byte header |
 
-> **Deep Dive:** The `data_msg_size` parameter represents only the data
-> *payload*; the constructor adds `control_msg_size` on top to account for
-> the header.
-> This is why a "data message" is 72 bytes, not 64.
-> If you want to model a system with 128-byte cache lines, set
-> `block_size_bytes = 128`, and data messages become 128 + 8 = 136 bytes.
+> **Deep Dive:** CHI also exposes a `data_channel_size` parameter on each node
+> (see [`CHI-cache.sm:116`](../../src/mem/ruby/protocol/chi/CHI-cache.sm#L116)
+> and the default of 32 bytes in
+> [`memory_controller.py:72`](../../src/python/gem5/components/cachehierarchies/chi/nodes/memory_controller.py#L72)).
+> This parameter controls how many **CHIDataMsg packets** the protocol emits
+> per cache line (a 64-byte line with `data_channel_size=32` produces two
+> DAT messages), modeling CHI's beat-granular data channel.  Each of those
+> DAT messages is still tagged `MessageSizeType_Data` and is flitized
+> independently — so a full cache-line transfer is **two 5-flit packets**
+> rather than one 9-flit packet, which changes contention behavior even
+> though the total bandwidth is identical.  This is distinct from
+> `data_msg_size`, which controls the **per-message** flit count.
 
 ---
 
 ## 9. Stage 5 — Flitization: Messages Become Flits
 
-This is the final conversion in the chain, and it is where coherence protocol messages cross into the network timing domain.
-The `NetworkInterface` (NI) sits between each coherence controller and its attached Garnet router — it is the border station where protocol-level `MessageBuffer` queues meet the flit-based network.
-When a protocol message is ready to send, the NI's `flitisizeMessage()` method breaks it into one or more flits based on the message's `MessageSizeType` and the link's flit width.
-The NI also handles VC allocation (stalling if no free VC is available) and route computation (filling in source and destination router IDs).
+This is the final conversion in the chain, and it is where CHI messages cross into the network timing domain.
+The `NetworkInterface` (NI) sits between each CHI controller and its attached Garnet router — it is the border station where `MessageBuffer` queues on each of the four CHI channels meet the flit-based network.
+When a CHI message is ready to send, the NI's `flitisizeMessage()` method breaks it into one or more flits based on the message's `MessageSizeType` and the link's flit width.
+The NI also handles VC allocation (stalling if no free VC is available within the message's vnet) and route computation (filling in source and destination router IDs).
 What may be surprising is what flitization does *not* do — detailed below.
 
 ### Entry Point
 
-When a coherence controller (e.g., L1 cache) wants to send a message, it
+When a CHI controller (e.g., the CHI cache) wants to send a message, it
 enqueues it into a [`MessageBuffer`](../../src/mem/ruby/network/MessageBuffer.hh#L74)
 that is connected to the
 [`NetworkInterface`](../../src/mem/ruby/network/garnet/NetworkInterface.hh#L62)
 (NI).
+Each CHI node has four such MessageBuffers on the `To` side (one per CHI
+channel) and four on the `From` side
+([`CHI-cache.sm:189`](../../src/mem/ruby/protocol/chi/CHI-cache.sm#L189)):
+
+```slicc
+MessageBuffer * reqOut,   network="To", virtual_network="0", vnet_type="none";
+MessageBuffer * snpOut,   network="To", virtual_network="1", vnet_type="none";
+MessageBuffer * rspOut,   network="To", virtual_network="2", vnet_type="none";
+MessageBuffer * datOut,   network="To", virtual_network="3", vnet_type="response";
+```
 
 During `GarnetNetwork::init()` ([`GarnetNetwork.cc:115`](../../src/mem/ruby/network/garnet/GarnetNetwork.cc#L115)),
 each NI is connected to its node's MessageBuffers:
@@ -776,8 +912,8 @@ int num_flits = (int)divCeil(
 ```
 
 With defaults (16-byte flit width):
-- Control message: $\lceil 8 / 16 \rceil = 1$ flit
-- Data message: $\lceil 72 / 16 \rceil = 5$ flits
+- `CHIRequestMsg` / `CHIResponseMsg`: $\lceil 8 / 16 \rceil = 1$ flit
+- `CHIDataMsg`: $\lceil 72 / 16 \rceil = 5$ flits
 
 **Step 2 — Allocate a virtual channel:**
 
@@ -849,22 +985,22 @@ flit::flit(int packet_id, int id, int vc, int vnet, RouteInfo route,
 ```
 
 Every flit in a packet stores `m_msg_ptr` — a `std::shared_ptr<Message>`
-pointing to **the same original message object**.
+pointing to **the same original CHI message object**.
 There is no byte-level serialization.
 The HEAD flit, all BODY flits, and the TAIL flit all hold the same pointer.
 
 **What does this mean?**
 
 - **The flit count is purely a timing model.**
-  A 5-flit data message occupies the link for 5 cycles (at 1 flit/cycle),
+  A 5-flit `CHIDataMsg` occupies the link for 5 cycles (at 1 flit/cycle),
   correctly modeling the serialization latency of pushing 72 bytes through a
   16-byte-wide link.
 - **No actual bytes are copied or packed.**
-  The C++ `Message` object lives on the heap.
+  The C++ `CHIDataMsg` object lives on the heap.
   Flits are lightweight wrappers that point to it.
 - **Only the TAIL flit's pointer matters at the destination.**
   When the last flit arrives, the NI extracts the `MsgPtr` and delivers it to
-  the protocol.
+  the CHI controller.
   The BODY flits' pointers are never used for delivery.
 
 ### Flit Type Assignment
@@ -896,7 +1032,8 @@ From the router's perspective, a flit is an opaque object with metadata:
 │                     flit                             │
 ├──────────────┬───────────────────────────────────────┤
 │ m_type       │ HEAD_, BODY_, TAIL_, or HEAD_TAIL_    │
-│ m_vnet       │ virtual network (e.g. 0=ctrl, 1=data) │
+│ m_vnet       │ virtual network (0=REQ, 1=SNP,        │
+│              │   2=RSP, 3=DAT)                       │
 │ m_vc         │ virtual channel index                 │
 │ m_route      │ RouteInfo {src, dest, hops}           │
 │ m_outport    │ output port (set by RoutingUnit)      │
@@ -916,16 +1053,16 @@ They read only `m_type` (to know if route computation is needed), `m_vnet` and
 `m_vc` (for VC management), `m_route` (for routing), and `m_stage` (for
 pipeline scheduling).
 
-This is a clean separation of concerns: the **protocol** defines what messages
-mean, and the **network** provides timing-accurate transport without
-understanding the payload.
+This is a clean separation of concerns: CHI defines what messages mean, and
+the network provides timing-accurate transport without understanding the
+payload.
 
 ---
 
 ## 11. Reassembly at the Destination
 
 "Reassembly" is a bit of a misnomer — since no byte-level serialization happened during flitization, there are no bytes to reassemble.
-What the destination NI actually does is consume flits one at a time, return credits, and wait for the TAIL flit to deliver the message to the protocol
+What the destination NI actually does is consume flits one at a time, return credits, and wait for the TAIL flit to deliver the CHI message to the protocol
 ([`NetworkInterface.cc:230-282`](../../src/mem/ruby/network/garnet/NetworkInterface.cc#L230)):
 
 ```cpp
@@ -958,7 +1095,8 @@ Key points:
 
 1. **Only TAIL/HEAD_TAIL flits trigger message delivery.**
    The `MsgPtr` is extracted via `get_msg_ptr()` and enqueued into the
-   protocol's `MessageBuffer`.
+   CHI controller's matching inbound `MessageBuffer` (REQ→`reqIn`,
+   SNP→`snpIn`, RSP→`rspIn`, DAT→`datIn`).
 2. **HEAD and BODY flits are consumed for credits and deleted.**
    Their `MsgPtr` is never used — it exists only because every flit in the
    packet shares the same pointer.
@@ -967,8 +1105,8 @@ Key points:
    HEAD/BODY flits send `Credit(vc, false)` — buffer space freed, but VC
    still in use.
 4. **Back-pressure via stall queue.**
-   If the protocol `MessageBuffer` is full when the TAIL arrives, the flit
-   goes into a stall queue.
+   If the CHI controller's `MessageBuffer` is full when the TAIL arrives,
+   the flit goes into a stall queue.
    When the protocol dequeues a message, a callback
    ([`dequeueCallback()`](../../src/mem/ruby/network/garnet/NetworkInterface.cc#L145))
    reschedules the NI to retry ejection next cycle.
@@ -978,26 +1116,29 @@ Key points:
 ## 12. The Response Path: Flit Back to CPU
 
 With the forward path complete, we can now trace the return journey that brings data back to the processor.
-The response path traverses the same payload types in reverse order, but through different code paths and with one crucial addition: the `DataBlock` carrying the actual cache line bytes.
-This section also covers the sub-path through the memory controller when the data is not cached anywhere and must be fetched from DRAM.
+In CHI, the data comes back as one or more `CHIDataMsg` packets on vnet 3 (DAT), followed by a separate `CHIResponseMsg:CompAck` that the requestor sends to close the transaction.
+This section also covers the sub-path through the memory controller node when the Home Node has no cached copy and must fetch from DRAM.
 
 ```
-Directory/L2 SLICC action
+HN (or peer cache) SLICC action Send_CompData
     │
-    │  enqueue(responseNetwork_out, ResponseMsg) with DataBlock + MessageSize:Data
+    │  enqueue(datOutPort, CHIDataMsg) with DataBlock + type=CompData_UC
+    │  (and separately, Send_RespSepData on rspOutPort if split)
     ▼
-ResponseMsg ──▶ NI flitisizeMessage() ──▶ 5 flits (72B / 16B)
+CHIDataMsg ──▶ NI flitisizeMessage() ──▶ 5 flits (72B / 16B) on vnet 3
     │
     │  traverse Garnet routers (5 cycles on each link)
     ▼
-Destination NI ──▶ reassemble ──▶ ResponseMsg delivered to L1 controller
+Destination NI ──▶ reassemble ──▶ CHIDataMsg delivered to requestor's datIn
     │
-    │  L1 SLICC action: write DataBlock into cache, signal completion
+    │  CHI cache action: copy DataBlock into local cache, transition to UC/UD,
+    │  schedule Send_CompAck back to the HN on rspOut
     ▼
-Sequencer::readCallback(address)
+Callback_LoadHit / Callback_StoreHit in CHI cache
     │
-    │  Lookup Packet in request table by address
-    │  Copy data from cache into Packet.data
+    │  Sequencer::readCallback/writeCallback(address, ...)
+    │  Look up Packet in Sequencer's request table by address
+    │  Copy data from local cache line into Packet.data
     ▼
 Packet (with data filled in) ──▶ RubyPort ──▶ CPU
     │
@@ -1006,74 +1147,81 @@ Packet (with data filled in) ──▶ RubyPort ──▶ CPU
 CPU receives read response, writes data to register x5
 ```
 
-The loaded data (the actual cache line bytes) travels inside the `DataBlock`
-field of `ResponseMsg`.
-When the L1 controller stores it in the cache, the Sequencer copies the
+The loaded data (the actual cache line bytes) travels inside the `dataBlk`
+field of `CHIDataMsg`.
+When the CHI cache stores it in the local array, the Sequencer copies the
 relevant bytes from the cache into the Packet's `data` buffer.
 The Packet then travels back to the CPU via the port system, completing the
 original `lw` instruction.
 
-### 12.5. The Directory-to-Memory-Controller Path
+> **Deep Dive:** CHI supports **Direct Memory Transfer (DMT)** — the HN can
+> forward a `ReadNoSnp` downstream with `dataToFwdRequestor=true`, so the
+> memory controller sends `CompData_*` directly to the requestor, bypassing
+> the HN.  See `Send_ReadNoSnpDMT`
+> ([`CHI-cache-actions.sm:1604`](../../src/mem/ruby/protocol/chi/CHI-cache-actions.sm#L1604)).
+> DMT shortens the response path but doesn't change any of the flitization
+> or size-classification logic described above.
 
-The response path above assumed the data was already cached at the L2 or
-directory level.
-When the directory does **not** have a cached copy, it must fetch the cache
-line from DRAM.
+### 12.5. The Home-Node-to-Memory-Controller Path
+
+The response path above assumed the data was already cached (either at the
+Home Node's System Level Cache or at a peer cache that got snooped).
+When the HN does **not** have a cached copy, it must fetch the cache line
+from DRAM.
 This path introduces two additional payload types and exits the NoC entirely.
 
-#### Topology: The Memory Controller Is Not on the NoC
+#### Topology: The DRAM Controller Is Not on the NoC
 
-The directory controller has **two interfaces**:
+The CHI memory-controller node (defined in
+[`CHI-mem.sm`](../../src/mem/ruby/protocol/chi/CHI-mem.sm)) has **two
+interfaces**:
 
 1. **NoC side** — MessageBuffers connected to the Garnet `NetworkInterface`
-   ([`MESI_Two_Level-dir.sm:34-39`](../../src/mem/ruby/protocol/MESI_Two_Level-dir.sm#L34)):
-   `requestToDir`, `responseToDir`, `responseFromDir` carry coherence
-   messages as flits through the network.
+   on the usual four CHI channels (`reqIn`, `snpIn` (unused here), `rspOut`,
+   `datOut`): incoming `CHIRequestMsg` of type `ReadNoSnp`/`WriteNoSnp` and
+   outgoing `CHIDataMsg` and `CHIResponseMsg`.
 2. **Memory side** — MessageBuffers that are **not** connected to the network
-   ([`MESI_Two_Level-dir.sm:41-42`](../../src/mem/ruby/protocol/MESI_Two_Level-dir.sm#L41)):
-   `requestToMemory` and `responseFromMemory` carry
+   (`requestToMemory` and `responseFromMemory`): carry
    [`MemoryMsg`](../../src/mem/ruby/protocol/RubySlicc_MemControl.sm#L65)
    objects, which `AbstractController` converts to `Packet` and sends through
    a direct `RequestPort` to `MemCtrl`.
 
 In configuration
-([`directory.py:53`](../../src/python/gem5/components/cachehierarchies/ruby/caches/mesi_two_level/directory.py#L53)):
+([`memory_controller.py:71`](../../src/python/gem5/components/cachehierarchies/chi/nodes/memory_controller.py#L71)):
 
 ```python
 self.memory_out_port = port   # RequestPort wired directly to MemCtrl
 ```
 
-#### Step 1: Directory Action Creates a MemoryMsg
+#### Step 1: CHI-mem Action Creates a MemoryMsg
 
-When the directory state machine receives a GETS for a line in state I
-(uncached), it transitions through state IM and fires the
-`qf_queueMemoryFetchRequest` action
-([`MESI_Two_Level-dir.sm:313`](../../src/mem/ruby/protocol/MESI_Two_Level-dir.sm#L313)):
+When the memory-node state machine receives a `ReadNoSnp`, it triggers
+`sendMemoryRead`
+([`CHI-mem.sm:566`](../../src/mem/ruby/protocol/chi/CHI-mem.sm#L566)):
 
 ```slicc
-action(qf_queueMemoryFetchRequest, "qf", desc="Queue off-chip fetch request") {
-    peek(requestNetwork_in, RequestMsg) {
-        enqueue(memQueue_out, MemoryMsg, to_mem_ctrl_latency) {
-            out_msg.addr := address;
-            out_msg.Type := MemoryRequestType:MEMORY_READ;
-            out_msg.Sender := in_msg.Requestor;
-            out_msg.MessageSize := MessageSizeType:Request_Control;
-            out_msg.Len := 0;
-        }
-    }
+action(sendMemoryRead, "smr", desc="Send request to memory") {
+  assert(is_valid(tbe));
+  enqueue(memQueue_out, MemoryMsg, to_memory_controller_latency) {
+    out_msg.addr := address;
+    out_msg.Type := MemoryRequestType:MEMORY_READ;
+    out_msg.Sender := tbe.requestor;
+    out_msg.MessageSize := MessageSizeType:Request_Control;
+    out_msg.Len := 0;
+  }
 }
 ```
+
+For writebacks, `sendMemoryWrite`
+([`CHI-mem.sm:577`](../../src/mem/ruby/protocol/chi/CHI-mem.sm#L577)) does the
+same but with `MEMORY_WB` and copies the `DataBlk` from the incoming
+`CHIDataMsg`.
 
 [`MemoryMsg`](../../src/mem/ruby/protocol/RubySlicc_MemControl.sm#L65) is
 defined in SLICC — it carries address, `MemoryRequestType` (MEMORY_READ or
 MEMORY_WB), sender, data block, and size.
-It is much simpler than coherence messages: no destination set, no coherence
-request type, no token count.
-
-For writebacks, `qw_queueMemoryWBRequest`
-([`MESI_Two_Level-dir.sm:325`](../../src/mem/ruby/protocol/MESI_Two_Level-dir.sm#L325))
-does the same but with `MEMORY_WB` and copies the `DataBlk` from the incoming
-`ResponseMsg`.
+It is much simpler than CHI channel messages: no destination set, no CHI
+request type, no transaction ID.
 
 #### Step 2: MemoryMsg → Packet (boundary ⑥–⑦)
 
@@ -1102,10 +1250,11 @@ memoryPort.sendTimingReq(pkt);
 
 This is the **re-entry into gem5's standard port world**.
 The `Packet` sent here is structurally identical to what a Classic cache would
-send to `MemCtrl` — the memory controller has no idea it is connected to Ruby.
+send to `MemCtrl` — the DRAM controller has no idea it is connected to a CHI
+network.
 
-The `SenderState` stashes the original requestor's `MachineID` so the return
-path knows who asked.
+The `SenderState` stashes the original CHI requestor's `MachineID` so the
+return path knows who asked.
 
 #### Step 3: MemCtrl Processes the Request
 
@@ -1138,48 +1287,50 @@ if (pkt->isRead()) {
 memRspQueue->enqueue(msg, ...);
 ```
 
-The `MemoryMsg` is enqueued into `responseFromMemory`, where the directory
-state machine picks it up, transitions to a stable state, and sends a
-`ResponseMsg` with the `DataBlock` back through the Garnet NoC to the
-requesting L1 cache.
+The `MemoryMsg` is enqueued into `responseFromMemory`, where the CHI-mem state
+machine picks it up, transitions to its completion state, and sends one or
+more `CHIDataMsg` (with the fetched `DataBlk`) plus the accompanying
+`CHIResponseMsg:RespSepData` / `Comp_UC` back through the Garnet NoC to the
+requesting CHI cache.
 
-#### Conversion Summary: Directory ↔ Memory Controller
+#### Conversion Summary: CHI-mem ↔ DRAM Controller
 
 | Boundary | From | To | Where |
 |----------|------|----|-------|
-| ⑥ | `RequestMsg` (coherence) | `MemoryMsg` | Directory SLICC action ([`dir.sm:313`](../../src/mem/ruby/protocol/MESI_Two_Level-dir.sm#L313)) |
+| ⑥ | `CHIRequestMsg:ReadNoSnp` | `MemoryMsg` | CHI-mem action ([`CHI-mem.sm:566`](../../src/mem/ruby/protocol/chi/CHI-mem.sm#L566)) |
 | ⑦ | `MemoryMsg` | `Packet` | [`AbstractController::serviceMemoryQueue()`](../../src/mem/ruby/slicc_interface/AbstractController.cc#L265) |
 | ⑦' (return) | `Packet` (DRAM response) | `MemoryMsg` | [`AbstractController::recvTimingResp()`](../../src/mem/ruby/slicc_interface/AbstractController.cc#L377) |
-| ⑥' (return) | `MemoryMsg` (with data) | `ResponseMsg` | Directory SLICC action sends data through NoC |
+| ⑥' (return) | `MemoryMsg` (with data) | `CHIDataMsg` + `CHIResponseMsg` | CHI-mem action sends data/response back through NoC |
 
 ---
 
-## 13. Virtual Networks: Traffic Class Separation
+## 13. Virtual Networks: The Four CHI Channels
 
-Coherence protocols generate several distinct types of traffic — requests, forwarded snoops, responses, data transfers — and mixing them freely on the same network resources can cause head-of-line blocking and, worse, deadlock (a response blocked behind the request it is trying to satisfy).
-Virtual networks (vnets) solve this by giving each traffic class its own logically independent set of resources: separate `MessageBuffer` queues at the endpoints, separate VC pools inside the routers, and separate buffer sizing.
-The vnet assignment happens at message creation time in the SLICC protocol code, and the NI uses it to select the correct VC pool during flitization.
+CHI generates four architecturally distinct classes of traffic — requests, snoops, responses, data — and mixing them freely on the same network resources can cause head-of-line blocking and, worse, deadlock (a response blocked behind the request it is trying to satisfy, or a snoop blocked behind a data transfer).
+The CHI specification pins this down with four named channels (REQ/SNP/RSP/DAT), and gem5's Ruby/Garnet implementation realizes each channel as its own Garnet vnet: separate `MessageBuffer` queues at the endpoints, separate VC pools inside the routers, and separate buffer sizing.
+The vnet assignment is fixed by the CHI cache's MessageBuffer declarations, and the NI uses it to select the correct VC pool during flitization.
 
-### How Vnets Are Assigned
+### The Four CHI Vnets
 
-The coherence protocol assigns the vnet when it enqueues a message.
-Each protocol defines its own vnet mapping.
+For CHI (from
+[`CHI-cache.sm:189-197`](../../src/mem/ruby/protocol/chi/CHI-cache.sm#L189)):
 
-For MESI_Two_Level (3 vnets):
-- **Vnet 0:** Requests (GETX, GETS, PUTX)
-- **Vnet 1:** Forwarded requests (from directory to caches)
-- **Vnet 2:** Responses (DATA, ACK, UNBLOCK)
+| Vnet | CHI Channel | Message Structure | Typical Messages |
+|------|-------------|-------------------|------------------|
+| 0 | REQ | `CHIRequestMsg` | ReadShared, ReadUnique, MakeReadUnique, CleanUnique, Evict, WriteBack*, WriteUnique*, ReadNoSnp |
+| 1 | SNP | `CHIRequestMsg` | SnpShared, SnpUnique, SnpCleanInvalid, SnpOnceFwd, SnpUniqueFwd, SnpDvmOp* |
+| 2 | RSP | `CHIResponseMsg` | Comp_I/UC/UD_PD/SC, CompAck, CompDBIDResp, DBIDResp, RespSepData, RetryAck, PCrdGrant |
+| 3 | DAT | `CHIDataMsg` | CompData_UC/UD_PD/SC/SD_PD, CBWrData_*, NCBWrData, SnpRespData_*, DataSepResp_UC |
 
-For CHI (4 vnets, matching the CHI channel structure):
-- **Vnet 0:** REQ channel (requests)
-- **Vnet 1:** SNP channel (snoops)
-- **Vnet 2:** RSP channel (responses)
-- **Vnet 3:** DAT channel (data transfers)
+Note that REQ and SNP share the same C++ structure (`CHIRequestMsg`) but are
+strictly separated at the vnet level.  The state machine routes REQ traffic
+to `reqOutPort` and SNP traffic to `snpOutPort`, which correspond to vnets
+0 and 1 respectively.
 
 ### Vnet-to-Buffer-Size Mapping
 
-Garnet classifies each vnet as either **control** or **data** based on a string
-tag provided during queue registration.
+Garnet classifies each vnet as either **control** or **data** based on the
+`vnet_type` tag provided in the MessageBuffer declaration.
 In [`GarnetNetwork.cc:81`](../../src/mem/ruby/network/garnet/GarnetNetwork.cc#L81):
 
 ```cpp
@@ -1191,23 +1342,27 @@ for (int i = 0; i < m_virtual_networks; i++) {
 }
 ```
 
+CHI tags only vnet 3 (DAT) as `"response"`; the other three are `"none"`
+([`CHI-cache.sm:192`](../../src/mem/ruby/protocol/chi/CHI-cache.sm#L192)).
 This classification controls buffer depth per VC:
-- `CTRL_VNET_` → `buffers_per_ctrl_vc` (default: 1)
-- `DATA_VNET_` → `buffers_per_data_vc` (default: 4)
+- `CTRL_VNET_` → `buffers_per_ctrl_vc` (default: 1) — REQ, SNP, RSP
+- `DATA_VNET_` → `buffers_per_data_vc` (default: 4) — DAT
 
-Data VCs get deeper buffers because data messages produce more flits per
-packet, and shallow buffers would cause excessive stalling.
+DAT VCs get deeper buffers because `CHIDataMsg` produces more flits per
+packet (5 with defaults), and shallow buffers would cause excessive
+stalling.
 
 ### Vnet-to-VC Mapping
 
 Each vnet gets its own pool of VCs.
-With `vcs_per_vnet = 4` and 3 vnets:
+With `vcs_per_vnet = 4` and CHI's 4 vnets:
 
 ```
-Vnet 0: VCs  0,  1,  2,  3
-Vnet 1: VCs  4,  5,  6,  7
-Vnet 2: VCs  8,  9, 10, 11
-         └── Total: 12 VCs per router port
+Vnet 0 (REQ): VCs  0,  1,  2,  3
+Vnet 1 (SNP): VCs  4,  5,  6,  7
+Vnet 2 (RSP): VCs  8,  9, 10, 11
+Vnet 3 (DAT): VCs 12, 13, 14, 15
+         └── Total: 16 VCs per router port
 ```
 
 The NI maps between them in
@@ -1226,8 +1381,8 @@ int NetworkInterface::get_vnet(int vc) {
 
 ## 14. Multicast-to-Unicast Conversion
 
-Coherence protocols sometimes need to send a single message to multiple destinations — the classic example is a directory sending invalidation messages to all sharers of a cache line.
-The protocol expresses this naturally by adding multiple machine IDs to the message's `NetDest` destination set.
+CHI Home Nodes sometimes need to send a single message to multiple destinations — the classic example is the HN issuing snoop invalidations (`SnpCleanInvalid`, `SnpUnique`) to all sharers of a cache line in one shot.
+The state machine expresses this naturally by adding multiple `MachineID`s to the `CHIRequestMsg.Destination` set.
 But Garnet is a **unicast** network: each flit has exactly one destination router.
 The NI bridges this gap by splitting each multicast message into separate unicast packets, one per destination
 ([`NetworkInterface.cc:394-428`](../../src/mem/ruby/network/garnet/NetworkInterface.cc#L394)):
@@ -1257,9 +1412,9 @@ for (int ctr = 0; ctr < dest_nodes.size(); ctr++) {
 }
 ```
 
-If the message has 4 destinations and each is a control message (1 flit),
-the NI produces 4 separate single-flit packets, each with its own VC, route,
-and cloned message pointer.
+For an HN snooping 4 sharers with `SnpCleanInvalid` (a control message, 1
+flit), the NI produces 4 separate single-flit packets on vnet 1 (SNP), each
+with its own VC, route, and cloned `CHIRequestMsg` pointer.
 
 If the NI runs out of free VCs partway through, it returns `false`, and
 the remaining destinations are retried next cycle (the already-removed
@@ -1269,7 +1424,7 @@ destinations from `NetDest` track partial progress).
 
 ## 15. Serialization and Deserialization (HeteroGarnet)
 
-Real NoC designs sometimes connect components with links of different widths — for example, a wide 32-byte link between a router and a large shared cache, and a narrower 16-byte link between routers in a mesh.
+Real NoC designs sometimes connect components with links of different widths — for example, a wide 32-byte link between a router and the HN's large SLC, and a narrower 16-byte link between routers in a mesh.
 Garnet models this through `NetworkBridge` components that sit between links of different flit widths.
 This feature, known as HeteroGarnet, enables modeling of heterogeneous NoC designs where different parts of the network operate at different bandwidths.
 
@@ -1289,7 +1444,8 @@ flit* flit::serialize(int ser_id, int parts, uint32_t bWidth) {
 }
 ```
 
-A single 32-byte-wide flit becomes two 16-byte-wide flits.
+A single 32-byte-wide flit carrying part of a `CHIDataMsg` becomes two
+16-byte-wide flits.
 The `MsgPtr` is shared — again, no actual byte packing occurs.
 The flit count increases to model the additional serialization cycles.
 
@@ -1303,8 +1459,8 @@ is re-derived from the new ID and size.
 ## 16. Functional Access: Bypassing the Network
 
 Garnet's shared-pointer design has a practical side benefit: it makes functional accesses straightforward.
-Functional accesses are simulator-level operations that bypass the timing model to inspect or modify data that is currently "in flight" through the network — for example, reading a cache line from a response message still traversing the NoC.
-If the data had been serialized into actual bytes spread across multiple flits, functional access would require reassembling the flits first — but since flits are just timing wrappers around a single heap-allocated message, no reassembly is needed.
+Functional accesses are simulator-level operations that bypass the timing model to inspect or modify data that is currently "in flight" through the network — for example, reading a cache line from a `CHIDataMsg` still traversing the NoC.
+If the data had been serialized into actual bytes spread across multiple flits, functional access would require reassembling the flits first — but since flits are just timing wrappers around a single heap-allocated CHI message, no reassembly is needed.
 
 Since flits carry a `MsgPtr`, functional access simply delegates to the
 message ([`flit.cc:128-140`](../../src/mem/ruby/network/garnet/flit.cc#L128)):
@@ -1321,32 +1477,47 @@ bool flit::functionalWrite(Packet *pkt) {
 }
 ```
 
-The message's implementation checks whether the packet address matches.
-For example, `ResponseMsg::functionalRead()` in MESI_Two_Level
-([`MESI_Two_Level-msg.sm:105`](../../src/mem/ruby/protocol/MESI_Two_Level-msg.sm#L105))
-only returns data for DATA-type responses:
+The message's implementation decides whether to return data.
+In CHI, `CHIRequestMsg` and `CHIResponseMsg` always return `false`
+([`CHI-msg.sm:131`](../../src/mem/ruby/protocol/chi/CHI-msg.sm#L131),
+[`CHI-msg.sm:181`](../../src/mem/ruby/protocol/chi/CHI-msg.sm#L181)) —
+they carry no payload.
+Only `CHIDataMsg::functionalRead()`
+([`CHI-msg.sm:229`](../../src/mem/ruby/protocol/chi/CHI-msg.sm#L229)) inspects
+the data:
 
 ```slicc
 bool functionalRead(Packet *pkt) {
-    if (Type == CoherenceResponseType:DATA ||
-        Type == CoherenceResponseType:DATA_EXCLUSIVE ||
-        Type == CoherenceResponseType:MEMORY_DATA) {
-        return testAndRead(addr, DataBlk, pkt);
-    }
+  if (bitMask.isFull()) {
+    return testAndRead(addr, dataBlk, pkt);
+  } else {
     return false;
+  }
 }
 ```
 
-This works precisely *because* the flits carry the original message by
-pointer — the `DataBlock` is still live in memory, accessible through any
-of the flits that reference it.
+The `bitMask.isFull()` check is important: a `CHIDataMsg` may carry only a
+partial cache line (this is how CHI supports beat-granular data transfers
+via `data_channel_size`).  Functional reads succeed only when the message
+happens to carry the full line.
+
+A second, mask-aware overload
+([`CHI-msg.sm:237`](../../src/mem/ruby/protocol/chi/CHI-msg.sm#L237)) handles
+partial-data merging across multiple `CHIDataMsg` packets, accumulating
+bytes into the caller's `WriteMask` until the full line is covered.
+This prioritizes dirty data (e.g., `CompData_UD_PD`, `CBWrData_SD_PD`) so
+that the most up-to-date bytes win.
+
+Functional access works precisely *because* the flits carry the original
+message by pointer — the `DataBlock` is still live in memory, accessible
+through any of the flits that reference it.
 
 ---
 
 ## 17. Statistics: What the NI Measures
 
 Garnet breaks network latency into three distinct components, measured at the destination NI when each flit is consumed.
-These statistics appear in the simulation output under `system.ruby.network` and are useful for diagnosing whether bottlenecks are at injection, in the network fabric, or at ejection.
+These statistics appear in the simulation output under `system.ruby.network` and are useful for diagnosing whether bottlenecks are at injection, in the network fabric, or at ejection.  Because CHI dedicates one vnet to each channel (REQ/SNP/RSP/DAT), the per-vnet counters directly reveal which channel is hot.
 
 When a flit is consumed at the destination NI,
 [`incrementStats()`](../../src/mem/ruby/network/garnet/NetworkInterface.cc#L155)
@@ -1382,26 +1553,26 @@ The three latency components:
            src_queueing          network_delay         dest_queueing
           ◄───────────►  ◄─────────────────────────►  ◄────────────►
   ┌────────┐  ┌─────┐  ┌─────────────────────────────┐  ┌─────┐  ┌─────────┐
-  │Protocol│→ │NI   │→ │  Router → Link → Router →...│→ │NI   │→ │Protocol │
+  │CHI     │→ │NI   │→ │  Router → Link → Router →...│→ │NI   │→ │CHI      │
   │enqueue │  │queue│  │     (hops × pipeline)       │  │eject│  │dequeue  │
   └────────┘  └─────┘  └─────────────────────────────┘  └─────┘  └─────────┘
   msg_time    enqueue_time                           dequeue_time   curTick()
 ```
 
-- **Source queueing delay:** Time the message waited in the protocol
+- **Source queueing delay:** Time the CHI message waited in the outbound
   `MessageBuffer` before the NI could inject it
   (`curTick() - msg_ptr->getTime()` at injection time).
 - **Network delay:** Time from NI injection to NI arrival, minus one cycle
   (the subtracted cycle accounts for the flit's creation cycle).
 - **Destination queueing delay:** Time from flit arrival at destination NI
-  to actual ejection into the protocol buffer
+  to actual ejection into the CHI inbound buffer
   (non-zero if stall queue was involved).
 
 ---
 
-## 18. Worked Example: GETX Request (8 Bytes, 1 Flit)
+## 18. Worked Example: ReadUnique Request (8 Bytes, 1 Flit)
 
-An L1 cache needs exclusive access to address `0x1000`.
+An L1 CHI cache needs exclusive access to address `0x1000`.
 The full path from a `sw` instruction:
 
 **CPU:** `sw x5, 0(x10)` → Request(`_paddr=0x1000, _size=4, _flags=0`)
@@ -1410,26 +1581,32 @@ The full path from a `sw` instruction:
 **Sequencer:** Packet → RubyRequest(`m_Type=ST, m_pkt→Packet`)
 → mandatory queue
 
-**SLICC (state I + event Store):** RubyRequest consumed, fires `b_issueGETX`:
+**CHI cache `AllocateTBE_SeqRequest`:** RubyRequest consumed, CHI message
+with internal type `Store` (or `StoreLine`) placed on `reqRdy` with a reserved
+TBE slot.  After the tag-array read, the state machine determines this is an
+I+Store miss and fires `Send_ReadUnique`:
 
 ```
-RequestMsg {
-    addr = 0x1000,
-    Type = GETX,
-    Requestor = L1Cache-0,
-    Destination = Directory-0,
-    MessageSize = Request_Control,
-    DataBlk = <empty>,
+CHIRequestMsg {
+    addr        = 0x1000,
+    accAddr     = 0x1000,
+    accSize     = 4,
+    type        = CHIRequestType:ReadUnique,
+    requestor   = L1Cache-0,
+    Destination = HNF-0,
+    txnId       = 7,
+    allowRetry  = true,
+    MessageSize = Control,
 }
 ```
 
 **Size classification:**
 
 ```
-MessageSizeType_to_int(Request_Control) = m_control_msg_size = 8 bytes
+MessageSizeType_to_int(Control) = m_control_msg_size = 8 bytes
 ```
 
-**Flitization:**
+**Flitization (enqueued on reqOut, vnet 0):**
 
 ```
 num_flits = ceil(8 / 16) = 1
@@ -1442,183 +1619,211 @@ flit {
     m_packet_id = 42,
     m_id = 0,
     m_type = HEAD_TAIL_,
-    m_vnet = 0,
-    m_vc = 0,
+    m_vnet = 0,                       // REQ channel
+    m_vc = 0,                         // first VC of REQ pool
     m_route = { src_router=0, dest_router=3, vnet=0 },
-    m_msg_ptr = shared_ptr → RequestMsg above,
+    m_msg_ptr = shared_ptr → CHIRequestMsg above,
     m_width = 16,
     msgSize = 8,
 }
 ```
 
 **Router view:**
-The router sees a single HEAD_TAIL flit on vnet 0.
+The router sees a single HEAD_TAIL flit on vnet 0 (REQ).
 It computes the route, allocates a switch, traverses the crossbar and output
 link — all in a few cycles.
-It never inspects the `RequestMsg` inside.
+It never inspects the `CHIRequestMsg` inside.
 
-**Destination NI:**
-The flit arrives, the NI extracts `m_msg_ptr`, enqueues the `RequestMsg` into
-the directory controller's `MessageBuffer`, sends a credit back, deletes the
-flit.
+**Destination NI (at the HN):**
+The flit arrives, the NI extracts `m_msg_ptr`, enqueues the `CHIRequestMsg`
+into the HN's `reqIn` MessageBuffer, sends a credit back, deletes the flit.
 
 ---
 
-## 19. Worked Example: Data Response (72 Bytes, 5 Flits)
+## 19. Worked Example: CompData_UC Response (72 Bytes, 5 Flits)
 
-The L2/directory responds with the cache line for address `0x1000`.
+The HN responds to the ReadUnique from Section 18 with the cache line for
+address `0x1000`, in UC (Unique Clean) state.
 
-**Protocol message:**
+**CHI data message:**
 
 ```
-ResponseMsg {
-    addr = 0x1000,
-    Type = DATA_EXCLUSIVE,
-    Sender = Directory-0,
+CHIDataMsg {
+    addr        = 0x1000,
+    type        = CHIDataType:CompData_UC,
+    responder   = HNF-0,
     Destination = L1Cache-0,
-    DataBlk = <64 bytes of data>,
-    MessageSize = Response_Data,
-    AckCount = 0,
+    dataBlk     = <64 bytes of data>,
+    bitMask     = <full mask: all 64 bytes valid>,
+    txnId       = 7,
+    MessageSize = Data,
 }
 ```
 
 **Size:**
 
 ```
-MessageSizeType_to_int(Response_Data) = m_data_msg_size = 72 bytes
+MessageSizeType_to_int(Data) = m_data_msg_size = 72 bytes
 ```
 
-**Flitization:**
+**Flitization (enqueued on datOut, vnet 3):**
 
 ```
 num_flits = ceil(72 / 16) = 5
 ```
 
-Five flits are created, all pointing to the same `ResponseMsg`:
+Five flits are created, all pointing to the same `CHIDataMsg`:
 
 ```
-Flit 0: HEAD_      m_id=0  m_msg_ptr → ResponseMsg
-Flit 1: BODY_      m_id=1  m_msg_ptr → ResponseMsg  (same pointer)
-Flit 2: BODY_      m_id=2  m_msg_ptr → ResponseMsg  (same pointer)
-Flit 3: BODY_      m_id=3  m_msg_ptr → ResponseMsg  (same pointer)
-Flit 4: TAIL_      m_id=4  m_msg_ptr → ResponseMsg  (same pointer)
+Flit 0: HEAD_      m_id=0  m_msg_ptr → CHIDataMsg
+Flit 1: BODY_      m_id=1  m_msg_ptr → CHIDataMsg  (same pointer)
+Flit 2: BODY_      m_id=2  m_msg_ptr → CHIDataMsg  (same pointer)
+Flit 3: BODY_      m_id=3  m_msg_ptr → CHIDataMsg  (same pointer)
+Flit 4: TAIL_      m_id=4  m_msg_ptr → CHIDataMsg  (same pointer)
 ```
+
+All five flits ride vnet 3 (DAT), which has deeper per-VC buffering
+(`buffers_per_data_vc = 4`) than the other three CHI channels.
 
 **At the destination NI:**
 
 - Flits 0-3 (HEAD + BODY): each returns a credit, is deleted.
   The `MsgPtr` reference count stays alive because Flit 4 still holds it.
-- Flit 4 (TAIL): the NI calls `outNode_ptr[vnet]->enqueue(t_flit->get_msg_ptr(), ...)`
-  to deliver the `ResponseMsg` to the L1 cache controller.
+- Flit 4 (TAIL): the NI calls `outNode_ptr[3]->enqueue(t_flit->get_msg_ptr(), ...)`
+  to deliver the `CHIDataMsg` to the L1 CHI cache's `datIn` buffer.
   A credit with `is_free_signal = true` is sent back.
   The flit is deleted.
 
 The 5-flit transmission correctly models that a 72-byte message takes 5 cycles
 to traverse a 16-byte-wide link.
 But the "data" was never serialized into bytes — the `DataBlock` lived in the
-`ResponseMsg` object on the heap the entire time.
+`CHIDataMsg` object on the heap the entire time.
 
-**Back at the CPU:**
-The L1 controller writes the DataBlock into the cache, signals the Sequencer.
+**Completing the transaction:**
+The L1 CHI cache writes the DataBlock into the cache, updates the line's
+state to UD (after the first write), and schedules `Send_CompAck` — a
+1-flit `CHIResponseMsg:CompAck` on vnet 2 back to the HN, closing the
+transaction from the requestor's side.
+The cache then fires `Callback_StoreHit`, which calls
+`Sequencer::writeCallback`.
 The Sequencer looks up address `0x1000` in its request table, finds the
-original `Packet`, copies 4 bytes from the cache line into `Packet.data`,
-and sends the Packet back through RubyPort to the CPU.
-The CPU writes the loaded value into register `x5`.
+original `Packet`, copies the store data from `x5` into the cache line (and
+into `Packet.data`), and sends the Packet back through RubyPort to the CPU.
+The CPU retires the `sw` instruction.
+
+> **Deep Dive:** If `data_channel_size < blockSize` (e.g., 32 vs. 64), the
+> HN instead sends **two** `CHIDataMsg` packets — each 5 flits, each tagged
+> `MessageSize_Data`, each with `bitMask` covering 32 bytes — plus one
+> `RespSepData` on RSP.  Total link occupancy is 2×5 = 10 DAT flits
+> rather than one 9-flit packet: more independent packets, more VC/contention
+> opportunities, but the same aggregate byte count.
 
 ---
 
-## 20. Protocol Comparison: Message Types Across Protocols
+## 20. CHI Channel Summary
 
-| Protocol | Vnets | Control Messages | Data Messages | Key Difference |
-|----------|-------|-----------------|---------------|----------------|
-| MI_example | 5 | GETX, GETS, INV, WB_ACK, WB_NACK | PUTX, DATA, DATA_EXCLUSIVE, WRITEBACK | Simplest; DMA on separate vnets |
-| MESI_Two_Level | 3 | GETX, GETS, INV, UPGRADE, ACK, UNBLOCK | DATA, DATA_EXCLUSIVE, MEMORY_DATA, WRITEBACK | Standard two-level cache hierarchy |
-| MESI_Three_Level | 3 | GETX, GETS, INV, ACK, NAK, FLUSH | DATA, DATA_EXCLUSIVE, PUTX | Adds L0-L1 `CoherenceMsg` |
-| MOESI_CMP_token | 6 | GETX, GETS, PERSISTENT, ACK | DATA_OWNER, DATA_SHARED, WB_* | `int Tokens` field; starvation prevention |
-| CHI | 4 | ReadShared, ReadUnique, SnpClean*, Comp*, RetryAck | CompData_*, CBWrData_*, SnpRespData_* | Transaction IDs, partial data via WriteMask |
-| Garnet_standalone | 3 | MSG (single type) | — | Synthetic traffic; no real coherence logic |
+| Vnet | Channel | Message C++ Type | Control or Data | Typical Payload |
+|------|---------|------------------|-----------------|-----------------|
+| 0 | REQ | `CHIRequestMsg` | Control (8 B, 1 flit) | ReadShared, ReadUnique, MakeReadUnique, CleanUnique, Evict, WriteBackFull, WriteCleanFull, WriteEvictFull, WriteUniquePtl/Full/Zero, ReadOnce, ReadNoSnp, ReadNoSnpSep, AtomicLoad/Store/Return, StashOnce* |
+| 1 | SNP | `CHIRequestMsg` | Control (8 B, 1 flit) | SnpShared, SnpUnique, SnpCleanInvalid, SnpOnce, Snp*Fwd, SnpDvmOp* |
+| 2 | RSP | `CHIResponseMsg` | Control (8 B, 1 flit) | Comp_I/UC/UD_PD/SC, CompAck, CompDBIDResp, DBIDResp, RespSepData, ReadReceipt, SnpResp_*, RetryAck, PCrdGrant |
+| 3 | DAT | `CHIDataMsg` | Data (72 B, 5 flits) | CompData_UC/UD_PD/SC/SD_PD/I, DataSepResp_UC, CBWrData_*, NCBWrData, SnpRespData_* |
 
-Despite their differences, every protocol follows the same pattern:
+Key CHI traits:
 
-1. Define message structures inheriting from `Message`
-2. Tag each with a `MessageSizeType` (Control or Data)
-3. Assign to a vnet when sending
-4. The network treats them identically — opaque payloads with size tags
+1. Message structures inherit from `Message`.
+2. Each is tagged with a `MessageSizeType` (Control or Data).
+3. Outgoing direction fixed by the port the state machine enqueues on
+   (`reqOutPort` → vnet 0, `snpOutPort` → vnet 1, etc.).
+4. The network treats all four channels identically at the flit level —
+   opaque payloads with size tags — but gives DAT deeper VC buffering.
 
 ---
 
 ## 21. Common Misconceptions
 
 **"Flits contain serialized cache line bytes."**
-No. Flits contain a `shared_ptr<Message>` to the original C++ object.
+No. Flits contain a `shared_ptr<Message>` to the original C++ CHI message.
 The flit count models serialization delay, but no byte packing occurs.
 All flits in a packet point to the same message.
 
 **"BODY flits carry different parts of the cache line."**
-No. Every flit in a packet carries the same `MsgPtr`.
+No. Every flit in a CHI data packet carries the same `MsgPtr` to the one
+`CHIDataMsg` object.
 BODY flits exist to occupy link bandwidth for the correct number of cycles.
 Only the TAIL flit's pointer is used for message delivery.
 
-**"The router inspects the message to make routing decisions."**
+**"The router inspects the CHI message to make routing decisions."**
 No. The router reads only flit-level metadata (`m_route`, `m_vnet`, `m_vc`,
 `m_type`).
 The `RoutingUnit` uses `RouteInfo.dest_router` or `RouteInfo.net_dest` — both
-set by the NI during flitization — not anything inside the `Message`.
+set by the NI during flitization — not anything inside the `CHIRequestMsg` or
+`CHIDataMsg`.
 
 **"Control messages and data messages use different flit formats."**
-No. The `flit` class is the same for both.
+No. The `flit` class is the same for all four CHI channels.
 The only difference is *how many flits* the NI creates: 1 for an 8-byte
-control message vs. 5 for a 72-byte data message (with default parameters).
+`CHIRequestMsg`/`CHIResponseMsg` vs. 5 for a 72-byte `CHIDataMsg` (with
+default parameters).
 
 **"Multicast is handled by the routers."**
 No. Garnet routers handle only unicast.
-The source NI splits multicast messages into separate unicast packets, each
-with its own cloned message, VC, and route.
+The source NI splits multicast CHI messages (e.g., a snoop to multiple
+sharers) into separate unicast packets, each with its own cloned
+`CHIRequestMsg`, VC, and route.
 
 **"The CPU's Packet travels through the network."**
 No. The Packet stays in the Sequencer's request table.
-The SLICC state machine creates a fresh `RequestMsg` with only coherence
-semantics — no Packet pointer, no PC, no thread context.
-The network never sees the Packet.
+The CHI cache state machine creates a fresh `CHIRequestMsg` whose only
+link back to CPU-world is a `seqReq` pointer that the network never
+dereferences — routing uses `Destination`, `MessageSize`, and transaction
+ID only.
+
+**"REQ and SNP are the same channel because they use `CHIRequestMsg`."**
+No. They share a C++ structure but use different vnets (0 vs. 1) and
+different physical MessageBuffers (`reqOut` vs. `snpOut`).  A snoop never
+head-of-line-blocks behind a pending request (or vice versa).
 
 ---
 
 ## 22. Key Ideas
 
 1. **Six payload types span CPU to network.**
-   StaticInst → Request → Packet → RubyRequest → RequestMsg → flit.
+   StaticInst → Request → Packet → RubyRequest → CHIRequestMsg → flit.
    Each conversion keeps what the next layer needs and drops the rest.
 
 2. **The Packet never enters the network.**
-   The SLICC state machine is the boundary where CPU-world information
+   The CHI cache state machine is the boundary where CPU-world information
    (Packet, PC, thread context) is left behind.
-   The network carries only coherence semantics (GETS/GETX + address + destination).
+   The network carries only CHI semantics (ReadShared/ReadUnique/…, address,
+   transaction ID, destination).
    The Sequencer retains the Packet for completion when the response returns.
 
 3. **Garnet is a timing model, not a data-movement model.**
-   Flits carry shared pointers to protocol messages, not serialized bytes.
+   Flits carry shared pointers to CHI messages, not serialized bytes.
 
-4. **Messages come from SLICC protocols.**
-   Each protocol defines its own message structures (RequestMsg, ResponseMsg,
-   etc.) with fields for address, type, sender, destination, and data block.
+4. **CHI uses three concrete message classes on four vnets.**
+   `CHIRequestMsg` on REQ (vnet 0) and SNP (vnet 1), `CHIResponseMsg` on
+   RSP (vnet 2), `CHIDataMsg` on DAT (vnet 3).
 
 5. **Size classification is coarse-grained.**
-   Every message is tagged as either Control (~8 bytes) or Data (~72 bytes).
-   This tag determines flit count.
+   Every CHI message is tagged as either Control (~8 bytes) or Data
+   (~72 bytes).  This tag determines flit count.
 
 6. **The NI is the protocol-network boundary.**
-   The NetworkInterface converts protocol messages to flits (flitization) and
+   The NetworkInterface converts CHI messages to flits (flitization) and
    flits back to messages (reassembly).
    Everything between two NIs — routers, links, credits — operates on flits
    without understanding the payload.
 
-7. **Virtual networks separate traffic classes.**
-   Each protocol assigns messages to vnets.
-   Each vnet gets its own VC pool and buffer sizing.
-   This prevents deadlock and head-of-line blocking between traffic classes.
+7. **The four CHI vnets separate traffic classes.**
+   REQ/SNP/RSP/DAT each get their own VC pool and buffer sizing.  DAT gets
+   deeper buffers (4 vs. 1) to match its 5-flit packets.
+   This prevents deadlock and head-of-line blocking between CHI channels.
 
 8. **Only the TAIL flit delivers the message.**
    HEAD and BODY flits are consumed for credits and discarded.
-   The TAIL flit's `MsgPtr` is enqueued into the destination protocol buffer.
+   The TAIL flit's `MsgPtr` is enqueued into the destination CHI channel's
+   inbound buffer.
 
 ---
