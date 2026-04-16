@@ -1,115 +1,25 @@
 ---
 marp: true
-theme: default
+theme: gem5-chi
 paginate: true
 size: 16:9
-style: |
-  section {
-    font-size: 22px;
-    padding: 30px 50px;
-  }
-  h1 {
-    font-size: 36px;
-    text-align: center;
-    margin-top: 120px;
-  }
-  h2 {
-    font-size: 30px;
-    color: #1a5276;
-    border-bottom: 3px solid #2980b9;
-    padding-bottom: 8px;
-    margin-bottom: 20px;
-  }
-  h3 {
-    font-size: 24px;
-    color: #2c3e50;
-  }
-  table {
-    font-size: 17px;
-    width: 100%;
-    border-collapse: collapse;
-    margin: 10px 0;
-  }
-  th {
-    background-color: #2980b9;
-    color: white;
-    padding: 6px 10px;
-    text-align: left;
-  }
-  td {
-    padding: 5px 10px;
-    border: 1px solid #bdc3c7;
-  }
-  tr:nth-child(even) {
-    background-color: #eaf2f8;
-  }
-  code {
-    font-size: 16px;
-    background-color: #f0f0f0;
-    padding: 1px 4px;
-    border-radius: 3px;
-  }
-  pre {
-    font-size: 14px;
-    background-color: #2c3e50;
-    color: #ecf0f1;
-    border-radius: 6px;
-    padding: 12px;
-  }
-  img {
-    max-width: 100%;
-    max-height: 540px;
-    width: auto;
-    height: auto;
-    object-fit: contain;
-  }
-  .columns img {
-    max-height: 250px;
-  }
-  .columns {
-    display: flex;
-    gap: 30px;
-    align-items: flex-start;
-  }
-  .columns > div {
-    flex: 1;
-    min-width: 0;
-  }
-  .smaller {
-    font-size: 18px;
-  }
-  .key {
-    background-color: #f9e79f;
-    padding: 2px 6px;
-    border-radius: 3px;
-    font-weight: bold;
-  }
-  .note {
-    font-size: 16px;
-    color: #7f8c8d;
-    font-style: italic;
-  }
-  blockquote {
-    border-left: 4px solid #e74c3c;
-    background: #fdedec;
-    padding: 8px 15px;
-    margin: 10px 0;
-    font-size: 18px;
-  }
 ---
 
 <!-- ================================================================== -->
 <!-- SLIDE 1: Title -->
 <!-- ================================================================== -->
 
+<!-- _class: hero -->
+<!-- _paginate: false -->
+
 # AMBA 5 CHI Protocol
-## Coherent Hub Interface — Architecture & gem5 Modeling
+## Coherent Hub Interface for scalable coherence and gem5 modeling
 
 **Memory Architecture and NoC Modeling in gem5**
 
-_Third-party marks are the property of their respective owners. ARM and AMBA are trademarks of Arm Limited._
+<p class="note">Third-party marks are the property of their respective owners. ARM and AMBA are trademarks of Arm Limited.</p>
 
-![bg right:30% 80%](chi_logo.svg)
+![bg right:34% 78%](chi_logo.svg)
 
 <!-- Speaker Notes:
 Welcome everyone. Today we are diving into the AMBA 5 CHI protocol — the Coherent Hub Interface.
@@ -213,21 +123,39 @@ home node, and the home node talks to memory. Every link is independent and pipe
 
 ## CHI in the AMBA Family
 
-| Protocol | Topology | Coherence | Target Scale |
-|----------|----------|-----------|-------------|
-| **AXI** | Point-to-point | None | Single master per link |
-| **ACE** | Shared bus | Snoop-based | 2–8 cores |
-| **ACE-Lite** | Point-to-point | One-way snoop | I/O coherency |
-| **CHI** | Packetized NoC | Directory + Snoop | 16–256+ cores |
+<div class="comparison-grid smaller">
+<div class="card compact accent-blue">
+<p class="eyebrow">AXI</p>
+<h3>Point-to-point baseline</h3>
+<p>No coherence, minimal semantics, and one master-slave link at a time.</p>
+<span class="pill neutral">Single link scale</span>
+</div>
+<div class="card compact accent-gold">
+<p class="eyebrow">ACE</p>
+<h3>Shared-bus coherence</h3>
+<p>Snoop-based and easy to reason about, but every transaction leans on one shared fabric.</p>
+<span class="pill neutral">2-8 cores</span>
+</div>
+<div class="card compact accent-teal">
+<p class="eyebrow">ACE-Lite</p>
+<h3>I/O coherency edge case</h3>
+<p>Useful when devices participate in coherence without becoming full cache peers.</p>
+<span class="pill neutral">Peripheral focused</span>
+</div>
+<div class="card compact accent-violet">
+<p class="eyebrow">CHI</p>
+<h3>NoC-native coherence</h3>
+<p>Packetized channels, targeted snoops, and credit flow control for large meshes.</p>
+<span class="pill req">REQ</span>
+<span class="pill.snp">SNP</span>
+<span class="pill.rsp">RSP</span>
+<span class="pill.dat">DAT</span>
+</div>
+</div>
 
-<br>
-
-**CHI is the convergence point** — it subsumes ACE functionality with a scalable architecture:
-
-- 4 independent channels: **REQ**, **SNP**, **RSP**, **DAT**
-- Separate data and response paths allow non-blocking operation
-- Credit-based flow control replaces bus arbitration
-- Designed for mesh, ring, and crossbar topologies
+<div class="takeaway">
+<p><strong>Why CHI feels different:</strong> it keeps ACE-style functionality, but moves it onto transport lanes and directory lookups that scale with a packet network.</p>
+</div>
 
 <!-- Speaker Notes:
 This slide places CHI in context. If you have worked with ARM SoCs before, you likely know AXI and ACE.
@@ -264,14 +192,44 @@ CHI is like a messaging system where you send targeted messages on dedicated lan
 <div class="columns">
 <div>
 
-| Node | Role | gem5 Class |
-|------|------|------------|
-| **RN-F** | Fully-coherent Requester | `CHI_RNF` |
-| **RN-I** | I/O Requester | `CHI_RNI_IO` |
-| **RN-D** | DMA Requester | `CHI_RNI_DMA` |
-| **HN-F** | Fully-coherent Home | `CHI_HNF` |
-| **MN** | Misc Node (DVM) | `CHI_MN` |
-| **SN-F** | Fully-coherent Slave | `CHI_SNF_MainMem` |
+<div class="card-grid two smaller">
+<div class="card compact accent-blue">
+<p class="eyebrow">RN-F</p>
+<h3>Fully coherent requester</h3>
+<p>CPU-side node with private caches and full snoop participation.</p>
+<p><code>CHI_RNF</code></p>
+</div>
+<div class="card compact accent-teal">
+<p class="eyebrow">RN-I</p>
+<h3>I/O requester</h3>
+<p>Peripheral-side access path that needs protocol awareness without full caching.</p>
+<p><code>CHI_RNI_IO</code></p>
+</div>
+<div class="card compact accent-gold">
+<p class="eyebrow">RN-D</p>
+<h3>DMA requester</h3>
+<p>Scatter-gather traffic source tuned for data movers rather than CPUs.</p>
+<p><code>CHI_RNI_DMA</code></p>
+</div>
+<div class="card compact accent-violet">
+<p class="eyebrow">HN-F</p>
+<h3>Home + directory slice</h3>
+<p>Serialization point for address ownership, snoop targeting, and optimizations.</p>
+<p><code>CHI_HNF</code></p>
+</div>
+<div class="card compact accent-red">
+<p class="eyebrow">MN</p>
+<h3>Misc node</h3>
+<p>Coordinates DVM and TLB maintenance traffic across the coherent domain.</p>
+<p><code>CHI_MN</code></p>
+</div>
+<div class="card compact accent-green">
+<p class="eyebrow">SN-F</p>
+<h3>Memory-side slave</h3>
+<p>Gateway from CHI requests into DRAM service and memory timing models.</p>
+<p><code>CHI_SNF_MainMem</code></p>
+</div>
+</div>
 
 </div>
 <div>
@@ -342,12 +300,28 @@ middle, memory at the bottom. All communication flows through the four CHI chann
 <div class="columns">
 <div>
 
-| Channel | VNet | Direction | Carries |
-|---------|------|-----------|---------|
-| **REQ** | 0 | RN → HN | ReadShared, WriteUnique, ... |
-| **SNP** | 1 | HN → RN | SnpShared, SnpUnique, ... |
-| **RSP** | 2 | Any → Any | Comp, CompAck, DBIDResp, ... |
-| **DAT** | 3 | Any → Any | CompData, CBWrData, ... |
+<div class="card-grid two smaller">
+<div class="channel-card compact req">
+<p class="eyebrow">REQ · VNet 0</p>
+<h3>Requests</h3>
+<p>RN to HN traffic that starts transactions: <code>ReadShared</code>, <code>WriteUnique</code>, atomics, and maintenance ops.</p>
+</div>
+<div class="channel-card compact snp">
+<p class="eyebrow">SNP · VNet 1</p>
+<h3>Snoops</h3>
+<p>HN to RN probes that invalidate, downgrade, or forward data from existing holders.</p>
+</div>
+<div class="channel-card compact rsp">
+<p class="eyebrow">RSP · VNet 2</p>
+<h3>Lightweight responses</h3>
+<p>Completions, write acknowledgements, retry control, and protocol credits.</p>
+</div>
+<div class="channel-card compact dat">
+<p class="eyebrow">DAT · VNet 3</p>
+<h3>Data payloads</h3>
+<p>Cache-line transfers such as <code>CompData</code>, copybacks, and forwarded snoop data.</p>
+</div>
+</div>
 
 </div>
 <div>
@@ -415,39 +389,33 @@ the NoC as separate flit classes.
 
 ## Message Types at a Glance
 
-<div class="columns smaller">
-<div>
-
-**Request Types** (44 total in gem5)
-
-| Category | Examples |
-|----------|---------|
-| Reads | `ReadShared`, `ReadUnique`, `ReadOnce`, `ReadNotSharedDirty` |
-| Writes | `WriteUniqueFull`, `WriteUniquePtl`, `WriteBackFull`, `WriteCleanFull` |
-| Atomics | `AtomicReturn`, `AtomicNoReturn` |
-| Evictions | `Evict`, `WriteEvictFull` |
-| DVM | `DvmTlbi_Initiate`, `DvmSync_Initiate` |
-
+<div class="card-grid three smaller">
+<div class="card compact accent-blue">
+<p class="eyebrow">44 request types</p>
+<h3>Requests express intent</h3>
+<ul>
+<li>Reads: <code>ReadShared</code>, <code>ReadUnique</code>, <code>ReadOnce</code></li>
+<li>Writes: <code>WriteUniqueFull</code>, <code>WriteBackFull</code></li>
+<li>Maintenance: <code>Evict</code>, DVM initiates, atomics</li>
+</ul>
 </div>
-<div>
-
-**Response Types** (18 total)
-
-| Category | Examples |
-|----------|---------|
-| Completions | `Comp_I`, `Comp_UC`, `Comp_SC`, `Comp_UD_PD` |
-| Write Acks | `DBIDResp`, `CompDBIDResp` |
-| Snoop Resp | `SnpResp_I`, `SnpResp_SC`, `SnpResp_UD_Fwded_I` |
-| Flow Control | `RetryAck`, `PCrdGrant` |
-
-**Data Types** (24 total)
-
-| Category | Examples |
-|----------|---------|
-| Comp+Data | `CompData_I`, `CompData_SC`, `CompData_UD_PD` |
-| Copyback | `CBWrData_UC`, `CBWrData_UD_PD` |
-| Snoop Data | `SnpRespData_*` (12 variants) |
-
+<div class="card compact accent-green">
+<p class="eyebrow">18 response types</p>
+<h3>Responses close control flow</h3>
+<ul>
+<li>Completions: <code>Comp_I</code>, <code>Comp_SC</code>, <code>Comp_UD_PD</code></li>
+<li>Write acknowledgements: <code>DBIDResp</code>, <code>CompDBIDResp</code></li>
+<li>Flow control: <code>RetryAck</code>, <code>PCrdGrant</code></li>
+</ul>
+</div>
+<div class="card compact accent-violet">
+<p class="eyebrow">24 data types</p>
+<h3>Data carries the payload story</h3>
+<ul>
+<li>Completion + data: <code>CompData_SC</code>, <code>CompData_UD_PD</code></li>
+<li>Copyback traffic: <code>CBWrData_*</code></li>
+<li>Snoop-returned data: <code>SnpRespData_*</code> variants</li>
+</ul>
 </div>
 </div>
 
@@ -491,21 +459,40 @@ The others exist for I/O, atomics, DVM, and edge cases.
 
 ## Request Opcodes — Choosing the Right One
 
-<div class="smaller">
-
-| Request | When to Use | Final State | Notes |
-|---------|-------------|-------------|-------|
-| `ReadShared` | Normal load | SC | Most common read |
-| `ReadUnique` | Before store | UC/UD | Get exclusive ownership |
-| `ReadOnce` | Non-allocating read | I | Don't cache the result |
-| `ReadNotSharedDirty` | Read if not SD | SC/UC | Optimized shared read |
-| `CleanUnique` | Have SC, need to write | UC | Upgrade without data |
-| `MakeReadUnique` | Have UC in peer cache | UC | Multi-cast invalidation |
-| `WriteUniqueFull` | Full-line write | UC | Data included in request |
-| `WriteUniquePtl` | Partial-line write | UC | Byte mask included |
-| `WriteBackFull` | Evict dirty line | I | Hand data to HN-F |
-| `Evict` | Evict clean line | I | No data, just notification |
-
+<div class="comparison-grid smaller">
+<div class="card accent-blue">
+<p class="eyebrow">Read path</p>
+<h3>Choose how much ownership you need</h3>
+<ul>
+<li><code>ReadShared</code>: normal load, lands in <code>SC</code></li>
+<li><code>ReadUnique</code>: pre-store fetch, lands in <code>UC/UD</code></li>
+<li><code>ReadOnce</code>: non-allocating read, leaves line uncached</li>
+<li><code>ReadNotSharedDirty</code>: optimized shared read when SD is unlikely</li>
+</ul>
+</div>
+<div class="card accent-teal">
+<p class="eyebrow">Upgrade path</p>
+<h3>Avoid moving data when ownership is enough</h3>
+<ul>
+<li><code>CleanUnique</code>: SC to UC without fetching data again</li>
+<li><code>MakeReadUnique</code>: invalidate peer sharers for exclusive access</li>
+<li><code>WriteUniqueFull</code>: send ownership request and full data together</li>
+<li><code>WriteUniquePtl</code>: same idea, but with a byte mask</li>
+</ul>
+</div>
+<div class="card accent-gold">
+<p class="eyebrow">Eviction path</p>
+<h3>Tell the HN-F exactly what leaves the cache</h3>
+<ul>
+<li><code>WriteBackFull</code>: dirty victim, data returns to the home path</li>
+<li><code>Evict</code>: clean victim, just update ownership metadata</li>
+</ul>
+</div>
+<div class="card accent-violet">
+<p class="eyebrow">Naming rule</p>
+<h3>Opcode names are mini-protocol specs</h3>
+<p>The action and the final intent live in the opcode itself, so the HN-F does not need an extra negotiation round.</p>
+</div>
 </div>
 
 **Pattern**: Request name encodes both the *action* and the *intent* — the HN-F knows what to do without additional negotiation.
@@ -556,22 +543,39 @@ The mapping logic is in CHI-cache-funcs.sm, in functions like processNextState()
 <div class="columns">
 <div>
 
-**Stable States**
+<div class="state-grid smaller">
+<div class="state-card compact accent-red">
+<h3><code>I</code></h3>
+<p>Invalid. No local copy, no access rights.</p>
+</div>
+<div class="state-card compact accent-blue">
+<h3><code>SC</code></h3>
+<p>Shared clean. Readable, but not writable.</p>
+</div>
+<div class="state-card compact accent-teal">
+<h3><code>UC</code></h3>
+<p>Unique clean. Exclusive ownership before the line turns dirty.</p>
+</div>
+<div class="state-card compact accent-violet">
+<h3><code>UD</code></h3>
+<p>Unique dirty. Sole owner and authoritative data source.</p>
+</div>
+<div class="state-card compact accent-gold">
+<h3><code>SD</code></h3>
+<p>Shared dirty. Shared readers exist, but this node owes the eventual writeback.</p>
+</div>
+</div>
 
-| State | Name | Access | Description |
-|-------|------|--------|-------------|
-| `I` | Invalid | None | Line not present |
-| `SC` | Shared Clean | Read | Clean shared copy |
-| `UC` | Unique Clean | Read/Write | Exclusive, clean |
-| `UD` | Unique Dirty | Read/Write | Exclusive, dirty |
-| `SD` | Shared Dirty | Read | Shared, but responsible for writeback |
-
-**Transient States**
-
-| Pattern | Meaning |
-|---------|---------|
-| `BUSY_INTR` | Waiting for data, snoops proceed |
-| `BUSY_BLKD` | Waiting for data, snoops blocked |
+<div class="comparison-grid smaller">
+<div class="card compact accent-blue">
+<h3><code>BUSY_INTR</code></h3>
+<p>Transaction in flight, but snoops may still proceed safely.</p>
+</div>
+<div class="card compact accent-red">
+<h3><code>BUSY_BLKD</code></h3>
+<p>Transaction in flight and snoops must wait to preserve protocol invariants.</p>
+</div>
+</div>
 
 </div>
 <div>
@@ -946,23 +950,27 @@ based on whether it already has ownership. The logic is in CHI-cache-funcs.sm.
 <div class="columns smaller">
 <div>
 
-**Forwarding Snoops** (DCT — data sent to requester)
+<div class="card accent-violet">
+<p class="eyebrow">Forwarding snoops</p>
+<h3>DCT path: data goes to the requester</h3>
+<ul>
+<li><code>SnpSharedFwd</code>: holder downgrades to <code>SC</code> and forwards data</li>
+<li><code>SnpUniqueFwd</code>: holder invalidates and forwards the dirty line</li>
+<li><code>SnpOnceFwd</code>: one-shot forward without retaining the line</li>
+<li><code>SnpNotSharedDirtyFwd</code>: forward while preserving SD-specific ownership rules</li>
+</ul>
+</div>
 
-| Snoop | Response | Holder's new state |
-|-------|----------|--------------------|
-| `SnpSharedFwd` | `SnpResp_SC_Fwded_SC` | SC |
-| `SnpUniqueFwd` | `SnpResp_UD_Fwded_I` | I |
-| `SnpOnceFwd` | Data forwarded | I |
-| `SnpNotSharedDirtyFwd` | `SnpResp_SD_Fwded_*` | SD or I |
-
-**Non-Forwarding Snoops** (data sent to HN-F)
-
-| Snoop | Purpose |
-|-------|---------|
-| `SnpShared` | Check if holder has clean shared copy |
-| `SnpUnique` | Invalidate — holder must give up line |
-| `SnpOnce` | Return data but don't invalidate |
-| `SnpCleanInvalid` | Clean + invalidate |
+<div class="card accent-gold">
+<p class="eyebrow">Non-forwarding snoops</p>
+<h3>Classical home-node return path</h3>
+<ul>
+<li><code>SnpShared</code>: probe for a clean shared copy</li>
+<li><code>SnpUnique</code>: invalidate and hand ownership back</li>
+<li><code>SnpOnce</code>: send data without invalidating</li>
+<li><code>SnpCleanInvalid</code>: fast clean invalidate when no data transfer is needed</li>
+</ul>
+</div>
 
 </div>
 <div>
@@ -1184,30 +1192,43 @@ under load spikes — exactly when you need the protocol to not crash.
 <div class="columns">
 <div>
 
-**Clusivity modes** (configured per controller):
-
-| Mode | Behavior | Example |
-|------|----------|---------|
-| **Strict Inclusive** | All L1 lines must be in L2 | `alloc_on_* = all, dealloc = none` |
-| **Mostly Inclusive** | Allocate on read, not on write | Default gem5 L2 config |
-| **Exclusive** | L1 and L2 never share a line | `dealloc_on_unique = true` |
-| **Non-Inclusive** | No guarantee either way | Custom tuning |
+<div class="comparison-grid smaller">
+<div class="card compact accent-blue">
+<p class="eyebrow">Strict inclusive</p>
+<h3>Easy snoop filtering</h3>
+<p>Every child line must live upstream too.</p>
+<p><code>alloc_on_* = all</code>, minimal deallocation.</p>
+</div>
+<div class="card compact accent-teal">
+<p class="eyebrow">Mostly inclusive</p>
+<h3>Pragmatic default</h3>
+<p>Keep shared lines for filtering, but do not over-commit to write-private data.</p>
+</div>
+<div class="card compact accent-gold">
+<p class="eyebrow">Exclusive</p>
+<h3>Capacity first</h3>
+<p>L1 and L2 avoid duplicate copies, at the cost of more back-invalidations and tracking.</p>
+</div>
+<div class="card compact accent-violet">
+<p class="eyebrow">Non-inclusive</p>
+<h3>Policy driven</h3>
+<p>No hard guarantee either way. Allocate and drop based on workload goals.</p>
+</div>
+</div>
 
 </div>
 <div>
 
-**gem5 clusivity parameters:**
+<div class="card accent-green smaller">
+<p class="eyebrow">gem5 knobs</p>
+<h3>Allocation and deallocation are explicit</h3>
+<p><code>alloc_on_readshared</code>, <code>alloc_on_readunique</code>, <code>alloc_on_readonce</code>, and <code>alloc_on_writeback</code> decide when an upstream level keeps a line.</p>
+<p><code>dealloc_on_unique</code> and <code>dealloc_on_shared</code> decide when that level lets go after a child gains ownership.</p>
+</div>
 
-| Parameter | Meaning |
-|-----------|---------|
-| `alloc_on_readshared` | Allocate entry on ReadShared |
-| `alloc_on_readunique` | Allocate entry on ReadUnique |
-| `alloc_on_readonce` | Allocate entry on ReadOnce |
-| `alloc_on_writeback` | Allocate entry on WriteBack |
-| `dealloc_on_unique` | Evict when child gets Unique |
-| `dealloc_on_shared` | Evict when child gets Shared |
-
-**Trade-off**: Inclusive = simpler snoop filtering, more capacity waste. Exclusive = full capacity utilization, complex back-invalidation.
+<div class="takeaway smaller">
+<p><strong>Trade-off:</strong> inclusive hierarchies simplify snoop filtering, while exclusive hierarchies reclaim capacity and push more work into metadata and invalidation logic.</p>
+</div>
 
 </div>
 </div>

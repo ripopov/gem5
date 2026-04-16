@@ -1,0 +1,388 @@
+/* @theme gem5-chi */
+
+@import 'default';
+
+:root {
+  --chi-ink: #16324f;
+  --chi-muted: #516b84;
+  --chi-blue: #2563eb;
+  --chi-blue-deep: #1d4ed8;
+  --chi-teal: #0f766e;
+  --chi-gold: #c58b1b;
+  --chi-violet: #7c3aed;
+  --chi-green: #15803d;
+  --chi-red: #c2410c;
+  --chi-surface: #f7fbff;
+  --chi-surface-2: #edf4fb;
+  --chi-border: #d4e0ec;
+  --chi-shadow: 0 10px 24px rgba(22, 50, 79, 0.08);
+}
+
+section {
+  font-family: Inter, "Avenir Next", Avenir, "Segoe UI", sans-serif;
+  font-size: 22px;
+  color: var(--chi-ink);
+  background: linear-gradient(180deg, #fbfdff 0%, #f4f8fc 100%);
+  padding: 34px 54px;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: Inter, "Avenir Next", Avenir, "Segoe UI", sans-serif;
+  color: var(--chi-ink);
+  margin: 0;
+}
+
+h1 {
+  font-size: 40px;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+}
+
+h2 {
+  font-size: 30px;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  padding-bottom: 10px;
+  margin-bottom: 18px;
+  border-bottom: 3px solid var(--chi-blue);
+}
+
+h3 {
+  font-size: 22px;
+  line-height: 1.15;
+  margin-bottom: 8px;
+}
+
+p,
+li {
+  color: var(--chi-ink);
+}
+
+strong {
+  color: var(--chi-ink);
+}
+
+a {
+  color: var(--chi-blue-deep);
+}
+
+code {
+  font-size: 0.8em;
+  background: #ecf3ff;
+  color: var(--chi-blue-deep);
+  padding: 1px 6px;
+  border-radius: 6px;
+}
+
+pre {
+  font-size: 14px;
+  line-height: 1.35;
+  color: #edf4fb;
+  background: #17324d;
+  border-radius: 14px;
+  padding: 14px 16px;
+  box-shadow: var(--chi-shadow);
+}
+
+pre code {
+  background: transparent;
+  color: inherit;
+  padding: 0;
+}
+
+table {
+  width: 100%;
+  font-size: 17px;
+  border-collapse: separate;
+  border-spacing: 0;
+  overflow: hidden;
+  border: 1px solid var(--chi-border);
+  border-radius: 14px;
+  box-shadow: var(--chi-shadow);
+  background: white;
+}
+
+th {
+  background: linear-gradient(135deg, var(--chi-blue-deep), var(--chi-blue));
+  color: white;
+  text-align: left;
+  padding: 10px 12px;
+}
+
+td {
+  padding: 8px 12px;
+  border-top: 1px solid #e7eef5;
+}
+
+tr:nth-child(even) td {
+  background: #f9fbfe;
+}
+
+img {
+  max-width: 100%;
+  max-height: 540px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+}
+
+blockquote,
+.takeaway,
+.callout {
+  margin: 14px 0 0;
+  padding: 14px 18px;
+  border-radius: 14px;
+  border-left: 6px solid var(--chi-blue);
+  background: linear-gradient(135deg, #eef5ff, #f8fbff);
+  box-shadow: var(--chi-shadow);
+}
+
+blockquote p,
+.takeaway p,
+.callout p {
+  margin: 0;
+}
+
+.callout.warning {
+  border-left-color: var(--chi-red);
+  background: linear-gradient(135deg, #fff0eb, #fff8f5);
+}
+
+.eyebrow {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--chi-blue-deep);
+}
+
+.muted,
+.note {
+  color: var(--chi-muted);
+}
+
+.smaller {
+  font-size: 18px;
+}
+
+.columns {
+  display: flex;
+  gap: 28px;
+  align-items: flex-start;
+}
+
+.columns > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.columns img {
+  max-height: 250px;
+}
+
+.comparison-grid,
+.card-grid,
+.state-grid,
+.channel-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.comparison-grid,
+.card-grid.two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.card-grid.three,
+.channel-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.state-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.card,
+.state-card,
+.channel-card {
+  padding: 16px 18px;
+  border-radius: 16px;
+  border: 1px solid var(--chi-border);
+  background: linear-gradient(180deg, white 0%, var(--chi-surface) 100%);
+  box-shadow: var(--chi-shadow);
+}
+
+.card.compact,
+.state-card.compact,
+.channel-card.compact {
+  padding: 14px 16px;
+}
+
+.card h3,
+.state-card h3,
+.channel-card h3 {
+  margin-bottom: 8px;
+}
+
+.card ul,
+.state-card ul,
+.channel-card ul {
+  margin: 10px 0 0 18px;
+  padding: 0;
+}
+
+.card li,
+.state-card li,
+.channel-card li {
+  margin: 0 0 5px;
+}
+
+.card p:last-child,
+.state-card p:last-child,
+.channel-card p:last-child {
+  margin-bottom: 0;
+}
+
+.accent-blue {
+  border-top: 5px solid var(--chi-blue);
+}
+
+.accent-teal {
+  border-top: 5px solid var(--chi-teal);
+}
+
+.accent-gold {
+  border-top: 5px solid var(--chi-gold);
+}
+
+.accent-violet {
+  border-top: 5px solid var(--chi-violet);
+}
+
+.accent-green {
+  border-top: 5px solid var(--chi-green);
+}
+
+.accent-red {
+  border-top: 5px solid var(--chi-red);
+}
+
+.channel-card.req {
+  border-top: 5px solid var(--chi-blue);
+}
+
+.channel-card.snp {
+  border-top: 5px solid var(--chi-gold);
+}
+
+.channel-card.rsp {
+  border-top: 5px solid var(--chi-green);
+}
+
+.channel-card.dat {
+  border-top: 5px solid var(--chi-violet);
+}
+
+.pill {
+  display: inline-block;
+  margin: 6px 8px 0 0;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #e9f1fb;
+  color: var(--chi-blue-deep);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.pill.req {
+  background: #e7f0ff;
+  color: var(--chi-blue-deep);
+}
+
+.pill.snp {
+  background: #fff2d8;
+  color: #8a5a00;
+}
+
+.pill.rsp {
+  background: #e8f7ec;
+  color: #17603a;
+}
+
+.pill.dat {
+  background: #f0e9ff;
+  color: #5d33bf;
+}
+
+.pill.neutral {
+  background: #edf2f7;
+  color: var(--chi-muted);
+}
+
+.hero {
+  padding-top: 74px;
+}
+
+.hero h1 {
+  max-width: 760px;
+  font-size: 46px;
+}
+
+.hero h2 {
+  max-width: 760px;
+  border-bottom: none;
+  color: var(--chi-muted);
+  padding-bottom: 0;
+  margin-top: 10px;
+  margin-bottom: 18px;
+}
+
+.hero strong {
+  display: inline-block;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: #e9f1fb;
+  color: var(--chi-blue-deep);
+}
+
+.hero img {
+  max-height: 72%;
+  opacity: 0.95;
+}
+
+.hero .note {
+  max-width: 780px;
+  font-size: 15px;
+}
+
+.metric-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.metric {
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: white;
+  border: 1px solid var(--chi-border);
+  box-shadow: var(--chi-shadow);
+}
+
+.metric strong {
+  display: block;
+  font-size: 26px;
+  color: var(--chi-blue-deep);
+}
+
+.metric span {
+  font-size: 15px;
+  color: var(--chi-muted);
+}

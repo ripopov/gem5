@@ -2,130 +2,315 @@
 
 Lessons learned from building the CHI Protocol slide deck.
 
+## Authoring Contract
+
+- Keep the authored deck in one Markdown source file.
+- Keep Mermaid blocks in the source deck for readability and review.
+- Pre-render Mermaid only as a build step for Marp export.
+- Treat the rendered markdown and generated SVGs as build artifacts, even if cached in git.
+
+## Custom Theme First
+
+Do not build serious decks on `theme: default` with a huge inline `style:` block.
+
+Create a custom Marp theme file instead:
+
+```css
+/* @theme gem5-chi */
+@import 'default';
+
+:root {
+  --chi-ink: #16324f;
+  --chi-blue: #2563eb;
+  --chi-teal: #0f766e;
+  --chi-gold: #c58b1b;
+  --chi-violet: #7c3aed;
+}
+
+section {
+  font-family: Inter, "Avenir Next", sans-serif;
+  font-size: 22px;
+  color: var(--chi-ink);
+}
+```
+
+Then reference it from the deck front matter:
+
+```yaml
+---
+marp: true
+theme: gem5-chi
+paginate: true
+size: 16:9
+---
+```
+
+And load the theme during export:
+
+```bash
+npx @marp-team/marp-cli \
+  --allow-local-files \
+  --html \
+  --theme gem5-chi.css \
+  slides_rendered.md \
+  --pdf \
+  -o slides.pdf
+```
+
+For multi-deck workspaces with several named themes, `--theme-set` is still useful.
+
+### Why this matters
+
+- One place defines typography, spacing, color, and component styling.
+- Multiple decks can share one visual system.
+- The slide source becomes content-focused instead of CSS-heavy.
+- Theme changes invalidate less authoring context than editing the deck front matter.
+
 ## Mermaid Diagrams
 
 **Marp does not render Mermaid natively** ([github.com/marp-team/marp-core/issues/139](https://github.com/marp-team/marp-core/issues/139)).
-A PR to add support ([#719](https://github.com/marp-team/marp-cli/pull/719)) was rejected — the maintainers want it as a plugin, and none exists yet.
+The practical workflow is still: keep Mermaid in source, render to SVG during build, then let Marp place the SVGs.
 
-**Workaround**: pre-render all Mermaid blocks to SVG using `@mermaid-js/mermaid-cli` (`mmdc`), then reference them as images.
+### Base rendering command
 
 ```bash
-npx @mermaid-js/mermaid-cli -i diagram.mmd -o diagram.svg -b transparent -p puppeteer-config.json
+npx @mermaid-js/mermaid-cli \
+  -i diagram.mmd \
+  -o diagram.svg \
+  -b transparent \
+  -p puppeteer-config.json
 ```
 
 ### Puppeteer sandbox issue
 
-On Ubuntu 23.10+ and similar distros, `mmdc` fails with `No usable sandbox!`.
-Fix: pass a puppeteer config file with `--no-sandbox`:
+On Ubuntu 23.10+ and similar distros, `mmdc` may fail with `No usable sandbox!`.
+Use:
 
 ```json
-// puppeteer-config.json
 {
   "args": ["--no-sandbox"]
 }
 ```
 
-Then: `mmdc -i in.mmd -o out.svg -p puppeteer-config.json`
+Then run:
+
+```bash
+mmdc -i in.mmd -o out.svg -p puppeteer-config.json
+```
+
+## Theme Mermaid to Match the Deck
+
+The default Mermaid palette rarely matches the slide theme.
+If the deck is blue/teal and Mermaid exports are purple/yellow, the diagrams will look bolted on.
+
+Inject a shared Mermaid init block during rendering:
+
+```python
+MERMAID_INIT = {
+    "theme": "base",
+    "themeVariables": {
+        "background": "transparent",
+        "fontFamily": "Inter, Avenir Next, sans-serif",
+        "primaryColor": "#eff6ff",
+        "primaryBorderColor": "#2563eb",
+        "secondaryColor": "#e7f8f5",
+        "secondaryBorderColor": "#0f766e",
+        "tertiaryColor": "#fff5df",
+        "tertiaryBorderColor": "#c58b1b",
+        "lineColor": "#516b84",
+        "textColor": "#16324f",
+        "noteBkgColor": "#fff5df",
+        "noteBorderColor": "#c58b1b",
+        "noteTextColor": "#16324f"
+    }
+}
+```
+
+### Recommended color semantics
+
+Reuse the same colors across slides and diagrams:
+
+- `REQ` = blue
+- `SNP` = gold / amber
+- `RSP` = green
+- `DAT` = violet
+- warnings = red-orange
+- neutral metadata = gray-blue
+
+This helps transaction slides feel continuous instead of re-explained.
 
 ### Render width
 
-Use `--width` to control SVG viewport size:
+Use `--width` to control the Mermaid viewport:
 
-- **Full-width slides**: `--width 1200`
-- **Inside columns (half-width)**: `--width 600`
+- Full-width diagram: `--width 1200`
+- Diagram inside columns: `--width 600`
 
-This doesn't crop content — it sets the viewport Mermaid lays out within. Narrower viewports produce more compact diagrams.
+This does not crop content.
+It changes the layout space Mermaid uses before exporting.
 
 ## Image Auto-Scaling
 
 ### The problem
 
-SVGs rendered by `mmdc` have fixed pixel dimensions. Large diagrams (especially tall sequence diagrams) overflow slides vertically. Setting only `max-width: 100%` fixes horizontal overflow but not vertical.
+SVGs rendered by `mmdc` have fixed dimensions.
+Tall diagrams, especially sequence diagrams, can overflow vertically even when width is constrained.
 
 ### The fix
 
-Constrain **both** dimensions with CSS:
+Constrain both dimensions:
 
 ```css
 img {
   max-width: 100%;
-  max-height: 540px;   /* 720px slide - ~180px for title/padding */
+  max-height: 540px;
   width: auto;
   height: auto;
-  object-fit: contain; /* preserve aspect ratio within bounds */
+  object-fit: contain;
 }
 ```
 
-`object-fit: contain` is the key — it scales the image to fit within the `max-width` × `max-height` box while maintaining aspect ratio.
+`object-fit: contain` is the key.
 
 ### Images inside columns
 
-When two diagrams are stacked inside a `.columns` flex container, each needs a smaller height budget:
-
 ```css
 .columns img {
-  max-height: 250px;   /* 2 × 250 = 500px fits a column */
+  max-height: 250px;
 }
 ```
 
 ### Marp image sizing syntax
 
-Marp supports inline image resizing via alt text keywords:
-
 ```markdown
-![w:200px h:100px](image.png)    /* explicit size */
-![w:50% h:auto](image.png)       /* percentage width */
+![w:200px h:100px](image.png)
+![w:50% h:auto](image.png)
 ```
 
-For pre-rendered SVGs, prefer CSS constraints over per-image directives — it's fewer changes and works consistently.
+For Mermaid exports, prefer deck-level CSS constraints over per-image tweaks.
+
+## Slide Layout Patterns
+
+Do not default every technical slide to “table on the left, diagram on the right.”
+It becomes visually flat very quickly.
+
+Use a small set of repeatable slide archetypes instead.
+
+### 1. Comparison grid
+
+Best for protocol families, option trade-offs, and modes.
+
+```html
+<div class="comparison-grid">
+  <div class="card accent-blue">...</div>
+  <div class="card accent-gold">...</div>
+  <div class="card accent-violet">...</div>
+  <div class="card accent-teal">...</div>
+</div>
+```
+
+Use this instead of a 4-row comparison table when the point is contrast, not lookup.
+
+### 2. Card grid
+
+Best for node roles, channel roles, message categories, or configuration modes.
+
+```html
+<div class="card-grid two">
+  <div class="card">...</div>
+  <div class="card">...</div>
+</div>
+```
+
+### 3. Diagram + takeaway
+
+Best for transaction flows and mechanism slides.
+
+- One main diagram.
+- One short takeaway box.
+- Speaker notes carry the detailed narration.
+
+### 4. Metrics strip
+
+Best for summary slides and “what changed” slides.
+
+```html
+<div class="metric-strip">
+  <div class="metric"><strong>4</strong><span>channels</span></div>
+  <div class="metric"><strong>6</strong><span>node types</span></div>
+</div>
+```
+
+## Replace Tables More Aggressively
+
+Tables are still useful for:
+
+- file inventories
+- API parameter reference
+- dense opcode lookup
+- appendix material
+
+But for presentation slides, replace about half of the tables with cards or comparison panels.
+
+### Use a table when
+
+- the audience needs to scan rows precisely
+- exact cross-column comparison matters
+- the slide is more reference than persuasion
+
+### Use cards when
+
+- the audience needs a quick conceptual distinction
+- each item deserves its own emphasis
+- you want color or visual grouping to carry meaning
+
+### Use a takeaway panel when
+
+- the real point is one sentence, and the details are supporting evidence
 
 ## Background Images
 
-### Avoid inline base64 data URIs
+Avoid inline base64 data URIs.
 
-`![bg](data:image/svg+xml;base64,...)` does **not** render in Marp CLI's PDF output (Puppeteer/Chrome doesn't load `data:` URIs in this context).
+`![bg](data:image/svg+xml;base64,...)` does not reliably render in Marp CLI PDF output.
 
-**Fix**: save the SVG to a file and reference it:
+Use file references instead:
 
 ```markdown
-![bg right:30% 80%](logo.svg)
+![bg right:34% 78%](logo.svg)
 ```
 
-Run Marp CLI with `--allow-local-files` so it can read local file paths.
+Run Marp CLI with `--allow-local-files`.
 
-## Slide Layout
+## Useful Theme Classes
 
-### Columns with flex
+Recommended reusable classes:
 
-```css
-.columns {
-  display: flex;
-  gap: 30px;
-  align-items: flex-start;
-}
-.columns > div {
-  flex: 1;
-  min-width: 0;  /* prevent flex children from overflowing */
-}
-```
+- `.hero` for title slides
+- `.columns` for side-by-side content
+- `.comparison-grid` for 2x2 trade-off slides
+- `.card-grid` for role/category slides
+- `.channel-card` for transport-lane semantics
+- `.state-grid` for coherence state summaries
+- `.takeaway` for one-message summary panels
+- `.callout.warning` for failure modes
+- `.metric-strip` for summary slides
 
-`min-width: 0` on flex children is essential — without it, long content (wide tables, code blocks) can push the column wider than `50%` and break the layout.
+## Slide Budgets
 
-### Font sizes
+Work within explicit limits.
 
-```css
-section { font-size: 22px; }     /* base text */
-table  { font-size: 17px; }      /* tables can be smaller */
-.smaller { font-size: 18px; }    /* utility class for dense slides */
-```
+- 16:9 viewport is 1280×720
+- available height under a normal title is about 540 px
+- usable width after padding is about 1180 px
+- inside two columns, each side gets about 560 px
 
-### Slide dimensions
+Practical budget rules:
 
-16:9 is standard (`size: 16:9` in front-matter). The rendered viewport is 1280×720px. Plan content accordingly:
-
-- Available height below title: ~540px
-- Available width with padding: ~1180px (50px padding each side)
-- In columns: ~560px per column (30px gap)
+- one main idea per slide
+- one main visual focus per slide
+- one table or one diagram, not both unless one is very small
+- if you need `.smaller`, ask whether the slide should split
 
 ## Build Pipeline
 
@@ -134,40 +319,45 @@ table  { font-size: 17px; }      /* tables can be smaller */
 ```
 render_mermaid.py
 ├── Extract ```mermaid blocks from source .md
-├── Hash each block → cache key for SVG filename
-├── If SVG not cached, render with mmdc
-├── Replace ```mermaid blocks with ![diagram](path.svg)
-├── Write intermediate .md
-└── Run marp-cli to produce PDF
+├── Inject shared Mermaid theme init
+├── Hash each themed block for stable cache filenames
+├── Render missing diagrams with mmdc
+├── Replace Mermaid blocks with local SVG image refs
+├── Write intermediate rendered markdown
+└── Run marp-cli with the custom theme to export PDF / HTML
 ```
 
 ### SVG caching
 
-Use content hashes in filenames (e.g., `diagram_03_6d2a7469.svg`). This way:
+Use content hashes in filenames such as `diagram_03_6d2a7469.svg`.
 
-- Re-running the script skips unchanged diagrams
-- Only modified diagrams are re-rendered
-- Safe to commit `mermaid_svg/` to version control
+Benefits:
 
-### Full command
+- unchanged diagrams are reused
+- changed diagrams invalidate naturally
+- cached assets are safe to commit if you want reproducible exports
 
-```bash
-npx @marp-team/marp-cli \
-  --allow-local-files \   # load local SVGs
-  --html \                # allow raw HTML (columns, styled blocks)
-  slides_rendered.md \
-  --pdf \
-  -o slides.pdf
-```
+## Review Checklist
+
+Before calling a deck “done,” check:
+
+1. Does the deck use a custom theme instead of piling CSS into the front matter?
+2. Do Mermaid diagrams visually match the deck palette and typography?
+3. Did we replace enough tables with cards or comparison layouts?
+4. Is each slide understandable in about 10 seconds?
+5. Is there one visual focal point per slide?
+6. Did we split dense slides instead of shrinking everything?
+7. Does the PDF export look identical in tone to the HTML preview?
 
 ## Common Pitfalls
 
 | Pitfall | Symptom | Fix |
 |---------|---------|-----|
-| Mermaid shows as source code | Raw text in PDF | Pre-render to SVG with `mmdc` |
+| Staying on `theme: default` | Deck looks like polished notes, not a designed presentation | Create a custom Marp theme and load it during export |
+| Mermaid keeps its default palette | Diagrams feel visually disconnected from the deck | Inject a shared Mermaid init block with theme variables |
+| Every comparison is a table | Slides read like documentation pages | Replace at least half of conceptual tables with cards / panels |
 | Tall diagram overflows slide | Bottom clipped in PDF | `max-height` + `object-fit: contain` |
-| Column content overflows | Text/images push outside slide | `min-width: 0` on flex children |
-| Base64 bg image missing | Title slide shows raw `![bg]` text | Use file reference + `--allow-local-files` |
+| Column content overflows | Text or images push outside slide | `min-width: 0` on flex children |
+| Base64 bg image missing | Background does not appear in PDF | Use file reference + `--allow-local-files` |
 | `mmdc` sandbox crash | `No usable sandbox!` error | `puppeteer-config.json` with `--no-sandbox` |
-| Two diagrams in one column | Second diagram cut off | `.columns img { max-height: 250px }` |
-| SVG rendered too wide | Diagram fills only half column | Set `--width 600` for column diagrams |
+| SVG rendered too wide in a column | Diagram feels cramped or clipped | Render with a narrower viewport such as `--width 600` |
