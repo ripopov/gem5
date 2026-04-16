@@ -363,6 +363,101 @@ is.
 raising the cap only makes things worse and gives misleadingly low
 TBE utilization numbers.
 
+### v4 — source-localize the remaining queueing
+
+`2026-04-17`, same run as v1b (`rbook-link-pressure-v1b-pervnet-20260416-232515`).
+
+v3 established that the mesh is the ceiling, but not *where* on the
+mesh. v4 walks down the stat tree looking for where flits actually
+stack up. Each step narrowed the search.
+
+**Step 1 — Check CPU/cache backpressure first (cheapest to rule out).**
+Pulled `avg_size` / `avg_util` for L1D TBEs, L2 TBEs, HNF TBEs, and
+sequencer max-outstanding at the 16-thread window:
+
+| Resource | Cap | Avg size | Util |
+|---|---:|---:|---:|
+| L1D TBE | 32 | 23.7 | 0.74 |
+| L2 TBE | 64 | 23.3 | 0.36 |
+| HNF TBE | 64 | 12–17 | 0.19–0.26 |
+| seq max outstanding | 32 | ~24 | 0.74 |
+
+L1D looked high but v3 had already disproved it as binding. L2 and
+HNF TBEs are both below 40% — confirmed not bottlenecks. So the
+queueing lives inside the network, not at controllers.
+
+**Step 2 — Split the `avg_flit_queueing_latency = 26,532` by vnet.**
+gem5 emits `system.ruby.network.average_flit_vqueue_latency` (source-NI
+queueing) and `average_flit_vnet_latency` (transit) per vnet. Result:
+
+| Vnet | Transit (ticks) | Source NI queue (ticks) | Total |
+|---|---:|---:|---:|
+| 0 REQ | 9,823 | 2,015 | 11,838 |
+| 1 RSP | 4,050 | 570 | 4,620 |
+| 2 SNP | 9,230 | 863 | 10,093 |
+| **3 DAT** | **18,788** | **42,337** | **61,125** |
+
+DAT's source-NI queueing alone is `42k / 26k weighted = 86%` of the
+total. REQ/RSP/SNP are practically free to inject. So DAT is the
+congested vnet, and the queueing happens *before* DAT flits enter the
+routers — at the HNF's NI output buffer.
+
+**Step 3 — Localize DAT injection pressure per HNF.** Read
+`system.ruby.hnf{N}.cntrl.datOut.m_buf_msgs` (average messages waiting
+in each HNF's DAT output buffer) for N = 0..15. Grouping by tile
+position:
+
+| Position | Tiles | datOut avg |
+|---|---|---:|
+| corners (r0, r3, r12, r15) | 4 | 6.5 – 7.9 |
+| side edges (r4, r7, r8, r11) | 4 | 3.2 – 4.1 |
+| **top/bottom edges (r1, r2, r13, r14)** | **4** | **47.6 – 81.3** |
+| interior (r5, r6, r9, r10) | 4 | 12.8 – 19.8 |
+
+Striking asymmetry: the four top/bottom-edge HNFs have 10x the
+queueing of corners and side edges, and 4x the queueing of interior
+HNFs. This is the bottleneck *location*.
+
+**Step 4 — Confirm via router-level crossbar activity.** Extracted
+`routers{NN}.crossbar_activity` (flits switched through the xbar per
+window) for the 16 mesh routers and converted to flits/cy with
+`simTicks/500`:
+
+```
+       col 0   col 1   col 2   col 3
+row 0: 1.69    2.40    2.38    1.69
+row 1: 2.35    3.03    3.03    2.35
+row 2: 2.27    2.91    2.91    2.27
+row 3: 1.61    2.26    2.27    1.61
+```
+
+Interior routers push the most total flits (~3.0 flits/cy) but their
+local HNFs queue *less*. That contradiction is the clue: total flits
+is not the right metric — per-output-direction flits is.
+
+**Step 5 — Explain via XY routing geometry.** With 16 uniformly
+spread destinations, an edge HNF (e.g., HNF1 at row 0, col 1) sends
+DAT to:
+- col 0 destinations (4 CPUs): west via r1 → r0, 25%
+- col 1 destinations (3 CPUs non-local): south via r1 → r5, 19%
+- col 2–3 destinations (8 CPUs): east via r1 → r2, 50%
+- local (1 CPU): no mesh cost, 6%
+
+`50%` of HNF1's DAT goes through the single east-facing r1 → r2 link
+at `1 flit/cy/vnet`. Interior HNFs have 4 output directions, so their
+locally-injected DAT spreads across more ports. The missing N port
+on top-row routers (no N port on row 0, no S port on row 3) is what
+concentrates edge-HNF DAT onto a single hot output.
+
+**Step 6 — Conclusion.** The binding resource is the top-row and
+bottom-row east/west DAT links at the edge-HNF tiles. `--per-vnet-links`
+separated DAT from REQ/RSP/SNP on shared physical channels (the HoL
+block v1b removed), but each vnet still has `1 flit/cy` per direction
+and cannot be split further without widening the physical link, adopting
+non-XY routing, or moving HNFs off the edge rows. Those knobs are not
+measured in this benchmark and are listed in the "Current bottleneck ►
+Real levers" section as follow-up work.
+
 ### Lessons learned
 
 1. A workload must overflow private L2 or single-thread windows see no
@@ -379,6 +474,22 @@ TBE utilization numbers.
    saturated. v2 (8 MiB) shows the same `+13%` as v1b (4 MiB); a
    larger working set raises raw LLC traffic but does not increase
    the vnet-contention headroom `--per-vnet-links` can recover.
+5. Do not trust a high utilization number as proof of binding. v3
+   widened L1D TBEs from 32 → 48 → 64 based on a 74% average
+   utilization; throughput regressed because the average was a
+   downstream-latency equilibrium, not a cap hit. Always test a
+   suspected bottleneck by widening it and checking whether the new
+   slots get used — if avg occupancy stays flat, the binding
+   resource is elsewhere.
+6. Split the aggregate `avg_flit_queueing_latency` by vnet before
+   naming a network bottleneck. In v4 the headline was `26k ticks
+   of queueing`, but 86% of that sits on DAT alone — a single-vnet
+   story, not a whole-network story.
+7. Per-router crossbar-activity totals mislead when you want to
+   find a congestion *origin*. Interior routers show higher totals,
+   but DAT source-NI queueing in v4 was on *edge* tiles — because
+   the congestion is about a single output direction, not total
+   traffic volume through the router.
 
 ---
 
