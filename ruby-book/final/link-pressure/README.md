@@ -191,33 +191,136 @@ artifact of a too-small buffer.
 
 ### Current bottleneck (16 threads, per-vnet-links)
 
-With the DAT head-of-line block removed, the next binding constraint
-at `1.10` line ops/cycle is **the mesh itself** — specifically the
-steady-state round-trip latency per L1D miss, not any per-CPU queue
-cap. This was validated by a widening sweep (v3 below) that showed
-larger L1D TBE / sequencer pools did *not* raise throughput.
+Headline: **DAT-vnet physical links into the top-row and bottom-row
+edge HNF tiles** are the binding resource. Per-core MLP is pinned by
+the resulting round-trip, not by any CPU/cache queue cap.
 
-From the v1b 16-thread per-vnet stats block:
+#### Average flit latency, broken down per vnet
+
+From the v1b 16-thread per-vnet stats block (500 ticks = 1 CPU cycle
+@ 2 GHz). `Network` = transit time through routers/links; `Source NI
+queueing` = time a flit waits in its injecting controller's output
+buffer before entering the network.
+
+| Vnet | Network (ticks) | Source NI queueing (ticks) | Total (ticks) | CPU cycles |
+|---|---:|---:|---:|---:|
+| 0 REQ (RN → HN) | 9,823 | 2,015 | 11,838 | 23.7 |
+| 1 RSP | 4,050 | 570 | 4,620 | 9.2 |
+| 2 SNP | 9,230 | 863 | 10,093 | 20.2 |
+| **3 DAT (HN → RN)** | **18,788** | **42,337** | **61,125** | **122.2** |
+| all (weighted) | 15,209 | 26,532 | 41,740 | 83.5 |
+
+The aggregate `qlat = 26,532` hides that **~86% of all mesh queueing
+is on the DAT vnet alone**. REQ and SNP flits spend ~20% of their
+total time queueing; DAT flits spend 69% of their total time queueing
+(42k of 61k ticks).
+
+gem5 in this config does not emit a max/peak flit latency; the per-vnet
+totals above are the proxy. DAT's queueing/transit ratio is `2.25x` vs
+REQ `0.21x`.
+
+#### Where on the mesh the DAT queue physically sits
+
+DAT flits queue at the **source-side network interface** of each HNF
+(stat: `system.ruby.hnfN.cntrl.datOut.m_buf_msgs` — average number of
+messages waiting in the HNF's DAT output buffer):
+
+| HNF | Router position (row, col) | datOut avg msgs waiting |
+|---:|---|---:|
+| **1** | top edge (0, 1) | **81.3** |
+| **14** | bottom edge (3, 2) | **73.9** |
+| **2** | top edge (0, 2) | **57.2** |
+| **13** | bottom edge (3, 1) | **47.6** |
+| 5 | interior (1, 1) | 19.8 |
+| 6 | interior (1, 2) | 16.8 |
+| 9 | interior (2, 1) | 15.5 |
+| 10 | interior (2, 2) | 12.8 |
+| 0, 3, 12, 15 | corners | 6.5 – 7.9 |
+| 4, 7, 8, 11 | side edges (col 0 or col 3, not a corner) | 3.2 – 4.1 |
+
+Pile-up is concentrated on **four edge-row HNFs**, with totals 20–80
+messages waiting. Corners and side edges have near-empty queues.
+
+#### Crossbar activity per mesh router (flits/cycle, window 4)
+
+```
+       col 0   col 1   col 2   col 3
+row 0: 1.69    2.40    2.38    1.69
+row 1: 2.35    3.03    3.03    2.35   <- interior routers near 3 flits/cy
+row 2: 2.27    2.91    2.91    2.27
+row 3: 1.61    2.26    2.27    1.61
+```
+
+Interior routers 5, 6, 9, 10 push the most total flits/cy (~3.0) but
+their local HNFs' DAT-output queues stay small. Top/bottom edge
+routers (1, 2, 13, 14) push less total traffic but their local HNFs'
+DAT queues explode. The reason is the DIRECTION of outflow, not the
+total volume.
+
+#### Why top/bottom-edge HNFs pile up where interior HNFs do not
+
+- Interior routers (5, 6, 9, 10) have **4 mesh outputs** (N, S, E, W).
+  Their local HNF's outbound DAT is dispersed across all four.
+- Top-row routers (1, 2) have **3 mesh outputs** (S, E, W — no N).
+  Bottom-row routers (13, 14) have **3 mesh outputs** (N, E, W — no S).
+- With XY dimension-ordered routing and uniform destination spread, an
+  edge HNF like HNF1 sends DAT east-bound to 8 of 16 CPUs (col 2 and
+  col 3 on all four rows), west-bound to 4 CPUs (col 0 on all rows),
+  south-bound to 3 CPUs (col 1, rows 1–3), and keeps 1 local. The
+  **east-facing link `r1 → r2` carries 50% of HNF1's DAT output**
+  on top of the row-0 transit traffic from HNF0 going east.
+- That single east-facing top-row link at `1 flit/cycle/vnet` is the
+  chokepoint. The NI cannot drain the HNF's DAT output fast enough,
+  so `datOut.m_buf_msgs` climbs and the DAT flits accumulate
+  source-side queueing latency (the 42k ticks in the per-vnet table).
+- Side-edge HNFs (4, 7, 8, 11) have the opposite geometry (3 mesh
+  outputs: N, S, plus one of E/W). They route ~half their DAT
+  north/south where transit is lighter, so their queues stay short.
+
+#### What is NOT the bottleneck
 
 | Resource | Cap | Avg size | Avg utilization |
 |---|---:|---:|---:|
-| L1D TBEs (per CPU, sampled cpu0/1/7/15) | 32 | 23.5–24.1 | 0.74–0.75 |
+| L1D TBEs (per CPU) | 32 | 23.5–24.1 | 0.74 |
 | L2 TBEs (per CPU) | 64 | ~23.3 | 0.36 |
-| HNF TBEs (per HNF, sampled 0/5/10/15) | 64 | 12.0–16.7 | 0.19–0.26 |
-| Sequencer max outstanding | 32 | ~24 (tracks L1D TBE) | ~0.75 |
+| HNF TBEs (per HNF) | 64 | 12.0–16.7 | 0.19–0.26 |
+| Sequencer max outstanding | 32 | ~24 | 0.74 |
 
-The `74%` L1D TBE utilization *looked* like a binding constraint at
-first glance, but v3 widening to 48 and 64 slots shows it is not: the
-average occupancy barely moves when the cap is lifted. That tells us
-per-core MLP sits at a **Little's-Law equilibrium** with the mesh:
+The 74% L1D TBE utilization looks binding but isn't: v3 (below)
+widens the cap to 48 and 64 and the average occupancy stays at
+~25, confirming the per-core in-flight count is pinned by
+`T_round-trip`, not by the cap.
+
+#### Little's-Law framing
 
 $$ N_{\text{in-flight}} = R_{\text{miss}} \cdot T_{\text{round-trip}} $$
 
-With `N` stuck at ~24 per core and `T_round-trip` = queueing
-(`26.5 kticks`) + transit (`15.2 kticks`) ≈ `42 kticks` ≈ `83` CPU
-cycles @ 2 GHz, the issue rate `R` is already maxed out — adding more
-cap to L1D just lets `N` rise slightly, and `T` grows in step, so
-`R` doesn't. This is the mesh link / router buffer bandwidth ceiling.
+With `N ≈ 24` per core and `T_round-trip ≈ 83` CPU cycles, per-core
+miss rate `R ≈ 24/83 ≈ 0.29` misses/cycle, and total system miss
+rate `≈ 16 * 0.29 ≈ 4.6` misses/cycle. Measured throughput of
+`1.10` line ops/cycle × ~4x average flits per line op matches this
+— the mesh is the ceiling. Raising `N` (widening L1D TBEs) only
+raises `T` (more queueing on the already-saturated DAT edge links),
+so `R` stays flat or falls.
+
+#### Real levers (not measured here)
+
+1. **Wider physical links** (`--link-width-bits` 128 → 256). Halves
+   the flit count of a 64 B DAT packet (5 → 3 flits), which directly
+   relieves the top-row east-bound DAT link.
+2. **Non-XY routing** (adaptive or YX-biased for DAT vnet) so
+   edge-HNF DAT can go Y-first and skip the loaded row-0 / row-3
+   east-west links.
+3. **Relocate HNFs 1, 2, 13, 14** off the top/bottom edge rows
+   (e.g., move LLC slices to interior tiles only, or add skipping
+   links between non-adjacent interior routers).
+4. **Add a second physical link per vnet in the direction of the
+   dominant DAT flow** (east along row 0 and row 3).
+
+`--per-vnet-links` is already applied; it bought `+13.4%` by removing
+DAT→REQ HoL blocking on the shared 128b physical link, but it does
+not widen the per-vnet capacity itself — that takes `--link-width-bits`
+or topology changes.
 
 ### v3 — L1D TBE widening sweep (confirms mesh is the ceiling)
 
