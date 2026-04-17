@@ -354,13 +354,109 @@ multiple flits.
 ---
 
 <!-- ================================================================== -->
-<!-- SLIDE 6: TBD -->
+<!-- SLIDE 6: Flit Fields -->
 <!-- ================================================================== -->
 
-## TBD
+## Flit Fields — a typical REQ flit
+
+```systemverilog
+// CHI REQ flit — AMBA 5 CHI Issue H, Table B13.6.
+// Baseline fields (always present) + Excl/LPID (optional: exclusives).
+// Feature-gated fields (StashNID, ReturnNID, TagOp, TraceTag, MPAM,
+// RME, ...) omitted — bit positions are within this subset.
+
+parameter int NODE_ID_W  = 7;   // B16.1.12 — NodeID_Width  (7..16)
+parameter int REQ_ADDR_W = 44;  // B16.1.11 — Req_Addr_Width (44..52)
+
+typedef struct packed {
+  logic                   ExpCompAck;   // [106]    CompAck mandated
+  logic                   Excl;         // [105]    exclusive monitor  -- optional
+  logic [4:0]             LPID;         // [104:100] logical processor -- optional
+  logic                   SnpAttr;      // [99]     snoop hint
+  logic [3:0]             MemAttr;      // [98:95]  cacheability  (AXI AxCACHE-like)
+  logic [3:0]             PCrdType;     // [94:91]  retry credit type
+  logic [1:0]             Order;        // [90:89]  ordering contract
+  logic                   AllowRetry;   // [88]     target may issue Retry
+  logic                   LikelyShared; // [87]     cache-placement hint
+  logic [2:0]             PAS;          // [86:84]  Physical Address Space (security)
+  logic [REQ_ADDR_W-1:0]  Addr;         // [83:40]  physical address
+  logic [2:0]             Size;         // [39:37]  bytes = 2^Size  (1..64)
+  logic [6:0]             Opcode;       // [36:30]  REQ opcode (Table B13.12)
+  logic [11:0]            TxnID;        // [29:18]  transaction identifier
+  logic [NODE_ID_W-1:0]   SrcID;        // [17:11]  source node
+  logic [NODE_ID_W-1:0]   TgtID;        // [10: 4]  target node
+  logic [3:0]             QoS;          // [ 3: 0]  priority for fabric arbitration
+} chi_req_flit_t;
+```
+
+<div class="takeaway">
+Field <em>order</em> in Table B13.6 is architectural — implementations may not reshuffle bit positions. What the implementer controls is field <em>widths</em> (<code>NODE_ID_W</code>, <code>REQ_ADDR_W</code>, <code>DATA_W</code>) and which optional features (stashing, DMT, tagging, MPAM, RME, exclusives) contribute extra fields.
+</div>
 
 <!-- Speaker Notes:
 Time budget: 3 minutes.
+
+A flit is the packetised bundle of control fields that carries one
+protocol message across a CHI link. Spec Table B13.6 pins down
+exactly which fields appear in a REQ flit, their bit positions, and
+their widths. This slide writes them as a SystemVerilog packed
+struct — which is how CHI RTL and verification collateral usually
+model the wire. Two design-time parameters set the variable widths:
+NodeID_Width, spec B16.1.12, defaults to 7 and can go up to 16;
+Req_Addr_Width, B16.1.11, defaults to 44 and can go up to 52.
+
+Read the struct bottom-up, because the lowest-declared field sits at
+bit 0.
+
+QoS, 4 bits at bit 0, is the priority that fabric arbitration
+consumes.
+
+TgtID and SrcID, 7 bits each by default, name the destination and
+source nodes. QoS, TgtID, and SrcID together are what the
+interconnect needs to route and schedule the flit without
+understanding the protocol.
+
+TxnID, 12 bits, is unique at the Requester. Every downstream message
+in this transaction is keyed back to this TxnID.
+
+Opcode, 7 bits. The What: ReadClean, ReadUnique, WriteUnique,
+WriteBackFull, CleanInvalid, and dozens more. Spec Table B13.12 is
+the opcode dictionary.
+
+Size, 3 bits. Bytes moved encoded as a power of two: bytes equals
+2 to the Size, so 1, 2, 4, 8, 16, 32, or 64. A 64-byte cache-line
+read encodes 0b110.
+
+Addr, 44 bits by default, is the physical address.
+
+Then the attribute group. PAS, 3 bits, is the Physical Address Space
+— Secure / Non-secure / Realm / Root per RME. LikelyShared, 1 bit,
+is a hint telling the home this line is probably shared, biasing
+allocation and directory policy. AllowRetry, 1 bit, tells the target
+whether it may issue a RetryAck; when AllowRetry = 0, the Requester
+must already own a PCrdType it can consume. Order, 2 bits, asks the
+home for an ordering contract, typically for device accesses.
+PCrdType, 4 bits, pairs with AllowRetry on the retry mechanism.
+MemAttr, 4 bits, selects cacheable/non-cacheable, bufferable,
+early-write-acknowledge — same concept as AXI's AxCACHE. SnpAttr,
+1 bit, is the snoop hint.
+
+Three control bits at the top. LPID, 5 bits, names a logical
+processor within a multi-threaded node — paired with SrcID and Excl
+it uniquely identifies an exclusive-monitor reservation; optional.
+Excl marks the request as part of an exclusive-monitor pair — the
+CHI equivalent of LR/SC; also optional. ExpCompAck — already relied
+on for ReadClean — tells the home the Requester will close the
+transaction with a CompAck; always present.
+
+Three structural points to close. One, the field order in Table
+B13.6 is architectural — implementations may not reshuffle bit
+positions. Two, what the implementer controls is widths — only
+NodeID_Width, Req_Addr_Width, and for DAT flits Data_Width are
+parameterised. Three, which optional fields appear depends on
+enabled features — stashing, DMT, tagging, trace, MPAM, RME,
+exclusives — each contributes extra fields the spec lists in the
+same table but that only materialise when the feature is on.
 -->
 
 ---
