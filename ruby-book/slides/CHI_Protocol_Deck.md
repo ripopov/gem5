@@ -32,26 +32,29 @@ size: 16:9
 
 ### CHI does more than coherence
 
-- A **layered protocol**, not a bus — message meaning is separate from message delivery
-- The four channels also carry **non-coherent traffic** — uncached I/O, atomics, TLB shoot-downs
+- **Layered by design** — what a message *means* is separate from how it is *delivered*
+- Shares the fabric with **uncached I/O, atomics, and cache-maintenance** traffic
 - **Atomics can execute in the fabric**, not only in the core
-- **Errors and ordering travel with the messages** — no sideband
+- **Ordering is an explicit contract** — each transaction declares how strictly it must complete
+- **And more** — virtual-memory sync, producer hints, persistence, security tagging, in-band RAS signals
 
 </div>
 <div>
 
 ### CHI leaves these to you
 
-- **Home-node directory sizing** — where most real performance lives
-- **NoC deadlock freedom** — separated channels help; the fabric still has work to do
-- **Cache inclusion policy** — inclusive / exclusive / non-inclusive is a choice
-- **Spec version** — features you read about may not be in the issue your simulator targets
+- **Home-node internals** — CHI names the home node but not its shape:
+  - directory size → system-wide back-invalidations
+  - tracker depth → retry pressure
+  - address hashing → mesh hotspots
+- **The interconnect network (ICN) is implementation-defined** — topology, routing, buffers are yours; CHI mandates only per-channel non-blocking at each link
+- **Not one CHI** — features like DMT/DCT and atomics vary by issue (B/D/E/C2C) and by what the implementer turns on
 
 </div>
 </div>
 
 <div class="takeaway">
-Left side is <em>why</em> the CHI spec is so large. Right side is <em>why</em> two CHI systems with identical traces can perform very differently.
+Left side is <em>why</em> the CHI spec is so large. Right side is <em>why</em> two CHI systems that send the same messages can perform very differently.
 </div>
 
 <!-- Speaker Notes:
@@ -77,28 +80,44 @@ Third, atomic read-modify-writes can execute inside the fabric — at the home
 node or at the memory node — not only in the core. That changes how you model
 atomic performance.
 
-Fourth, error signals and ordering contracts travel in the messages
-themselves. There is no sideband for "this line is poisoned" or "wait for
-this to finish before that" — both travel end-to-end with the data.
+Fourth, ordering is an explicit contract. On a shared snoop bus,
+transactions serialized by accident — whoever grabbed the bus first won.
+CHI's separated channels reorder freely, so each transaction carries an
+explicit field saying how strict its ordering must be. That gives the
+core's memory-consistency model concrete hooks to bind to, instead of
+relying on the bus to serialize implicitly.
+
+Fifth, the list does not stop there. The spec also reaches into distributed
+virtual-memory sync, producer-to-consumer hints, persistence, security
+tagging, and in-band RAS. The deck skips most of these — just know the
+surface area is larger than any one slide can show.
 
 Now the right side — where the spec deliberately stops.
 
-First: the directory at the home node. CHI names it but does not size it. How
-many lines it tracks, how it evicts entries, how it reclaims space — all
-implementation-defined. Two CHI systems with identical message traces can
-perform very differently because of these choices. In gem5 those knobs live
-in the SLICC controllers and their Python parameters.
+First: home-node internals. CHI names the home node as the entity where
+coherence decisions happen, but does not pick its shape. Three dials
+dominate. The directory tracks who holds each line; undersize it, and
+every entry the directory evicts forces a back-invalidation across every
+cache that still holds that line. Trackers hold in-flight transactions at
+the home node; when the table fills, CHI's retry mechanism kicks in and
+the home node tells the requester to come back later. Address hashing
+decides which home node owns which line; a bad hash concentrates traffic
+on one corner of the mesh, a good hash distributes it. All three are out
+of spec, and any one can dominate the performance curve.
 
-Second: deadlock freedom. Separated channels help, but the NoC still has to
-provide enough buffering and the right virtual-channel assignment. A naive
-Garnet configuration can still wedge.
+Second: the interconnect itself. Topology, routing, VC allocation, buffer
+sizes, and credit counts are all implementation-defined — none of it is in
+the AMBA document. The one rule CHI mandates is per-channel non-blocking
+at each link: flits on one channel cannot block flits on another between
+transmitter and receiver. That guarantee does not extend across multi-hop
+paths for free — collapse channels at a switch or share a credit pool
+badly and it silently dies. A naive Garnet configuration can still wedge.
 
-Third: cache inclusion. The spec gives you the levers; it does not pick.
-Inclusive, exclusive, and non-inclusive are all legal; picking one is a
-design decision.
-
-Fourth: the spec has versions. What you read on one page may not be in the
-issue your simulator implements. Always check.
+Third: not one CHI. The spec has issues — B, D, E, and CHI-C2C — and
+each changes what is on the menu. Direct transfers DMT and DCT, atomic
+coverage, MPAM tags, persistence hints — all vary by issue, and for the
+optional features, by what the implementer turned on. Two CHI systems may
+both be "same spec" and still have different feature sets.
 
 The rest of the deck lives inside this frame. Ruby implements the left side;
 Garnet wraps the right side; the single RISC-V CHI system that ships with
