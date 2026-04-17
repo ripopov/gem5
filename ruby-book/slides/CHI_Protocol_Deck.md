@@ -6,7 +6,360 @@ size: 16:9
 ---
 
 <!-- ================================================================== -->
-<!-- SLIDE 1: Title -->
+<!-- SLIDE 1: Title (new deck) -->
+<!-- ================================================================== -->
+
+<!-- _class: hero -->
+<!-- _paginate: false -->
+
+# CHI in gem5
+## From Protocol to Ruby and Garnet
+
+**Memory Architecture and NoC Modeling in gem5**
+
+![bg right:34% 78%](chi_logo.svg)
+
+---
+
+<!-- ================================================================== -->
+<!-- SLIDE 2: Scoping CHI — what it owns, what it leaves open -->
+<!-- ================================================================== -->
+
+## Scoping CHI: what it owns, what it leaves open
+
+<div class="columns">
+<div>
+
+### CHI does more than coherence
+
+- A **layered protocol**, not a bus — message meaning is separate from message delivery
+- The four channels also carry **non-coherent traffic** — uncached I/O, atomics, TLB shoot-downs
+- **Atomics can execute in the fabric**, not only in the core
+- **Errors and ordering travel with the messages** — no sideband
+
+</div>
+<div>
+
+### CHI leaves these to you
+
+- **Home-node directory sizing** — where most real performance lives
+- **NoC deadlock freedom** — separated channels help; the fabric still has work to do
+- **Cache inclusion policy** — inclusive / exclusive / non-inclusive is a choice
+- **Spec version** — features you read about may not be in the issue your simulator targets
+
+</div>
+</div>
+
+<div class="takeaway">
+Left side is <em>why</em> the CHI spec is so large. Right side is <em>why</em> two CHI systems with identical traces can perform very differently.
+</div>
+
+<!-- Speaker Notes:
+Before we look at any messages or state machines, set the scope. CHI is a
+standard, and like most standards it has edges — places where it reaches
+further than you might expect, and places where it stops short. Both edges
+matter, because both edges show up in gem5 as Ruby or Garnet configuration.
+
+Four points on the left.
+
+First, CHI is a layered protocol. The spec separates "what a message means"
+from "how that message gets delivered over the wire." That sounds academic
+until you debug gem5. Ruby owns the meaning — requests, snoops, responses,
+data. Garnet owns the delivery — flits, routers, link-level credits. If you
+confuse the layers, the spec diagrams stop matching your trace.
+
+Second, CHI's channels carry more than coherent loads and stores. Uncached
+I/O, atomic operations, TLB shoot-downs, and cache-maintenance hints all ride
+the same four channels. CHI is the envelope for everything that crosses the
+coherent fabric, not just cache-line traffic.
+
+Third, atomic read-modify-writes can execute inside the fabric — at the home
+node or at the memory node — not only in the core. That changes how you model
+atomic performance.
+
+Fourth, error signals and ordering contracts travel in the messages
+themselves. There is no sideband for "this line is poisoned" or "wait for
+this to finish before that" — both travel end-to-end with the data.
+
+Now the right side — where the spec deliberately stops.
+
+First: the directory at the home node. CHI names it but does not size it. How
+many lines it tracks, how it evicts entries, how it reclaims space — all
+implementation-defined. Two CHI systems with identical message traces can
+perform very differently because of these choices. In gem5 those knobs live
+in the SLICC controllers and their Python parameters.
+
+Second: deadlock freedom. Separated channels help, but the NoC still has to
+provide enough buffering and the right virtual-channel assignment. A naive
+Garnet configuration can still wedge.
+
+Third: cache inclusion. The spec gives you the levers; it does not pick.
+Inclusive, exclusive, and non-inclusive are all legal; picking one is a
+design decision.
+
+Fourth: the spec has versions. What you read on one page may not be in the
+issue your simulator implements. Always check.
+
+The rest of the deck lives inside this frame. Ruby implements the left side;
+Garnet wraps the right side; the single RISC-V CHI system that ships with
+gem5 is where we will see both in action.
+-->
+
+---
+
+<!-- ================================================================== -->
+<!-- SLIDE 3: TBD -->
+<!-- ================================================================== -->
+
+## TBD
+
+<!-- Speaker Notes:
+Time budget: 3 minutes.
+-->
+
+---
+
+<!-- ================================================================== -->
+<!-- SLIDE 4: TBD -->
+<!-- ================================================================== -->
+
+## TBD
+
+<!-- Speaker Notes:
+Time budget: 3 minutes.
+-->
+
+---
+
+<!-- ================================================================== -->
+<!-- SLIDE 5: TBD -->
+<!-- ================================================================== -->
+
+## TBD
+
+<!-- Speaker Notes:
+Time budget: 3 minutes.
+-->
+
+---
+
+<!-- ================================================================== -->
+<!-- SLIDE 6: TBD -->
+<!-- ================================================================== -->
+
+## TBD
+
+<!-- Speaker Notes:
+Time budget: 3 minutes.
+-->
+
+---
+
+<!-- ================================================================== -->
+<!-- SLIDE 7: TBD -->
+<!-- ================================================================== -->
+
+## TBD
+
+<!-- Speaker Notes:
+Time budget: 3 minutes.
+-->
+
+---
+
+<!-- ================================================================== -->
+<!-- SLIDE 8: TBD -->
+<!-- ================================================================== -->
+
+## TBD
+
+<!-- Speaker Notes:
+Time budget: 3 minutes.
+-->
+
+---
+
+<!-- ================================================================== -->
+<!-- SLIDE 9: TBD -->
+<!-- ================================================================== -->
+
+## TBD
+
+<!-- Speaker Notes:
+Time budget: 3 minutes.
+-->
+
+---
+
+<!-- ================================================================== -->
+<!-- SLIDE 10: TBD -->
+<!-- ================================================================== -->
+
+## TBD
+
+<!-- Speaker Notes:
+Time budget: 3 minutes.
+-->
+
+---
+
+<!-- ================================================================== -->
+<!-- SLIDE 11: TBD -->
+<!-- ================================================================== -->
+
+## TBD
+
+<!-- Speaker Notes:
+Time budget: 3 minutes.
+-->
+
+---
+
+<!-- ================================================================== -->
+<!-- SLIDE 12: TBD -->
+<!-- ================================================================== -->
+
+## TBD
+
+<!-- Speaker Notes:
+Time budget: 3 minutes.
+-->
+
+---
+
+<!-- ================================================================== -->
+<!-- SLIDE 13: TBD -->
+<!-- ================================================================== -->
+
+## TBD
+
+<!-- Speaker Notes:
+Time budget: 3 minutes.
+-->
+
+---
+
+<!-- ================================================================== -->
+<!-- SLIDE 14: TBD -->
+<!-- ================================================================== -->
+
+## TBD
+
+<!-- Speaker Notes:
+Time budget: 3 minutes.
+-->
+
+---
+
+<!-- ================================================================== -->
+<!-- SLIDE 15: TBD -->
+<!-- ================================================================== -->
+
+## TBD
+
+<!-- Speaker Notes:
+Time budget: 3 minutes.
+-->
+
+---
+
+<!-- ================================================================== -->
+<!-- SLIDE 16: TBD -->
+<!-- ================================================================== -->
+
+## TBD
+
+<!-- Speaker Notes:
+Time budget: 3 minutes.
+-->
+
+---
+
+<!-- ================================================================== -->
+<!-- SLIDE 17: TBD -->
+<!-- ================================================================== -->
+
+## TBD
+
+<!-- Speaker Notes:
+Time budget: 3 minutes.
+-->
+
+---
+
+<!-- ================================================================== -->
+<!-- SLIDE 18: TBD -->
+<!-- ================================================================== -->
+
+## TBD
+
+<!-- Speaker Notes:
+Time budget: 3 minutes.
+-->
+
+---
+
+<!-- ================================================================== -->
+<!-- SLIDE 19: TBD -->
+<!-- ================================================================== -->
+
+## TBD
+
+<!-- Speaker Notes:
+Time budget: 3 minutes.
+-->
+
+---
+
+<!-- ================================================================== -->
+<!-- SLIDE 20: TBD -->
+<!-- ================================================================== -->
+
+## TBD
+
+<!-- Speaker Notes:
+Time budget: 3 minutes.
+-->
+
+---
+
+<!-- ================================================================== -->
+<!-- SLIDE 21: TBD -->
+<!-- ================================================================== -->
+
+## TBD
+
+<!-- Speaker Notes:
+Time budget: 3 minutes.
+-->
+
+---
+
+<!-- ================================================================== -->
+<!-- SLIDE 1b: Backup divider — content below is the archived v1 deck -->
+<!-- ================================================================== -->
+
+<!-- _paginate: false -->
+
+<style scoped>
+section {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+h1 {
+  font-size: 96px;
+  letter-spacing: -0.03em;
+}
+</style>
+
+# Backup
+
+---
+
+<!-- ================================================================== -->
+<!-- SLIDE 1c: v1 Title (archived) -->
 <!-- ================================================================== -->
 
 <!-- _class: hero -->
