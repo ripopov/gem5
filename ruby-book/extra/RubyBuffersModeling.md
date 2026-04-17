@@ -678,8 +678,8 @@ flowchart LR
 
     subgraph B["Downstream router B"]
         direction TB
-        BIn[InputUnit<br/>per-VC flit buffer]
-        BSA[SwitchAllocator<br/>grants this input VC]
+        BIn["InputUnit<br/>per-VC flit buffer"]
+        BSA["SwitchAllocator<br/>grants this input VC"]
     end
 
     AOut -->|if credit count > 0,<br/>send flit on NetworkLink| BIn
