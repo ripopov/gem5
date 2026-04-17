@@ -360,10 +360,8 @@ multiple flits.
 ## Flit Fields — a typical REQ flit
 
 ```systemverilog
-// CHI REQ flit — AMBA 5 CHI Issue H, Table B13.6.
-// Baseline fields (always present) + Excl/LPID (optional: exclusives).
-// Feature-gated fields (StashNID, ReturnNID, TagOp, TraceTag, MPAM,
-// RME, ...) omitted — bit positions are within this subset.
+// CHI REQ flit — AMBA 5 CHI Issue H, Table B13.6 (subset).
+// Feature-gated fields (stashing, DMT, tagging, MPAM, RME) omitted.
 
 parameter int NODE_ID_W  = 7;   // B16.1.12 — NodeID_Width  (7..16)
 parameter int REQ_ADDR_W = 44;  // B16.1.11 — Req_Addr_Width (44..52)
