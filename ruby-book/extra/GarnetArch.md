@@ -202,7 +202,24 @@ Four things happen in order every cycle a router fires:
 
 Each sub-object re-schedules the router for the next cycle if it still has pending work — stalled VCs, enqueued credits, pipelined flits still a few cycles from `SA_`.
 
-### 5.3 The default two-stage pipeline: SA and ST
+### 5.3 Router pipeline: canonical 5-stage reference vs. Garnet's collapsed model
+
+The canonical NoC router pipeline is defined by Dally and Towles, *Principles and Practices of Interconnection Networks* (Morgan Kaufmann, 2004).
+That reference design has five stages — **BW**, **RC**, **VA**, **SA**, **ST** — each corresponding to a distinct resource or allocator in real silicon.
+Garnet collapses most of them into SA and ST; understanding what is collapsed (and what is therefore **not** modeled) is the single most important fact about Garnet's router.
+
+| Abbrev | Name | What happens in real silicon | Garnet treatment |
+|---|---|---|---|
+| **BW** | Buffer Write | Arriving flit is written into the input VC buffer (SRAM write port, finite bandwidth) | Synchronous at arrival inside `InputUnit::wakeup` via `VirtualChannel::insertFlit` — no write-port contention modeled |
+| **RC** | Route Compute | HEAD flit's output port is resolved (table lookup, XY math, adaptive logic) | Synchronous at arrival — `m_router->route_compute(...)` called directly in `InputUnit::wakeup`; no separate stage tag |
+| **VA** | VC Allocation | HEAD reserves one downstream input VC for the whole packet; an independent allocator that can deny even when SA would grant | Folded into SA-II's `OutputUnit::select_free_vc(vnet)` call; no standalone allocator object; the `VA_` enum value is vestigial |
+| **SA** | Switch Allocation | Two-phase arbitration picks one VC per inport (SA-I) and one inport per outport (SA-II) | Modeled — this is the only real contention point in Garnet |
+| **ST** | Switch Traversal | Winning flit crosses the crossbar datapath | Modeled as trivial forwarding; SA already resolved the contention |
+
+**Staging is pure delay, not new arbitration.**
+Setting `m_latency = 3` or `4` does **not** introduce a BW arbiter, a standalone VA allocator, or any new contention.
+It bumps the tick stored in `flit::m_stage.second` to a future cycle so the flit sits longer in its input VC before SA considers it eligible.
+Route-compute and VC-allocate work still happen at their original instants; the added cycles are timestamp slack, not pipeline walk.
 
 `m_latency` defaults to 2.
 That means a flit that arrives at cycle *N* leaves this router on its outgoing NetworkLink at cycle *N + 2* in the absence of contention.
@@ -228,16 +245,35 @@ Separating SA and ST mirrors how commercial NoC routers are built; the model pre
 - `m_latency = 4` further splits VA (virtual-channel allocation for HEAD flits) from SA: BW/RC → VA → SA → ST.
 - Going deeper trades per-hop latency (each extra stage = +1 cycle per hop) for better timing closure in the hypothetical silicon. *Functionally* nothing changes — same flits, same credits, same arbitration, just stretched out.
 
+**Where the stage tag is written.**
+A flit's `m_stage.first` (see [§13](#13-flit-credit-flitbuffer--the-data-layer)) is written at exactly four call sites across the entire Garnet source tree:
+
+| Call site | File | New stage | Meaning |
+|---|---|---|---|
+| flit constructor | `flit.cc:59` | `I_` | initial tag, set once at the NI when the flit is minted |
+| ingress tagging | `InputUnit.cc:131` / `138` | `SA_` | arrival at a router; `.second` is bumped `pipe_stages − 1` cycles into the future so SA gates on it |
+| SA-II grant | `SwitchAllocator.cc:231` | `ST_` | flit won arbitration, staged in `CrossbarSwitch::switchBuffers[inport]` |
+| crossbar forward | `CrossbarSwitch.cc:90` | `LT_` | flit placed in `OutputUnit::outBuffer`, about to ride the link |
+
+`VA_` appears in the enum (`CommonTypes.hh:51`) but is **never written** — the VC-allocation work happens synchronously inside SA-II's `select_free_vc` call without re-tagging the flit.
+The enum value is retained for documentation parity with garnet1.0.
+
+After the first hop a flit cycles through `SA_ → ST_ → LT_ → SA_ → …` with no return to `I_`; `I_` is a one-shot label at injection.
+
+> For why this collapse matters when modeling CHI fabrics — RP-aware VC pools, QoS arbitration, per-channel-class contention — see the R5 and R7 discussions in `ChiRouterReqs.md`.
+
 ### 5.4 How many flits move through a router per cycle
 
 Given *P* physical ports and *V* VCs per port, the stage-by-stage capacity is:
 
 | Stage                     | Where the flit lives                       | Maximum in flight                     | Advancing per cycle                              |
 |---------------------------|--------------------------------------------|---------------------------------------|--------------------------------------------------|
-| **I_ / VA_** (buffered)   | `VirtualChannel::inputBuffer` on each VC  | *P × V × buffer\_depth* flits         | *P* new flits arrive (one per inport)            |
+| **I_ / VA_** (buffered) ¹ | `VirtualChannel::inputBuffer` on each VC  | *P × V × buffer\_depth* flits         | *P* new flits arrive (one per inport)            |
 | **SA_** (arbitration)     | same VCs, marked `SA_`                    | all VCs at `SA_`                      | SA-I: ≤*P* requests   · SA-II: ≤*P* winners      |
 | **ST_** (crossbar)        | `CrossbarSwitch::switchBuffers[inport]`   | *P* (one slot per inport)             | up to *P* (the SA-II winners)                    |
 | **LT_** (output buffer)   | `OutputUnit::outBuffer`                   | small queue, 1 flit dequeued per link clock | ≤*P* (one per outport per cycle)          |
+
+¹ `VA_` in the enum is unused at runtime — all buffered flits are tagged either `I_` pre-arrival or `SA_` while waiting in the input VC. See [§5.3](#53-router-pipeline-canonical-5-stage-reference-vs-garnets-collapsed-model).
 
 Two things fall out of that table:
 
@@ -446,6 +482,32 @@ Deadlock freedom is not affected (the VC / credit contract is unchanged), but pe
 
 There is no upstream feature request to add this knob, so if you need it you'll be patching your local tree.
 
+**Q5. Does the VC id stay constant end-to-end?**
+
+No. The VC id is a **per-hop label** that is rewritten at every router. At each hop, SA-II runs:
+
+```cpp
+// SwitchAllocator.cc:183-215
+int outvc = input_unit->get_outvc(invc);
+if (outvc == -1) {
+    // VC Allocation - select any free VC from outport
+    outvc = vc_allocate(outport, inport, invc);
+}
+...
+// set outvc (i.e., invc for next hop) in flit
+// (This was updated in VC by vc_allocate, but not in flit)
+t_flit->set_vc(outvc);
+```
+
+The outvc allocated at router R is the same numeric id that router R+1 will use as the invc when the flit lands there, because the downstream `InputUnit` reads `flit::m_vc` and places the flit into `virtualChannels[outvc]`.
+
+Two invariants keep this consistent:
+
+- **vnet is invariant end-to-end.** The allocated outvc always falls inside the current vnet's VC range (`[vnet * m_vc_per_vnet, (vnet+1) * m_vc_per_vnet)`), so a REQ flit stays a REQ flit at every hop, just with different VC ids.
+- **HEAD allocates; BODY/TAIL inherit.** `vc_allocate` runs only when `outvc == -1` (i.e., only for HEAD). Subsequent body/tail flits of the same packet read the already-stored outvc via `input_unit->get_outvc(invc)` and follow the HEAD through the same chain of renames.
+
+So a packet walking R0 → R1 → R2 → R3 in vnet 0 with 2 VCs per vnet might land in invcs `2 → 5 → 1 → 7` at successive routers — all four values satisfy `vc / m_vc_per_vnet == 0`, but the numeric id has no end-to-end meaning.
+
 ---
 
 ## 6. `InputUnit` and `VirtualChannel`
@@ -461,10 +523,13 @@ std::vector<VirtualChannel> virtualChannels;   // one per VC on this inport
 flitBuffer creditQueue;                         // credits to send upstream
 ```
 
-`wakeup()` pulls the current cycle's flit off `m_in_link`, routes it to `virtualChannels[vc].insertFlit(flit)`, and:
+`wakeup()` pulls the current cycle's flit off `m_in_link`, routes it to `virtualChannels[vc].insertFlit(flit)` (this is the canonical **BW — Buffer Write — stage**, run synchronously here without write-port contention), and:
 
-- On `HEAD_`/`HEAD_TAIL_`: calls `m_router->route_compute(...)` (which delegates to `RoutingUnit::outportCompute`). The resulting outport id is stored in the VC.
+- On `HEAD_`/`HEAD_TAIL_`: calls `m_router->route_compute(...)` (which delegates to `RoutingUnit::outportCompute`). This is the canonical **RC — Route Compute — stage**, also run synchronously. The resulting outport id is stored in the VC.
 - For all flit types: starts buffering; after `m_latency−1` cycles the flit is marked ready for switch allocation (`flit_stage = SA_`).
+
+> **Deep Dive: why BW is a stage in Dally/Towles but invisible in Garnet.**
+> Real ingress buffers are physical SRAMs with a finite number of write ports per cycle. Credits guarantee capacity (a flit always has a landing slot) but not write-port bandwidth. If two subchannels or two parallel sources arrive in the same cycle and target the same buffer bank, one waits. Real silicon solves this with per-link staging flops whose capacity is **included in the advertised credit count**, so upstream never overcommits; BW is the write arbiter that drains staging into VC RAM. Stock Garnet hides all of this because each inport has exactly one incoming `NetworkLink` delivering one flit per cycle, and `VirtualChannel::inputBuffer` is a software priority queue with no write-port limit. The moment subchannels, shared buffer pools, or SerDes deserialization bursts enter the model, BW port contention becomes a first-class concern — see `ChiRouterReqs.md` R8.
 
 **`VirtualChannel`** is a simple pair of state-plus-queue:
 
@@ -521,6 +586,16 @@ Every router has exactly one `SwitchAllocator`.
 It performs both VC allocation and switch arbitration in a single `wakeup()`.
 This is Garnet's most intricate object; understand it and the rest falls out.
 
+**Three orthogonal allocators in one object.**
+`SwitchAllocator` conflates what Dally & Towles separate into three distinct resources:
+
+- **VA** (naming) — *which* downstream VC reserves this packet? Succeeds when any VC in the target vnet is `IDLE_`.
+- **SA** (scheduling) — *which* input gets to use the crossbar datapath this cycle? Succeeds when the input wins round-robin at SA-I and the requested outport wins round-robin at SA-II.
+- **Credit check** (capacity) — *is there room* in the chosen downstream VC's buffer for this specific flit? Succeeds when `has_credit(outvc)` returns true.
+
+Each can independently deny a flit's progress — you can win SA and still fail VA (no free outvc on the target vnet), succeed at VA but fail SA (another inport won the outport), or hold the outvc and stall on credits (downstream buffer full).
+A CHI-fidelity extension typically wants to pull VA out into its own allocator so RP/QoS policies can deny grants without being entangled with SA's crossbar scheduling — see `ChiRouterReqs.md` R3 and R7.
+
 **Two-phase arbitration (per router cycle):**
 
 ```cpp
@@ -533,7 +608,25 @@ void wakeup() {
 ```
 
 **SA-I (`arbitrate_inports`).**
-For each inport, walk its VCs in round-robin (`m_round_robin_invc[inport]`) and pick the first VC that is ready (has a flit at stage `SA_`, with credits available for its chosen outport/outvc). For `HEAD_`/`HEAD_TAIL_`, the VC must also see at least one free outvc on the desired outport; for `BODY_`/`TAIL_`, the previously allocated outvc must have a credit.
+For each inport, walk its VCs in round-robin (`m_round_robin_invc[inport]`) and pick the first VC that is ready.
+Readiness is checked by `send_allowed(inport, invc, outport, outvc)` (`SwitchAllocator.cc:295`), which is **per flit, not per packet**:
+
+```cpp
+// send_allowed semantics (paraphrased from SwitchAllocator.cc:295)
+if (flit is HEAD or HEAD_TAIL) {
+    // VA not yet done for this packet → need any free outvc
+    if (output_unit->has_free_vc(vnet)) {
+        has_outvc = true;
+        has_credit = true;   // each VC has >=1 buffer, free-VC implies a credit
+    }
+} else {
+    // BODY or TAIL: outvc already bound, check credit for THIS flit
+    has_credit = output_unit->has_credit(outvc);
+}
+return has_outvc && has_credit && !ordered_vnet_violation();
+```
+
+The implication is important: **credits are checked one flit at a time at SA, not the whole packet at VA**. A packet whose size exceeds the downstream VC's buffer depth will legitimately stretch across several routers — each holding a piece — until credits drain hop by hop. The downstream VC stays `VC_AB_` / `ACTIVE_` (reserved) for the full duration, so no other packet can steal it, and when the TAIL finally passes, `is_free_signal` returns the VC to the upstream pool. This "serpent" behavior is canonical wormhole flow control, not a pathology, and it is why `buffers_per_ctrl_vc = 1` (the default) works correctly even though CHI control messages are always single-flit — single-flit packets never need to stretch.
 
 **SA-II (`arbitrate_outports`).**
 For each outport, walk inports in round-robin (`m_round_robin_inport[outport]`) and pick the first inport that requested it during SA-I.
@@ -609,6 +702,9 @@ int m_credit_count;                          // buffers free at downstream VC
 
 Initial credit count equals the downstream's per-VC buffer depth (`m_buffers_per_ctrl_vc` or `m_buffers_per_data_vc`, depending on vnet type).
 
+The VC id that this router's SA-II allocates out of `outVcState[]` *is* the VC id the downstream router's `InputUnit` will place the flit into (see `SwitchAllocator.cc:215` `t_flit->set_vc(outvc)` and [§5.8 Q5](#58-follow-up-questions-answered-precisely)).
+`OutVcState` is therefore the upstream's mirror of the downstream's input-VC availability — credits track how many buffer slots remain in that downstream VC, and `VC_state_type` tracks whether the downstream VC is free, reserved for a HEAD that has not yet landed, or actively carrying a packet whose TAIL has not yet passed.
+
 ---
 
 ## 11. `NetworkLink` and `CreditLink` — Pipelined Wires
@@ -672,7 +768,7 @@ int       m_size;                // total flits in this packet
 int       msgSize;               // original message size in bytes
 uint32_t  m_width;               // link width at injection (for SerDes)
 flit_type m_type;                // HEAD_ / BODY_ / TAIL_ / HEAD_TAIL_ / CREDIT_
-std::pair<flit_stage, Tick> m_stage;  // I_→VA_→SA_→ST_→LT_
+std::pair<flit_stage, Tick> m_stage;  // {current stage, earliest-valid tick}
 MsgPtr    m_msg_ptr;             // the original Ruby message (shared)
 int       m_outport;
 Tick      m_enqueue_time, m_dequeue_time, m_time, src_delay;
@@ -680,6 +776,8 @@ Tick      m_enqueue_time, m_dequeue_time, m_time, src_delay;
 
 The `MsgPtr` is a shared pointer held by *every* flit of the packet (cheap because it's refcounted).
 At the destination NI, when TAIL arrives, the NI just unwraps `m_msg_ptr` and enqueues it into the right `outNode_ptr[vnet]` — zero copy.
+
+`m_stage.first` is written at exactly four call sites (see [§5.3](#53-router-pipeline-canonical-5-stage-reference-vs-garnets-collapsed-model) table): `I_` at the flit constructor, `SA_` at `InputUnit::wakeup`, `ST_` at SA-II grant, `LT_` at the crossbar forward. `VA_` is in the enum but never written. `I_` is a one-shot initial label set when the NI mints the flit; after the first hop the flit cycles through `SA_ → ST_ → LT_ → SA_ → …` at each router, never returning to `I_`. `m_stage.second` stores the earliest tick at which the current stage becomes valid — this is how the 3-stage and 4-stage `m_latency` settings encode their extra delay without actually walking through intermediate stage values.
 
 **`Credit`** inherits from `flit` and adds one bit:
 

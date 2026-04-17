@@ -578,6 +578,94 @@ The gem5 model should follow the same principle: implement CHI L-Credits and cha
 | R13 | Support optional advanced features such as DAT reordering, critical-chunk-first, link power states, and integrity metadata adaptation. | Should |
 | R14 | Keep a practical performance envelope by allowing optional fidelity knobs to be disabled. | Should |
 
+## Current Ruby/Garnet Support Per Requirement
+
+This section classifies each requirement as **Already supported**, **Partially supported**, or **Not supported** against the Ruby + Garnet3 code as it exists today, and notes what it would take to close the gap.
+Code anchors point into `src/mem/ruby/network/garnet/`.
+
+- **R1 — Preserve Ruby network API and CHI wiring. Already supported.**
+  Ruby's `Network` contract is a set of per-vnet `MessageBuffer *` ports, and `GarnetNetwork` already implements it.
+  A CHI-aware router can live inside the existing `Network` subclass and keep the four-vnet controller-facing shape unchanged.
+  No SLICC or topology-script changes are needed as long as the NI keeps the same injection/ejection API.
+
+- **R2 — REQ/RSP/SNP/DAT as first-class channel classes with independent resources. Partially supported.**
+  Garnet already maps CHI REQ/SNP/RSP/DAT to vnets 0–3, isolates them via static VC partitioning (`m_vc_per_vnet`), and gives CTRL vs DATA vnets different per-VC buffer depth (`buffers_per_ctrl_vc` / `buffers_per_data_vc`).
+  But VC counts, arbitration policy, and pipeline depth are uniform across vnets inside one router (`Router.cc:54`), so per-class differentiation stops at buffer depth.
+  Closing the gap requires making `vcs_per_vnet`, arbitration policy, and buffer sizing per-channel-class parameters in `Router`, `InputUnit`, `SwitchAllocator`, and `OutputUnit`.
+
+- **R3 — REQ and SNP Resource Planes with dedicated or shared credits. Not supported.**
+  Garnet has no notion of CHI Resource Planes; credits are tracked per output VC only (`OutVcState`).
+  Support requires adding an RP field to `flit`/`RouteInfo`, extending VC partitioning to `(vnet, RP)` buckets, and teaching `OutputUnit`/NI to manage either dedicated per-RP credit pools or a shared pool with per-RP reservations per CHI B14.2.1.2.
+  The NI also needs a configurable RP assignment policy on injection.
+
+- **R4 — One CHI packet per transport unit, explicit DAT packet count from `Data_Width`. Partially supported.**
+  Packetization and flitization are distinct operations that current Garnet conflates.
+  *Packetization* (protocol-driven) splits a message into M independent CHI packets with M = `line_size / Data_Width`; each packet carries `DataID`, has its own VC / credit / arbitration, and may arrive out of order — the receiver reassembles by `DataID` position, not by arrival order.
+  *Flitization* (wire-driven) then splits a packet into K flits only when an internal link is narrower than the packet; at the CHI architectural interface K = 1, so at that boundary a packet is always one `HEAD_TAIL_` flit.
+  Today `NetworkInterface::flitisizeMessage` skips packetization entirely and flitizes the whole Ruby message into `ceil(bytes / ni_flit_size)` chained flits (`HEAD` + `BODY` … + `TAIL`) bound to one VC end-to-end — a wormhole whose length is driven by link width, not `Data_Width`.
+  The lock is VC-scoped, not port-scoped: other packets on other VCs still interleave on the same physical link one flit per cycle, but the chunks of *this* message are pinned to one input VC and one output VC at every hop from HEAD allocation until TAIL returns `is_free_signal`.
+  That pinning has three consequences for a single DAT transfer: chunks (a) cannot overtake each other, (b) cannot take different routes (HEAD's outport decision is inherited), and (c) share one credit stream, so any backpressure on that VC stalls every remaining chunk of the message.
+  Critical-chunk-first (R13) is therefore structurally impossible today — the memory controller cannot issue the urgent word ahead of the rest because the chunks are not independent scheduling units.
+  Real CHI RTL treats the chunks as independent transactions: each lands on its own VC, is arbitrated separately, can overtake on contested hops, and can be issued out of order.
+  The CHI spec (IHI0050H) defines the mechanics explicitly: packet-count and packet labeling come from `Data_Width` and `DataID` (B2.9.4 "Data packetization"), each packet also carries `CCID = Addr[5:4]` so the receiver identifies the critical chunk by `CCID == DataID` (B2.9.7 "Critical Chunk Identifier", B13.10.50 field encoding), reordering within a transaction across the interconnect is explicitly permitted (B2.9.4), and sending in critical-chunk-first wrap order is permitted but not required, negotiated via the `CCF_Wrap_Order` component property (B2.9.8 "Critical Chunk First Wrap order").
+  Closing the gap requires the NI to emit M independent `HEAD_TAIL_` flits per DAT message with per-packet `DataID`, a constant `CCID`, and CHI header fields, keeping wormhole chaining only for the optional internal SerDes layer below the CHI interface.
+
+- **R5 — Explicit router/link pipeline stages with per-stage latency and contention. Already supported (core), partially for contention.**
+  `Router.m_latency` selects a 2/3/4-stage pipeline drawn from the canonical NoC router stages — BW (Buffer Write), RC (Route Compute), VA (VC Allocation), SA (Switch Allocation), ST (Switch Traversal) — per Dally and Towles, *Principles and Practices of Interconnection Networks*.
+  Garnet's staging is: `m_latency = 2` runs SA + ST (BW/RC fold into arrival, VA into SA-II), `m_latency = 3` separates BW/RC from SA, `m_latency = 4` further separates VA; `NetworkLink.m_latency` is configurable per link and each flit is tagged with `flit_stage` (`I_`, `VA_`, `SA_`, `ST_`, `LT_`).
+  Contention is modeled explicitly only at SA (SA-I/SA-II arbitration); BW/RC and VA are currently pure delay stages with no per-stage allocator, so dialing `m_latency` up only spreads the same work across more cycles rather than adding a BW port conflict or an independent VA allocator.
+  Adding realistic per-stage contention needs explicit arbiter objects at those stages rather than opaque cycle counts.
+
+- **R6 — Hop-by-hop credit timing with backpressure and credit turnaround. Mostly supported.**
+  Credits travel on a dedicated `CreditLink` with its own configurable `m_latency`; `OutputUnit::wakeup()` applies `increment_credit` and `is_free_signal`, and `niOutVcs` stalls when credits are exhausted, so backpressure is modeled end-to-end.
+  What is missing is an explicit CHI-style minimum credit turnaround constraint at the architectural interface (B14.2's "returned credit cannot be used in the same cycle it arrives" is implicitly guaranteed by link latency ≥ 1, but not enforced as a separate knob).
+  A small extension that exposes a `credit_turnaround_min_cycles` parameter in the CHI-facing NI would make the contract explicit.
+
+- **R7 — Configurable QoS, fairness, and starvation prevention. Not supported.**
+  `SwitchAllocator` uses plain round-robin for both SA-I and SA-II (`m_round_robin_invc`, `m_round_robin_inport`) with no QoS, priority, weight, or aging; `flit`/`RouteInfo` carry no QoS field, so priority cannot even be represented.
+  Support requires propagating a QoS value from the Ruby `Message` into the flit header, adding a pluggable arbiter interface in `SwitchAllocator`, and shipping policies such as strict priority, weighted round-robin, and age-based anti-starvation.
+  Forward-progress guarantees for low-priority traffic will also need explicit minimum-share or credit-based fairness enforcement.
+
+- **R8 — Per-channel bandwidth, subchannels, CDC/SerDes boundaries. Partially supported.**
+  Per-link `bitWidth` is already a parameter; topology scripts can put each vnet on its own physical link via `supported_vnets` and the per-vnet `m_outports_dirn2idx` map; `NetworkBridge` already models CDC (`cdc_latency`) and SerDes (`serdes_latency`) on both `GarnetIntLink` and `GarnetExtLink`.
+  What is missing is native CHI subchannels — multiple parallel physical channels of the same class with independent L-Credit pools on one logical link — because `RoutingUnit` stores a single outport per `(vnet, direction)` and overwrites duplicates (`RoutingUnit.cc:156`).
+  Today subchannels are approximated by splitting into distinct vnets; native support requires letting `RoutingUnit` return a set of outports and teaching `SwitchAllocator` to pick among them.
+
+- **R9 — Preserve CHI ordering and forward-progress assumptions. Partially supported.**
+  CHI orders at the **protocol layer**, not the transport layer: transactions are matched by `TxnID`/`DBID`, DAT reassembly uses `DataID` (B2.9.4), `CompAck` closes ordering, and same-address serialization happens at the HN-F's Point of Serialization. CHI explicitly permits packet reordering across the interconnect (B2.9.4) — that permission is exactly what makes RP-level independence, QoS arbitration, critical-chunk-first, and subchannel parallelism legal.
+  Consequently a CHI-correct fabric must leave all four vnets **unordered**, which Garnet does: `isVNetOrdered` defaults to false and the gem5 CHI SLICC protocols leave it off. Declaring a CHI vnet ordered via `isVNetOrdered` would be the **wrong** fix for any CHI fidelity gap — the flag also forces deterministic routing (RoutingUnit.cc:140) and serialized injection (NetworkInterface.cc:548), which would kill path diversity and undo the reordering latitude CHI is designed to exploit.
+  What Garnet already preserves correctly for CHI: per-packet HEAD → BODY → TAIL order via the VC pin end-to-end (see R4), and cross-channel deadlock freedom via the four-vnet partitioning with per-vnet VC pools.
+  What is **not** enforced:
+  (a) **RP-level forward-progress independence within REQ / SNP.** With no RP tag on flits, no per-RP credit pool, and no RP-aware VC allocation (see R3), a stalled RP0 transaction can block RP1 transactions sharing the same REQ-vnet VCs and credits, violating CHI B14.2.1.2.
+  (b) **Architectural link-layer FIFO at the CHI interface.** CHI defines that flits on one channel class of the single point-to-point link between a node and the ICN arrive in sending order. Garnet's NI `calculateVC` round-robins across the vnet's VCs and gates on per-VC credits, so when one VC's downstream path is congested and another is not, a later message riding the uncongested VC can win injection on the external link ahead of an earlier same-vnet message stuck waiting for credit on the congested VC — reordering them in the CHI-architectural channel's FIFO. The reordering is invisible to protocol correctness (the receiver uses `TxnID`) but a fidelity gap for architectural-link modeling. The right fix is a narrow NI-boundary FIFO rule scoped to one channel class on the external link only, not vnet-wide `isVNetOrdered`, which would also constrain the fabric interior unnecessarily.
+  (c) **Starvation prevention under contention.** Round-robin SA gives weak probabilistic fairness, not an explicit forward-progress contract; once QoS arbitration (R7) is added, low-priority traffic can be indefinitely deferred without an age-based or weighted-share safeguard.
+  Closing the CHI forward-progress contract therefore depends on RP plumbing (R3), a NI-boundary per-channel-class FIFO, and arbitration fairness hooks (R7) — not on enabling `isVNetOrdered`.
+
+- **R10 — Rich stats, tracing, debug hooks. Mostly supported.**
+  `GarnetNetwork` already emits per-vnet injected/received counts, network/queueing latency histograms, per-link utilization by type, hop count, and the full N×N traffic matrix; debug flags `RubyNetwork`, `GarnetAllocator`, `GarnetCrossbar`, and `RubyQueue` cover the main hot paths.
+  Gaps for CHI work: per-packet/per-RP/per-QoS breakdowns, per-stage residency histograms (BW/RC/VA/SA/ST), credit-wait and outvc-alloc-stall counters, and structured packet traces with CHI transport metadata.
+  These are additive — they plug into the existing `statistics::Group` infrastructure and debug flag framework without touching the pipeline itself.
+
+- **R11 — Parameter schema expressing different vendor-style CHI NoCs without code changes. Not supported yet.**
+  Today's knobs (`vcs_per_vnet`, `buffers_per_*_vc`, `ni_flit_size`, `routing_algorithm`, link `m_latency`, link `bitWidth`) are generic NoC knobs with no CHI-specific semantics; there is no RP count, no per-channel-class arbitration selector, no subchannel count, and no QoS policy.
+  Support requires layering a CHI-flavored parameter set on top of the current one — per-channel-class tuples, RP tables, QoS policy selectors, subchannel counts, credit-pool modes — plus a preset mechanism so vendor-style configurations can ship as named profiles.
+  The schema should be expressible purely in Python so users can fork presets without rebuilding gem5.
+
+- **R12 — Backward-compatible defaults and shorthands for migration. Feasible with incremental change.**
+  `GarnetNetwork.py` defaults already drive the stock flow, and per-router/per-link overrides (`GarnetRouter.vcs_per_vnet`, `NetworkLink.width`, `supported_vnets`) show the idiom used today.
+  A CHI-aware router can be introduced as a new SimObject (e.g., `ChiGarnetRouter`) opt-in per router while existing topology builders like `Mesh_XY.py` keep using the plain `GarnetRouter` with unchanged parameters.
+  Shorthands can be added as Python helpers that expand a single "CHI preset" into the full per-class parameter set.
+
+- **R13 — Optional advanced features: DAT reordering, critical-chunk-first, link power states, integrity metadata. Not supported.**
+  Garnet preserves per-packet flit order (BODY/TAIL bound to the HEAD's VC end-to-end), has no chunk-priority concept, no link-state machine beyond active/inactive, and no integrity metadata fields in `flit`.
+  Each feature is an independent extension: reordering needs a reassembly buffer in the egress NI, critical-chunk-first needs an intra-packet priority field and matching arbiter rules, power states need a link-level FSM with wake latency, integrity metadata needs additional flit header fields and width accounting.
+  All are good candidates for `Should`-priority optional modules gated behind flags.
+
+- **R14 — Practical performance envelope with optional fidelity knobs. Partially supported.**
+  Today fidelity is mostly binary: pick SimpleNetwork for speed or Garnet for detail; within Garnet you can only shrink `m_latency`, VCs, or buffer depths.
+  A CHI-aware model should expose per-feature fidelity flags (e.g., `enable_qos_arbitration`, `enable_rp_credits`, `enable_pipeline_stages`, `enable_credit_turnaround`) so users can keep the expensive pieces off when running long workloads.
+  Defaults should be chosen so the "all knobs off" path runs close to today's Garnet performance.
+
 ## High-Level Model
 
 ### 1. Conceptual View
