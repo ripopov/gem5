@@ -256,13 +256,99 @@ spec guarantees at the port interface, not what happens inside.
 ---
 
 <!-- ================================================================== -->
-<!-- SLIDE 5: TBD -->
+<!-- SLIDE 5: Transaction, Message, Packet, and Flit -->
 <!-- ================================================================== -->
 
-## TBD
+## Transaction, Message, Packet, and Flit
+
+<div class="columns">
+<div>
+
+### Hierarchy — `ReadClean`, 64 B line, 128-bit `Data_Width`, `ExpCompAck=1`
+
+```text
+Transaction (ReadClean, line clean-shared at home)
+├── REQ message
+│   └── ReadClean      → flit   (REQ chan, outbound)
+├── DAT message
+│   ├── CompData_SC    → flit   (DAT chan, inbound, DataID=0)
+│   ├── CompData_SC    → flit   (DataID=1)
+│   ├── CompData_SC    → flit   (DataID=2)
+│   └── CompData_SC    → flit   (DataID=3)
+└── RSP message
+    └── CompAck        → flit   (RSP chan, outbound)
+```
+
+</div>
+<div>
+
+### Ratios at each boundary
+
+| Boundary                | Layer(s)            | Ratio |
+|-------------------------|---------------------|-------|
+| Transaction → Message   | Protocol            | 1 : N |
+| Message → Packet        | Protocol → Network  | 1 : N |
+| Packet → Flit           | Network → Link      | 1 : 1 |
+
+- **Transaction** (B1.3) — one coherence op; `TxnID` at RN, `DBID` at home.
+- **Message** — one protocol step on one channel.
+- **Packet** (B1.1, B13.3) — routing granule with independent metadata.
+- **Flit** (B13.3) — link-layer unit; architecturally 1:1 with a protocol packet.
+
+</div>
+</div>
 
 <!-- Speaker Notes:
 Time budget: 3 minutes.
+
+When you read a CHI trace, you'll see four terms nested inside each
+other: transaction, message, packet, and flit.
+
+At the top, a transaction. Section B1.3. One complete coherence
+operation — everything that happens between a Requester, its
+Completer, and any snooped nodes to fulfil a single request. A
+transaction is identified by TxnID at the Requester and DBID at the
+Completer. The example on the left is a ReadClean — REQ opcode 0x02
+per table B13.12 — fetching one 64-byte line. The request asserts
+ExpCompAck=1, so the home will expect a CompAck at the end. We're
+showing the simple non-snooping path where the home serves from its
+LLC or memory; add snoops on top if other RNs hold the line.
+
+One level down: a message. One protocol communication step, carried
+on one channel — a request, a snoop, a response, or a data transfer.
+A transaction generates multiple messages. Our ReadClean has three: a
+ReadClean REQ on the outbound link, a CompData DAT on the inbound
+link, and a CompAck RSP on the outbound link.
+
+Next: a packet. Sections B1.1 and B13.3. The granule of transfer
+across the interconnect — carries the metadata needed to route
+independently. A message can comprise one packet or many. The REQ
+and RSP messages here are single-packet. The DAT message splits into
+four CompData packets because the link's Data_Width is 128 bits and
+a 64-byte line needs four transfers — each packet carries one
+DataID from 0 to 3. Each of the four CompData packets encodes
+Resp = CompData_SC to tell the Requester the line is arriving in
+Shared-Clean state. At 256-bit Data_Width it would be two packets;
+at 512-bit, one.
+
+Finally a flit — the Link-layer transfer unit. Every protocol packet
+maps to exactly one protocol flit at the architectural interface.
+That 1:1 is part of the CHI abstraction — unlike generic NoC
+protocols, CHI does not do multi-flit wormhole splitting. The spec
+also defines link flits, non-protocol flits used for credit return
+during link deactivation, but those do not carry protocol packets.
+
+Closing the loop: the CompAck on the RSP channel echoes the DBID
+that the home supplied in CompData, and its TgtID matches the home's
+HomeNID. That is how the home knows which outstanding transaction
+just completed.
+
+The right-side table summarises the three boundaries. The two "N"
+ratios are where variability enters: a transaction can spawn many
+messages, and a message can split into many packets. The single
+"1:1" ratio is an architectural guarantee — at the CHI port
+interface, the spec does not let implementations split a packet into
+multiple flits.
 -->
 
 ---
