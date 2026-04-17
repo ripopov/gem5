@@ -673,7 +673,7 @@ flowchart LR
 
     subgraph A["Upstream router A"]
         direction TB
-        AOut[OutputUnit<br/>OutVcState[vc]<br/>credit count for B's input VC]
+        AOut["OutputUnit<br/>OutVcState[vc]<br/>credit count for B's input VC"]
     end
 
     subgraph B["Downstream router B"]
