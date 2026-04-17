@@ -127,13 +127,66 @@ gem5 is where we will see both in action.
 ---
 
 <!-- ================================================================== -->
-<!-- SLIDE 3: TBD -->
+<!-- SLIDE 3: CHI Node Types — a typical system -->
 <!-- ================================================================== -->
 
-## TBD
+## CHI Node Types — a typical system
+
+![h:513 CHI node types overview — RN-F, RN-I (PCIe and GPU variants), RN-D, MN, HN-F, SN-F around the ICN, with MC and DRAM attached to the SN-F](../resources/chi_node_types.svg)
 
 <!-- Speaker Notes:
 Time budget: 3 minutes.
+
+This is a typical CHI system, with every node type the spec defines.
+
+In the middle, ICN — the Interconnect Network. CHI is carried over
+it but does not specify it. The spec's own wording is "IMPLEMENTATION
+SPECIFIC": topology, fabric, routing, buffering are all yours. Every
+other node plugs into ICN through the four CHI channels we'll see on
+the next slide.
+
+Top-left, two RN-Fs: Fully Coherent Request Nodes. CPU cores with
+hardware-coherent caches — drawn as the internal "CPU" and "L1 / L2"
+boxes. An RN-F generates every transaction type and responds to every
+snoop type.
+
+Top-right, RN-I with a GPU inside: IO Coherent Request Node. Section
+B13.6.1.3 of the spec literally names this use case, quote: "a GPU or
+IO bridge". An RN-I holds no hardware-coherent cache and receives
+neither snoops nor DVM — the driver manages any on-GPU cache and TLB
+explicitly.
+
+Left column, top: a second RN-I with a PCIe bridge inside — same node
+type, different device. Any non-caching I/O requester fits here.
+
+Left column, bottom, RN-D: IO Coherent Request Node with DVM support.
+The "D" is DVM, Distributed Virtual Memory. Put an accelerator here
+when its SMMU walks the CPU's page tables directly, so CPU-side TLB
+invalidations must reach it in hardware. RN-D does receive snoops —
+but the spec restricts them: "use of the SNP channel is limited to
+DVM transactions". DVM snoops only, never cache-coherence snoops. So
+a driver-managed GPU stays RN-I; a hardware-SVM GPU moves to RN-D.
+
+Right side, MN: Miscellaneous Node. Where DVM traffic terminates and
+fans out to every RN-F and every RN-D in the system.
+
+Bottom row, two HN-Fs: Fully Coherent Home Nodes. The Point of
+Coherence. Every cache line maps to exactly one home, usually by
+address hashing. Two optional internal pieces: SF, a snoop filter or
+directory, which the spec explicitly lists as optional; and LLC
+slice, an implementation-specific last-level cache. The home
+serializes conflicting requests, sends snoops, grants ownership, and
+forwards data.
+
+Next to the HN-Fs, SN-F: Subordinate Node. Note the spec uses
+"Subordinate", not "Slave". The memory-side node. It receives
+ReadNoSnp and WriteNoSnp from the homes and returns data. CHI stops
+at SN-F — attached on the side you see MC, the memory controller,
+and behind it DRAM. Whatever MC speaks to DRAM is outside the CHI
+spec.
+
+Color coding we'll reuse throughout the deck: RN-F blue, RN-I teal,
+RN-D gold, HN-F violet, MN slate, SN-F green.
 -->
 
 ---

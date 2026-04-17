@@ -1,0 +1,159 @@
+<mxfile host="Electron" modified="2026-04-17T00:00:00.000Z" agent="draw.io" version="24.0.0">
+  <diagram name="CHI Node Types" id="chi-node-types">
+    <mxGraphModel dx="1500" dy="900" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1220" pageHeight="630" math="0" shadow="0" background="#ffffff">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <!-- ============================================================ -->
+        <!-- ICN — central interconnect network                            -->
+        <!-- ============================================================ -->
+        <mxCell id="icn" value="&lt;div style=&quot;font-size:34px;font-weight:bold;color:#334155;letter-spacing:1px&quot;&gt;ICN&lt;/div&gt;&lt;div style=&quot;font-size:13px;color:#64748b;margin-top:4px&quot;&gt;Interconnect Network — implementation defined&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F1F5F9;strokeColor=#475569;strokeWidth=3;verticalAlign=middle;arcSize=3;fontSize=14;dashed=0;" vertex="1" parent="1">
+          <mxGeometry x="240" y="210" width="760" height="220" as="geometry"/>
+        </mxCell>
+
+        <!-- ============================================================ -->
+        <!-- Top row: RN-F x3 (CPU + L1/L2 internal)                       -->
+        <!-- ============================================================ -->
+        <mxCell id="rnf0" value="&lt;b style=&quot;font-size:24px&quot;&gt;RN-F&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DBEAFE;strokeColor=#2563eb;strokeWidth=2.5;verticalAlign=top;fontSize=16;fontColor=#1d4ed8;arcSize=6;" vertex="1" parent="1">
+          <mxGeometry x="244" y="30" width="220" height="130" as="geometry"/>
+        </mxCell>
+        <mxCell id="rnf0_cpu" value="&lt;b&gt;CPU&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#93c5fd;strokeWidth=1.5;fontSize=13;fontColor=#1d4ed8;arcSize=10;" vertex="1" parent="rnf0">
+          <mxGeometry x="15" y="50" width="90" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="rnf0_cache" value="&lt;b&gt;L1 / L2&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#93c5fd;strokeWidth=1.5;fontSize=13;fontColor=#1d4ed8;arcSize=10;" vertex="1" parent="rnf0">
+          <mxGeometry x="115" y="50" width="90" height="60" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="rnf1" value="&lt;b style=&quot;font-size:24px&quot;&gt;RN-F&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DBEAFE;strokeColor=#2563eb;strokeWidth=2.5;verticalAlign=top;fontSize=16;fontColor=#1d4ed8;arcSize=6;" vertex="1" parent="1">
+          <mxGeometry x="510" y="30" width="220" height="130" as="geometry"/>
+        </mxCell>
+        <mxCell id="rnf1_cpu" value="&lt;b&gt;CPU&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#93c5fd;strokeWidth=1.5;fontSize=13;fontColor=#1d4ed8;arcSize=10;" vertex="1" parent="rnf1">
+          <mxGeometry x="15" y="50" width="90" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="rnf1_cache" value="&lt;b&gt;L1 / L2&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#93c5fd;strokeWidth=1.5;fontSize=13;fontColor=#1d4ed8;arcSize=10;" vertex="1" parent="rnf1">
+          <mxGeometry x="115" y="50" width="90" height="60" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="rni2" value="&lt;b style=&quot;font-size:24px&quot;&gt;RN-I&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#CCFBF1;strokeColor=#0f766e;strokeWidth=2.5;verticalAlign=top;fontSize=16;fontColor=#0f766e;arcSize=6;" vertex="1" parent="1">
+          <mxGeometry x="776" y="30" width="220" height="130" as="geometry"/>
+        </mxCell>
+        <mxCell id="rni2_gpu" value="&lt;b&gt;GPU&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#5eead4;strokeWidth=1.5;fontSize=13;fontColor=#0f766e;arcSize=10;" vertex="1" parent="rni2">
+          <mxGeometry x="15" y="50" width="90" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="rni2_cache" value="&lt;b&gt;L1 / L2&lt;/b&gt;&lt;div style=&quot;font-size:10px;font-weight:normal&quot;&gt;NonCoh&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#5eead4;strokeWidth=1.5;fontSize=13;fontColor=#0f766e;arcSize=10;" vertex="1" parent="rni2">
+          <mxGeometry x="115" y="50" width="90" height="60" as="geometry"/>
+        </mxCell>
+
+        <!-- ============================================================ -->
+        <!-- Left column: RN-I (PCIe inside), RN-D (SMMU inside)           -->
+        <!-- ============================================================ -->
+        <mxCell id="rni" value="&lt;b style=&quot;font-size:22px&quot;&gt;RN-I&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#CCFBF1;strokeColor=#0f766e;strokeWidth=2.5;verticalAlign=top;fontSize=16;fontColor=#0f766e;arcSize=6;" vertex="1" parent="1">
+          <mxGeometry x="40" y="215" width="170" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="rni_dev" value="&lt;b&gt;PCIe&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#5eead4;strokeWidth=1.5;fontSize=13;fontColor=#0f766e;arcSize=10;" vertex="1" parent="rni">
+          <mxGeometry x="30" y="42" width="110" height="38" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="rnd" value="&lt;b style=&quot;font-size:22px&quot;&gt;RN-D&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEF3C7;strokeColor=#c58b1b;strokeWidth=2.5;verticalAlign=top;fontSize=16;fontColor=#a16207;arcSize=6;" vertex="1" parent="1">
+          <mxGeometry x="40" y="335" width="170" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="rnd_dev" value="&lt;b&gt;SMMU&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#fcd34d;strokeWidth=1.5;fontSize=13;fontColor=#a16207;arcSize=10;" vertex="1" parent="rnd">
+          <mxGeometry x="30" y="42" width="110" height="38" as="geometry"/>
+        </mxCell>
+
+        <!-- ============================================================ -->
+        <!-- Right column: MN                                              -->
+        <!-- ============================================================ -->
+        <mxCell id="mn" value="&lt;b style=&quot;font-size:24px&quot;&gt;MN&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F1F5F9;strokeColor=#64748b;strokeWidth=2.5;verticalAlign=middle;fontSize=16;fontColor=#334155;arcSize=6;" vertex="1" parent="1">
+          <mxGeometry x="1030" y="275" width="150" height="90" as="geometry"/>
+        </mxCell>
+
+        <!-- ============================================================ -->
+        <!-- Bottom row: HN-F x2 (SF + LLC), SN-F, MC, DRAM                 -->
+        <!-- ============================================================ -->
+        <mxCell id="hnf0" value="&lt;b style=&quot;font-size:24px&quot;&gt;HN-F&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE9FE;strokeColor=#7c3aed;strokeWidth=2.5;verticalAlign=top;fontSize=16;fontColor=#6d28d9;arcSize=6;" vertex="1" parent="1">
+          <mxGeometry x="239" y="475" width="230" height="140" as="geometry"/>
+        </mxCell>
+        <mxCell id="hnf0_sf" value="&lt;b&gt;SF&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#c4b5fd;strokeWidth=1.5;fontSize=13;fontColor=#6d28d9;arcSize=10;" vertex="1" parent="hnf0">
+          <mxGeometry x="20" y="55" width="90" height="65" as="geometry"/>
+        </mxCell>
+        <mxCell id="hnf0_llc" value="&lt;b&gt;LLC slice&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#c4b5fd;strokeWidth=1.5;fontSize=13;fontColor=#6d28d9;arcSize=10;" vertex="1" parent="hnf0">
+          <mxGeometry x="120" y="55" width="90" height="65" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="hnf1" value="&lt;b style=&quot;font-size:24px&quot;&gt;HN-F&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE9FE;strokeColor=#7c3aed;strokeWidth=2.5;verticalAlign=top;fontSize=16;fontColor=#6d28d9;arcSize=6;" vertex="1" parent="1">
+          <mxGeometry x="505" y="475" width="230" height="140" as="geometry"/>
+        </mxCell>
+        <mxCell id="hnf1_sf" value="&lt;b&gt;SF&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#c4b5fd;strokeWidth=1.5;fontSize=13;fontColor=#6d28d9;arcSize=10;" vertex="1" parent="hnf1">
+          <mxGeometry x="20" y="55" width="90" height="65" as="geometry"/>
+        </mxCell>
+        <mxCell id="hnf1_llc" value="&lt;b&gt;LLC slice&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#c4b5fd;strokeWidth=1.5;fontSize=13;fontColor=#6d28d9;arcSize=10;" vertex="1" parent="hnf1">
+          <mxGeometry x="120" y="55" width="90" height="65" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="snf" value="&lt;b style=&quot;font-size:24px&quot;&gt;SN-F&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DCFCE7;strokeColor=#15803d;strokeWidth=2.5;verticalAlign=middle;fontSize=16;fontColor=#166534;arcSize=6;" vertex="1" parent="1">
+          <mxGeometry x="811" y="485" width="150" height="120" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="mc" value="&lt;b&gt;MC&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f1f5f9;strokeColor=#334155;strokeWidth=1.8;verticalAlign=middle;fontSize=14;fontColor=#334155;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="981" y="510" width="90" height="70" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="dram" value="&lt;b&gt;DRAM&lt;/b&gt;" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#f8fafc;strokeColor=#334155;strokeWidth=1.8;fontSize=13;fontColor=#334155;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1091" y="510" width="100" height="70" as="geometry"/>
+        </mxCell>
+
+        <!-- ============================================================ -->
+        <!-- Straight connections: nodes plug into ICN on axis-aligned     -->
+        <!-- paths. Exit/entry ratios are chosen so each line is purely   -->
+        <!-- horizontal or vertical.                                       -->
+        <!-- ============================================================ -->
+
+        <!-- Top: RN-F bottoms → ICN top at x=354, 620, 886 -->
+        <mxCell id="e_rnf0" style="edgeStyle=none;rounded=0;html=1;strokeColor=#64748b;strokeWidth=2.5;endArrow=none;startArrow=none;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.15;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="rnf0" target="icn">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_rnf1" style="edgeStyle=none;rounded=0;html=1;strokeColor=#64748b;strokeWidth=2.5;endArrow=none;startArrow=none;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="rnf1" target="icn">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_rni2" style="edgeStyle=none;rounded=0;html=1;strokeColor=#64748b;strokeWidth=2.5;endArrow=none;startArrow=none;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.85;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="rni2" target="icn">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Left: RN-I/RN-D rights → ICN left at y=260, y=380 -->
+        <mxCell id="e_rni" style="edgeStyle=none;rounded=0;html=1;strokeColor=#64748b;strokeWidth=2.5;endArrow=none;startArrow=none;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.2273;entryDx=0;entryDy=0;" edge="1" parent="1" source="rni" target="icn">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_rnd" style="edgeStyle=none;rounded=0;html=1;strokeColor=#64748b;strokeWidth=2.5;endArrow=none;startArrow=none;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.7727;entryDx=0;entryDy=0;" edge="1" parent="1" source="rnd" target="icn">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Right: MN left → ICN right at y=320 -->
+        <mxCell id="e_mn" style="edgeStyle=none;rounded=0;html=1;strokeColor=#64748b;strokeWidth=2.5;endArrow=none;startArrow=none;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="mn" target="icn">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Bottom: HN-F/SN-F tops → ICN bottom at x=354, 620, 886 -->
+        <mxCell id="e_hnf0" style="edgeStyle=none;rounded=0;html=1;strokeColor=#64748b;strokeWidth=2.5;endArrow=none;startArrow=none;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.15;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" source="hnf0" target="icn">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_hnf1" style="edgeStyle=none;rounded=0;html=1;strokeColor=#64748b;strokeWidth=2.5;endArrow=none;startArrow=none;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" source="hnf1" target="icn">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_snf" style="edgeStyle=none;rounded=0;html=1;strokeColor=#64748b;strokeWidth=2.5;endArrow=none;startArrow=none;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.85;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" source="snf" target="icn">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- SN-F → MC → DRAM chain (off-fabric, dark line) -->
+        <mxCell id="e_snf_mc" style="edgeStyle=none;rounded=0;html=1;strokeColor=#334155;strokeWidth=2.5;endArrow=none;startArrow=none;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="snf" target="mc">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_mc_dram" style="edgeStyle=none;rounded=0;html=1;strokeColor=#334155;strokeWidth=2.5;endArrow=none;startArrow=none;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="mc" target="dram">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
