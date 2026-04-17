@@ -34,8 +34,8 @@ and flow control**.
 5. [Layer 3: SimpleNetwork Interior](#5-layer-3-simplenetwork-interior)
 6. [Layer 3: Garnet Interior](#6-layer-3-garnet-interior)
 7. [Backpressure: Who Pushes Back On Whom](#7-backpressure-who-pushes-back-on-whom)
-8. [RTL Correlation](#8-rtl-correlation)
-9. [Swapping SimpleNetwork ↔ Garnet With Aligned Config](#9-swapping-simplenetwork--garnet-with-aligned-config)
+8. [Implications of Infinite Outbound MessageBuffers](#8-implications-of-infinite-outbound-messagebuffers)
+9. [RTL Correlation](#9-rtl-correlation)
 10. [Transaction Flow at a Glance](#10-transaction-flow-at-a-glance)
 11. [Per-Buffer Catalog (Quick Reference)](#11-per-buffer-catalog-quick-reference)
 12. [Common Misconceptions](#12-common-misconceptions)
@@ -743,13 +743,219 @@ enqueues to add `check_allocate(reqOut)` etc.
 
 ---
 
-## 8. RTL Correlation
+## 8. Implications of Infinite Outbound MessageBuffers
+
+Sections §4 and §7 noted CHI's central flow-control asymmetry:
+
+- The TBE table is capped, and `check_allocate(storTBEs)` makes its fullness
+  reach the FSM (causing `RetryAck` at HN, resource-stall at RN).
+- The four outbound MessageBuffers (`reqOut`/`snpOut`/`rspOut`/`datOut`) are
+  **uncapped by default and unguarded by `check_allocate`**, so they behave as
+  infinite reservoirs sitting between the FSM and the network.
+
+This section unpacks what that actually means for transaction dynamics, since
+it is easy to assume "TBEs are bounded, therefore message traffic is bounded" —
+and that is true in long-run averages but **not at the per-cycle granularity
+that determines queueing dynamics, tail latency, and link saturation**.
+
+### 8.1 Two Different Things to Count
+
+A frequent confusion is treating "outstanding transactions" and "outstanding
+messages" as the same quantity. They are not.
+
+| Quantity | What it counts | What bounds it |
+|---|---|---|
+| In-flight **transactions** at a node | TBEs currently allocated | TBE pool size + `max_outstanding_transactions` |
+| In-flight **messages** on a vnet (anywhere in the system) | `MsgPtr`s in MessageBuffers + in NoC | TBE count × per-TBE per-channel fan-out factor (loose bound) |
+| Per-cycle **enqueue rate** into a controller's outbound MessageBuffer | Number of `enqueue(...)` calls executed in one tick | **Unbounded** in CHI — no `check_allocate` on outbound vnets |
+| **Occupancy** of a controller's outbound MessageBuffer | Messages waiting to be drained by NI / PerfectSwitch | **Unbounded** — `buffer_size = 0` by default; capping it panics |
+
+The TBE bound on in-flight messages is meaningful but **loose**. To see why,
+consider what each TBE state can produce.
+
+### 8.2 Per-TBE Concurrent Live Messages
+
+In steady state, how many of a TBE's messages are simultaneously alive?
+
+| Node + role | Concurrent live messages from one TBE | Channels |
+|---|---|---|
+| RN-F doing a ReadShared | 1 REQ outstanding (waiting for DAT), then 1 RSP (CompAck) | REQ → RSP |
+| RN-F handling a snoop (snoop TBE) | 1 SnpResp or SnpRespData | RSP or DAT |
+| **HN-F handling a ReadShared with N potential sharers** | **N concurrent SNP messages**, then 1 REQ to SN, then 1 DAT response | SNP × N → REQ → DAT |
+| SN-F handling a memory access | 1 DAT response | DAT |
+
+The HN-F snoop fan-out case is the one that breaks the tight "1 TBE = 1
+message" intuition. With 32 TBEs at an HN-F and a snoop-broadcast list of 16
+RN-Fs, the SNP vnet can carry up to 32 × 16 = 512 in-flight messages from this
+one HN — far more than the TBE count alone would suggest.
+
+### 8.3 Where Bursts Come From
+
+A "burst" is **a short window in which the message-generation rate at a
+controller exceeds the network's drain rate**. Bursts are not about
+transactions completing — transactions complete one at a time. Bursts are about
+*message production within and across transactions* not being uniform in time.
+
+Five common sources:
+
+**(1) Fan-out within one transaction.** An HN-F handling a ReadShared issues
+snoops to all potential sharers in the same SLICC transition. One TBE → N
+messages enqueued back-to-back on `snpOut`.
+
+```
+cycle T:    HN-F receives ReadShared, allocates TBE
+cycle T+k:  ProcessReadShared transition fires:
+              enqueue SnpShared to RN-F[0]
+              enqueue SnpShared to RN-F[1]
+              ...
+              enqueue SnpShared to RN-F[N-1]   ← N enqueues in one cycle;
+                                                  snpOut depth jumps by N
+```
+
+**(2) Convergence (fan-in).** The N RN-Fs receive the snoops and respond on
+roughly the same cycle. From the HN-F's perspective, `rspIn` (or `datIn` for
+SnpRespData) sees N arrivals in close cycles. The HN-F's incoming MessageBuffer
+absorbs the convergence.
+
+**(3) Multiple TBEs reaching the same enqueue step in the same cycle.** SN-F
+(memory controller) returns DRAM data for several outstanding accesses
+simultaneously when independent banks complete on the same cycle. HN-F sees
+those DAT messages arrive, demuxes them to the right transactions, and each
+transaction enqueues a `CompData` to its requester on the same or adjacent
+cycle.
+
+```
+cycle T:    SN-F datOut: DAT[0], DAT[1], DAT[2], DAT[3] enqueued
+            (4 banks completed this cycle)
+cycle T+1:  HN-F datIn receives them; demuxes to 4 TBEs
+cycle T+2:  4 TBEs fire SendCompData transitions concurrently
+            HN-F datOut grows by 4 in one cycle
+```
+
+Each TBE involved in this burst is *not* retiring — it is merely advancing
+through its `SendCompData` transition. The TBE will hold until `CompAck`
+arrives. So TBE occupancy gives no warning of the buffer spike.
+
+**(4) Replacement cascades.** A capacity miss triggers an eviction; the
+eviction triggers a writeback; the writeback enqueues a `CopyBackWrData` on
+`datOut`. A set-conflict storm or a hash-collision burst lines up many
+evictions in close succession, each adding to `datOut`.
+
+**(5) Retry-credit storms.** When an HN-F drains a TBE and frees a slot, it
+issues `PCrdGrant` to the next waiting requester. If many requesters were
+stalled (because the HN was saturated), several `PCrdGrant`s may fire on
+`rspOut` over a short window as TBEs recycle.
+
+### 8.4 What Happens in gem5 vs Real RTL
+
+Take source (3) — four DAT responses enqueued by the HN in one cycle.
+
+**In RTL:** the HN's link-layer DAT-channel LCrdV counter limits how many
+in-flight DAT messages can be on the wire to the requester. When credits run
+out, the HN's transmit FSM stalls — it cannot pop from its internal DAT queue
+until LCredits return. The internal queue is finite (e.g., 4 slots). If it
+fills, the upstream stage backpressures, ultimately delaying the response
+generation itself.
+
+**In gem5:** the HN's `datOut` accepts the four enqueues without complaint.
+With `buffer_size = 0` (default) there is no panic and no stall. The network
+drains at ~flit-rate. The TBEs that produced the responses have already moved
+past their `SendCompData` transitions — they are now waiting for `CompAck` —
+so the TBE table doesn't push back either. The buffer occupancy spikes, then
+bleeds down at network rate.
+
+```
+                              datOut occupancy at HN-F
+   |                                     ╱╲
+ 5 |                                    ╱  ╲
+   |                                   ╱    ╲___
+ 4 |                          ___     ╱         ╲___
+   |                         ╱   ╲___╱              ╲___
+ 3 |               ___      ╱                           ╲___
+   |              ╱   ╲____╱                                ╲___
+ 2 |          ___╱                                              ╲
+ 1 |  ___ ___╱
+ 0 +────────────────────────────────────────────────────────────────  cycles
+       ↑               ↑              ↑            ↑
+       1 DRAM rsp      DRAM bank     4 banks       burst absorbed,
+       arrives         bursts        complete      network drains
+       (1 enqueue)     (2 enqueues)  (4 enqueues   at flit rate
+                                      same cycle)
+```
+
+### 8.5 Concrete Effects on Reported Behavior
+
+| Aspect | gem5 with infinite outbound | Real RTL |
+|---|---|---|
+| Mean latency under low load | Matches RTL | Matches RTL |
+| Mean throughput under steady moderate load | Matches RTL (bounded by TBE × per-TBE rate) | Matches RTL |
+| Per-cycle enqueue rate | Whatever the FSM emits | Capped by link-layer credit |
+| Tail latency | Distorted: bursts absorbed silently, then bled out at network rate | Bursts feel link credit pressure; producer stalls; tail shape reflects RTL queueing |
+| Effective FSM behavior | "Producer-paced" — FSM never knows the network is congested on egress | "Network-paced" — FSM stalls when channel queue is full |
+| Throughput right at saturation | Possibly **over-estimated**, because backpressure that would slow the FSM in RTL doesn't slow it in gem5 | Naturally throttled by link credits |
+| Deadlocks from finite channel queues | **Vacuously absent** — infinite buffers always sink messages | Can arise; designs must prove freedom |
+| Interaction with VC/credit fidelity (Garnet) | NI drains slowly when VCs are starved, but the controller's outbound buffer just grows behind it | RTL's link-layer queues feel pressure all the way back to the FSM |
+
+The most subtle effect is the last row: **even with Garnet and tight VC sizing,
+the controller's outbound MessageBuffer hides backpressure from the FSM**.
+Garnet correctly slows down the *drain rate* from `datOut` when VCs are
+starved; what it cannot do is cause the FSM to stop *filling* `datOut`. The
+buffer is the cushion that absorbs the discrepancy. A short-window burst can
+produce a large queue in `datOut` that the FSM never sees.
+
+### 8.6 When This Matters and When It Does Not
+
+| Use case | Affected? | Why |
+|---|---|---|
+| Protocol bring-up, coverage, race testing | No | Correctness studies don't care about queueing distortion |
+| Mean latency, mean throughput at moderate load | No | Long-run averages match |
+| Energy/area sizing of TBE pools | No | TBE bound is faithful |
+| Energy/area sizing of CHI channel queues | **Yes** | gem5 cannot tell you "the channel queue needs to be N deep to avoid stalling the producer" because the producer never stalls |
+| Tail latency, p99/p999 measurements | **Yes** | Burst-induced queueing is bled out at network rate, not absorbed at the producer; tail shape is wrong |
+| Studies near saturation | **Yes** | Effective throughput may be over-estimated; backpressure that would slow FSM is absent |
+| NoC-link saturation localization | Partial | Can localize where flits queue, but cannot localize where producer stalls would happen in RTL |
+| RTL correlation for performance regressions | **Yes** | Workload-specific bursts may produce different latency tails than RTL; mean numbers may still agree |
+| Deadlock-freedom proofs | **Yes** | Vacuously OK in gem5 with infinite buffers; not a guarantee for RTL |
+
+### 8.7 What to Do About It
+
+Three escalating options, in increasing fidelity (and increasing effort):
+
+1. **Accept and document.** For studies where mean latency / throughput is the
+   primary metric, the infinite-outbound assumption is fine. Note explicitly in
+   published results that egress-side channel-level flow control is not modeled.
+
+2. **Use Garnet with tight VC sizing and capped controller ingress buffers.**
+   Set `vcs_per_vnet` and `buffers_per_*_vc` to RTL-matched values. Cap the
+   controller's *incoming* MessageBuffers (`reqIn`/`snpIn`/`rspIn`/`datIn`) —
+   this is safe in Garnet because the NI checks `areNSlotsAvailable` before
+   ejection. This produces honest **ingress** backpressure and bleeds drain
+   rate back into outbound buffers, but does not gate the FSM's enqueue side.
+
+3. **Patch SLICC or use `CHIGenericController`.** To get FSM-level **egress**
+   backpressure you must either:
+   - Edit `CHI-cache-actions.sm` to add `check_allocate(reqOut)` (and the
+     other three) on every outbound enqueue. This is invasive (many
+     transitions) and requires care to avoid livelock — if a transition
+     cannot enqueue and holds a TBE that another transition needs, the system
+     starves.
+   - Or bypass SLICC entirely with **`CHIGenericController`**
+     (`src/mem/ruby/protocol/chi/generic/`), implementing CHI in C++ with
+     explicit per-channel credit handling, optionally driven by an Arm AMBA
+     TLM model.
+
+See §9 for how each of these maps onto specific RTL parameters, and
+`ruby-book/extra/ChiGenericCtrl.md` for the bypass path.
+
+---
+
+## 9. RTL Correlation
 
 The point of this section is practical: **how close can my gem5 model get to a
 real CHI RTL NoC, where can I match outstanding-transaction counts and buffer
 depths exactly, and what should I do about the gaps?**
 
-### 8.1 Mapping CHI Spec Concepts to gem5 Storage
+### 9.1 Mapping CHI Spec Concepts to gem5 Storage
 
 | CHI spec concept | RTL implementation | gem5 SLICC CHI counterpart | Faithful? |
 |---|---|---|---|
@@ -762,7 +968,7 @@ depths exactly, and what should I do about the gaps?**
 | Snoop filter / directory entries | Hardware snoop-filter cache | HN cache state + `number_of_snoop_TBEs` | Yes |
 | Per-channel arbitration / VC arbitration | Hardware NoC arbiter | `PerfectSwitch` (Simple) / `SwitchAllocator` (Garnet) | Garnet faithful, Simple abstracted |
 
-### 8.2 What You Can Match Today
+### 9.2 What You Can Match Today
 
 These knobs let you tune gem5 to a target RTL configuration with reasonable fidelity:
 
@@ -776,7 +982,7 @@ These knobs let you tune gem5 to a target RTL configuration with reasonable fide
    Mesh / ring / custom; match your RTL placement.
 5. **In Garnet only:** per-VC buffer depth (`buffers_per_data_vc`, `buffers_per_ctrl_vc`) and VC count per channel (`vcs_per_vnet`).
 
-### 8.3 What You Cannot Match (Without Code Changes)
+### 9.3 What You Cannot Match (Without Code Changes)
 
 1. **Channel-level link credit (LCrdV).** No model. Garnet's VC credits are
    close but operate at a different granularity. If your RTL has 8 LCredits per
@@ -785,16 +991,20 @@ These knobs let you tune gem5 to a target RTL configuration with reasonable fide
    `reqOut`/`snpOut`/`rspOut`/`datOut` panics today because CHI's SLICC does not
    guard enqueues with `check_allocate`. Your RTL has finite channel queues at
    every node; gem5 does not.
-3. **Burst absorption when many TBEs retire in one cycle.** Real RTL would
-   serialize the resulting DAT messages over the link's credit budget; gem5's
-   uncapped `datOut` absorbs the burst and bleeds it out at network rate.
+3. **Per-cycle burst shaping at the producer.** When several messages are
+   produced in the same cycle (snoop fan-out, multi-TBE concurrent
+   `SendCompData`, eviction cascades, retry-grant storms — see §8.3), real RTL
+   would serialize them through the link's per-channel credit budget and stall
+   the producer. gem5's uncapped outbound MessageBuffer absorbs the spike and
+   bleeds it out at network rate. Mean throughput matches; tail latency and
+   queueing dynamics do not.
 4. **Per-channel virtual networks separated by physical wires** (CHI optionally
    physically separates REQ/SNP/RSP/DAT). Garnet always shares the same physical
    link across vnets, modulated by VC allocation. SimpleNetwork can simulate
    parallel channels via `physical_vnets_channels` but only as bandwidth/depth
    scaling.
 
-### 8.4 Workarounds
+### 9.4 Workarounds
 
 | Goal | Workaround |
 |---|---|
@@ -810,7 +1020,7 @@ escape hatch: a pure-C++ controller that bypasses SLICC and lets you implement
 CHI semantics with full credit fidelity, optionally via an Arm TLM model. See
 `ruby-book/extra/ChiGenericCtrl.md` for an introduction.
 
-### 8.5 A Practical RTL-Correlation Recipe
+### 9.5 A Practical RTL-Correlation Recipe
 
 For each RTL CHI node, translate as follows:
 
@@ -841,7 +1051,7 @@ it does enforce a hard cap on in-flight flits per channel.
 ---
 
 
-## 9. Transaction Flow at a Glance
+## 10. Transaction Flow at a Glance
 
 A condensed view of what happens to a single load. For the full story (all six
 representations, all five conversion boundaries), see
@@ -852,44 +1062,65 @@ sequenceDiagram
     autonumber
     participant CPU as CPU core
     participant Seq as Sequencer
-    participant L1 as L1 RNF<br/>(SLICC FSM)
+    participant L1 as L1 RN-F<br/>(SLICC FSM)
     participant Net as Network<br/>(Simple OR Garnet)
     participant HN as HN-F<br/>(SLICC FSM)
-    participant SN as SN-F<br/>(memory ctrl)
+    participant SN as SN-F<br/>(memory node)
 
-    CPU->>Seq: lw  (RubyRequest in mandatoryQueue)
-    Seq->>L1: triggered transition
-    L1->>L1: AllocateTBE_SeqRequest (check_allocate storTBEs)
-    L1->>L1: enqueue ReadShared on reqOut (vnet 0)
-    L1->>Net: NI/PerfectSwitch peeks reqOut
-    Net->>HN: deliver Message to reqIn
-    HN->>HN: AllocateTBE_Request (or RetryAck)
-    HN->>HN: enqueue SnpShared on snpOut (vnet 1)
-    Note right of HN: ... snoop fan-out elided ...
-    HN->>SN: enqueue ReadNoSnp on reqOut → SN-F reqIn
-    SN->>HN: enqueue CompData on datOut (vnet 3)
-    HN->>L1: enqueue CompData_UC on datOut (vnet 3)
-    L1->>L1: deallocate TBE, write to L1 cache
-    L1->>Seq: callback to Sequencer
-    Seq->>CPU: load value
+    CPU->>Seq: `lw` issues a timing load
+    Seq->>L1: `RubyRequest` enters `mandatoryQueue`
+    L1->>L1: `AllocateTBE_SeqRequest`<br/>reserve request TBE<br/>`mandatoryQueue -> reqRdy` (`type=Load`)
+    L1->>L1: miss path from `reqRdy`<br/>emit `ReadShared` or `ReadNotSharedDirty` on `reqOut` (REQ vnet)
+    L1->>Net: network drains `reqOut`
+    Net->>HN: deliver CHI request into `reqIn`
+    HN->>HN: `AllocateTBE_Request`<br/>`reqIn -> reqRdy`<br/>(retry path omitted here)
+
+    alt HN already has the line
+        HN->>HN: satisfy from local cache / directory state
+        HN->>Net: send `CompData_*` on `datOut` (DAT vnet)
+    else Line is cached upstream
+        HN->>Net: send snoop(s) on `snpOut` (SNP vnet)
+        Note right of HN: Snoop fan-out and snoop responses elided.
+        HN->>Net: send `CompData_*` to the requester
+    else HN misses and goes to memory
+        HN->>Net: send `ReadNoSnp` on `reqOut` (REQ vnet)
+        Net->>SN: deliver request into `reqIn`
+        SN->>Net: send `CompData_UC` on `datOut` (DAT vnet)
+        Net->>HN: deliver data into `datIn`
+        HN->>Net: send `CompData_*` on `datOut` (DAT vnet)
+    end
+
+    Net->>L1: deliver data into `datIn`
+    par Complete the CPU-visible request
+        L1->>L1: `Callback_Miss`<br/>update cache line and state
+        L1->>Seq: complete Sequencer request
+        Seq->>CPU: return load value
+    and Close the CHI transaction
+        L1->>Net: send `CompAck` on `rspOut` (RSP vnet)
+        Net->>HN: deliver `CompAck`
+        HN->>HN: finalize request-side bookkeeping
+    end
+
+    L1->>L1: finalize and deallocate request TBE
 ```
 
 Mapping to storage:
 
-| Step | Storage touched | Layer |
+| Phase | Storage touched | Layer |
 |---|---|---|
-| 1–2 | `mandatoryQueue` | Protocol (internal) |
-| 3 | TBE table | Protocol |
-| 4 | `reqOut` | Protocol/Network boundary |
-| 5 | (Garnet) NI flit buffers, NetworkLink, router VCs / (Simple) PerfectSwitch port_buffers, Throttle | Network + Link |
-| 6 | `reqIn` at HN | Boundary |
-| 7 | TBE table at HN | Protocol |
-| 8–10 | `snpOut`/`datOut` etc. | Boundary; then network |
-| 11 | TBE deallocation | Protocol |
+| CPU to Ruby ingress | `mandatoryQueue` | Protocol (internal) |
+| RN request admission | request TBE table, then `reqRdy` | Protocol |
+| RN outbound send | `reqOut` | Protocol/Network boundary |
+| NoC transit | Garnet NI VC buffers, `NetworkLink`, router VCs, `CreditLink` / or SimpleNetwork switch buffers and throttles | Network + Link |
+| HN request admission | `reqIn`, then HN request TBE table and `reqRdy` | Boundary + Protocol |
+| HN service path | local cache+directory state, or `snpOut`, or `reqOut` to SN-F | Protocol + Boundary |
+| Memory-node path | SN-F `reqIn` / `datOut` | Boundary + Protocol |
+| Data return | HN/L1 `datIn`, then `rspOut` for `CompAck` | Boundary |
+| Request completion | local cache arrays, Sequencer callback state, TBE finalization | Protocol |
 
 ---
 
-## 10. Per-Buffer Catalog (Quick Reference)
+## 11. Per-Buffer Catalog (Quick Reference)
 
 | Buffer | Where it lives | Stores | Sized by | Capped by default? | Backpressure modeled? |
 |---|---|---|---|---|---|
@@ -915,7 +1146,7 @@ Mapping to storage:
 
 ---
 
-## 11. Common Misconceptions
+## 12. Common Misconceptions
 
 **"Setting `buffer_size` on the controller's outbound MessageBuffer adds
 realistic backpressure."**
@@ -957,7 +1188,7 @@ a CHI Message, not a Ruby `Packet`.
 
 ---
 
-## 12. Key Ideas
+## 13. Key Ideas
 
 1. **Three layers, four units.** Protocol (Transactions), Network/boundary
    (Messages), Network interior (Packets, conceptually), Link (Flits). gem5's
