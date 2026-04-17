@@ -192,13 +192,65 @@ RN-D gold, HN-F violet, MN slate, SN-F green.
 ---
 
 <!-- ================================================================== -->
-<!-- SLIDE 4: TBD -->
+<!-- SLIDE 4: Port, Link, and Channel -->
 <!-- ================================================================== -->
 
-## TBD
+## Port, Link, and Channel
+
+![h:513 Port / Link / Channel hierarchy at the RN&ndash;ICN interface: two ports (RN and ICN) connected by an outbound link carrying REQ, DAT, RSP channels and an inbound link carrying SNP, RSP, DAT channels, with TX/RX pin names on each port](../resources/chi_port_link_channel.svg)
 
 <!-- Speaker Notes:
 Time budget: 3 minutes.
+
+Before we look at any packet or router, three terms need to be
+crisp: channel, link, and port. They form a hierarchy, and this
+diagram shows how they fit together at the interface between a
+Request Node and the Interconnect.
+
+Start from the bottom — a channel. Section B13.4 of the spec. A
+channel is a defined path over which flits of one traffic class
+move. CHI defines exactly four: REQ, RSP, SNP, DAT. These are not
+labels — they are different kinds of traffic with different
+dependency, progress, and buffering rules. REQ carries requests that
+start or advance a transaction. RSP carries non-data responses like
+completion or acceptance. SNP carries snoop requests sent to caches.
+DAT carries the data payload — cache-line fills, write data, snoop
+data. DAT usually consumes the most bandwidth.
+
+One level up — a link, sections B13.1 and B13.2. A link is a
+unidirectional connection from one transmitter to one receiver. Each
+link bundles some set of channels. Two-way communication between two
+nodes takes a pair of links. A link has finite bandwidth, nonzero
+latency, and link-layer credits that apply hop by hop. Internally a
+link may cross several routers and wires, but at the CHI
+architectural interface it still exposes exactly this channel
+structure.
+
+Top of the hierarchy — a port, section B13.6. A port is the set of
+all links at one node's interface. The whole interface bundle.
+
+Now read the diagram. The two outer boxes, Port (RN) on the left and
+Port (ICN) on the right, are the ports. Between them, two link
+boxes. The top one is the outbound link: RN transmits, ICN receives.
+It carries three channels — REQ for requests, DAT for write data,
+and RSP for responses like CompAck. Pin names on the RN side start
+with TX because the RN transmits; on the ICN side they start with RX
+because the ICN receives.
+
+The bottom link is the inbound link: ICN transmits, RN receives.
+Different channel set — SNP for snoops, RSP for completions, DAT for
+read data. Pins are reversed — RX on the RN side, TX on the ICN
+side.
+
+Which channels appear on a link depends on the node types at either
+end. An RN-to-SN inbound link, for example, has no SNP channel —
+SN-Fs do not generate snoops.
+
+One last caveat. Inside the ICN, what the spec calls a "link" may
+be realized by many routers and wires with a different
+microarchitecture — wider channels, virtual channels, whatever the
+implementer chose. The architectural link abstraction is what the
+spec guarantees at the port interface, not what happens inside.
 -->
 
 ---
