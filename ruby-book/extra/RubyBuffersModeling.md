@@ -682,10 +682,10 @@ flowchart LR
         BSA["SwitchAllocator<br/>grants this input VC"]
     end
 
-    AOut -->|if credit count > 0,<br/>send flit on NetworkLink| BIn
-    BIn -->|buffered flit waits for SA| BSA
-    BSA -->|flit leaves B's input VC| C["CreditLink<br/>Credit(vc, free?)"]
-    C -->|OutputUnit::wakeup()<br/>increment credit;<br/>free=true => mark VC IDLE| AOut
+    AOut -->|"if credit count > 0,<br/>send flit on NetworkLink"| BIn
+    BIn -->|"buffered flit waits for SA"| BSA
+    BSA -->|"flit leaves B's input VC"| C["CreditLink<br/>Credit(vc, free?)"]
+    C -->|"OutputUnit::wakeup()<br/>increment credit;<br/>free=true => mark VC IDLE"| AOut
 
     class AOut state
     class BIn router
