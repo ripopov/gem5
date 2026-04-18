@@ -1,0 +1,117 @@
+<mxfile host="Electron" modified="2026-04-18T00:00:00.000Z" agent="draw.io" version="24.0.0">
+  <diagram name="CHI Directory" id="chi-directory">
+    <mxGraphModel dx="1200" dy="900" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="500" pageHeight="700" math="0" shadow="0" background="#ffffff">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <!-- ============================================================ -->
+        <!-- Section 1 — HN-F slice (Directory + LLC)                      -->
+        <!-- ============================================================ -->
+        <mxCell id="hnf" value="&lt;b style=&quot;font-size:16px&quot;&gt;HN-F slice&lt;/b&gt; &#8212; &lt;span style=&quot;font-family:Menlo,monospace;font-size:13px&quot;&gt;CHI-cache.sm&lt;/span&gt;, &lt;span style=&quot;font-family:Menlo,monospace;font-size:13px&quot;&gt;is_HN = true&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F5F3FF;strokeColor=#7c3aed;strokeWidth=2.5;verticalAlign=top;fontSize=14;fontColor=#334155;arcSize=4;" vertex="1" parent="1">
+          <mxGeometry x="10" y="10" width="480" height="270" as="geometry"/>
+        </mxCell>
+
+        <!-- Directory column header -->
+        <mxCell id="dir_hdr" value="&lt;b&gt;Directory&lt;/b&gt;&lt;div style=&quot;font-size:11px;color:#6d28d9;margin-top:2px&quot;&gt;PerfectCacheMemory&#8239;&#8212;&#8239;unbounded&lt;/div&gt;&lt;div style=&quot;font-size:11px;color:#6d28d9&quot;&gt;Addr &#8594; DirEntry&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE9FE;strokeColor=#7c3aed;strokeWidth=2;verticalAlign=middle;align=center;fontSize=14;fontColor=#6d28d9;arcSize=6;" vertex="1" parent="1">
+          <mxGeometry x="28" y="50" width="210" height="58" as="geometry"/>
+        </mxCell>
+        <!-- Directory rows -->
+        <mxCell id="dir_r1" value="&lt;span style=&quot;font-family:Menlo,monospace&quot;&gt;0x40&#8239;&#8594;&#8239;DirEntry&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FAF5FF;strokeColor=#c4b5fd;strokeWidth=1;verticalAlign=middle;align=center;fontSize=13;fontColor=#334155;" vertex="1" parent="1">
+          <mxGeometry x="28" y="112" width="210" height="28" as="geometry"/>
+        </mxCell>
+        <mxCell id="dir_r2" value="&lt;span style=&quot;font-family:Menlo,monospace&quot;&gt;0x80&#8239;&#8594;&#8239;DirEntry&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FAF5FF;strokeColor=#c4b5fd;strokeWidth=1;verticalAlign=middle;align=center;fontSize=13;fontColor=#334155;" vertex="1" parent="1">
+          <mxGeometry x="28" y="142" width="210" height="28" as="geometry"/>
+        </mxCell>
+        <mxCell id="dir_r3" value="&lt;span style=&quot;font-family:Menlo,monospace&quot;&gt;0xC0&#8239;&#8594;&#8239;DirEntry&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FAF5FF;strokeColor=#c4b5fd;strokeWidth=1;verticalAlign=middle;align=center;fontSize=13;fontColor=#334155;" vertex="1" parent="1">
+          <mxGeometry x="28" y="172" width="210" height="28" as="geometry"/>
+        </mxCell>
+        <mxCell id="dir_ell" value="&#8230;" style="text;html=1;fontSize=18;fontStyle=1;fontColor=#7c3aed;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="28" y="202" width="210" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="dir_foot" value="one entry per &lt;em&gt;tracked&lt;/em&gt; line" style="text;html=1;fontSize=11;fontColor=#6d28d9;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="28" y="226" width="210" height="24" as="geometry"/>
+        </mxCell>
+
+        <!-- LLC column header -->
+        <mxCell id="llc_hdr" value="&lt;b&gt;LLC&lt;/b&gt;&lt;div style=&quot;font-size:11px;color:#334155;margin-top:2px&quot;&gt;CacheMemory&#8239;&#8212;&#8239;finite&lt;/div&gt;&lt;div style=&quot;font-size:11px;color:#334155&quot;&gt;tag + data, ways &#215; rows&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#334155;strokeWidth=2;verticalAlign=middle;align=center;fontSize=14;fontColor=#334155;arcSize=6;" vertex="1" parent="1">
+          <mxGeometry x="262" y="50" width="210" height="58" as="geometry"/>
+        </mxCell>
+        <!-- LLC rows -->
+        <mxCell id="llc_r1" value="&lt;span style=&quot;font-family:Menlo,monospace&quot;&gt;0x40&#8239;|&#8239;UC&#8239;|&#8239;data&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F8FAFC;strokeColor=#94a3b8;strokeWidth=1;verticalAlign=middle;align=center;fontSize=13;fontColor=#334155;" vertex="1" parent="1">
+          <mxGeometry x="262" y="112" width="210" height="28" as="geometry"/>
+        </mxCell>
+        <mxCell id="llc_r2" value="&lt;span style=&quot;font-family:Menlo,monospace;color:#94a3b8&quot;&gt;(miss)&#8239;&#8212;&#8239;tracked only&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F8FAFC;strokeColor=#94a3b8;strokeWidth=1;dashed=1;verticalAlign=middle;align=center;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="262" y="142" width="210" height="28" as="geometry"/>
+        </mxCell>
+        <mxCell id="llc_r3" value="&lt;span style=&quot;font-family:Menlo,monospace&quot;&gt;0xC0&#8239;|&#8239;SC&#8239;|&#8239;data&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#F8FAFC;strokeColor=#94a3b8;strokeWidth=1;verticalAlign=middle;align=center;fontSize=13;fontColor=#334155;" vertex="1" parent="1">
+          <mxGeometry x="262" y="172" width="210" height="28" as="geometry"/>
+        </mxCell>
+        <mxCell id="llc_ell" value="&#8230;" style="text;html=1;fontSize=18;fontStyle=1;fontColor=#334155;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="262" y="202" width="210" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="llc_foot" value="data only when &lt;em&gt;cached&lt;/em&gt;" style="text;html=1;fontSize=11;fontColor=#334155;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="262" y="226" width="210" height="24" as="geometry"/>
+        </mxCell>
+
+        <!-- ============================================================ -->
+        <!-- Centered zoom arrow connecting HN-F to DirEntry detail         -->
+        <!-- ============================================================ -->
+        <mxCell id="zoom_arrow" value="&lt;b&gt;zoom into one entry&lt;/b&gt;" style="endArrow=classic;html=1;strokeColor=#7c3aed;strokeWidth=2.5;fontSize=13;fontColor=#6d28d9;fontStyle=1;verticalAlign=middle;align=center;labelBackgroundColor=#ffffff;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="250" y="290" as="sourcePoint"/>
+            <mxPoint x="250" y="322" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ============================================================ -->
+        <!-- Section 2 — DirEntry detail                                    -->
+        <!-- ============================================================ -->
+        <mxCell id="entry_box" value="&lt;b style=&quot;font-size:16px&quot;&gt;DirEntry&lt;/b&gt; &#8212; &lt;span style=&quot;font-weight:normal&quot;&gt;one tracked line&lt;/span&gt;&lt;div style=&quot;font-size:11px;color:#475569;font-weight:normal;margin-top:2px&quot;&gt;declared at &lt;span style=&quot;font-family:Menlo,monospace&quot;&gt;CHI-cache.sm:590&lt;/span&gt;&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8FAFC;strokeColor=#334155;strokeWidth=2.5;verticalAlign=top;fontSize=14;fontColor=#334155;arcSize=4;" vertex="1" parent="1">
+          <mxGeometry x="10" y="320" width="480" height="360" as="geometry"/>
+        </mxCell>
+
+        <!-- Field 1: state -->
+        <mxCell id="f1_name" value="&lt;span style=&quot;font-family:Menlo,monospace&quot;&gt;state&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DBEAFE;strokeColor=#2563eb;strokeWidth=1.5;verticalAlign=middle;align=center;fontSize=14;fontStyle=1;fontColor=#1d4ed8;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="28" y="382" width="150" height="48" as="geometry"/>
+        </mxCell>
+        <mxCell id="f1_desc" value="SLICC coherence state at the home&lt;br&gt;&lt;span style=&quot;font-family:Menlo,monospace;font-size:12px;color:#475569&quot;&gt;I, SC, SD, UC, UD&lt;/span&gt;" style="text;html=1;whiteSpace=wrap;fontSize=13;align=left;verticalAlign=middle;fontColor=#334155;" vertex="1" parent="1">
+          <mxGeometry x="192" y="382" width="280" height="48" as="geometry"/>
+        </mxCell>
+
+        <!-- Field 2: sharers -->
+        <mxCell id="f2_name" value="&lt;span style=&quot;font-family:Menlo,monospace&quot;&gt;sharers&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DBEAFE;strokeColor=#2563eb;strokeWidth=1.5;verticalAlign=middle;align=center;fontSize=14;fontStyle=1;fontColor=#1d4ed8;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="28" y="438" width="150" height="48" as="geometry"/>
+        </mxCell>
+        <mxCell id="f2_desc" value="&lt;b&gt;NetDest&lt;/b&gt; bit-vector of upstream RN IDs&lt;br&gt;&lt;span style=&quot;font-family:Menlo,monospace;font-size:12px;color:#475569&quot;&gt;{ RN-F_0, RN-F_1, RN-F_3, &#8230; }&lt;/span&gt;" style="text;html=1;whiteSpace=wrap;fontSize=13;align=left;verticalAlign=middle;fontColor=#334155;" vertex="1" parent="1">
+          <mxGeometry x="192" y="438" width="280" height="48" as="geometry"/>
+        </mxCell>
+
+        <!-- Field 3: owner -->
+        <mxCell id="f3_name" value="&lt;span style=&quot;font-family:Menlo,monospace&quot;&gt;owner&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DBEAFE;strokeColor=#2563eb;strokeWidth=1.5;verticalAlign=middle;align=center;fontSize=14;fontStyle=1;fontColor=#1d4ed8;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="28" y="494" width="150" height="48" as="geometry"/>
+        </mxCell>
+        <mxCell id="f3_desc" value="&lt;b&gt;MachineID&lt;/b&gt; of the owning RN&lt;br&gt;&lt;span style=&quot;font-size:12px;color:#475569&quot;&gt;holds the line in UD / UC / SD&lt;/span&gt;" style="text;html=1;whiteSpace=wrap;fontSize=13;align=left;verticalAlign=middle;fontColor=#334155;" vertex="1" parent="1">
+          <mxGeometry x="192" y="494" width="280" height="48" as="geometry"/>
+        </mxCell>
+
+        <!-- Field 4: ownerExists -->
+        <mxCell id="f4_name" value="&lt;span style=&quot;font-family:Menlo,monospace&quot;&gt;ownerExists&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DBEAFE;strokeColor=#2563eb;strokeWidth=1.5;verticalAlign=middle;align=center;fontSize=14;fontStyle=1;fontColor=#1d4ed8;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="28" y="550" width="150" height="48" as="geometry"/>
+        </mxCell>
+        <mxCell id="f4_desc" value="valid bit for &lt;span style=&quot;font-family:Menlo,monospace&quot;&gt;owner&lt;/span&gt;&lt;br&gt;&lt;span style=&quot;font-size:12px;color:#475569&quot;&gt;true when the line has an owner&lt;/span&gt;" style="text;html=1;whiteSpace=wrap;fontSize=13;align=left;verticalAlign=middle;fontColor=#334155;" vertex="1" parent="1">
+          <mxGeometry x="192" y="550" width="280" height="48" as="geometry"/>
+        </mxCell>
+
+        <!-- Field 5: ownerIsExcl -->
+        <mxCell id="f5_name" value="&lt;span style=&quot;font-family:Menlo,monospace&quot;&gt;ownerIsExcl&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DBEAFE;strokeColor=#2563eb;strokeWidth=1.5;verticalAlign=middle;align=center;fontSize=14;fontStyle=1;fontColor=#1d4ed8;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="28" y="606" width="150" height="48" as="geometry"/>
+        </mxCell>
+        <mxCell id="f5_desc" value="&lt;b&gt;true&lt;/b&gt; &#8212; owner holds &lt;span style=&quot;font-family:Menlo,monospace&quot;&gt;UD&lt;/span&gt;/&lt;span style=&quot;font-family:Menlo,monospace&quot;&gt;UC&lt;/span&gt;&lt;br&gt;&lt;b&gt;false&lt;/b&gt; &#8212; owner holds &lt;span style=&quot;font-family:Menlo,monospace&quot;&gt;SD&lt;/span&gt; (shared-dirty)" style="text;html=1;whiteSpace=wrap;fontSize=13;align=left;verticalAlign=middle;fontColor=#334155;" vertex="1" parent="1">
+          <mxGeometry x="192" y="606" width="280" height="48" as="geometry"/>
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
