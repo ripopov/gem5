@@ -1011,61 +1011,703 @@ LLC without any RN currently sharing it.
 ---
 
 <!-- ================================================================== -->
-<!-- SLIDE 12: TBD -->
+<!-- SLIDE 12: HN-F FSM — start with the familiar local core -->
 <!-- ================================================================== -->
 
-## TBD
+## HN-F FSM — start with the familiar local core
+
+```mermaid
+stateDiagram-v2
+    direction LR
+
+    I --> SC: ReadShared fill
+    I --> UC: ReadUnique fill
+    I --> UD: Write miss, ownership + data
+
+    SC --> UC: Gain uniqueness
+    SC --> I: Evict clean
+
+    UC --> UD: Local write
+    UC --> SC: Downgrade on share
+    UC --> I: Evict clean
+
+    UD --> SD: Another reader appears
+    UD --> SC: Writeback and downgrade
+    UD --> I: Writeback and evict
+
+    SD --> UD: Re-gain uniqueness
+    SD --> I: Writeback and evict
+```
+
+<div class="takeaway">
+The HN-F FSM begins with one cache controller's local view. Directory memory and in-flight bookkeeping are extra dimensions added to this base — not a separate machine.
+</div>
 
 <!-- Speaker Notes:
 Time budget: 3 minutes.
+
+We just looked at what the HN-F remembers — the directory entry: state,
+sharers, owner, ownerExists, ownerIsExcl. That was the *data* side.
+Now we open the FSM that uses it.
+
+The trick to reading the CHI cache state names is to separate three
+questions instead of trying to memorize the whole alphabet.
+
+First question: does *this* controller have usable data locally — in
+its own tag and data array? Second question: does the *requester
+side* — the upstream caches above it in the hierarchy — also have a
+copy that the directory remembers? Third question: is the line in a
+stable resting state, or in the middle of a transaction? Once you
+split the names along those three axes, the two-letter and four-letter
+codes stop looking cryptic.
+
+This first diagram answers only question one. It shows the local-only
+core: I, SC, UC, SD, UD. These are the states you would expect from
+any CHI- or MOESI-like protocol. S versus U tells you shared versus
+unique. C versus D tells you clean versus dirty. The arrows are the
+familiar moves: a ReadShared fill, a write that gains uniqueness, a
+downgrade when another reader appears, a writeback on eviction.
+
+Why start here? Because the same SLICC machine — `CHI-cache.sm` —
+runs as a private L1 when `is_HN` is false and as the HN-F when
+`is_HN` is true. There is no separate `*-dir.sm`. The directory
+bookkeeping we just saw is layered on top of *these* familiar states,
+not bolted on as a different controller. So the right way to read the
+HN-F FSM is to anchor first on this MOESI-like core, then add the
+directory dimension, then add the in-flight dimension.
+
+This diagram is deliberately simplified. It hides UD_T — the
+use-timeout variant of UD that gets set after a store miss to prevent
+LL/SC livelocks. It hides every R-prefixed state that records what the
+upstream caches still hold. It hides UC_RU and UD_RU, where the local
+data is bookkeeping residue and the real owner has moved upstream. And
+it hides the BUSY_INTR and BUSY_BLKD transient states that exist
+because coherence actions are spread over many cycles. The next slide
+adds all of those in one place and groups them into the four families:
+local only, remembered upstream only, local plus remembered upstream,
+and transient.
+
+If the audience wants the complete written derivation, the full
+breakdown lives in `ruby-book/slides/CHIStates.md` — the file is
+structured around the same three-question decomposition.
 -->
 
 ---
 
 <!-- ================================================================== -->
-<!-- SLIDE 13: TBD -->
+<!-- SLIDE 13: HN-F FSM — full state vocabulary -->
 <!-- ================================================================== -->
 
-## TBD
+## HN-F FSM — full state vocabulary
+
+<div class="columns" style="font-size: 14px; line-height: 1.25;">
+<div>
+
+**Local only** — what this controller physically holds
+
+| State | Meaning |
+|---|---|
+| `I` | No local copy; no upstream tracking |
+| `SC` | Local Shared Clean; reads only |
+| `UC` | Local Unique Clean; may write (→ `UD`) |
+| `SD` | Local Shared Dirty; the Owned-like state |
+| `UD` | Local Unique Dirty; only writable copy in system |
+| `UD_T` | `UD` locked under "use timeout" (LL/SC livelock guard) |
+
+**Remembered upstream only** — local copy gone, directory tracks RNs
+
+| State | Meaning |
+|---|---|
+| `RU` | One upstream unique owner (in `UC` or `UD`) |
+| `RSC` | Upstream shared-clean sharers |
+| `RSD` | Upstream dirty owner (+ maybe `SC` sharers) |
+| `RUSC` | `RSC` + this node still holds system-wide exclusive access |
+| `RUSD` | `RSD` + this node still holds system-wide exclusive access |
+
+</div>
+<div>
+
+**Local + remembered upstream** — both dimensions live at once
+
+| State | Meaning |
+|---|---|
+| `SC_RSC` | Local `SC` + upstream `SC` sharers |
+| `SD_RSC` | Local dirty owner + upstream readers |
+| `SD_RSD` | Local `SD` + upstream dirty owner; split responsibility |
+| `UC_RSC` | Local `UC` + upstream `SC` sharers |
+| `UC_RU` | Upstream is the unique owner; local copy is residue (`Invalid` perm) |
+| `UD_RU` | Same as `UC_RU` but local residue is dirty |
+| `UD_RSD` | Local `UD` + upstream dirty owner (transient overlap) |
+| `UD_RSC` | Local `UD` + upstream readers; HN-F is source of truth |
+
+**Transient** — TBE carries the future stable state
+
+| State | Meaning |
+|---|---|
+| `BUSY_INTR` | In flight; snoops may still be processed safely |
+| `BUSY_BLKD` | In flight; snoops blocked until finalization |
+
+</div>
+</div>
 
 <!-- Speaker Notes:
 Time budget: 3 minutes.
+
+This is the full non-DVM vocabulary the HN-F can be in. Twenty-one
+states, grouped into four families. Do not try to memorize the table —
+just learn how to *decode* a name, and then any name on the slide
+makes sense.
+
+Decoding rule, left to right. The left side names the controller's
+local cache state — exactly the I/SC/UC/SD/UD/UD_T from the previous
+slide. An `_R...` suffix adds what the directory remembers about the
+upstream subtree. A leading `R` means there is no usable local copy at
+all and the only knowledge is the remembered upstream state.
+
+Family one — local only — needs no surprises. The one new state is
+`UD_T`. It is just `UD` plus a "use timeout" set by `Callback_Miss`
+after a store miss. The point of the timer is to prevent LL/SC
+livelocks: while it is active, coherence snoops on the line are
+stalled (`StallSnoop_NoTBE`). An eviction request does not stall — it
+cancels the timer and transitions to plain `UD`, and then normal
+eviction handling runs. The natural exit is the `UseTimeout` event,
+which fires `UD_T -> UD`.
+
+Family two — remembered upstream only — is where the HN-F earns its
+keep as a directory node. `RU` collapses both clean-unique and
+dirty-unique upstream owners into one stable state; the source comment
+literally says "Upstream requester has line in UD/UC". The clean
+versus dirty distinction lives in the TBE flag
+`dataMaybeDirtyUpstream`, not in the state name. `RSC` and `RSD` are
+the analogous shared cases.
+
+The interesting pair is `RUSC` and `RUSD`. Read the leading `U` very
+carefully. It does *not* mean the upstream copies are unique. It means
+the source comment in `CHI-cache.sm`: "RSC + this node still has
+exclusive access" — that is, the HN-F's directory records that no
+peer outside this subtree has the line, so a later upstream upgrade to
+`UC` or `UD` can be granted without further peer snooping. They are
+permission-preserving directory states, not "exclusive" upstream
+copies.
+
+Family three — local plus remembered upstream — is what makes the
+mostly-inclusive HN-F policies work. The straightforward ones are
+`SC_RSC`, `SD_RSC`, `UC_RSC`, `UD_RSC`: local data of one kind plus
+upstream readers. The two unusual ones are `UC_RU` and `UD_RU`. Their
+`AccessPermission` is `Invalid` — the local copy is *not* the
+authoritative owner anymore. The HN-F may still physically retain
+data in the LLC slice, but the protocol-visible owner has moved
+upstream. Treat these as bookkeeping states for replacement and
+writeback handling, not as ordinary cache hits. `UD_RSD` and `SD_RSD`
+are transient overlap states where dirty data exists both locally and
+in an upstream owner; the controller has to respect both during
+finalization.
+
+Family four — transient — is gem5's choice to use exactly two generic
+in-flight states instead of one per outcome. `BUSY_INTR` lets snoops
+proceed because the TBE carries enough information to answer them
+correctly. `BUSY_BLKD` is the fragile point of a sequence where a
+servicing snoop would violate ordering or state assumptions. Both
+states resolve via the `Final` event: the actions and the next stable
+state are computed from `makeFinalState` in `CHI-cache-funcs.sm`,
+which assembles the cache half (`UD/UC/SD/SC/UD_T`) and the directory
+half (`RU/RSC/RSD/RUSC/RUSD`) and then calls `makeFinalStateHelper`
+to combine them into one of the names on this slide.
+
+The complete written derivation, with both RN-F and HN-F perspective
+columns, is in `ruby-book/slides/CHIStates.md`. The source anchors
+are `src/mem/ruby/protocol/chi/CHI-cache.sm` for the state
+declarations, `CHI-cache-funcs.sm` for `makeFinalState`,
+`CHI-cache-actions.sm` for action callbacks (including the
+`Callback_Miss` that produces `UD_T`), and `CHI-cache-transitions.sm`
+for the actual `transition(...)` rules.
 -->
 
 ---
 
 <!-- ================================================================== -->
-<!-- SLIDE 14: TBD -->
+<!-- SLIDE 14: Allocating Read — B2.3.1.1 / Figure B2.1 -->
 <!-- ================================================================== -->
 
-## TBD
+## Practice Transaction 1 — Allocating Read (B2.3.1.1, Fig B2.1)
+
+<div class="columns">
+<div>
+
+**Alt 1 — Data cached at Home**
+
+```mermaid
+sequenceDiagram
+    participant R as Requester
+    participant H as Home
+
+    R->>H: ReadShared / ReadUnique /<br/>ReadClean / ReadNotSharedDirty /<br/>ReadPreferUnique
+    H-->>R: CompData
+    R->>H: CompAck
+```
+
+Home holds a usable copy and returns response + data in a single `CompData` flit.
+
+</div>
+<div>
+
+**Alt 3 — DMT from Subordinate**
+
+```mermaid
+sequenceDiagram
+    participant R as Requester
+    participant H as Home
+    participant S as Subordinate
+
+    R->>H: ReadShared / ReadUnique /<br/>ReadClean / ReadNotSharedDirty /<br/>ReadPreferUnique
+    H->>S: ReadNoSnp
+    S-->>R: CompData
+    R->>H: CompAck
+```
+
+Home forwards to memory; Subordinate sends `CompData` straight to the Requester, bypassing Home on the return leg.
+
+</div>
+</div>
 
 <!-- Speaker Notes:
-Time budget: 3 minutes.
+This is the first of three practice transactions. Allocating Read is the bread-and-butter
+coherent read: the Requester intends to put the line into a coherent cache state (SC, UC, UD,
+or SD) and must therefore close the loop with CompAck. Spec section B2.3.1.1, Figure B2.1.
+
+The full Figure B2.1 encodes six alternatives (1, 2, 3, 4, 5a–d, 6) between four lifelines
+(Requester, Home, Subordinate, Snoopee). On this slide we show only the two that come up
+most often in practice — Alt 1 and Alt 3 — and summarize the rest verbally. For the full
+decision tree, see the spec figure or the companion note SequenceHowTo.md.
+
+Actors in the full figure. Requester is always an RN-F for these opcodes (Allocating Reads
+can only come from a fully coherent Request Node). Home is HN-F acting as Point of Coherence
+and Point of Serialization. Subordinate is SN-F (memory side). Snoopee is a peer RN-F that
+holds or might hold the line.
+
+In-scope opcodes (listed on both arrows). The spec lists six: ReadClean, ReadNotSharedDirty,
+ReadShared, ReadUnique, ReadPreferUnique, and MakeReadUnique. The slide shows five — we
+omit MakeReadUnique from the label because MakeReadUnique uses its own dedicated
+Alternative 6 (Comp instead of CompData) and does not belong to either of the two paths
+shown here.
+
+Fields that affect the flow. For Allocating Reads, CompAck is always required from an RN-F
+(per B2.7.3), so ExpCompAck is effectively pinned to 1 and is not a selector the way it is
+for Non-allocating Reads. The choice among Alt 1–5 is a Home-local decision based on where
+the line lives.
+
+Left column — Alt 1 "Combined response from Home". The Home already has a usable copy of the
+line (typically because an inclusive or mostly-inclusive cache inside the interconnect holds
+it, or because the directory confirms there is no dirty peer and Home can construct the line
+itself). Home returns a single CompData flit on RDAT, carrying both the response (cache state:
+SC, UC, UD, SD — possibly with the _PD "PassDirty" bit) and the 64-byte payload in one flit
+sequence. The Requester fills its cache in the returned state and sends CompAck on SRSP to
+close the loop. This is the shortest possible Allocating Read — three flits end-to-end and
+no Subordinate involvement.
+
+Right column — Alt 3 "Combined response from Subordinate (DMT)". The Home does not have the
+line and the directory says no peer RN-F does either, so Home must fetch from memory. Under
+Direct Memory Transfer, Home issues a downstream ReadNoSnp to the Subordinate, and the
+Subordinate sends CompData straight to the Requester, bypassing Home on the return leg. This
+saves one NoC hop and one buffer allocation at Home. The Requester still sends CompAck to
+Home (not to Subordinate) — Home remains the Point of Serialization even under DMT. We are
+showing the unordered sub-case (Order = 00); for ordered reads (Order = 10 or 11) the
+Subordinate also returns a ReadReceipt to Home to confirm the downstream request will not
+be retried, but that message is optional from the figure's perspective and we have elided
+it here.
+
+Why these two. Every real coherent load miss follows either "Home served it from its own
+cache" (Alt 1) or "Home had to go to DRAM" (Alt 3). Alt 2 and Alt 4 are latency-optimized
+variants of Alt 1 and Alt 3 respectively — they split the single CompData into separate
+RespSepData (permissions) and DataSepResp (payload) so the Requester can send CompAck as
+soon as permissions arrive, freeing Home to snoop the same line for the next request sooner.
+Whether Alt 2/4 or Alt 1/3 is used depends on implementation choice.
+
+The other four alternatives, in one line each.
+
+• Alt 2 — RespSepData + DataSepResp from Home. Latency-optimized Alt 1. Home has the line
+but splits the response to let the Requester send CompAck earlier.
+
+• Alt 4 — RespSepData from Home, DataSepResp from Subordinate (DMT). Latency-optimized
+Alt 3. Home sends permissions immediately (because the directory already knows them) while
+the data is fetched from memory in parallel.
+
+• Alt 5 — DCT via Snp*Fwd forwarding snoop. The directory indicates a peer RN-F holds the
+line in a forwardable state. Home issues SnpSharedFwd, SnpUniqueFwd, SnpNotSharedDirtyFwd,
+SnpCleanFwd, or SnpOnceFwd to the Snoopee, which responds in one of four ways: 5a forward
+CompData to Requester + SnpRespFwded to Home; 5b same + SnpRespDataFwded with a data copy
+to Home; 5c or 5d refuse the forward (SnpResp or SnpRespData/Ptl to Home), forcing Home to
+fall back to Alt 1–4. DCT is opportunistic, not guaranteed.
+
+• Alt 6 — MakeReadUnique only. The Requester is about to overwrite the full line, so it
+asks for unique permission without data. Home returns a bare Comp instead of CompData.
+Illegal for the other five opcodes.
+
+Closing the loop. A single CompAck from Requester to Home terminates the transaction in
+every alternative. It is legal to send CompAck as soon as CompData (Alts 1, 3, 5a, 5b),
+Comp (Alt 6), or RespSepData (Alts 2, 4) arrives — the Requester does not have to wait for
+DataSepResp. CompAck release lets Home forward a queued snoop for the same line to this
+Requester.
+
+Common misreadings. (1) The Subordinate and Snoopee lifelines only exist on certain
+alternatives — don't assume all four actors are always active. (2) Under DMT (Alt 3/4),
+CompAck still goes to Home, never to Subordinate. (3) Alt 5c/5d are legitimate outcomes,
+not error cases — DCT is opportunistic. (4) For ordered requests on Alt 3, a ReadReceipt
+from Sub to Home appears in the original figure as an opt block — we have elided it in the
+slide because the typical RN-F load miss uses Order = 00.
 -->
 
 ---
 
 <!-- ================================================================== -->
-<!-- SLIDE 15: TBD -->
+<!-- SLIDE 15: Allocating Read with DCT — B2.3.1.1 Alt 5 / Figure B2.1 -->
 <!-- ================================================================== -->
 
-## TBD
+## Practice Transaction 2 — Allocating Read with DCT (B2.3.1.1 Alt 5, Fig B2.1)
+
+<div class="columns">
+<div>
+
+**Alt 5a — Snoopee held Clean**
+
+```mermaid
+sequenceDiagram
+    participant R as Requester
+    participant H as Home
+    participant N as Snoopee
+
+    R->>H: ReadShared
+    H->>N: SnpSharedFwd
+    N-->>R: CompData
+    N-->>H: SnpRespFwded
+    R->>H: CompAck
+```
+
+Snoopee forwards data to the Requester and updates Home with an RSP-only `SnpRespFwded`. No data copy goes to Home.
+
+</div>
+<div>
+
+**Alt 5c — Snoopee refuses, fallback to DMT**
+
+```mermaid
+sequenceDiagram
+    participant R as Requester
+    participant H as Home
+    participant S as Subordinate
+    participant N as Snoopee
+
+    R->>H: ReadShared
+    H->>N: SnpSharedFwd
+    N-->>H: SnpResp
+    Note over H: DCT failed — use another alternative
+    H->>S: ReadNoSnp
+    S-->>R: CompData
+    R->>H: CompAck
+```
+
+Snoopee returns `SnpResp` on RSP with no data (e.g. it had silently evicted). Home must fall back to Alt 1–4; here we show a DMT fallback via Subordinate.
+
+</div>
+</div>
 
 <!-- Speaker Notes:
-Time budget: 3 minutes.
+Second practice transaction — same transaction class as slide 14 (Allocating Read,
+B2.3.1.1) but this time we focus on Alternative 5: the DCT path where the data comes from
+a peer RN-F, not from Home's cache or from DRAM. Two actors become three: Requester, Home,
+Snoopee. The Subordinate is dormant here.
+
+What triggers this path. Home's directory shows that a peer RN-F holds the line in a state
+that can serve it. Instead of snooping, pulling the data back, and then forwarding to the
+Requester, Home issues a forwarding snoop (the Snp*Fwd family) that instructs the Snoopee
+to send the data directly. This saves one NoC hop and the Home's data buffer.
+
+The Snp*Fwd family. Which forwarding snoop Home picks depends on the original request; the
+mapping is defined in B4.4 "Request transactions and corresponding Snoop requests":
+
+• ReadShared          → SnpSharedFwd
+• ReadUnique          → SnpUniqueFwd
+• ReadClean           → SnpCleanFwd
+• ReadNotSharedDirty  → SnpNotSharedDirtyFwd
+• ReadPreferUnique    → SnpPreferUniqueFwd
+• ReadOnce*           → SnpOnceFwd (IO-coherent variant)
+
+We use ReadShared → SnpSharedFwd on both slides as a concrete, familiar example.
+
+Left column — Alt 5a "With response to Home" (SnpRespFwded).
+
+Setup. The Snoopee holds the line in a Clean state — SC (Shared Clean) or UC (Unique
+Clean). The Requester asked for a shared copy.
+
+Flow.
+• R → H: REQ ReadShared.
+• H → N: SNP SnpSharedFwd. Home provides its own NID in FwdNID and the Requester's TxnID
+  in FwdTxnID so the Snoopee knows who to forward to.
+• N → R: DAT CompData. The Snoopee sends the cache line directly to the Requester with a
+  Resp field that says SC. HomeNID in the data flit tells the Requester where to send
+  CompAck (it goes to Home, not the Snoopee).
+• N → H: RSP SnpRespFwded. A response-channel message only — no data. It tells Home the
+  snoop succeeded, which peer state changed, and what state the Requester will end up in.
+• R → H: SRSP CompAck. Closes the transaction.
+
+Typical state transitions.
+• Snoopee: SC → SC (clean sharer stays), or UC → SC (gives up uniqueness).
+• Requester: I → SC.
+
+When 5a is used. Snoopee had a clean copy, and Home either already has the line or does not
+need a refresh. The line has no dirty responsibility to re-home.
+
+Right column — Alt 5c "Failed through RSP channel, must use alternative."
+
+Setup. Home tried DCT based on its directory, but the Snoopee cannot honour the forward —
+most commonly because the peer silently evicted the line between Home's directory lookup
+and the snoop's arrival, so it no longer holds anything to send. Stale directory entries,
+transient states at the peer, and certain MSHR/TBE conflicts are the usual culprits.
+
+Flow (as drawn on the slide — Alt 5c refusal, followed by Alt 3 DMT as the fallback).
+
+• R → H: REQ ReadShared.
+• H → N: SNP SnpSharedFwd. Home optimistically asks for a forward.
+• N → H: RSP SnpResp. Response-channel only, no data. The Resp field carries the
+  Snoopee's final state (typically I — the peer confirms it has nothing). Crucially, no
+  data reaches the Requester on this leg.
+• Fallback. The spec text for 5c says explicitly: "The Home must use another alternative
+  described in this section to complete the transaction to the Requester." Home picks one
+  of Alts 1, 2, 3, or 4. We illustrate Alt 3 (combined response from Subordinate via DMT),
+  which is the typical fallback when the peer has nothing and Home also has nothing cached.
+• H → S: REQ ReadNoSnp. Home issues a downstream read.
+• S → R: DAT CompData. Subordinate sends the line straight to the Requester (DMT).
+• R → H: SRSP CompAck. Closes the transaction.
+
+Why this is an important scenario to see. It is the canonical example of a single Read
+transaction touching all four actors — Requester, Home, Snoopee, and Subordinate — within
+one logical transaction. The CHI spec's figure semantics allow this because Alt 5 sits at
+the top level and its failure branches explicitly re-enter Alt 1–4; the Snoopee interaction
+is not an "independent transaction" in the 5c/5d case but part of the same transaction flow.
+
+Alternatives Home could pick as the fallback.
+• Alt 1 — if Home can now satisfy the read from an internal cache state that changed while
+  the snoop was in flight.
+• Alt 2 — the RespSepData / DataSepResp variant of Alt 1.
+• Alt 3 (shown) — DMT, the common case when nobody has the data.
+• Alt 4 — Home returns RespSepData immediately, Subordinate returns DataSepResp.
+
+Alt 5d in one line. Sibling of 5c where the refusal carries a data payload up to Home
+(SnpRespData or SnpRespDataPtl on the DAT channel). Home still cannot treat this as a
+forward — it must execute a follow-up alternative to deliver the data to the Requester.
+Useful when the peer has a partially valid copy and Home wants to absorb it for a later
+use, but the immediate transaction still needs a Home-issued completion.
+
+5a vs 5c in one sentence. 5a is the happy path — Snoopee forwards `CompData` to the
+Requester and the transaction ends quickly; 5c is the refusal path — Home spent a snoop
+round-trip in vain and must still go to Home's own cache or to memory to serve the
+Requester.
+
+Common misreadings.
+
+(1) The Subordinate lifeline in 5c is not an "independent transaction" in the same sense
+as snoops Home fires during Alt 1–4. It is part of the same transaction flow because 5c's
+fallback is explicitly specified as "use another alternative described in this section."
+
+(2) CompAck goes to Home, not to the Subordinate (even under DMT). Home is still the
+Point of Serialization.
+
+(3) "DCT saves two hops" — no, it saves one. Without DCT it would be R → H → N → H → R
+(4 hops); with DCT (5a) it is R → H, H → N, N → R plus N → H for the response — still 4
+hops but one is a cheap RSP message instead of a full data payload, and Home's data buffer
+is skipped. When DCT fails (5c), the round-trip to the Snoopee is pure overhead.
+
+(4) `SnpResp` in 5c is not an error response — it is a legitimate "I don't have the line
+in a forwardable state" reply. Home is required to handle it.
+
+In gem5 — DCT is gated by the `enable_DCT` parameter on the HN-F controller. It is enabled
+by default in the standard CHI configurations. When the SLICC protocol observes a 5c-style
+refusal (for example because the directory was optimistic), it executes the fallback by
+issuing the downstream `ReadNoSnp`, matching the diagram shown here.
 -->
 
 ---
 
 <!-- ================================================================== -->
-<!-- SLIDE 16: TBD -->
+<!-- SLIDE 16: Write with DWT — B2.3.2.1 Alt 1 / B2.3.2.4 Alt 1 -->
 <!-- ================================================================== -->
 
-## TBD
+## Practice Transaction 3 — Write with DWT: Plain vs Combined + CMO (B2.3.2.1, B2.3.2.4)
+
+<div class="columns">
+<div>
+
+**Immediate Write (B2.3.2.1 Alt 1 — DWT)**
+
+```mermaid
+sequenceDiagram
+    participant R as Requester
+    participant H as Home
+    participant S as Subordinate
+
+    R->>H: WriteNoSnpFull / WriteUniqueFull /<br/>WriteNoSnpPtl / WriteUniquePtl
+    H->>S: WriteNoSnpFull / WriteNoSnpPtl /<br/>WriteNoSnpDef (DoDWT = 1)
+    S-->>R: DBIDResp
+    R-->>S: NonCopyBackWriteData
+    S-->>H: Comp
+    H-->>R: Comp
+```
+
+Home delegates to Subordinate. Data flows straight R → S; Home never buffers the payload. Sub issues `DBIDResp`, receives data, returns `Comp` to Home. Home mirrors `Comp` to Requester.
+
+</div>
+<div>
+
+**Combined Write + CMO (B2.3.2.4 Alt 1 — DWT)**
+
+```mermaid
+sequenceDiagram
+    participant R as Requester
+    participant H as Home
+    participant S as Subordinate
+
+    R->>H: WriteNoSnpFullCleanInv / WriteUniqueFullCleanSh /<br/>WriteNoSnpFullCleanSh / WriteNoSnpFullCleanInvPoPA
+    H->>S: Combined Write+CMO opcode (DoDWT = 1)
+    S-->>R: DBIDResp
+    R-->>S: NonCopyBackWriteData
+    S-->>H: Comp
+    H-->>R: Comp
+    S-->>H: CompCMO
+    H-->>R: CompCMO
+```
+
+Same DWT skeleton; the combined opcode carries **write + CMO** together. Sub returns two completions — `Comp` for the write half, `CompCMO` for the CMO half. Home mirrors both to the Requester.
+
+</div>
+</div>
 
 <!-- Speaker Notes:
-Time budget: 3 minutes.
+Third practice transaction. The theme is "data flowing down to memory": we show the DWT
+(Direct Write-data Transfer) path for two different write families. Left column is the
+plain Immediate Write from B2.3.2.1 Alt 1; right column is the Combined Immediate Write
+and CMO from B2.3.2.4 Alt 1. Three actors in each — Requester, Home, Subordinate. No
+Snoopee lifeline: any snoops Home fires to enforce coherence are independent transactions
+from the Home (see B2.3.9) and deliberately not drawn.
+
+What DWT is. Direct Write-data Transfer lets the Requester's write data bypass Home on
+the WDAT channel. Home delegates the write to the Subordinate by setting the DoDWT bit on
+the downstream request. The Subordinate, not Home, issues DBIDResp to the Requester, and
+the Requester sends NonCopyBackWriteData directly to the Subordinate. Home stays in the
+loop for completion bookkeeping but never touches the payload. That is the whole
+bandwidth argument for DWT.
+
+Why these two columns. The left column is the foundational DWT shape — the simplest
+concrete demonstration of "data flows straight to Subordinate." The right column shows
+that the same skeleton scales naturally to combined Write+CMO transactions, with one new
+element: the CompCMO response that acknowledges the CMO half of the combined operation.
+
+Left column — Immediate Write via DWT (B2.3.2.1 Alt 1).
+
+In-scope opcodes. The spec lists seven for B2.3.2.1: WriteNoSnpPtl, WriteNoSnpFull,
+WriteNoSnpDef, WriteUniquePtl, WriteUniqueFull, WriteUniquePtlStash, WriteUniqueFullStash.
+Home strips the snoop aspect of WriteUnique* before sending downstream; the opcode that
+actually lands at Sub is always WriteNoSnpPtl, WriteNoSnpFull, or WriteNoSnpDef — with
+DoDWT = 1.
+
+Flow (on the slide, step by step).
+• R → H: REQ carrying the original write opcode.
+• H → S: REQ with DoDWT = 1. Home forwards downstream.
+• S → R: CRSP DBIDResp. Critical — the buffer grant comes from Sub, not Home. DBIDResp
+  carries the DBID that the Requester must echo back as TxnID in the data flit.
+• R → S: WDAT NonCopyBackWriteData (or WriteDataCancel if the Requester aborts). Only
+  legal after DBIDResp arrives.
+• S → H: CRSP Comp. Sub signals that the write has been accepted. Sub is permitted, but
+  not required, to wait for the write data (or WriteDataCancel) from the Requester before
+  sending Comp.
+• H → R: CRSP Comp. Home mirrors the completion. Home is permitted, but not required,
+  to wait for the S→H Comp before returning Comp to the Requester.
+
+What we have elided. The spec figure also shows an opt [TagOp == Match] branch with a
+TagMatch response from Sub to R for memory-tagged writes. For TagOp != Match — the
+common case — that arrow is not sent and is not drawn on this slide.
+
+Right column — Combined Immediate Write and CMO via DWT (B2.3.2.4 Alt 1).
+
+What a "Combined Write and CMO" is. One transaction carries both a write payload and a
+Cache Maintenance Operation. Example: WriteNoSnpFullCleanInv — write these 64 bytes, then
+run a CleanInvalid across any downstream caches. The opcode packages the write and the
+CMO into a single atomically-scheduled operation.
+
+In-scope opcodes (10 total in B2.3.2.4):
+• WriteNoSnpPtlCleanInv / WriteNoSnpFullCleanInv
+• WriteNoSnpPtlCleanSh / WriteNoSnpFullCleanSh
+• WriteUniquePtlCleanSh / WriteUniqueFullCleanSh
+• WriteNoSnpPtlCleanInvPoPA / WriteNoSnpFullCleanInvPoPA
+• WriteUniqueFullCleanInvStrg / WriteNoSnpFullCleanInvStrg
+
+TagOp constraint. For Combined Write + CMO, TagOp = Match is not permitted (spec note in
+B2.3.2.4). So no TagMatch response ever appears in this figure — TagOp does not affect
+the flow.
+
+Flow (on the slide, step by step).
+• R → H: REQ carrying the combined Write+CMO opcode.
+• H → S: REQ with DoDWT = 1. Unlike plain Immediate Write, the downstream opcode is the
+  full combined opcode (WriteNoSnpFullCleanInv, etc.), not a stripped-down WriteNoSnp.
+  Sub therefore sees both the write and the CMO intent.
+• S → R: CRSP DBIDResp.
+• R → S: WDAT NonCopyBackWriteData (or WriteDataCancel).
+• S → H: CRSP Comp. Acknowledges the write half. Sub may send this before or after the
+  write data arrives.
+• H → R: CRSP Comp. Home mirrors the write completion.
+• S → H: CRSP CompCMO. Acknowledges the CMO half. Sub may send CompCMO before or after
+  write data.
+• H → R: CRSP CompCMO. Home mirrors the CMO completion. One subtle ordering constraint:
+  if there is an observer downstream of Home (a deeper subordinate, or a persistence
+  point), Home must wait for CompCMO from Sub before returning CompCMO to the Requester.
+  Otherwise Home is free to forward it earlier.
+
+Why two completions. Comp means "the write is accepted and observable at this level."
+CompCMO means "the CMO has been completed — any caches below this point that needed a
+Clean or Invalidate have done so." They are independent acknowledgements and arrive
+separately because they complete at different times: the CMO may have to propagate
+through additional downstream observers before it is truly done.
+
+The other B2.3.2.4 alternatives, in one line each (not drawn on the slide).
+
+• Alt 2 — Non-combined Write to Subordinate with DWT. Home splits the combined opcode
+  into a plain WriteNoSnp (DoDWT = 1) down to Sub, and handles the CMO half itself. Sub
+  returns only Comp; Home returns Comp + CompCMO to the Requester. Used when the
+  Subordinate does not support the combined opcode variant.
+
+• Alt 3 — Without DWT. Home handles everything locally: the Requester sends
+  NonCopyBackWriteData to Home, not to Sub. Sub-alternatives 3a1/3a2, 3b1/3b2/3b2a/3b2b
+  cover DBIDResp/Comp packaging and optional CompAck handling for OWO ordering.
+
+Common misreadings.
+
+(1) The downstream opcode differs between the two columns. Left — always one of
+WriteNoSnpPtl / WriteNoSnpFull / WriteNoSnpDef. Right — the full combined opcode
+(WriteNoSnpFullCleanInv etc.). Readers often assume Home always strips to a plain
+WriteNoSnp; that is only true for B2.3.2.1 Alt 1.
+
+(2) DBIDResp under DWT comes from Subordinate, not Home. Readers who internalized the
+Home-centric view of non-DWT writes (Alt 3 in either section) often expect Home to issue
+DBIDResp. Under DWT, Home is out of the data path AND out of the buffer-grant path.
+
+(3) WriteDataCancel is a legal substitute for NonCopyBackWriteData. The Requester can
+abort after receiving DBIDResp — both Comp and CompCMO still arrive and the transaction
+completes cleanly, just without the write landing.
+
+(4) ExpCompAck and DWT. Under DWT (both columns), no CompAck message is shown even if
+ExpCompAck was set in the original request. Sub closes the write half of the transaction
+loop at Home, and Home closes the loop at the Requester via Comp (and CompCMO for the
+combined case). CompAck appears only in the No-DWT Alt 3 sub-trees of B2.3.2.4.
+
+(5) The CompCMO arrow pair is NOT a second retry of Comp. Comp and CompCMO are
+semantically different responses that both ride CRSP; students who miss this sometimes
+read the right column as "the same Comp sent twice for reliability." It is not — Comp
+acknowledges the write, CompCMO acknowledges the CMO.
+
+In gem5. The CHI-cache and HN-F controllers implement the DWT decision as a bit on the
+downstream request generated from the original write. For combined Write + CMO, the CHI
+SLICC file threads both Comp and CompCMO responses through the HN-F transition table
+before releasing the Requester. Search for "CompCMO" under src/mem/ruby/protocol/chi/
+for the SLICC machinery.
 -->
 
 ---
