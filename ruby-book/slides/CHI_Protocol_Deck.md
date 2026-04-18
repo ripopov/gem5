@@ -195,7 +195,7 @@ RN-D gold, HN-F violet, MN slate, SN-F green.
 <!-- SLIDE 4: Port, Link, and Channel -->
 <!-- ================================================================== -->
 
-## Port, Link, and Channel
+## Link layer: Port, Link, and Channel
 
 ![h:513 Port / Link / Channel hierarchy at the RN&ndash;ICN interface: two ports (RN and ICN) connected by an outbound link carrying REQ, DAT, RSP channels and an inbound link carrying SNP, RSP, DAT channels, with TX/RX pin names on each port](../resources/chi_port_link_channel.svg)
 
@@ -256,7 +256,114 @@ spec guarantees at the port interface, not what happens inside.
 ---
 
 <!-- ================================================================== -->
-<!-- SLIDE 5: Transaction, Message, Packet, and Flit -->
+<!-- SLIDE 5: Network layer — addressing and routing -->
+<!-- ================================================================== -->
+
+## Network layer: addressing and routing
+
+<div class="columns">
+<div>
+
+<img class="tall" src="../resources/chi_network_layer.svg" alt="Heterogeneous 3x3 CHI mesh with RN, HN, and SN nodes placed on grid positions, connected by bidirectional mesh links">
+
+
+</div>
+<div>
+
+<div class="sam-viz">
+<div class="sam-viz-title">System Address Map — <code>address → NodeID</code></div>
+
+<div class="sam-addr"><span class="sam-tag">0x0000_0000_5</span><span class="sam-hash">0</span><span class="sam-offset">40</span></div>
+
+<div class="sam-legend">tag · <span class="sam-legend-hash">hash bits</span> · line offset</div>
+
+<div class="sam-arrow-v">▼</div>
+
+<div class="sam-box">RN SAM — hash + range decode</div>
+
+<div class="sam-arrow-v">▼&nbsp;&nbsp;&nbsp;&nbsp;▼</div>
+
+<div class="sam-outputs">
+<span class="sam-out">HN0<span class="sam-nid">NID = 5</span></span>
+<span class="sam-out">HN1<span class="sam-nid">NID = 6</span></span>
+</div>
+</div>
+
+<div class="sam-rules">
+<p><b>Packet header</b> — the RN stamps <code>SrcID</code>, <code>TgtID</code>, <code>ReturnNID</code>, and <code>TxnID</code> into every REQ.</p>
+<p><b>Two SAMs per request</b> — on a miss, the HN runs its <em>own</em> SAM: <code>address → SN NodeID</code>.</p>
+<p><b>ICN may remap <code>TgtID</code></b> — for HN hot-spare, load balancing, or partition reconfiguration. <code>SrcID</code> is preserved.</p>
+<p><b>Responses skip the SAM</b> — TgtID is copied from the trigger: <code>SrcID</code> · <code>ReturnNID</code> · <code>HomeNID</code> · <code>FwdNID</code>.</p>
+<p><b>Snoops carry no <code>TgtID</code></b> — snoop routing is IMPL-DEFINED (typically a snoop filter or a bit-vector multicast).</p>
+</div>
+
+</div>
+</div>
+
+<!-- Speaker Notes:
+Time budget: 3 minutes.
+
+Chapter B3 of the CHI spec is the thinnest of the four layers, and
+the most often skipped. It answers one question — how does a packet
+know where to go — and the answer has three moving parts. That is
+the whole of the network layer.
+
+Part one — names. Every port on the interconnect is assigned a
+NodeID. The field is 7 to 16 bits wide, configured once for a given
+implementation. A port can carry multiple NodeIDs; a NodeID can
+belong to exactly one port. That is all the spec says. How IDs are
+assigned to real silicon nodes is implementation defined.
+
+Part two — the System Address Map, SAM. The SAM is the table that
+turns an address into a TgtID, the destination NodeID stamped on the
+packet. Every Request Node has a SAM — that is how it knows which
+Home Node to talk to. Every Home Node has a SAM too — how else
+would the HN know which memory-side SN owns the line it just missed
+on. The spec does not prescribe the SAM format. It can be a handful
+of fixed-range decoders, a programmable interleave, or something
+fancier. What the spec demands is only that the SAM covers the
+entire address space, and that unmapped addresses go somewhere that
+can answer with an error response.
+
+On the diagram: RN0 has a mini SAM showing two rows, address to HN.
+HN-F1 has its own SAM showing address to SN. Pedagogically these
+are tiny. In a real system each SAM is bigger and usually hash- or
+interleave-based.
+
+Part three — the interconnect may remap TgtID. The fabric is
+allowed to rewrite the TgtID of the incoming request. In the
+diagram, RN0 stamps HN0 but the ICN retargets to HN1. This is not
+an error, not a hack — it is a first-class feature. It is how a
+chip supports HN hot-spare, dynamic HN load-balancing, snoop-filter
+partitioning, or address-range reconfiguration after a reset. The
+SrcID is preserved. Only TgtID moves.
+
+Now flip to the response side — this is the load-bearing insight.
+Responses do not look up a destination. They copy it from a named
+field of the message that caused them. Data comes back to
+ReturnNID. Comp comes back to the request's SrcID. The
+requester's CompAck goes to the HomeNID stored in the data or
+completion message — which is the real home, including the
+remapped one, not the original HN the RN targeted. That is how
+remapping stays transparent to the requester.
+
+One last exception. Snoops have no TgtID at all. The spec does not
+say how snoops are routed — that is entirely up to the fabric. In
+real systems a snoop filter at the HN narrows snoop destinations to
+exactly the caches that could hold the line. In gem5, Garnet uses a
+simple NetDest bit-vector instead.
+
+One implication for gem5. The SAM the book cares about is the HN
+SAM, built from Python parameters in CHI_config.py. The RN-side SAM
+is implicit — Ruby addresses directly by home. Remapping is not
+modeled. Keep that in mind when your trace looks simpler than
+silicon.
+-->
+
+---
+
+<!-- ================================================================== -->
+<!-- SLIDE 6: Transaction, Message, Packet, and Flit -->
 <!-- ================================================================== -->
 
 ## Transaction, Message, Packet, and Flit
@@ -354,7 +461,7 @@ multiple flits.
 ---
 
 <!-- ================================================================== -->
-<!-- SLIDE 6: Flit Fields -->
+<!-- SLIDE 7: Flit Fields -->
 <!-- ================================================================== -->
 
 ## REQ flit fields
@@ -368,17 +475,19 @@ multiple flits.
 | TgtID        | 7  | Target node (NODE_ID_W: 7..16)       |
 | SrcID        | 7  | Source node (NODE_ID_W)              |
 | TxnID        | 12 | Transaction identifier                |
+| ReturnNID    | 7  | DMT: where SN sends the data         |
+| ReturnTxnID  | 12 | DMT: TxnID echoed on data response   |
 | Opcode       | 7  | REQ opcode (Table B13.12)             |
 | Size         | 3  | Bytes = 2^Size (1..64)                |
 | Addr         | 44 | Physical addr (REQ_ADDR_W: 44..52)   |
 | PAS          | 3  | Physical Address Space (security)     |
-| LikelyShared | 1  | Cache-placement hint                  |
 
 </div>
 <div>
 
 | Name         | W  | Description                          |
 |--------------|----|--------------------------------------|
+| LikelyShared | 1  | Cache-placement hint                  |
 | AllowRetry   | 1  | Target may issue Retry                |
 | Order        | 2  | Ordering contract                     |
 | PCrdType     | 4  | Retry credit type                     |
@@ -419,6 +528,13 @@ understanding the protocol.
 
 TxnID, 12 bits, is unique at the Requester. Every downstream message
 in this transaction is keyed back to this TxnID.
+
+ReturnNID and ReturnTxnID are the DMT pair — Direct Memory Transfer.
+When the HN forwards a read to an SN and wants the SN to reply
+directly to the Requester, it fills ReturnNID with the Requester's
+NodeID and ReturnTxnID with the Requester's TxnID. The SN's
+CompData then targets ReturnNID carrying ReturnTxnID. Both are zero
+when DMT is not used.
 
 Opcode, 7 bits. The What: ReadClean, ReadUnique, WriteUnique,
 WriteBackFull, CleanInvalid, and dozens more. Spec Table B13.12 is
@@ -463,7 +579,7 @@ same table but that only materialise when the feature is on.
 ---
 
 <!-- ================================================================== -->
-<!-- SLIDE 7: DAT Flit Fields -->
+<!-- SLIDE 8: DAT Flit Fields -->
 <!-- ================================================================== -->
 
 ## DAT flit fields
@@ -481,14 +597,14 @@ same table but that only materialise when the feature is on.
 | Opcode     | 4   | DAT opcode (CompData, WriteData, …)        |
 | RespErr    | 2   | Error status (OK / ExOK / DERR / NDERR)   |
 | Resp       | 3   | Cache state (I / SC / UC / UD / SD / PD)  |
+| DBID       | 12  | Data Buffer ID — echoed by CompAck        |
+| DataSource | 8   | Hint: which node supplied the data        |
 
 </div>
 <div>
 
 | Name       | W   | Description                               |
 |------------|-----|-------------------------------------------|
-| DBID       | 12  | Data Buffer ID — echoed by CompAck        |
-| DataSource | 8   | Hint: which node supplied the data        |
 | FwdState   | 3   | State forwarded — snoop-fwd *only*        |
 | CCID       | 2   | Critical Chunk Identifier                  |
 | DataID     | 2   | Packet index (0..3 for 128-bit DATA_W)    |
@@ -496,6 +612,8 @@ same table but that only materialise when the feature is on.
 | TraceTag   | 1   | Trace/debug tag                            |
 | BE         | 16  | Byte enables (DATA_W/8)                   |
 | Data       | 128 | Payload (DATA_W: 128 / 256 / 512)         |
+| DataCheck  | 16  | RAS: per-byte data integrity (*optional*) |
+| Poison     | 2   | RAS: per-64-bit poison bit (*optional*)   |
 
 </div>
 </div>
@@ -565,19 +683,28 @@ can throttle or route around a hot node.
 BE, 16 bits at default, is the byte-enable mask — one bit per byte
 of the data payload. Crucial for partial writes.
 
-And Data — the payload itself, DATA_W bits wide.
+Data — the payload itself, DATA_W bits wide.
+
+The last two are RAS-optional. DataCheck carries one integrity bit
+per data byte — DATA_W/8 bits — typically used to hold parity or a
+compressed ECC syndrome computed at the producer. Poison carries
+one bit per 64-bit chunk — DATA_W/64 bits — marking that chunk as
+containing a known-bad value that must not be silently consumed;
+downstream hardware propagates the poison rather than trapping on it.
+Both fields are zero-width when the implementation does not enable
+data integrity or poisoning.
 
 Three points to close. One, the field order is architectural just
 like REQ. Two, DATA_W is the main parameter; at 256 bits the Data
-field doubles and BE goes from 16 to 32. Three, RAS options —
-Poison and DataCheck — and stashing fields (DataPull, Tag) add more
+field doubles and BE goes from 16 to 32, DataCheck from 16 to 32,
+Poison from 2 to 4. Three, stashing fields (DataPull, Tag) add more
 bits when enabled.
 -->
 
 ---
 
 <!-- ================================================================== -->
-<!-- SLIDE 8: RSP flit fields -->
+<!-- SLIDE 9: RSP flit fields -->
 <!-- ================================================================== -->
 
 ## RSP flit fields
@@ -677,7 +804,7 @@ probe first when a CHI system hangs.
 ---
 
 <!-- ================================================================== -->
-<!-- SLIDE 9: SNP flit fields -->
+<!-- SLIDE 10: SNP flit fields -->
 <!-- ================================================================== -->
 
 ## SNP flit fields
@@ -774,25 +901,106 @@ back. SNP by itself is always data-less.
 ---
 
 <!-- ================================================================== -->
-<!-- SLIDE 10: TBD -->
+<!-- SLIDE 11: Directory Controller — the HN-F's coherence book -->
 <!-- ================================================================== -->
 
-## TBD
+## Directory Controller — what the HN-F remembers
+
+<div class="columns">
+<div>
+
+<img src="../resources/chi_directory.svg" alt="CHI directory: HN-F slice holds a Directory (PerfectCacheMemory, addr-to-DirEntry, unbounded) alongside an LLC (CacheMemory). One DirEntry expanded to show its five fields: state, sharers (NetDest bit-vector), owner, ownerExists, ownerIsExcl." class="tall">
+
+
+</div>
+<div>
+
+### What the directory answers
+
+- *Who upstream has this line, and in what state?*
+- Who, if anyone, can **supply data** without going to memory?
+- Which RNs need **snoops** on the next write?
+
+### In gem5
+
+- Lives inside `CHI-cache.sm`; **no separate `*-dir.sm`** — the `is_HN` flag turns it on
+- Entry fields above are declared at `CHI-cache.sm:590`
+- `PerfectCacheMemory` = **unbounded** map — no capacity, no evictions, no back-invalidations modeled
+- `sharers` is a **full bit-vector** of RN IDs — exact, not coarse-vector or pointer+overflow
+- One HN-F per slice; line address routed by the NUMA interleave bits set in `CHI_config.py`
+
+</div>
+</div>
+
+<div class="takeaway">
+Directory = what the home <em>knows</em>. LLC = what the home <em>holds</em>. Same address, different storage — a line can be tracked without being cached, and cached without being shared.
+</div>
 
 <!-- Speaker Notes:
 Time budget: 3 minutes.
--->
 
----
+Up to here we have talked about channels and flit fields — what travels
+on the wire. Now we open one of the nodes and look at what it has to
+remember.
 
-<!-- ================================================================== -->
-<!-- SLIDE 11: TBD -->
-<!-- ================================================================== -->
+The directory lives inside the home node. In CHI that is the HN-F — the
+Fully coherent Home Node. Only HN-F owns a directory. The other home
+nodes you saw on the node-types slide, HN-I for I/O and MN for
+miscellaneous, do not participate in coherence, so they have no sharer
+tracking to do.
 
-## TBD
+Why does the HN-F need a directory at all? Because CHI is
+directory-based, not snoop-broadcast. When a read arrives for line
+0x40, the HN-F has to answer two questions before it can respond. Does
+any cache upstream own a dirty copy of this line? And who, if anyone,
+is sharing it? The directory is the book that answers those two
+questions.
 
-<!-- Speaker Notes:
-Time budget: 3 minutes.
+Now the fields in the diagram.
+
+`state` is the coherence state from the home node's point of view — I,
+SC, SD, UC, UD. Important: this is the HN's state, not the state at
+any particular RN. A line can be SC at the home while each sharer
+independently thinks of its own copy as SC.
+
+`sharers` is a bit-vector — Ruby calls the type NetDest — over all
+upstream RN IDs in the system. Every RN that might have a valid copy
+has its bit set. Bit-vectors are exact but expensive; real silicon
+typically uses a compressed representation like coarse-vector or
+pointer-plus-overflow. gem5 prefers exactness over realism here.
+
+`owner` plus `ownerExists` and `ownerIsExcl` pin down who, if anyone,
+holds the line in a state that can supply data. `ownerIsExcl`
+distinguishes an exclusive UD or UC owner from a shared-dirty SD
+owner. Those are the flags the HN uses to pick a snoop opcode and to
+decide whether it still needs to go to memory.
+
+Now two things about gem5 that usually surprise people.
+
+First, there is no `*-dir.sm` file. Most textbook descriptions of Ruby
+show cache and directory as separate controllers with separate state
+machines. CHI in gem5 does not do that. The directory is folded into
+`CHI-cache.sm`, gated by the `is_HN` configuration flag. The same
+source file runs as a private L1 with `is_HN` false, and as an HN-F
+with `is_HN` true. You will not find a standalone directory controller
+anywhere in the CHI protocol tree.
+
+Second, the directory is a `PerfectCacheMemory` — an unbounded hash
+map from line address to DirEntry. No capacity. No eviction. No
+conflict misses. That matters both ways. It simplifies modeling — the
+HN never forgets who has a line, so you never debug a bug that was
+really a directory overflow. But it is also a deliberate
+simplification. In silicon, directory overflow forces
+back-invalidations, and that is one of the largest performance effects
+in real CHI systems. gem5 does not give you that cost out of the box —
+if you want it, you have to add it.
+
+The LLC slice next to the directory is a conventional `CacheMemory` —
+finite rows and ways, NUMA-interleaved across HN-F slices using the
+address bits set up in `CHI_config.py`. Directory and LLC share the
+line address but not the storage. A line can be tracked by the
+directory without being present in the LLC — and a line can be in the
+LLC without any RN currently sharing it.
 -->
 
 ---

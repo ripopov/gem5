@@ -186,6 +186,157 @@ blockquote p,
   max-height: 250px;
 }
 
+.columns img.tall {
+  max-height: 540px;
+}
+
+.flow-step {
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--chi-border);
+  background: linear-gradient(180deg, white 0%, var(--chi-surface) 100%);
+  box-shadow: var(--chi-shadow);
+}
+
+.flow-step h3 {
+  font-size: 16px;
+  line-height: 1.2;
+  margin: 0 0 4px;
+  color: var(--chi-blue-deep);
+}
+
+.flow-step p {
+  font-size: 13px;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.flow-arrow {
+  text-align: center;
+  font-size: 22px;
+  line-height: 1;
+  color: var(--chi-muted);
+  margin: 4px 0;
+}
+
+.sam-viz {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, white 0%, var(--chi-surface) 100%);
+  border: 1px solid var(--chi-border);
+  box-shadow: var(--chi-shadow);
+}
+
+.sam-viz-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--chi-blue-deep);
+  margin: 0 0 4px;
+}
+
+.sam-addr {
+  font-family: "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 18px;
+  background: white;
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--chi-border);
+  letter-spacing: 0.5px;
+}
+
+.sam-addr .sam-tag {
+  color: var(--chi-muted);
+}
+
+.sam-addr .sam-hash {
+  color: var(--chi-gold);
+  background: #fef3c7;
+  padding: 2px 5px;
+  margin: 0 1px;
+  border-radius: 4px;
+  font-weight: 700;
+}
+
+.sam-addr .sam-offset {
+  color: var(--chi-muted);
+}
+
+.sam-legend {
+  font-size: 11px;
+  color: var(--chi-muted);
+  margin-top: -2px;
+}
+
+.sam-legend .sam-legend-hash {
+  color: #8a5a00;
+  background: #fef3c7;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-weight: 700;
+}
+
+.sam-arrow-v {
+  font-size: 18px;
+  color: var(--chi-muted);
+  line-height: 1;
+}
+
+.sam-box {
+  padding: 8px 18px;
+  background: linear-gradient(135deg, var(--chi-blue-deep), var(--chi-blue));
+  color: white;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 14px;
+  box-shadow: var(--chi-shadow);
+}
+
+.sam-outputs {
+  display: flex;
+  gap: 18px;
+}
+
+.sam-out {
+  display: inline-block;
+  padding: 8px 14px;
+  background: #EDE9FE;
+  color: var(--chi-violet);
+  border: 2px solid var(--chi-violet);
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 15px;
+  text-align: center;
+  line-height: 1.15;
+}
+
+.sam-out .sam-nid {
+  display: block;
+  font-family: monospace;
+  font-weight: 500;
+  font-size: 12px;
+  color: var(--chi-muted);
+  margin-top: 2px;
+}
+
+.sam-rules {
+  margin-top: 10px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--chi-surface-2);
+  border-left: 5px solid var(--chi-blue);
+}
+
+.sam-rules p {
+  margin: 5px 0;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--chi-ink);
+}
+
 .comparison-grid,
 .card-grid,
 .state-grid,
