@@ -1713,13 +1713,208 @@ for the SLICC machinery.
 ---
 
 <!-- ================================================================== -->
-<!-- SLIDE 17: TBD -->
+<!-- SLIDE 17: CHI Transaction Encyclopedia -->
 <!-- ================================================================== -->
 
-## TBD
+<style scoped>
+section h2 { margin: 0 0 4px 0; font-size: 24px; }
+section h3 { font-size: 13px; margin: 4px 0 1px 0; padding: 0; color: #1f6feb; font-weight: 600; }
+section table { font-size: 10.5px; margin: 0 0 2px 0; border-collapse: collapse; width: 100%; }
+section th, section td { padding: 0px 5px; line-height: 1.15; border-bottom: 1px solid #e1e4e8; }
+section th { background: #eef3fb; }
+section code { font-size: 10px; padding: 0 1px; background: transparent; }
+.columns { gap: 18px; }
+</style>
+
+## CHI Transactions — a tour of what the protocol offers
+
+<div class="columns">
+<div>
+
+### Coherent (allocating) Reads — B4.2.1
+
+| Opcode | Purpose |
+|---|---|
+| `ReadShared` | Coherent load; accepts UC/UD/SC/SD |
+| `ReadNotSharedDirty` | Coherent load; SD state not permitted |
+| `ReadClean` | Load into clean-only cache (e.g. I-cache); UC/SC only |
+| `ReadUnique` | Load-to-store; returns UC or UD |
+| `ReadPreferUnique` | Prefer Unique; accepts Shared during exclusive sequences |
+| `MakeReadUnique` | Upgrade SC/SD → Unique; data return optional |
+
+### Non-coherent / IO-coherent Reads — B4.2.1
+
+| Opcode | Purpose |
+|---|---|
+| `ReadNoSnp` | Read to Non-snoopable region, or Home→Sub memory fetch |
+| `ReadOnce` | IO-coherent snapshot; not cached coherently |
+| `ReadOnceCleanInvalid` | Snapshot + hint to clean-invalidate other copies |
+| `ReadOnceMakeInvalid` | Snapshot + hint to invalidate (may drop Dirty) |
+
+### Dataless — ownership & CMO — B4.2.2
+
+| Opcode | Purpose |
+|---|---|
+| `CleanUnique` | Upgrade to Unique; Dirty sharers must writeback |
+| `MakeUnique` | Upgrade to Unique; overwrite whole line; Dirty discarded |
+| `Evict` | "Clean line dropped" — directory hint, no data |
+| `CleanShared` | CMO: flush Dirty to memory; keep Clean copies |
+| `CleanSharedPersist` / `…Sep` | CMO: flush to Point of Persistence (PoP) |
+| `CleanInvalid` | CMO: invalidate all; Dirty must be written to memory |
+| `CleanInvalidPoPA` | CMO: invalidate + push past Point of Physical Aliasing |
+| `CleanInvalidStorage` | CMO: invalidate + push to Point of Persistent Storage |
+| `MakeInvalid` | CMO: invalidate all; Dirty may be discarded |
+
+### Atomics — B4.2.5
+
+| Opcode | Purpose |
+|---|---|
+| `AtomicStore` | Op-and-store (ADD/CLR/EOR/SET/SMAX/SMIN/UMAX/UMIN); no data returned |
+| `AtomicLoad` | Same 8 ops; returns original value |
+| `AtomicSwap` | Unconditional swap; returns original value |
+| `AtomicCompare` | Compare-and-swap; returns original (half outbound size) |
+
+</div>
+<div>
+
+### Immediate (Non-CopyBack) Writes — B4.2.3.1
+
+| Opcode | Purpose |
+|---|---|
+| `WriteNoSnpFull` / `WriteNoSnpPtl` | Non-coherent write to Non-snoopable region |
+| `WriteNoSnpDef` | Deferrable non-coherent write; multiple outstanding OK |
+| `WriteNoSnpZero` / `WriteUniqueZero` | Write zero without transferring data bytes |
+| `WriteUniqueFull` / `WriteUniquePtl` | Coherent write from I; Home invalidates sharers |
+| `WriteUniqueFullStash` / `…PtlStash` | WriteUnique + Stash injection into target cache |
+
+### CopyBack Writes (writeback / eviction) — B4.2.3.2
+
+| Opcode | Purpose |
+|---|---|
+| `WriteBackFull` / `WriteBackPtl` | Dirty writeback (UD→I or SD→I) |
+| `WriteCleanFull` | Flush Dirty but keep a Clean copy in cache |
+| `WriteEvictFull` | UC eviction carrying data; stays in Snoop domain |
+| `WriteEvictOrEvict` | Eviction — Home chooses whether to accept data |
+
+### Combined Write + CMO — B4.2.4 (examples)
+
+| Opcode | Purpose |
+|---|---|
+| `WriteNoSnpFullCleanInv` | Non-coh write + CleanInvalid, atomically |
+| `WriteUniqueFullCleanSh` | Coherent write + CleanShared |
+| `WriteBackFullCleanInv` | Dirty writeback + CleanInvalid |
+| `WriteNoSnpFullCleanInvPoPA` | Write + cross-PAS invalidation |
+| `WriteBackFullCleanShPerSep` | Writeback + CleanSharedPersistSep (PCMO) |
+
+### Stash / DVM / Prefetch / System — B4.2.2, B4.2.6
+
+| Opcode | Purpose |
+|---|---|
+| `StashOnceUnique` / `…SepUnique` | Inject line into target cache for write-intent |
+| `StashOnceShared` / `…SepShared` | Inject line into target cache for read-intent |
+| `DVMOp` | TLB / I-cache / branch-predictor maintenance broadcast |
+| `PrefetchTgt` | Warm memory controller; no response expected |
+| `PCrdReturn` | Return an unused Protocol Credit to the Completer |
+
+### Child requests spawned by Home — B4.3, B2.3.9
+
+| Opcode | Where it fires |
+|---|---|
+| `ReadNoSnp` / `ReadNoSnpSep` | Home → Sub for any Read's memory fetch |
+| `WriteNoSnp*` with `DoDWT = 1` | Home → Sub for DWT on Immediate Writes |
+| `SnpShared` / `SnpUnique` / `SnpCleanInvalid` | Non-forwarding snoops (downgrade, invalidate, pull Dirty) |
+| `SnpSharedFwd` / `SnpUniqueFwd` / `SnpCleanFwd` | Forwarding snoops — power DCT (slide 15 Alt 5) |
+| `SnpMakeInvalid` | Invalidate without pulling Dirty (MakeUnique, stash non-targets) |
+| `SnpStashUnique` / `SnpStashShared` | Stash injection snoops |
+| `SnpDVMOp` | DVM broadcast (2 snoops per `DVMOp`; 1 combined response) |
+| `SnpQuery` | State-probe only; does not change Snoopee state |
+
+</div>
+</div>
 
 <!-- Speaker Notes:
-Time budget: 3 minutes.
+This slide is deliberately an encyclopedia, not a walkthrough. The aim is to show the
+breadth of the CHI protocol — how much territory a single "transaction opcode" field covers.
+All definitions here are condensed directly from IHI0050H B4.2 (Request types) and B4.3
+(Snoop request types); section references are in each table header so the listener can
+drop into the spec for any row.
+
+Reading the slide top-down by column.
+
+Left column.
+
+(1) Coherent Allocating Reads. These are the six opcodes an RN-F uses when it will put the
+line into a coherent cache state. They differ mainly in which final states the Requester
+can accept. ReadShared is the permissive case (any of UC/UD/SC/SD), ReadNotSharedDirty
+tightens that to UC/UD/SC (no SD), ReadClean is for caches that do not support Dirty lines
+(instruction caches — UC/SC only), ReadUnique is the load-to-store variant that demands
+UC or UD, ReadPreferUnique is the exclusive-sequence optimizer, and MakeReadUnique is the
+upgrade-without-data variant.
+
+(2) Non-coherent / IO-coherent Reads. ReadNoSnp is the Home→Sub fetch workhorse: all
+memory requests the Home issues downstream use it. ReadOnce and its two invalidating
+variants are for IO / DMA engines that want to see coherent data but do not intend to
+cache it. The CleanInvalid / MakeInvalid suffixes are hints, not guarantees — the spec is
+explicit that these do not replace proper CMOs.
+
+(3) Dataless — ownership and CMO. This box mixes two related families because both
+complete without a data response. CleanUnique, MakeUnique, and Evict change coherence
+ownership without moving data. The seven CMOs below are the software-cache-management
+toolkit: CleanShared / CleanSharedPersist / CleanSharedPersistSep push Dirty data out to
+memory or to the Point of Persistence; CleanInvalid and its PoPA and Storage variants
+invalidate plus push to progressively deeper memory hierarchy points; MakeInvalid is the
+"I do not care about the Dirty data, just invalidate" hammer.
+
+(4) Atomics. Four top-level opcodes. AtomicStore and AtomicLoad each cover eight named
+operations (ADD/CLR/EOR/SET plus signed/unsigned MAX/MIN). AtomicSwap and AtomicCompare
+are the full read-modify-write primitives; AtomicCompare is CAS and is the only one where
+inbound data size is half the outbound size (because the inbound is just the old value,
+not the compare-value side).
+
+Right column.
+
+(5) Immediate (Non-CopyBack) Writes. These are writes where the Requester ships new data
+that is not a writeback of a previously-cached dirty line. The Requester must be in state
+I when sending any of these. WriteNoSnp* are for Non-snoopable regions; WriteUnique* are
+coherent and cause Home to fire invalidating snoops. The …Stash variants add a Stash
+injection hint alongside the write.
+
+(6) CopyBack Writes. Writebacks and evictions. These move cached lines down the hierarchy.
+WriteBackFull / WriteBackPtl push Dirty data; WriteCleanFull pushes Dirty but keeps a
+Clean copy; WriteEvictFull pushes a UC line that must stay within the Snoop domain;
+WriteEvictOrEvict lets Home decide whether data is actually needed (this is the Alt 1a /
+Alt 1b branch we covered in our earlier practice slides).
+
+(7) Combined Write + CMO. The Write+CMO fusion family from B4.2.4 with ten concrete
+opcodes. The table shows representative examples: each opcode packages a write and a CMO
+against the same address into one transaction, so that ordering is trivial and DWT can
+be used for both halves. The PerSep suffix indicates a PCMO with a separate Persist
+response (CleanSharedPersistSep).
+
+(8) Stash / DVM / Prefetch / System. Everything else. StashOnce* let a producer hint
+"cache this line at that consumer" to reduce the consumer's first-touch latency. DVMOp is
+the TLBI / instruction-cache / branch-predictor invalidation broadcast primitive.
+PrefetchTgt is the speculative memory-warm operation — fire-and-forget, no response.
+PCrdReturn closes the protocol-credit loop when a retried request is abandoned.
+
+(9) Child requests — the last table. This is the answer to "what does Home actually
+issue while processing any of the above?" Two families: downstream Sub-side requests
+(ReadNoSnp, ReadNoSnpSep, WriteNoSnp* with DoDWT), and peer-side snoops. The snoop list
+itself shows the same three-way split that the Allocating Read figure showed us:
+non-forwarding snoops when Home will serve data itself, forwarding snoops for DCT, and
+the specialty snoops — stash, DVM broadcast, probe-only SnpQuery.
+
+Concluding point. Every opcode on this slide fits somewhere on one of the three axes CHI
+exposes: (a) data movement direction (in to the Requester, out from the Requester, or
+zero data), (b) coherence domain (coherent, IO-coherent, non-coherent), and (c) side
+effect (cache state change, CMO propagation, Stash injection, DVM broadcast, persistence).
+Any new CHI opcode introduced in a future revision of the spec will slot into the same
+grid.
+
+References. Definitions on the slide are drawn from IHI0050H sections:
+B4.2.1 (Read), B4.2.2 (Dataless + CMO), B4.2.3 (Write), B4.2.4 (Combined Write),
+B4.2.5 (Atomic), B4.2.6 (DVM / Prefetch), B4.3 (Snoop), B2.3.9 (Home-initiated child
+transactions).
 -->
 
 ---
