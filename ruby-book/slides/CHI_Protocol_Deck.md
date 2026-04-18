@@ -2092,13 +2092,185 @@ Deeper treatment of buffering and backpressure is in
 ---
 
 <!-- ================================================================== -->
-<!-- SLIDE 19: TBD -->
+<!-- SLIDE 19: Garnet Router Architecture -->
 <!-- ================================================================== -->
 
-## TBD
+## Anatomy of a Garnet router
+
+<img src="../resources/ruby_garnet_router.svg" alt="Garnet NoC architecture: leftmost column shows a CHI RN-F controller with its eight per-VNet MessageBuffers (reqOut/snpOut/rspOut/datOut outbound, reqIn/snpIn/rspIn/datIn inbound), colored blue/gold/green/violet for REQ/SNP/RSP/DAT. The middle NetworkInterface column shows the ingress pipeline (inNode_ptr[vnet] → flitisizeMessage → calculateVC → niOutVcs[vc] → OutputPort) above a dashed divider, and the egress pipeline (InputPort → accumulate by packet_id → outNode_ptr[vnet]) below. The outVcState[vc] credit mirror sits on the ingress side. The large Router column on the right details the per-cycle pipeline: a full InputUnit[Local] with per-vnet virtualChannels (REQ/SNP/RSP/DAT pills) and its creditQueue, plus four compact IU[N]/IU[E]/IU[S]/IU[W] tiles; below them the RoutingUnit stripe, then the SwitchAllocator box split into SA-I and SA-II rows, then CrossbarSwitch, then a full OutputUnit[Local] with outBuffer and outVcState[num_vcs] (REQ/SNP/RSP/DAT pills) plus four compact OU[N]/OU[E]/OU[S]/OU[W] tiles. Green dashed arrows show CreditLink flow from IU[Local] back to NI.outVcState; orange arrows show the intra-router IU→RU→SA→XB→OU data path. A 3×3 mini-mesh inset on the far right places R4 (dashed violet outline) as the zoomed router, surrounded by RN-F/HN-F/SN-F neighbours, with an IntLink arrow pair connecting one mesh edge to OU[E]/IU[E]. A legend under the mini-mesh lists node types (RN-F, HN-F, SN-F), channel colors, and link types (ExtLink, IntLink, NetworkLink, CreditLink)." class="tall">
 
 <!-- Speaker Notes:
-Time budget: 3 minutes.
+Time budget: 5 minutes.
+
+This slide is the one-picture map of a Garnet NoC node. It continues the RN-F
+example from the previous slide and shows where each CHI message physically
+lands once the SLICC controller has handed it off. The four columns read
+left-to-right: the protocol controller, the NetworkInterface, the Router, and
+a mini-mesh that anchors the zoomed router in its neighborhood. Everything
+lives under `src/mem/ruby/network/garnet/`, with the top-level SimObject being
+`GarnetNetwork` (`GarnetNetwork.hh/cc`).
+
+Start at the far left. The **RN-F controller** is the same box we dissected on
+slide 18, collapsed here to just its eight per-VNet MessageBuffers:
+`reqOut/snpOut/rspOut/datOut` going out, `reqIn/snpIn/rspIn/datIn` coming
+back. These are the only things the controller writes to and reads from the
+network — everything else is internal. Each MessageBuffer is bound to one
+virtual network: REQ=0, SNP=1, RSP=2, DAT=3. That binding is what the
+`virtual_network=` keyword on the SLICC declaration records, and it survives
+all the way to the flit on the wire.
+
+Move right into the **NetworkInterface**, the SimObject declared in
+`NetworkInterface.hh/cc` and `GarnetNetwork.py` as `GarnetNetworkInterface`.
+One NI per controller — the two objects talk through plain MessageBuffer
+pointers, exactly as they would talk to any other SLICC machine. The NI is
+the last place in Garnet that understands SLICC `Message` objects; downstream
+of it, everything is flits.
+
+The NI column is split into an ingress half — protocol to network — and an
+egress half — network back to protocol — separated by a dashed line. On
+ingress, the NI peeks `inNode_ptr[vnet]`, one pointer per outbound
+MessageBuffer. When it finds a ready message, `flitisizeMessage(msg, vnet)`
+sizes the message in bytes (CHI requests are small, CHI data responses carry
+a full cache line) and chops it into `ceil(bytes / m_ni_flit_size)` flits —
+the first HEAD, the last TAIL, middles BODY; a single-flit packet is
+HEAD_TAIL. `m_ni_flit_size` defaults to sixteen bytes, set at the
+`GarnetNetwork` level.
+
+Then `calculateVC(vnet)` picks one VC from the vnet's VC range, round-robin.
+Two important things about that pick. First, it happens once per packet, at
+HEAD time, and every BODY/TAIL inherits the same VC so flits of one message
+stay together. Second, it only returns a VC that is currently `IDLE_` on the
+downstream router — the NI reads its local `outVcState[vc]` mirror to decide.
+If every VC in that vnet is busy, `calculateVC` returns −1 and the flit sits
+in `niOutVcs[vc]` until a credit comes back.
+
+The chosen flit lands in `niOutVcs[vc]` — one `flitBuffer` per VC. From
+there `scheduleOutputLink()` moves one flit per cycle into the `OutputPort`'s
+outFlitQueue, which *is* the upstream end of the ExtLink. That is the
+boundary between NI and Router.
+
+The egress side is the mirror. Flits arrive on the `InputPort` one per cycle,
+the NI accumulates them by `packet_id`, and on TAIL arrival it unwraps the
+shared `MsgPtr` carried by every flit and enqueues it onto the protocol
+controller's matching inbound MessageBuffer via `outNode_ptr[vnet]`. Zero
+copy — the `MsgPtr` has ridden along on every flit as a shared pointer since
+the source NI minted it.
+
+`outVcState[vc]` deserves a moment. It is the NI's *mirror* of the downstream
+router's VC state — how many credits each downstream VC has left, and whether
+it is IDLE / VC_AB / ACTIVE. When the router consumes a flit out of a VC, it
+sends a Credit back on the reverse CreditLink; the NI applies it via
+`increment_credit(vc)`, and on `is_free_signal` flips the VC back to IDLE.
+This is the back-pressure that keeps the NI honest about what the wire can
+actually take.
+
+Now the main event — the **Router** itself, `Router.hh/cc`, extends
+`BasicRouter + Consumer`. This is the cycle-accurate switch. For a mesh node,
+it has five physical ports: one Local port facing the NI plus one each for
+North, East, South, West. `m_latency=2` by default — two cycles per hop, one
+for Switch Allocation, one for Switch Traversal.
+
+The top strip shows the InputUnits. There is one `InputUnit` per physical
+inport, each owning the incoming `NetworkLink` and the outgoing `CreditLink`
+back to the upstream router. The Local IU is shown in full — you can see
+its `virtualChannels[num_vcs]` pool, partitioned per vnet. For CHI with
+four vnets and say two VCs per vnet, the Local IU has eight VCs total: two
+in the REQ range, two SNP, two RSP, two DAT. Each VC is a `flitBuffer` plus a
+small state machine (IDLE / VC_AB / ACTIVE) plus the `m_output_port` and
+`m_output_vc` the RoutingUnit and SwitchAllocator will fill in. The
+`creditQueue` on the IU drains credits back to the upstream router once flits
+leave a VC.
+
+The four small IU[N]/E/S/W tiles to the right are structurally identical.
+Each has its own VC pool, its own credit path back upstream, its own
+wakeup. They are drawn small because per-cycle behavior is the same as IU
+Local; only the upstream endpoint differs.
+
+When a HEAD flit arrives at any InputUnit, the IU calls
+`m_router->route_compute(...)` which delegates to the **RoutingUnit** — the
+red stripe across the middle. There is exactly one RoutingUnit per Router,
+no per-cycle state. `outportCompute(route, inport, dirn)` takes the flit's
+destination and returns the outport id via one of three algorithms:
+`TABLE_`, `XY_`, or `CUSTOM_`. For the classic CHI mesh, `XY_` is the
+default — dimension-order routing, which is the canonical deadlock-free
+choice. The result is stored back in the VC, and every BODY/TAIL flit of
+the same packet inherits it.
+
+Below that is the **SwitchAllocator** — the linchpin of Garnet's cycle
+accuracy. It runs every router cycle and does two rounds of arbitration.
+In **SA-I**, each inport picks one ready VC round-robin, where 'ready'
+means the flit is at stage SA_ and the downstream VC has a credit to spend.
+HEAD flits additionally require a free downstream VC in the target vnet.
+In **SA-II**, each outport picks one inport round-robin among those that
+asked for it in SA-I. For HEAD flits SA-II also allocates the downstream
+outvc via `select_free_vc(vnet)`, decrements the credit on the outvc, and
+enqueues a Credit back to the upstream InputUnit so the upstream VC can be
+reused. Per cycle the router can grant at most min(num_inports, num_outports)
+flits through — five in our mesh node.
+
+The **CrossbarSwitch** is the thin stripe below. It has one small flitBuffer
+per inport and does no arbitration — all contention was resolved in
+SwitchAllocator. Its only job is to move each winning flit from
+`switchBuffers[inport]` into the chosen OutputUnit's `outBuffer`, which
+advances the flit's stage from SA_ to ST_.
+
+The bottom strip shows the **OutputUnits**. One per outport. OU Local is
+drawn in full — `outBuffer` holding flits on their way to the outgoing
+NetworkLink, plus `outVcState[num_vcs]` tracking the *downstream* VC state.
+Every VC on the downstream neighbor has a credit count here, updated when a
+Credit arrives on the reverse CreditLink. The four OU[N]/E/S/W tiles behave
+identically — each owns the outgoing NetworkLink to one mesh neighbor and
+the incoming CreditLink from that neighbor.
+
+Two things about credits. First: credits never cross between IU and OU
+*inside the same router*. An IU sends its credits *upstream* to the router
+on the other side of its inbound link, not to the OU next to it. An OU
+receives credits *from downstream*, not from the IU next to it. The green
+dashed arrow on the diagram from IU[Local] back to the NI's outVcState is
+exactly that flow — credits returning to the upstream endpoint, which
+happens to be the NI in this case. Second: the `outVcState[vc]` on OU[Local]
+is the Router's mirror of the *NI's* input VC state, where outgoing flits
+are headed. The NI's own `outVcState[vc]` mirrors the downstream Router.
+Both mirrors keep their respective senders from over-flowing their
+receivers' buffers.
+
+The mini-mesh on the far right places R4, our zoomed router, in a 3×3 CHI
+mesh alongside three other RN-Fs, three HN-Fs, and an SN-F. The dashed
+violet outline on R4 marks 'you are here'. Every solid line in the mini-mesh
+is a GarnetIntLink, which is internally a pair: a NetworkLink carrying flits
+and a CreditLink carrying credits back. R4's four mesh ports connect to
+R1 (North), R5 (East), R7 (South), R3 (West), and the ExtLink on the left
+side of R4 goes to R4's NI and to the RN-F controller we just dissected. The
+two arrows between OU[E]/IU[E] and R4's mesh cell highlight that: IntLinks
+come in pairs, one per direction, and physically each one is a NetworkLink
+plus a CreditLink.
+
+Three takeaways.
+
+First: the Router has *five* ports, not four. The Local port is how the NI
+attaches. A mesh corner router has three mesh ports; a mesh edge router has
+four; every router has exactly one Local port.
+
+Second: the virtual channel pool is striped across vnets. A flit on vnet 0
+can only land in a VC whose index is in `[0, m_vc_per_vnet)`. That is what
+makes CHI's REQ / SNP / RSP / DAT flows deadlock-independent — they never
+share a buffer, not even inside one Router.
+
+Third: every credit the network handles exists to close *one* buffer-write /
+buffer-read pair. Every NetworkLink has a matching CreditLink. Every
+`flitisizeMessage` on the NI has a matching accumulate-by-packet_id on the
+receiving NI. If you can keep that paired mental model, the rest is just
+parameters: `m_latency`, `m_vc_per_vnet`, `m_buffers_per_ctrl_vc`,
+`m_buffers_per_data_vc`, `m_ni_flit_size`, routing_algorithm, bit_width.
+
+References. `GarnetNetwork.hh/cc`, `NetworkInterface.hh/cc`, `Router.hh/cc`,
+`InputUnit.hh/cc`, `VirtualChannel.hh/cc`, `RoutingUnit.hh/cc`,
+`SwitchAllocator.hh/cc`, `CrossbarSwitch.hh/cc`, `OutputUnit.hh/cc`,
+`NetworkLink.hh/cc`, and `NetworkBridge.hh/cc`, all under
+`src/mem/ruby/network/garnet/`. The Python parameters are in
+`GarnetNetwork.py`. A chapter-length treatment is in
+`ruby-book/extra/GarnetArch.md`; the NI's flit packetization and VC
+round-robin are in `ruby-book/extra/RequestToFlit.md`.
 -->
 
 ---

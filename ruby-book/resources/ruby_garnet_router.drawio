@@ -1,0 +1,466 @@
+<mxfile host="Electron" modified="2026-04-18T00:00:00.000Z" agent="claude" version="24.0.0">
+  <diagram name="Ruby Garnet Router" id="ruby-garnet-router">
+    <mxGraphModel dx="1660" dy="760" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1660" pageHeight="760" math="0" shadow="0" background="#ffffff">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <!-- =============================================================== -->
+        <!-- Outer frame                                                      -->
+        <!-- =============================================================== -->
+        <mxCell id="outer" value="&lt;b style=&quot;font-size:16px&quot;&gt;Garnet Network &#8212; RN-F node zoomed&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8FAFC;strokeColor=#334155;strokeWidth=2.5;verticalAlign=top;fontSize=13;fontColor=#334155;arcSize=2;" vertex="1" parent="1">
+          <mxGeometry x="8" y="8" width="1644" height="744" as="geometry"/>
+        </mxCell>
+
+        <!-- =============================================================== -->
+        <!-- COLUMN 1 : RN-F controller (compact)   x=22..232 (w=210)         -->
+        <!-- =============================================================== -->
+        <mxCell id="rnf_box" value="&lt;b&gt;RN-F controller&lt;/b&gt;&lt;div style=&quot;font-size:11px;color:#475569;font-weight:normal;margin-top:2px&quot;&gt;CHI-cache &#8212; machine(Cache)&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F1F5F9;strokeColor=#475569;strokeWidth=2;verticalAlign=top;fontSize=13;fontColor=#334155;arcSize=4;" vertex="1" parent="1">
+          <mxGeometry x="22" y="44" width="210" height="700" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="rnf_out_hdr" value="&lt;b&gt;to network&lt;/b&gt;" style="text;html=1;fontSize=11;fontColor=#475569;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="34" y="104" width="186" height="16" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="reqOut" value="&lt;b&gt;reqOut&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E7F0FF;strokeColor=#1d4ed8;strokeWidth=1.5;verticalAlign=middle;align=center;fontSize=12;fontColor=#1d4ed8;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="34" y="124" width="186" height="32" as="geometry"/>
+        </mxCell>
+        <mxCell id="snpOut" value="&lt;b&gt;snpOut&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2D8;strokeColor=#c58b1b;strokeWidth=1.5;verticalAlign=middle;align=center;fontSize=12;fontColor=#8a5a00;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="34" y="162" width="186" height="32" as="geometry"/>
+        </mxCell>
+        <mxCell id="rspOut" value="&lt;b&gt;rspOut&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F7EC;strokeColor=#15803d;strokeWidth=1.5;verticalAlign=middle;align=center;fontSize=12;fontColor=#15803d;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="34" y="200" width="186" height="32" as="geometry"/>
+        </mxCell>
+        <mxCell id="datOut" value="&lt;b&gt;datOut&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F0E9FF;strokeColor=#7c3aed;strokeWidth=1.5;verticalAlign=middle;align=center;fontSize=12;fontColor=#5d33bf;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="34" y="238" width="186" height="32" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="rnf_out_lbl" value="&lt;i&gt;vnet 0 &#8211; 3 MessageBuffers&lt;/i&gt;" style="text;html=1;fontSize=10;fontColor=#64748b;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="34" y="274" width="186" height="16" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="rnf_in_hdr" value="&lt;b&gt;from network&lt;/b&gt;" style="text;html=1;fontSize=11;fontColor=#475569;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="34" y="444" width="186" height="16" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="reqIn" value="&lt;b&gt;reqIn&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E7F0FF;strokeColor=#1d4ed8;strokeWidth=1.5;verticalAlign=middle;align=center;fontSize=12;fontColor=#1d4ed8;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="34" y="464" width="186" height="32" as="geometry"/>
+        </mxCell>
+        <mxCell id="snpIn" value="&lt;b&gt;snpIn&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2D8;strokeColor=#c58b1b;strokeWidth=1.5;verticalAlign=middle;align=center;fontSize=12;fontColor=#8a5a00;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="34" y="502" width="186" height="32" as="geometry"/>
+        </mxCell>
+        <mxCell id="rspIn" value="&lt;b&gt;rspIn&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F7EC;strokeColor=#15803d;strokeWidth=1.5;verticalAlign=middle;align=center;fontSize=12;fontColor=#15803d;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="34" y="540" width="186" height="32" as="geometry"/>
+        </mxCell>
+        <mxCell id="datIn" value="&lt;b&gt;datIn&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F0E9FF;strokeColor=#7c3aed;strokeWidth=1.5;verticalAlign=middle;align=center;fontSize=12;fontColor=#5d33bf;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="34" y="578" width="186" height="32" as="geometry"/>
+        </mxCell>
+
+        <!-- =============================================================== -->
+        <!-- COLUMN 2 : NetworkInterface   x=282..532 (w=250)                 -->
+        <!-- =============================================================== -->
+        <mxCell id="ni_box" value="&lt;b&gt;NetworkInterface&lt;/b&gt;&lt;div style=&quot;font-size:11px;color:#92400e;font-weight:normal;margin-top:2px&quot;&gt;SLICC messages &#8596; flits&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFBEB;strokeColor=#d97706;strokeWidth=2;verticalAlign=top;fontSize=13;fontColor=#92400e;arcSize=4;" vertex="1" parent="1">
+          <mxGeometry x="282" y="44" width="250" height="700" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="ni_ing_hdr" value="&lt;b style=&quot;color:#92400e&quot;&gt;ingress&lt;/b&gt; &lt;span style=&quot;font-size:10px;color:#78350f;font-weight:normal&quot;&gt;&#8212; protocol &#8594; network&lt;/span&gt;" style="text;html=1;fontSize=11;fontColor=#92400e;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="294" y="104" width="230" height="16" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="in_msgbufs" value="&lt;b&gt;inNode_ptr[vnet]&lt;/b&gt;&lt;div style=&quot;font-size:10px;color:#78350f;font-weight:normal&quot;&gt;peek each outbound MessageBuffer&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEF3C7;strokeColor=#c58b1b;strokeWidth=1;verticalAlign=middle;align=center;fontSize=12;fontColor=#78350f;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="294" y="124" width="226" height="44" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="flitise" value="&lt;b&gt;flitisizeMessage&lt;/b&gt;&lt;div style=&quot;font-size:10px;color:#78350f;font-weight:normal&quot;&gt;chop msg into HEAD / BODY / TAIL&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEF3C7;strokeColor=#c58b1b;strokeWidth=1;verticalAlign=middle;align=center;fontSize=12;fontColor=#78350f;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="294" y="176" width="226" height="44" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="vc_pick" value="&lt;b&gt;calculateVC(vnet)&lt;/b&gt;&lt;div style=&quot;font-size:10px;color:#78350f;font-weight:normal&quot;&gt;round-robin over the vnet&#8217;s VC range&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEF3C7;strokeColor=#c58b1b;strokeWidth=1;verticalAlign=middle;align=center;fontSize=12;fontColor=#78350f;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="294" y="228" width="226" height="44" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="niOutVcs" value="&lt;b&gt;niOutVcs[vc]&lt;/b&gt;&lt;div style=&quot;font-size:10px;color:#78350f;font-weight:normal&quot;&gt;per-VC flit staging &#8212; injection buffer&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEF3C7;strokeColor=#c58b1b;strokeWidth=1.5;verticalAlign=middle;align=center;fontSize=12;fontColor=#78350f;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="294" y="280" width="226" height="52" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="outVcState" value="&lt;b&gt;outVcState[vc]&lt;/b&gt;&lt;div style=&quot;font-size:10px;color:#78350f;font-weight:normal&quot;&gt;credit mirror of downstream router VCs&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEF3C7;strokeColor=#c58b1b;strokeWidth=1;dashed=1;verticalAlign=middle;align=center;fontSize=12;fontColor=#78350f;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="294" y="344" width="226" height="40" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="oport" value="&lt;b&gt;OutputPort&lt;/b&gt; &lt;span style=&quot;font-size:10px;color:#78350f;font-weight:normal&quot;&gt;&#8212; drains one flit / cycle to NetworkLink&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEF3C7;strokeColor=#c58b1b;strokeWidth=1;verticalAlign=middle;align=center;fontSize=11;fontColor=#78350f;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="294" y="394" width="226" height="32" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="ni_divider" value="" style="endArrow=none;html=1;strokeColor=#d97706;strokeWidth=1;dashed=1;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="294" y="442" as="sourcePoint"/>
+            <mxPoint x="520" y="442" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="ni_egr_hdr" value="&lt;b style=&quot;color:#92400e&quot;&gt;egress&lt;/b&gt; &lt;span style=&quot;font-size:10px;color:#78350f;font-weight:normal&quot;&gt;&#8212; network &#8594; protocol&lt;/span&gt;" style="text;html=1;fontSize=11;fontColor=#92400e;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="294" y="450" width="230" height="16" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="iport" value="&lt;b&gt;InputPort&lt;/b&gt; &lt;span style=&quot;font-size:10px;color:#78350f;font-weight:normal&quot;&gt;&#8212; one flit / cycle off NetworkLink&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEF3C7;strokeColor=#c58b1b;strokeWidth=1;verticalAlign=middle;align=center;fontSize=11;fontColor=#78350f;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="294" y="472" width="226" height="32" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="reasm" value="&lt;b&gt;accumulate by packet_id&lt;/b&gt;&lt;div style=&quot;font-size:10px;color:#78350f;font-weight:normal&quot;&gt;on TAIL &#8594; unwrap shared MsgPtr&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEF3C7;strokeColor=#c58b1b;strokeWidth=1.5;verticalAlign=middle;align=center;fontSize=12;fontColor=#78350f;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="294" y="516" width="226" height="48" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="out_msgbufs" value="&lt;b&gt;outNode_ptr[vnet]&lt;/b&gt;&lt;div style=&quot;font-size:10px;color:#78350f;font-weight:normal&quot;&gt;enqueue on controller&#8217;s inbound MB&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEF3C7;strokeColor=#c58b1b;strokeWidth=1;verticalAlign=middle;align=center;fontSize=12;fontColor=#78350f;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="294" y="576" width="226" height="44" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="ni_credit_note" value="&lt;i&gt;credits on CreditLink update outVcState &#8594; upstream VC becomes usable again&lt;/i&gt;" style="text;html=1;fontSize=10;fontColor=#64748b;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="294" y="634" width="226" height="30" as="geometry"/>
+        </mxCell>
+
+        <!-- =============================================================== -->
+        <!-- COLUMN 3 : Router   x=582..1316 (w=734)                          -->
+        <!-- =============================================================== -->
+        <mxCell id="rtr_box" value="&lt;b&gt;Router&lt;/b&gt; &lt;span style=&quot;font-size:11px;color:#5d33bf;font-weight:normal&quot;&gt;&#8212; 5 physical ports &#8226; m_latency = 2 (SA + ST)&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F5F3FF;strokeColor=#7c3aed;strokeWidth=2.5;verticalAlign=top;fontSize=13;fontColor=#5d33bf;arcSize=4;" vertex="1" parent="1">
+          <mxGeometry x="582" y="44" width="734" height="700" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="in_strip_lbl" value="&lt;b&gt;InputUnit[ ]&lt;/b&gt; &lt;span style=&quot;font-size:10px;color:#5d33bf;font-weight:normal&quot;&gt;&#8212; one per inport, each owning per-VC buffers&lt;/span&gt;" style="text;html=1;fontSize=11;fontColor=#5d33bf;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="594" y="102" width="710" height="16" as="geometry"/>
+        </mxCell>
+
+        <!-- IU Local (detailed) -->
+        <mxCell id="iu_local" value="&lt;b&gt;IU[Local]&lt;/b&gt;&lt;div style=&quot;font-size:10px;color:#5d33bf;font-weight:normal&quot;&gt;flits from NI&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE9FE;strokeColor=#7c3aed;strokeWidth=1.5;verticalAlign=top;fontSize=12;fontColor=#5d33bf;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="594" y="122" width="370" height="134" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="vcs_lbl" value="&lt;b&gt;virtualChannels[num_vcs]&lt;/b&gt;" style="text;html=1;fontSize=10;fontColor=#5d33bf;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="598" y="160" width="362" height="14" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="vc_req" value="REQ" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E7F0FF;strokeColor=#1d4ed8;strokeWidth=1;verticalAlign=middle;align=center;fontSize=10;fontColor=#1d4ed8;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="644" y="178" width="60" height="22" as="geometry"/>
+        </mxCell>
+        <mxCell id="vc_snp" value="SNP" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2D8;strokeColor=#c58b1b;strokeWidth=1;verticalAlign=middle;align=center;fontSize=10;fontColor=#8a5a00;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="714" y="178" width="60" height="22" as="geometry"/>
+        </mxCell>
+        <mxCell id="vc_rsp" value="RSP" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F7EC;strokeColor=#15803d;strokeWidth=1;verticalAlign=middle;align=center;fontSize=10;fontColor=#15803d;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="784" y="178" width="60" height="22" as="geometry"/>
+        </mxCell>
+        <mxCell id="vc_dat" value="DAT" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F0E9FF;strokeColor=#7c3aed;strokeWidth=1;verticalAlign=middle;align=center;fontSize=10;fontColor=#5d33bf;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="854" y="178" width="60" height="22" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="iu_local_note" value="&lt;i&gt;VC pool partitioned per vnet &#8226; each VC holds a flitBuffer + state (IDLE / VC_AB / ACTIVE)&lt;/i&gt;" style="text;html=1;fontSize=9;fontColor=#64748b;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="598" y="204" width="362" height="28" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="credit_q_lbl" value="&lt;b&gt;creditQueue&lt;/b&gt; &#8594; upstream" style="text;html=1;fontSize=10;fontColor=#5d33bf;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="598" y="232" width="362" height="16" as="geometry"/>
+        </mxCell>
+
+        <!-- 4 compact IUs for mesh directions -->
+        <mxCell id="iu_N" value="&lt;b&gt;IU[N]&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE9FE;strokeColor=#7c3aed;strokeWidth=1;verticalAlign=middle;align=center;fontSize=11;fontColor=#5d33bf;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="974" y="122" width="160" height="30" as="geometry"/>
+        </mxCell>
+        <mxCell id="iu_E" value="&lt;b&gt;IU[E]&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE9FE;strokeColor=#7c3aed;strokeWidth=1;verticalAlign=middle;align=center;fontSize=11;fontColor=#5d33bf;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="1144" y="122" width="160" height="30" as="geometry"/>
+        </mxCell>
+        <mxCell id="iu_S" value="&lt;b&gt;IU[S]&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE9FE;strokeColor=#7c3aed;strokeWidth=1;verticalAlign=middle;align=center;fontSize=11;fontColor=#5d33bf;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="974" y="160" width="160" height="30" as="geometry"/>
+        </mxCell>
+        <mxCell id="iu_W" value="&lt;b&gt;IU[W]&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE9FE;strokeColor=#7c3aed;strokeWidth=1;verticalAlign=middle;align=center;fontSize=11;fontColor=#5d33bf;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="1144" y="160" width="160" height="30" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="iu_mesh_note" value="&lt;i&gt;each mesh IU has the same VC pool&lt;/i&gt;" style="text;html=1;fontSize=9;fontColor=#64748b;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="974" y="196" width="330" height="32" as="geometry"/>
+        </mxCell>
+
+        <!-- RoutingUnit -->
+        <mxCell id="ru" value="&lt;b&gt;RoutingUnit&lt;/b&gt; &lt;span style=&quot;font-size:10px;color:#7c2d12;font-weight:normal&quot;&gt;&#8212; outportCompute(route, inport, dirn) &#8226; TABLE_ / XY_ / CUSTOM_&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEE2E2;strokeColor=#c2410c;strokeWidth=1.5;verticalAlign=middle;align=center;fontSize=12;fontColor=#7c2d12;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="594" y="272" width="710" height="42" as="geometry"/>
+        </mxCell>
+
+        <!-- SwitchAllocator -->
+        <mxCell id="sa_box" value="&lt;b style=&quot;font-size:13px&quot;&gt;SwitchAllocator&lt;/b&gt; &lt;span style=&quot;font-size:10px;color:#7c2d12;font-weight:normal&quot;&gt;&#8212; runs every router cycle&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEE2E2;strokeColor=#c2410c;strokeWidth=2;verticalAlign=top;fontSize=12;fontColor=#7c2d12;arcSize=6;" vertex="1" parent="1">
+          <mxGeometry x="594" y="326" width="710" height="112" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="sa_i" value="&lt;b&gt;SA-I&lt;/b&gt; &lt;span style=&quot;font-size:10px;color:#7c2d12;font-weight:normal&quot;&gt;&#8212; each inport picks 1 ready VC (round-robin)&lt;/span&gt;&lt;div style=&quot;font-size:10px;color:#7c2d12;font-weight:normal;margin-top:2px&quot;&gt;gate: flit at SA_ &#8226; has_credit(outvc) &#8226; HEAD needs free outvc&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEF2F2;strokeColor=#c2410c;strokeWidth=1;verticalAlign=middle;align=left;fontSize=11;fontColor=#7c2d12;arcSize=6;spacingLeft=8;" vertex="1" parent="1">
+          <mxGeometry x="604" y="354" width="690" height="36" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="sa_ii" value="&lt;b&gt;SA-II&lt;/b&gt; &lt;span style=&quot;font-size:10px;color:#7c2d12;font-weight:normal&quot;&gt;&#8212; each outport picks 1 inport (round-robin)&lt;/span&gt;&lt;div style=&quot;font-size:10px;color:#7c2d12;font-weight:normal;margin-top:2px&quot;&gt;HEAD &#8594; select_free_vc(vnet) &#8226; decrement_credit &#8226; Credit &#8594; upstream&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEF2F2;strokeColor=#c2410c;strokeWidth=1;verticalAlign=middle;align=left;fontSize=11;fontColor=#7c2d12;arcSize=6;spacingLeft=8;" vertex="1" parent="1">
+          <mxGeometry x="604" y="394" width="690" height="36" as="geometry"/>
+        </mxCell>
+
+        <!-- CrossbarSwitch -->
+        <mxCell id="xb" value="&lt;b&gt;CrossbarSwitch&lt;/b&gt; &lt;span style=&quot;font-size:10px;color:#7c2d12;font-weight:normal&quot;&gt;&#8212; switchBuffers[inport] &#8594; OutputUnit.outBuffer (ST_) &#8226; trivial forward, no arbitration&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEE2E2;strokeColor=#c2410c;strokeWidth=1.5;verticalAlign=middle;align=center;fontSize=12;fontColor=#7c2d12;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="594" y="450" width="710" height="42" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="out_strip_lbl" value="&lt;b&gt;OutputUnit[ ]&lt;/b&gt; &lt;span style=&quot;font-size:10px;color:#5d33bf;font-weight:normal&quot;&gt;&#8212; one per outport, each owning outBuffer + outVcState&lt;/span&gt;" style="text;html=1;fontSize=11;fontColor=#5d33bf;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="594" y="504" width="710" height="16" as="geometry"/>
+        </mxCell>
+
+        <!-- OU Local (detailed) -->
+        <mxCell id="ou_local" value="&lt;b&gt;OU[Local]&lt;/b&gt;&lt;div style=&quot;font-size:10px;color:#5d33bf;font-weight:normal&quot;&gt;flits to NI&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE9FE;strokeColor=#7c3aed;strokeWidth=1.5;verticalAlign=top;fontSize=12;fontColor=#5d33bf;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="594" y="524" width="370" height="134" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="outbuf_lbl" value="&lt;b&gt;outBuffer&lt;/b&gt; &lt;span style=&quot;font-size:10px;color:#5d33bf;font-weight:normal&quot;&gt;(one flit / cycle drains to NetworkLink)&lt;/span&gt;" style="text;html=1;fontSize=10;fontColor=#5d33bf;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="598" y="560" width="362" height="16" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="outvc_lbl" value="&lt;b&gt;outVcState[num_vcs]&lt;/b&gt;" style="text;html=1;fontSize=10;fontColor=#5d33bf;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="598" y="580" width="362" height="14" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="ovc_req" value="REQ" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E7F0FF;strokeColor=#1d4ed8;strokeWidth=1;verticalAlign=middle;align=center;fontSize=10;fontColor=#1d4ed8;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="644" y="598" width="60" height="22" as="geometry"/>
+        </mxCell>
+        <mxCell id="ovc_snp" value="SNP" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2D8;strokeColor=#c58b1b;strokeWidth=1;verticalAlign=middle;align=center;fontSize=10;fontColor=#8a5a00;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="714" y="598" width="60" height="22" as="geometry"/>
+        </mxCell>
+        <mxCell id="ovc_rsp" value="RSP" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F7EC;strokeColor=#15803d;strokeWidth=1;verticalAlign=middle;align=center;fontSize=10;fontColor=#15803d;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="784" y="598" width="60" height="22" as="geometry"/>
+        </mxCell>
+        <mxCell id="ovc_dat" value="DAT" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F0E9FF;strokeColor=#7c3aed;strokeWidth=1;verticalAlign=middle;align=center;fontSize=10;fontColor=#5d33bf;arcSize=12;" vertex="1" parent="1">
+          <mxGeometry x="854" y="598" width="60" height="22" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="ou_local_note" value="&lt;i&gt;credit counts per downstream VC &#8226; updated by incoming CreditLink&lt;/i&gt;" style="text;html=1;fontSize=9;fontColor=#64748b;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="598" y="624" width="362" height="28" as="geometry"/>
+        </mxCell>
+
+        <!-- 4 compact OUs for mesh directions -->
+        <mxCell id="ou_N" value="&lt;b&gt;OU[N]&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE9FE;strokeColor=#7c3aed;strokeWidth=1;verticalAlign=middle;align=center;fontSize=11;fontColor=#5d33bf;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="974" y="524" width="160" height="30" as="geometry"/>
+        </mxCell>
+        <mxCell id="ou_E" value="&lt;b&gt;OU[E]&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE9FE;strokeColor=#7c3aed;strokeWidth=1;verticalAlign=middle;align=center;fontSize=11;fontColor=#5d33bf;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="1144" y="524" width="160" height="30" as="geometry"/>
+        </mxCell>
+        <mxCell id="ou_S" value="&lt;b&gt;OU[S]&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE9FE;strokeColor=#7c3aed;strokeWidth=1;verticalAlign=middle;align=center;fontSize=11;fontColor=#5d33bf;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="974" y="562" width="160" height="30" as="geometry"/>
+        </mxCell>
+        <mxCell id="ou_W" value="&lt;b&gt;OU[W]&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE9FE;strokeColor=#7c3aed;strokeWidth=1;verticalAlign=middle;align=center;fontSize=11;fontColor=#5d33bf;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="1144" y="562" width="160" height="30" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="ou_mesh_note" value="&lt;i&gt;one IntLink per direction drains these&lt;/i&gt;" style="text;html=1;fontSize=9;fontColor=#64748b;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="974" y="598" width="330" height="32" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="rtr_footer" value="&lt;b&gt;per-cycle:&lt;/b&gt; InputUnit &#8594; SA-I &#8594; SA-II &#8594; CrossbarSwitch &#8594; OutputUnit &#8226; credits ride the reverse CreditLink" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F5F3FF;strokeColor=#7c3aed;strokeWidth=1;dashed=1;verticalAlign=middle;align=center;fontSize=10;fontColor=#5d33bf;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="594" y="668" width="710" height="30" as="geometry"/>
+        </mxCell>
+
+        <!-- =============================================================== -->
+        <!-- COLUMN 4 : mini-mesh context   x=1366..1638 (w=272)              -->
+        <!-- =============================================================== -->
+        <mxCell id="mesh_box" value="&lt;b&gt;Mesh context&lt;/b&gt;&lt;div style=&quot;font-size:10px;color:#475569;font-weight:normal&quot;&gt;3 &#215; 3 CHI mesh &#8212; center router zoomed&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F1F5F9;strokeColor=#475569;strokeWidth=2;verticalAlign=top;fontSize=12;fontColor=#334155;arcSize=4;" vertex="1" parent="1">
+          <mxGeometry x="1366" y="44" width="272" height="700" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="r00" value="&lt;b&gt;R0&lt;/b&gt;&lt;div style=&quot;font-size:9px;color:#475569;font-weight:normal&quot;&gt;RN-F&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#475569;strokeWidth=1;verticalAlign=middle;align=center;fontSize=11;fontColor=#334155;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="1378" y="104" width="72" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="r01" value="&lt;b&gt;R1&lt;/b&gt;&lt;div style=&quot;font-size:9px;color:#475569;font-weight:normal&quot;&gt;RN-F&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#475569;strokeWidth=1;verticalAlign=middle;align=center;fontSize=11;fontColor=#334155;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="1462" y="104" width="72" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="r02" value="&lt;b&gt;R2&lt;/b&gt;&lt;div style=&quot;font-size:9px;color:#475569;font-weight:normal&quot;&gt;HN-F&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#475569;strokeWidth=1;verticalAlign=middle;align=center;fontSize=11;fontColor=#334155;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="1546" y="104" width="72" height="60" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="r10" value="&lt;b&gt;R3&lt;/b&gt;&lt;div style=&quot;font-size:9px;color:#475569;font-weight:normal&quot;&gt;RN-F&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#475569;strokeWidth=1;verticalAlign=middle;align=center;fontSize=11;fontColor=#334155;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="1378" y="176" width="72" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="r11" value="&lt;b&gt;R4&lt;/b&gt;&lt;div style=&quot;font-size:9px;color:#5d33bf;font-weight:bold&quot;&gt;RN-F (zoom)&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE9FE;strokeColor=#7c3aed;strokeWidth=2.5;verticalAlign=middle;align=center;fontSize=11;fontColor=#5d33bf;arcSize=8;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="1462" y="176" width="72" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="r12" value="&lt;b&gt;R5&lt;/b&gt;&lt;div style=&quot;font-size:9px;color:#475569;font-weight:normal&quot;&gt;HN-F&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#475569;strokeWidth=1;verticalAlign=middle;align=center;fontSize=11;fontColor=#334155;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="1546" y="176" width="72" height="60" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="r20" value="&lt;b&gt;R6&lt;/b&gt;&lt;div style=&quot;font-size:9px;color:#475569;font-weight:normal&quot;&gt;RN-F&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#475569;strokeWidth=1;verticalAlign=middle;align=center;fontSize=11;fontColor=#334155;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="1378" y="248" width="72" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="r21" value="&lt;b&gt;R7&lt;/b&gt;&lt;div style=&quot;font-size:9px;color:#475569;font-weight:normal&quot;&gt;HN-F&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#475569;strokeWidth=1;verticalAlign=middle;align=center;fontSize=11;fontColor=#334155;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="1462" y="248" width="72" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="r22" value="&lt;b&gt;R8&lt;/b&gt;&lt;div style=&quot;font-size:9px;color:#475569;font-weight:normal&quot;&gt;SN-F&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#475569;strokeWidth=1;verticalAlign=middle;align=center;fontSize=11;fontColor=#334155;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="1546" y="248" width="72" height="60" as="geometry"/>
+        </mxCell>
+
+        <!-- Mesh horizontal links -->
+        <mxCell id="m_h00" style="endArrow=none;startArrow=none;html=1;strokeColor=#7e3ea3;strokeWidth=1.2;" edge="1" parent="1" source="r00" target="r01">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m_h01" style="endArrow=none;startArrow=none;html=1;strokeColor=#7e3ea3;strokeWidth=1.2;" edge="1" parent="1" source="r01" target="r02">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m_h10" style="endArrow=none;startArrow=none;html=1;strokeColor=#7e3ea3;strokeWidth=1.2;" edge="1" parent="1" source="r10" target="r11">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m_h11" style="endArrow=none;startArrow=none;html=1;strokeColor=#7e3ea3;strokeWidth=1.2;" edge="1" parent="1" source="r11" target="r12">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m_h20" style="endArrow=none;startArrow=none;html=1;strokeColor=#7e3ea3;strokeWidth=1.2;" edge="1" parent="1" source="r20" target="r21">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m_h21" style="endArrow=none;startArrow=none;html=1;strokeColor=#7e3ea3;strokeWidth=1.2;" edge="1" parent="1" source="r21" target="r22">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Mesh vertical links -->
+        <mxCell id="m_v00" style="endArrow=none;startArrow=none;html=1;strokeColor=#7e3ea3;strokeWidth=1.2;" edge="1" parent="1" source="r00" target="r10">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m_v01" style="endArrow=none;startArrow=none;html=1;strokeColor=#7e3ea3;strokeWidth=1.2;" edge="1" parent="1" source="r01" target="r11">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m_v02" style="endArrow=none;startArrow=none;html=1;strokeColor=#7e3ea3;strokeWidth=1.2;" edge="1" parent="1" source="r02" target="r12">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m_v10" style="endArrow=none;startArrow=none;html=1;strokeColor=#7e3ea3;strokeWidth=1.2;" edge="1" parent="1" source="r10" target="r20">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m_v11" style="endArrow=none;startArrow=none;html=1;strokeColor=#7e3ea3;strokeWidth=1.2;" edge="1" parent="1" source="r11" target="r21">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="m_v12" style="endArrow=none;startArrow=none;html=1;strokeColor=#7e3ea3;strokeWidth=1.2;" edge="1" parent="1" source="r12" target="r22">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Legend inside mesh column -->
+        <mxCell id="leg_nodes_hdr" value="&lt;b&gt;Node types&lt;/b&gt;" style="text;html=1;fontSize=11;fontColor=#334155;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1378" y="330" width="250" height="16" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg_rnf" value="&lt;b&gt;RN-F&lt;/b&gt; &#8212; fully-coherent request node (CPU + caches)" style="text;html=1;fontSize=10;fontColor=#475569;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1378" y="350" width="252" height="16" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg_hnf" value="&lt;b&gt;HN-F&lt;/b&gt; &#8212; home node (directory + SLC)" style="text;html=1;fontSize=10;fontColor=#475569;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1378" y="368" width="252" height="16" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg_snf" value="&lt;b&gt;SN-F&lt;/b&gt; &#8212; slave node (memory controller)" style="text;html=1;fontSize=10;fontColor=#475569;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1378" y="386" width="252" height="16" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="leg_ch_hdr" value="&lt;b&gt;CHI channels (vnet)&lt;/b&gt;" style="text;html=1;fontSize=11;fontColor=#334155;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1378" y="414" width="250" height="16" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg_req" value="REQ (0)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E7F0FF;strokeColor=#1d4ed8;strokeWidth=1;verticalAlign=middle;align=center;fontSize=10;fontColor=#1d4ed8;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1378" y="432" width="60" height="22" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg_snp" value="SNP (1)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2D8;strokeColor=#c58b1b;strokeWidth=1;verticalAlign=middle;align=center;fontSize=10;fontColor=#8a5a00;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1442" y="432" width="60" height="22" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg_rsp" value="RSP (2)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F7EC;strokeColor=#15803d;strokeWidth=1;verticalAlign=middle;align=center;fontSize=10;fontColor=#15803d;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1378" y="458" width="60" height="22" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg_dat" value="DAT (3)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F0E9FF;strokeColor=#7c3aed;strokeWidth=1;verticalAlign=middle;align=center;fontSize=10;fontColor=#5d33bf;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1442" y="458" width="60" height="22" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="leg_link_hdr" value="&lt;b&gt;Link types&lt;/b&gt;" style="text;html=1;fontSize=11;fontColor=#334155;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1378" y="494" width="250" height="16" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg_ext" value="&lt;b&gt;ExtLink&lt;/b&gt; &#8212; NI &#8596; Router (Local port)" style="text;html=1;fontSize=10;fontColor=#475569;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1378" y="512" width="252" height="16" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg_int" value="&lt;b&gt;IntLink&lt;/b&gt; &#8212; Router &#8596; Router (N/E/S/W)" style="text;html=1;fontSize=10;fontColor=#475569;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1378" y="530" width="252" height="16" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="leg_credit_hdr" value="&lt;b&gt;Two links per direction&lt;/b&gt;" style="text;html=1;fontSize=11;fontColor=#334155;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1378" y="558" width="250" height="16" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg_netlink" value="NetworkLink &#8212; carries flits" style="text;html=1;fontSize=10;fontColor=#475569;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1378" y="576" width="252" height="16" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg_creditlink" value="CreditLink &#8212; carries credits (reverse)" style="text;html=1;fontSize=10;fontColor=#475569;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1378" y="594" width="252" height="16" as="geometry"/>
+        </mxCell>
+
+        <!-- =============================================================== -->
+        <!-- Edges                                                             -->
+        <!-- =============================================================== -->
+        <mxCell id="e_rnf_ni" style="endArrow=classic;html=1;strokeColor=#475569;strokeWidth=2;exitX=1;exitY=0.28;entryX=0;entryY=0.1;" edge="1" parent="1" source="rnf_box" target="ni_box">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_rnf_ni_lbl" value="MsgPtr (per vnet)" style="edgeLabel;html=1;align=center;verticalAlign=middle;fontSize=10;fontColor=#475569;fontStyle=2;" vertex="1" connectable="0" parent="e_rnf_ni">
+          <mxGeometry x="0" relative="1" as="geometry"><mxPoint y="-8" as="offset"/></mxGeometry>
+        </mxCell>
+
+        <mxCell id="e_ni_rnf" style="endArrow=classic;html=1;strokeColor=#475569;strokeWidth=2;exitX=0;exitY=0.84;entryX=1;entryY=0.8;" edge="1" parent="1" source="ni_box" target="rnf_box">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_ni_rnf_lbl" value="MsgPtr (per vnet)" style="edgeLabel;html=1;align=center;verticalAlign=middle;fontSize=10;fontColor=#475569;fontStyle=2;" vertex="1" connectable="0" parent="e_ni_rnf">
+          <mxGeometry x="0" relative="1" as="geometry"><mxPoint y="8" as="offset"/></mxGeometry>
+        </mxCell>
+
+        <mxCell id="e_ni_iu" style="endArrow=classic;html=1;strokeColor=#7e3ea3;strokeWidth=2.5;exitX=1;exitY=0.56;entryX=0;entryY=0.55;" edge="1" parent="1" source="ni_box" target="iu_local">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_ni_iu_lbl" value="ExtLink NetworkLink &#8226; flits" style="edgeLabel;html=1;align=center;verticalAlign=middle;fontSize=10;fontColor=#7e3ea3;" vertex="1" connectable="0" parent="e_ni_iu">
+          <mxGeometry x="0" relative="1" as="geometry"><mxPoint y="-10" as="offset"/></mxGeometry>
+        </mxCell>
+
+        <mxCell id="e_ou_ni" style="endArrow=classic;html=1;strokeColor=#7e3ea3;strokeWidth=2.5;exitX=0;exitY=0.6;entryX=1;entryY=0.68;" edge="1" parent="1" source="ou_local" target="ni_box">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_ou_ni_lbl" value="ExtLink NetworkLink &#8226; flits" style="edgeLabel;html=1;align=center;verticalAlign=middle;fontSize=10;fontColor=#7e3ea3;" vertex="1" connectable="0" parent="e_ou_ni">
+          <mxGeometry x="0" relative="1" as="geometry"><mxPoint y="10" as="offset"/></mxGeometry>
+        </mxCell>
+
+        <mxCell id="e_credit_ni" style="endArrow=classic;html=1;strokeColor=#2a7f3f;strokeWidth=1.4;dashed=1;exitX=0;exitY=0.18;entryX=1;entryY=0.48;" edge="1" parent="1" source="iu_local" target="outVcState">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_credit_ni_lbl" value="CreditLink &#8226; credits" style="edgeLabel;html=1;align=center;verticalAlign=middle;fontSize=10;fontColor=#2a7f3f;fontStyle=2;" vertex="1" connectable="0" parent="e_credit_ni">
+          <mxGeometry x="0" relative="1" as="geometry"><mxPoint y="-6" as="offset"/></mxGeometry>
+        </mxCell>
+
+        <mxCell id="e_iu_ru" style="endArrow=classic;html=1;strokeColor=#c2410c;strokeWidth=1.2;exitX=0.5;exitY=1;entryX=0.2;entryY=0;" edge="1" parent="1" source="iu_local" target="ru">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="e_ium_ru" style="endArrow=classic;html=1;strokeColor=#c2410c;strokeWidth=1.2;exitX=0.5;exitY=1;entryX=0.7;entryY=0;" edge="1" parent="1" source="iu_S" target="ru">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="e_ru_sa" style="endArrow=classic;html=1;strokeColor=#c2410c;strokeWidth=1.2;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="ru" target="sa_box">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="e_sa_xb" style="endArrow=classic;html=1;strokeColor=#c2410c;strokeWidth=1.2;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="sa_box" target="xb">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="e_xb_oul" style="endArrow=classic;html=1;strokeColor=#c2410c;strokeWidth=1.2;exitX=0.2;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="xb" target="ou_local">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="e_xb_oum" style="endArrow=classic;html=1;strokeColor=#c2410c;strokeWidth=1.2;exitX=0.8;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="xb" target="ou_N">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="e_rtr_mesh" style="endArrow=classic;html=1;strokeColor=#7e3ea3;strokeWidth=2;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="ou_E" target="r11">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_rtr_mesh_lbl" value="IntLink to neighbor" style="edgeLabel;html=1;align=center;verticalAlign=middle;fontSize=10;fontColor=#7e3ea3;" vertex="1" connectable="0" parent="e_rtr_mesh">
+          <mxGeometry x="0" relative="1" as="geometry"><mxPoint y="-8" as="offset"/></mxGeometry>
+        </mxCell>
+
+        <mxCell id="e_mesh_rtr" style="endArrow=classic;html=1;strokeColor=#7e3ea3;strokeWidth=2;exitX=0;exitY=0.5;entryX=1;entryY=0.5;" edge="1" parent="1" source="r11" target="iu_E">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_mesh_rtr_lbl" value="IntLink from neighbor" style="edgeLabel;html=1;align=center;verticalAlign=middle;fontSize=10;fontColor=#7e3ea3;" vertex="1" connectable="0" parent="e_mesh_rtr">
+          <mxGeometry x="0" relative="1" as="geometry"><mxPoint y="10" as="offset"/></mxGeometry>
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
