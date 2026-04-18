@@ -264,7 +264,7 @@ spec guarantees at the port interface, not what happens inside.
 <div class="columns">
 <div>
 
-<img class="tall" src="../resources/chi_network_layer.svg" alt="Heterogeneous 3x3 CHI mesh with RN, HN, and SN nodes placed on grid positions, connected by bidirectional mesh links">
+<img class="tall" src="../resources/chi_network_layer.svg" alt="Heterogeneous 3x3 CHI mesh with RN, HN, and SN nodes placed on grid positions, labeled with NodeIDs and (x,y) coordinates, connected by bidirectional mesh links">
 
 
 </div>
@@ -292,6 +292,7 @@ spec guarantees at the port interface, not what happens inside.
 <div class="sam-rules">
 <p><b>Packet header</b> — the RN stamps <code>SrcID</code>, <code>TgtID</code>, <code>ReturnNID</code>, and <code>TxnID</code> into every REQ.</p>
 <p><b>Two SAMs per request</b> — on a miss, the HN runs its <em>own</em> SAM: <code>address → SN NodeID</code>.</p>
+<p><b>Routing is implementation-defined</b> — meshes often use deterministic XY, but other algorithms exist.</p>
 <p><b>ICN may remap <code>TgtID</code></b> — for HN hot-spare, load balancing, or partition reconfiguration. <code>SrcID</code> is preserved.</p>
 <p><b>Responses skip the SAM</b> — TgtID is copied from the trigger: <code>SrcID</code> · <code>ReturnNID</code> · <code>HomeNID</code> · <code>FwdNID</code>.</p>
 <p><b>Snoops carry no <code>TgtID</code></b> — snoop routing is IMPL-DEFINED (typically a snoop filter or a bit-vector multicast).</p>
@@ -329,6 +330,10 @@ On the diagram: RN0 has a mini SAM showing two rows, address to HN.
 HN-F1 has its own SAM showing address to SN. Pedagogically these
 are tiny. In a real system each SAM is bigger and usually hash- or
 interleave-based.
+
+The `(x,y)` labels on the tiles are there to make mesh routing
+examples concrete. A common mesh choice is deterministic XY routing:
+move in X first, then Y.
 
 Part three — the interconnect may remap TgtID. The fabric is
 allowed to rewrite the TgtID of the incoming request. In the

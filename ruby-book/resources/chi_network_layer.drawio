@@ -6,44 +6,44 @@
         <mxCell id="1" parent="0"/>
 
         <!-- ================================================================
-             3 x 3 heterogeneous CHI mesh with NodeIDs
-               row 0: RN0 (NID 0) | RN1 (NID 1) | HN0 (NID 5)
-               row 1: RN2 (NID 2) | HN1 (NID 6)  | RN3 (NID 3)
-               row 2: SN0 (NID 7) | RN4 (NID 4)  | SN1 (NID 8)
+             3 x 3 heterogeneous CHI mesh with NodeIDs and XY coordinates
+               row 0: RN0 (NID 0, 0,0) | RN1 (NID 1, 1,0) | HN0 (NID 5, 2,0)
+               row 1: RN2 (NID 2, 0,1) | HN1 (NID 6, 1,1) | RN3 (NID 3, 2,1)
+               row 2: SN0 (NID 7, 0,2) | RN4 (NID 4, 1,2) | SN1 (NID 8, 2,2)
              Tiles are 150 x 110, gaps 50 horizontal, 60 vertical.
              ================================================================ -->
 
         <!-- row 0 -->
-        <mxCell id="rn0" value="&lt;b style=&quot;font-size:26px&quot;&gt;RN0&lt;/b&gt;&lt;div style=&quot;font-family:monospace;font-size:13px;color:#1d4ed8;font-weight:bold;margin-top:4px&quot;&gt;NID = 0&lt;/div&gt;&lt;div style=&quot;font-size:11px;font-weight:normal;color:#475569;margin-top:2px&quot;&gt;core + L1/L2&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DBEAFE;strokeColor=#2563eb;strokeWidth=2.5;verticalAlign=middle;fontSize=14;fontColor=#1d4ed8;arcSize=8;" vertex="1" parent="1">
-          <mxGeometry x="30" y="40" width="150" height="110" as="geometry"/>
+        <mxCell id="rn0" value="&lt;b style=&quot;font-size:24px&quot;&gt;RN0&lt;/b&gt;&lt;div style=&quot;font-family:monospace;font-size:12px;color:#1d4ed8;font-weight:bold;margin-top:4px&quot;&gt;NID = 0&lt;/div&gt;&lt;div style=&quot;font-family:monospace;font-size:12px;color:#475569;margin-top:1px&quot;&gt;XY = (0,0)&lt;/div&gt;&lt;div style=&quot;font-size:10px;font-weight:normal;color:#64748b;margin-top:3px&quot;&gt;core + L1/L2&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DBEAFE;strokeColor=#2563eb;strokeWidth=2.5;verticalAlign=middle;fontSize=14;fontColor=#1d4ed8;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="55" y="40" width="150" height="110" as="geometry"/>
         </mxCell>
-        <mxCell id="rn1" value="&lt;b style=&quot;font-size:26px&quot;&gt;RN1&lt;/b&gt;&lt;div style=&quot;font-family:monospace;font-size:13px;color:#1d4ed8;font-weight:bold;margin-top:4px&quot;&gt;NID = 1&lt;/div&gt;&lt;div style=&quot;font-size:11px;font-weight:normal;color:#475569;margin-top:2px&quot;&gt;core + L1/L2&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DBEAFE;strokeColor=#2563eb;strokeWidth=2.5;verticalAlign=middle;fontSize=14;fontColor=#1d4ed8;arcSize=8;" vertex="1" parent="1">
-          <mxGeometry x="230" y="40" width="150" height="110" as="geometry"/>
+        <mxCell id="rn1" value="&lt;b style=&quot;font-size:24px&quot;&gt;RN1&lt;/b&gt;&lt;div style=&quot;font-family:monospace;font-size:12px;color:#1d4ed8;font-weight:bold;margin-top:4px&quot;&gt;NID = 1&lt;/div&gt;&lt;div style=&quot;font-family:monospace;font-size:12px;color:#475569;margin-top:1px&quot;&gt;XY = (1,0)&lt;/div&gt;&lt;div style=&quot;font-size:10px;font-weight:normal;color:#64748b;margin-top:3px&quot;&gt;core + L1/L2&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DBEAFE;strokeColor=#2563eb;strokeWidth=2.5;verticalAlign=middle;fontSize=14;fontColor=#1d4ed8;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="255" y="40" width="150" height="110" as="geometry"/>
         </mxCell>
-        <mxCell id="hn0" value="&lt;b style=&quot;font-size:26px&quot;&gt;HN0&lt;/b&gt;&lt;div style=&quot;font-family:monospace;font-size:13px;color:#6d28d9;font-weight:bold;margin-top:4px&quot;&gt;NID = 5&lt;/div&gt;&lt;div style=&quot;font-size:11px;font-weight:normal;color:#475569;margin-top:2px&quot;&gt;home + LLC slice&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE9FE;strokeColor=#7c3aed;strokeWidth=2.5;verticalAlign=middle;fontSize=14;fontColor=#6d28d9;arcSize=8;" vertex="1" parent="1">
-          <mxGeometry x="430" y="40" width="150" height="110" as="geometry"/>
+        <mxCell id="hn0" value="&lt;b style=&quot;font-size:24px&quot;&gt;HN0&lt;/b&gt;&lt;div style=&quot;font-family:monospace;font-size:12px;color:#6d28d9;font-weight:bold;margin-top:4px&quot;&gt;NID = 5&lt;/div&gt;&lt;div style=&quot;font-family:monospace;font-size:12px;color:#475569;margin-top:1px&quot;&gt;XY = (2,0)&lt;/div&gt;&lt;div style=&quot;font-size:10px;font-weight:normal;color:#64748b;margin-top:3px&quot;&gt;home + LLC slice&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE9FE;strokeColor=#7c3aed;strokeWidth=2.5;verticalAlign=middle;fontSize=14;fontColor=#6d28d9;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="455" y="40" width="150" height="110" as="geometry"/>
         </mxCell>
 
         <!-- row 1 -->
-        <mxCell id="rn2" value="&lt;b style=&quot;font-size:26px&quot;&gt;RN2&lt;/b&gt;&lt;div style=&quot;font-family:monospace;font-size:13px;color:#1d4ed8;font-weight:bold;margin-top:4px&quot;&gt;NID = 2&lt;/div&gt;&lt;div style=&quot;font-size:11px;font-weight:normal;color:#475569;margin-top:2px&quot;&gt;core + L1/L2&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DBEAFE;strokeColor=#2563eb;strokeWidth=2.5;verticalAlign=middle;fontSize=14;fontColor=#1d4ed8;arcSize=8;" vertex="1" parent="1">
-          <mxGeometry x="30" y="210" width="150" height="110" as="geometry"/>
+        <mxCell id="rn2" value="&lt;b style=&quot;font-size:24px&quot;&gt;RN2&lt;/b&gt;&lt;div style=&quot;font-family:monospace;font-size:12px;color:#1d4ed8;font-weight:bold;margin-top:4px&quot;&gt;NID = 2&lt;/div&gt;&lt;div style=&quot;font-family:monospace;font-size:12px;color:#475569;margin-top:1px&quot;&gt;XY = (0,1)&lt;/div&gt;&lt;div style=&quot;font-size:10px;font-weight:normal;color:#64748b;margin-top:3px&quot;&gt;core + L1/L2&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DBEAFE;strokeColor=#2563eb;strokeWidth=2.5;verticalAlign=middle;fontSize=14;fontColor=#1d4ed8;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="55" y="210" width="150" height="110" as="geometry"/>
         </mxCell>
-        <mxCell id="hn1" value="&lt;b style=&quot;font-size:26px&quot;&gt;HN1&lt;/b&gt;&lt;div style=&quot;font-family:monospace;font-size:13px;color:#6d28d9;font-weight:bold;margin-top:4px&quot;&gt;NID = 6&lt;/div&gt;&lt;div style=&quot;font-size:11px;font-weight:normal;color:#475569;margin-top:2px&quot;&gt;home + LLC slice&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE9FE;strokeColor=#7c3aed;strokeWidth=2.5;verticalAlign=middle;fontSize=14;fontColor=#6d28d9;arcSize=8;" vertex="1" parent="1">
-          <mxGeometry x="230" y="210" width="150" height="110" as="geometry"/>
+        <mxCell id="hn1" value="&lt;b style=&quot;font-size:24px&quot;&gt;HN1&lt;/b&gt;&lt;div style=&quot;font-family:monospace;font-size:12px;color:#6d28d9;font-weight:bold;margin-top:4px&quot;&gt;NID = 6&lt;/div&gt;&lt;div style=&quot;font-family:monospace;font-size:12px;color:#475569;margin-top:1px&quot;&gt;XY = (1,1)&lt;/div&gt;&lt;div style=&quot;font-size:10px;font-weight:normal;color:#64748b;margin-top:3px&quot;&gt;home + LLC slice&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE9FE;strokeColor=#7c3aed;strokeWidth=2.5;verticalAlign=middle;fontSize=14;fontColor=#6d28d9;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="255" y="210" width="150" height="110" as="geometry"/>
         </mxCell>
-        <mxCell id="rn3" value="&lt;b style=&quot;font-size:26px&quot;&gt;RN3&lt;/b&gt;&lt;div style=&quot;font-family:monospace;font-size:13px;color:#1d4ed8;font-weight:bold;margin-top:4px&quot;&gt;NID = 3&lt;/div&gt;&lt;div style=&quot;font-size:11px;font-weight:normal;color:#475569;margin-top:2px&quot;&gt;core + L1/L2&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DBEAFE;strokeColor=#2563eb;strokeWidth=2.5;verticalAlign=middle;fontSize=14;fontColor=#1d4ed8;arcSize=8;" vertex="1" parent="1">
-          <mxGeometry x="430" y="210" width="150" height="110" as="geometry"/>
+        <mxCell id="rn3" value="&lt;b style=&quot;font-size:24px&quot;&gt;RN3&lt;/b&gt;&lt;div style=&quot;font-family:monospace;font-size:12px;color:#1d4ed8;font-weight:bold;margin-top:4px&quot;&gt;NID = 3&lt;/div&gt;&lt;div style=&quot;font-family:monospace;font-size:12px;color:#475569;margin-top:1px&quot;&gt;XY = (2,1)&lt;/div&gt;&lt;div style=&quot;font-size:10px;font-weight:normal;color:#64748b;margin-top:3px&quot;&gt;core + L1/L2&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DBEAFE;strokeColor=#2563eb;strokeWidth=2.5;verticalAlign=middle;fontSize=14;fontColor=#1d4ed8;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="455" y="210" width="150" height="110" as="geometry"/>
         </mxCell>
 
         <!-- row 2 -->
-        <mxCell id="sn0" value="&lt;b style=&quot;font-size:26px&quot;&gt;SN0&lt;/b&gt;&lt;div style=&quot;font-family:monospace;font-size:13px;color:#166534;font-weight:bold;margin-top:4px&quot;&gt;NID = 7&lt;/div&gt;&lt;div style=&quot;font-size:11px;font-weight:normal;color:#475569;margin-top:2px&quot;&gt;DDR channel&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DCFCE7;strokeColor=#15803d;strokeWidth=2.5;verticalAlign=middle;fontSize=14;fontColor=#166534;arcSize=8;" vertex="1" parent="1">
-          <mxGeometry x="30" y="380" width="150" height="110" as="geometry"/>
+        <mxCell id="sn0" value="&lt;b style=&quot;font-size:24px&quot;&gt;SN0&lt;/b&gt;&lt;div style=&quot;font-family:monospace;font-size:12px;color:#166534;font-weight:bold;margin-top:4px&quot;&gt;NID = 7&lt;/div&gt;&lt;div style=&quot;font-family:monospace;font-size:12px;color:#475569;margin-top:1px&quot;&gt;XY = (0,2)&lt;/div&gt;&lt;div style=&quot;font-size:10px;font-weight:normal;color:#64748b;margin-top:3px&quot;&gt;DDR channel&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DCFCE7;strokeColor=#15803d;strokeWidth=2.5;verticalAlign=middle;fontSize=14;fontColor=#166534;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="55" y="380" width="150" height="110" as="geometry"/>
         </mxCell>
-        <mxCell id="rn4" value="&lt;b style=&quot;font-size:26px&quot;&gt;RN4&lt;/b&gt;&lt;div style=&quot;font-family:monospace;font-size:13px;color:#1d4ed8;font-weight:bold;margin-top:4px&quot;&gt;NID = 4&lt;/div&gt;&lt;div style=&quot;font-size:11px;font-weight:normal;color:#475569;margin-top:2px&quot;&gt;core + L1/L2&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DBEAFE;strokeColor=#2563eb;strokeWidth=2.5;verticalAlign=middle;fontSize=14;fontColor=#1d4ed8;arcSize=8;" vertex="1" parent="1">
-          <mxGeometry x="230" y="380" width="150" height="110" as="geometry"/>
+        <mxCell id="rn4" value="&lt;b style=&quot;font-size:24px&quot;&gt;RN4&lt;/b&gt;&lt;div style=&quot;font-family:monospace;font-size:12px;color:#1d4ed8;font-weight:bold;margin-top:4px&quot;&gt;NID = 4&lt;/div&gt;&lt;div style=&quot;font-family:monospace;font-size:12px;color:#475569;margin-top:1px&quot;&gt;XY = (1,2)&lt;/div&gt;&lt;div style=&quot;font-size:10px;font-weight:normal;color:#64748b;margin-top:3px&quot;&gt;core + L1/L2&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DBEAFE;strokeColor=#2563eb;strokeWidth=2.5;verticalAlign=middle;fontSize=14;fontColor=#1d4ed8;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="255" y="380" width="150" height="110" as="geometry"/>
         </mxCell>
-        <mxCell id="sn1" value="&lt;b style=&quot;font-size:26px&quot;&gt;SN1&lt;/b&gt;&lt;div style=&quot;font-family:monospace;font-size:13px;color:#166534;font-weight:bold;margin-top:4px&quot;&gt;NID = 8&lt;/div&gt;&lt;div style=&quot;font-size:11px;font-weight:normal;color:#475569;margin-top:2px&quot;&gt;DDR channel&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DCFCE7;strokeColor=#15803d;strokeWidth=2.5;verticalAlign=middle;fontSize=14;fontColor=#166534;arcSize=8;" vertex="1" parent="1">
-          <mxGeometry x="430" y="380" width="150" height="110" as="geometry"/>
+        <mxCell id="sn1" value="&lt;b style=&quot;font-size:24px&quot;&gt;SN1&lt;/b&gt;&lt;div style=&quot;font-family:monospace;font-size:12px;color:#166534;font-weight:bold;margin-top:4px&quot;&gt;NID = 8&lt;/div&gt;&lt;div style=&quot;font-family:monospace;font-size:12px;color:#475569;margin-top:1px&quot;&gt;XY = (2,2)&lt;/div&gt;&lt;div style=&quot;font-size:10px;font-weight:normal;color:#64748b;margin-top:3px&quot;&gt;DDR channel&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DCFCE7;strokeColor=#15803d;strokeWidth=2.5;verticalAlign=middle;fontSize=14;fontColor=#166534;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="455" y="380" width="150" height="110" as="geometry"/>
         </mxCell>
 
         <!-- ================================================================
