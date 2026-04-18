@@ -1920,13 +1920,173 @@ transactions).
 ---
 
 <!-- ================================================================== -->
-<!-- SLIDE 18: TBD -->
+<!-- SLIDE 18: Ruby CHI Cache Controller Architecture -->
 <!-- ================================================================== -->
 
-## TBD
+## Anatomy of a Ruby CHI cache controller
+
+<img src="../resources/ruby_chi_controller.svg" alt="CHI RN-F cache controller architecture: left column shows local ingress (Sequencer → mandatoryQueue / seqInPort, Prefetcher → prefetchQueue / pfInPort) and cache line storage (CacheMemory, PerfectCacheMemory directory for HN). The center SLICC FSM block lists in_port handlers, the internal scheduling MessageBuffers (reqRdy rank 3, snpRdy rank 8, triggerQueue rank 5, retryTriggerQueue rank 6, replTriggerQueue rank 4, useTimerTable rank 11), and the transitions(state, event) core generated from CHI-cache-transitions.sm. Below the FSM is the TBE storage box with storTBEs, storSnpTBEs, storReplTBEs, storDvmTBEs, and storDvmSnpTBEs. The right column shows the eight boundary MessageBuffers — four inbound (reqIn vnet 0, snpIn vnet 1, rspIn vnet 2, datIn vnet 3) and four outbound (reqOut, snpOut, rspOut, datOut) — color-coded blue/gold/green/violet for REQ/SNP/RSP/DAT. Arrows connect sources into the FSM, the FSM out to network buffers, and bidirectional edges link FSM to TBE storage and to the cache/directory structures." class="tall">
 
 <!-- Speaker Notes:
-Time budget: 3 minutes.
+Time budget: 5 minutes.
+
+This slide is the one-picture map of a Ruby CHI cache controller. Everything in
+the previous slides — channels, messages, transactions, state machines — lands
+somewhere on this diagram. The example I will narrate is an RN-F, the coherent
+request node that sits in front of a CPU and holds private caches. The same
+machine definition — `machine(MachineType:Cache)` in `CHI-cache.sm` — is also
+instantiated as the L2 in an RN-F and as the HN-F at the system level cache.
+The controller has one set of knobs, and the knob settings tell it which role
+to play. `is_HN=true` and `enable_DMT=true` make it a home node; the opposite
+makes it an RN-F L1.
+
+Start on the far left. A CPU issues a load or a store, and the corresponding
+`RubyRequest` lands in the controller's **mandatoryQueue**. This is a plain
+MessageBuffer allocated by the configuration code in `CHI_config.py` and
+attached to the controller. The SLICC `in_port` named **seqInPort** (rank=1)
+peeks this queue every cycle. For a normal sequencer request seqInPort fires
+`AllocSeqRequest`, which allocates a slot in the main TBE table and copies the
+request into the internal `reqRdy` queue. The Sequencer itself is a separate
+SimObject — it owns the in-flight request table that maps line addresses back
+to the original gem5 `Packet`. The controller never carries the Packet; it
+carries only the distilled `RubyRequest` fields.
+
+Directly below is the **prefetchQueue**, a second user-visible entry point.
+Whatever prefetcher object you bolt onto the controller (`prefetch::Base`)
+pushes its predictions here, and **pfInPort** (rank=0) drains them with
+`AllocPfRequest`. Prefetches are second-class citizens — they get the lowest
+rank so demand requests and every inbound network port wake up first.
+
+Move to the right column. This is the **network boundary** — the eight
+per-VNet MessageBuffers that every CHI controller exposes, declared at the top
+of `CHI-cache.sm`: `reqIn/Out`, `snpIn/Out`, `rspIn/Out`, `datIn/Out`. One
+MessageBuffer per CHI channel per direction. Four inbound, four outbound,
+color-coded by channel: REQ blue, SNP gold, RSP green, DAT violet. The
+`virtual_network=` attribute on each declaration is what Ruby hands to the
+network at wire-up time via `setToNetQueue` / `setFromNetQueue`. From the
+controller's point of view, these buffers *are* the network interface — the
+network is a black box that drains one side and fills the other.
+
+Now look at the `in_port` ranks stamped on each inbound boundary buffer.
+They are not cosmetic. The SLICC code generator emits them as a priority list:
+each cycle, ports are checked from highest rank to lowest, and the first ready
+port fires. So `rspInPort` at rank 10 and `datInPort` at rank 9 drain
+ahead of every other port. Responses and data can never stall — they are
+always consumed. If they could stall, a TBE somewhere would hold a line
+waiting for a response that the network is trying to deliver, and you would
+deadlock. That is why `CHI-cache-ports.sm` hard-wires `rspInPort_rsc_stall_handler`
+and `datInPort_rsc_stall_handler` to `error(...)`.
+
+Next rank down is `snpRdyPort` at rank 8, then `snpInPort` at rank 7. Notice
+that snoops have two stages. When a fresh snoop arrives from the network, it
+lands in `snpIn`. `snpInPort` allocates a slot in the **storSnpTBEs** table
+and moves the snoop into the internal `snpRdy` queue. Only then does the
+real work happen — `snpRdyPort` dequeues from `snpRdy` and drives the state
+machine. Two stages because CHI requires independent progress for snoops, and
+the allocation step is cheap and non-blocking. If the snoop TBE table is full,
+`snpInPort` stalls the snoop channel. Snoops cannot be retried at the
+protocol level, so this is the one ingress channel where real backpressure can
+propagate upstream.
+
+Same pattern for requests. `reqInPort` at rank 2 is the network-facing side;
+it allocates a main-pool TBE and moves the request to `reqRdy`. `reqRdyPort`
+at rank 3 drains `reqRdy` and fires the actual request event into the FSM.
+The pattern — allocate on inbound, execute on internal ready queue — gives
+the FSM clean, one-shot transitions and lets allocation failure generate
+`RetryAck` immediately without touching the request's real semantics.
+`reqInPort` also has a `must-never-stall` handler: if a home node runs out
+of TBEs, it pops the request and returns `RetryAck` rather than leaving the
+message in `reqIn`.
+
+Between the two columns sits the **SLICC FSM**. This is a large C++ file that
+SLICC generates from `CHI-cache.sm`, `CHI-cache-transitions.sm`, and
+`CHI-cache-actions.sm`. Logically it is a big switch on (state, event). The
+states are the CHI coherence states — I, UC, UD, SC, SD, UD_T, plus two
+transient BUSY states and a long list of DVM states. The events come from the
+in_port handlers. Each transition runs an ordered list of *actions*: allocate
+a TBE, look up the cache, send a message on one of the outbound VNets, schedule
+a trigger, deallocate. Inside the FSM box, you can see the five internal
+**scheduling MessageBuffers**. `reqRdy` and `snpRdy` are the TBE-backed ready
+queues we already met. `triggerQueue` is how the FSM schedules the *next step*
+of a multi-step transaction — when a request is waiting for data, the FSM
+posts a trigger to re-enter the transition after the data message arrives.
+`retryTriggerQueue` holds the three retry-related events — SendRetryAck,
+SendPCrdGrant, DoRetry — that CHI's transaction-credit machinery uses when
+TBEs are exhausted downstream. `replTriggerQueue` wakes the FSM when a
+replacement needs to happen: a new fill displaces a victim, and the FSM has
+to walk the victim through writeback before the new line can settle.
+
+Below the FSM are the **TBE tables**. A TBE — Transaction Buffer Entry — is
+the per-address state record for one in-flight transaction. It holds the
+original requestor, the request type, the expected-response map, the data
+block being assembled, the list of actions still to execute, and the final
+stable state the line will settle into. One TBE is allocated when a
+transaction starts; it is freed when the last response is consumed and the
+cache or directory is updated. The structure is declared in `CHI-cache.sm`
+around line 644 and has on the order of 50 fields.
+
+CHI splits TBEs into separate pools so that classes of traffic cannot
+starve each other. **storTBEs** is the main pool for incoming requests —
+typically 16 at an L1, 32 at an L2 or HN-F, sized by `number_of_TBEs`.
+**storSnpTBEs** is a smaller separate pool for incoming snoops — typically 4
+to 16 — so a burst of requests can never block snoops from progressing.
+**storReplTBEs** handles victim writebacks triggered by new fills; it can be
+unified with the request pool with `unify_repl_TBEs=true`. **storDvmTBEs**
+and **storDvmSnpTBEs** are the DVM analogues for TLBI and sync traffic. Each
+pool is a `TBEStorage` object, a thin counter wrapper around a `TBETable`.
+The SLICC helper `check_allocate(storTBEs)` is what enforces the cap: if no
+slot is free, the transition returns `TransitionResult_ResourceStall` and
+either recycles the port or, at the network-facing entry, pops the request
+and emits a `RetryAck`. TBE exhaustion is the one place in the whole
+controller where real backpressure becomes visible to the rest of the
+system.
+
+On the bottom left is the **line storage** — external SimObject pointers the
+controller holds on its own. `cache : CacheMemory` is the tag array plus data
+array for the lines this controller caches locally. The `CacheEntry`
+structure carries the stable SLICC state, the DataBlock, a requestor ID for
+the first filler, and a hardware-prefetch hint. `CacheMemory` is a normal
+gem5 SimObject with its own tag and data access latencies, banking, and
+replacement policy. The L1 in an RN-F might be 32 KiB four-way; an HN-F's
+SLC might be megabytes. `directory : PerfectCacheMemory` is the snoop filter
+/ coherence directory. It is only used when `is_HN=true`; at RN-F
+controllers, it sits unused. It is modeled as perfect — unbounded, no
+evictions — so that any home-node directory pressure you want to model has
+to come from somewhere else, typically from tracker-table caps in Garnet or
+from directly controlling the HN's TBE pool.
+
+Finally, the little tile near the FSM core labeled **useTimerTable** at
+rank 11 is the last wrinkle. When a store misses and the line fills in UD,
+CHI locks the line for a short window so the pending store commit cannot be
+beaten by an incoming snoop. `useTimerTable` tracks those timeouts. It wakes
+up at the highest rank so timeouts fire before anything else.
+
+Three things to remember from this slide.
+
+First: every box here is addressable configuration. Each MessageBuffer is a
+SimObject whose `buffer_size`, `ordered`, and `randomization` you can tune.
+Each TBE pool is an integer parameter on the controller. The cache and the
+directory are SimObjects in their own right. That is why CHI is usable as
+L1, L2, and HN-F — the shape is identical; the knobs differ.
+
+Second: the ingress side splits into *allocate* and *execute*. New requests
+and snoops are moved through an internal ready queue once a TBE has been
+reserved. The FSM never executes a transition without a TBE backing it.
+
+Third: the four outbound MessageBuffers are the *only* thing the controller
+writes to the network. Everything else — state, actions, triggers, retries —
+is internal. When you read a `ruby.debug` trace, every outbound line
+corresponds to a single enqueue onto one of those four buffers, and every
+inbound line corresponds to a single dequeue from one of the four inbound
+buffers.
+
+References. The machine definition, TBE structures, and queue declarations
+are in `src/mem/ruby/protocol/chi/CHI-cache.sm`. The in_port handlers and
+their ranks are in `src/mem/ruby/protocol/chi/CHI-cache-ports.sm`. Transitions
+and actions live in `CHI-cache-transitions.sm` and `CHI-cache-actions.sm`.
+The CHI-flavored RN-F wire-up with TBE sizes is in `configs/ruby/CHI_config.py`.
+Deeper treatment of buffering and backpressure is in
+`ruby-book/extra/RubyBuffersModeling.md`.
 -->
 
 ---
