@@ -6,195 +6,174 @@
         <mxCell id="1" parent="0"/>
 
         <!-- =============================================================== -->
-        <!-- Outer frame: the controller SimObject                            -->
+        <!-- Outer frame                                                      -->
         <!-- =============================================================== -->
-        <mxCell id="outer" value="&lt;b style=&quot;font-size:17px&quot;&gt;CHI RN-F cache controller&lt;/b&gt; &#8212; &lt;span style=&quot;font-family:Menlo,monospace;font-size:13px;color:#475569;font-weight:normal&quot;&gt;machine(MachineType:Cache) in CHI-cache.sm&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8FAFC;strokeColor=#334155;strokeWidth=2.5;verticalAlign=top;fontSize=14;fontColor=#334155;arcSize=3;" vertex="1" parent="1">
+        <mxCell id="outer" value="&lt;b style=&quot;font-size:17px&quot;&gt;CHI RN-F cache controller&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8FAFC;strokeColor=#334155;strokeWidth=2.5;verticalAlign=top;fontSize=14;fontColor=#334155;arcSize=3;" vertex="1" parent="1">
           <mxGeometry x="10" y="10" width="1380" height="740" as="geometry"/>
         </mxCell>
 
         <!-- =============================================================== -->
-        <!-- Left column: local sources and cache storage                     -->
+        <!-- Left column: local sources                                       -->
         <!-- =============================================================== -->
-        <mxCell id="src_label" value="&lt;b&gt;Local ingress&lt;/b&gt; &#8212; outside the network" style="text;html=1;fontSize=12;fontColor=#475569;align=left;verticalAlign=middle;" vertex="1" parent="1">
+        <mxCell id="src_label" value="&lt;b&gt;Local ingress&lt;/b&gt;" style="text;html=1;fontSize=12;fontColor=#475569;align=left;verticalAlign=middle;" vertex="1" parent="1">
           <mxGeometry x="30" y="48" width="380" height="20" as="geometry"/>
         </mxCell>
 
-        <!-- Sequencer -->
-        <mxCell id="seq" value="&lt;b&gt;Sequencer&lt;/b&gt;&lt;div style=&quot;font-size:11px;color:#475569;font-weight:normal;margin-top:2px&quot;&gt;RubySequencer &#8226; per-CPU&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#475569;strokeWidth=1.5;verticalAlign=middle;align=center;fontSize=13;fontColor=#334155;arcSize=10;" vertex="1" parent="1">
+        <mxCell id="seq" value="&lt;b&gt;Sequencer&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#475569;strokeWidth=1.5;verticalAlign=middle;align=center;fontSize=13;fontColor=#334155;arcSize=10;" vertex="1" parent="1">
           <mxGeometry x="30" y="75" width="140" height="50" as="geometry"/>
         </mxCell>
 
-        <!-- mandatoryQueue -->
-        <mxCell id="mand" value="&lt;b&gt;mandatoryQueue&lt;/b&gt;&lt;div style=&quot;font-size:11px;color:#475569;font-weight:normal&quot;&gt;MessageBuffer &#8226; RubyRequest&lt;/div&gt;&lt;div style=&quot;font-size:10px;color:#7c3aed;font-weight:bold&quot;&gt;in_port seqInPort (rank=1)&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F1F5F9;strokeColor=#475569;strokeWidth=1.5;verticalAlign=middle;align=center;fontSize=12;fontColor=#334155;arcSize=10;" vertex="1" parent="1">
-          <mxGeometry x="190" y="70" width="230" height="60" as="geometry"/>
+        <mxCell id="mand" value="&lt;b&gt;mandatoryQueue&lt;/b&gt;&lt;div style=&quot;font-size:11px;color:#7c3aed;font-weight:bold;margin-top:4px&quot;&gt;seqInPort (rank 1)&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F1F5F9;strokeColor=#475569;strokeWidth=1.5;verticalAlign=middle;align=center;fontSize=13;fontColor=#334155;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="190" y="75" width="230" height="50" as="geometry"/>
         </mxCell>
 
-        <!-- Prefetcher -->
-        <mxCell id="pf" value="&lt;b&gt;Prefetcher&lt;/b&gt;&lt;div style=&quot;font-size:11px;color:#475569;font-weight:normal;margin-top:2px&quot;&gt;prefetch::Base &#8226; optional&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#475569;strokeWidth=1.5;verticalAlign=middle;align=center;fontSize=13;fontColor=#334155;arcSize=10;" vertex="1" parent="1">
+        <mxCell id="pf" value="&lt;b&gt;Prefetcher&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#475569;strokeWidth=1.5;verticalAlign=middle;align=center;fontSize=13;fontColor=#334155;arcSize=10;" vertex="1" parent="1">
           <mxGeometry x="30" y="145" width="140" height="50" as="geometry"/>
         </mxCell>
 
-        <!-- prefetchQueue -->
-        <mxCell id="pfq" value="&lt;b&gt;prefetchQueue&lt;/b&gt;&lt;div style=&quot;font-size:11px;color:#475569;font-weight:normal&quot;&gt;MessageBuffer &#8226; RubyRequest&lt;/div&gt;&lt;div style=&quot;font-size:10px;color:#7c3aed;font-weight:bold&quot;&gt;in_port pfInPort (rank=0)&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F1F5F9;strokeColor=#475569;strokeWidth=1.5;verticalAlign=middle;align=center;fontSize=12;fontColor=#334155;arcSize=10;" vertex="1" parent="1">
-          <mxGeometry x="190" y="140" width="230" height="60" as="geometry"/>
+        <mxCell id="pfq" value="&lt;b&gt;prefetchQueue&lt;/b&gt;&lt;div style=&quot;font-size:11px;color:#7c3aed;font-weight:bold;margin-top:4px&quot;&gt;pfInPort (rank 0)&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F1F5F9;strokeColor=#475569;strokeWidth=1.5;verticalAlign=middle;align=center;fontSize=13;fontColor=#334155;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="190" y="145" width="230" height="50" as="geometry"/>
         </mxCell>
 
         <!-- =============================================================== -->
         <!-- Cache storage (bottom-left)                                      -->
         <!-- =============================================================== -->
-        <mxCell id="cache_label" value="&lt;b&gt;Line storage&lt;/b&gt; &#8212; external SimObject pointers" style="text;html=1;fontSize=12;fontColor=#0f766e;align=left;verticalAlign=middle;" vertex="1" parent="1">
+        <mxCell id="cache_label" value="&lt;b&gt;Line storage&lt;/b&gt;" style="text;html=1;fontSize=12;fontColor=#0f766e;align=left;verticalAlign=middle;" vertex="1" parent="1">
           <mxGeometry x="30" y="490" width="400" height="20" as="geometry"/>
         </mxCell>
 
-        <!-- CacheMemory -->
-        <mxCell id="cache" value="&lt;b&gt;cache : CacheMemory&lt;/b&gt;&lt;div style=&quot;font-size:11px;color:#0f766e;font-weight:normal;margin-top:4px&quot;&gt;tags + DataBlock &#8226; ways&#215;sets &#8226; CacheEntry&lt;/div&gt;&lt;div style=&quot;font-size:10px;color:#115e59;font-weight:normal;margin-top:2px&quot;&gt;{ state, DataBlk, HWPrefetched, requestor }&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#CCFBF1;strokeColor=#0f766e;strokeWidth=2;verticalAlign=middle;align=center;fontSize=13;fontColor=#115e59;arcSize=6;" vertex="1" parent="1">
+        <mxCell id="cache" value="&lt;b&gt;cache : CacheMemory&lt;/b&gt;&lt;div style=&quot;font-size:12px;color:#0f766e;font-weight:normal;margin-top:4px&quot;&gt;tags + data&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#CCFBF1;strokeColor=#0f766e;strokeWidth=2;verticalAlign=middle;align=center;fontSize=13;fontColor=#115e59;arcSize=6;" vertex="1" parent="1">
           <mxGeometry x="30" y="515" width="390" height="80" as="geometry"/>
         </mxCell>
 
-        <!-- PerfectCacheMemory / directory (HN only) -->
-        <mxCell id="dir" value="&lt;b&gt;directory : PerfectCacheMemory&lt;/b&gt; &lt;span style=&quot;font-size:10px;color:#7c3aed;font-weight:bold&quot;&gt;(HN only)&lt;/span&gt;&lt;div style=&quot;font-size:11px;color:#475569;font-weight:normal;margin-top:4px&quot;&gt;addr &#8594; DirEntry &#8226; unbounded snoop filter&lt;/div&gt;&lt;div style=&quot;font-size:10px;color:#475569;font-weight:normal;margin-top:2px&quot;&gt;{ sharers, owner, ownerExists, ownerIsExcl, state }&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE9FE;strokeColor=#7c3aed;strokeWidth=1.5;dashed=1;verticalAlign=middle;align=center;fontSize=13;fontColor=#475569;arcSize=6;" vertex="1" parent="1">
+        <mxCell id="dir" value="&lt;b&gt;directory : PerfectCacheMemory&lt;/b&gt;&lt;div style=&quot;font-size:11px;color:#7c3aed;font-weight:bold;margin-top:4px&quot;&gt;HN only&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE9FE;strokeColor=#7c3aed;strokeWidth=1.5;dashed=1;verticalAlign=middle;align=center;fontSize=13;fontColor=#475569;arcSize=6;" vertex="1" parent="1">
           <mxGeometry x="30" y="610" width="390" height="80" as="geometry"/>
         </mxCell>
 
         <!-- =============================================================== -->
         <!-- Center: SLICC FSM with internal ready queues                     -->
         <!-- =============================================================== -->
-        <mxCell id="fsm_box" value="&lt;b style=&quot;font-size:15px;color:#b45309&quot;&gt;SLICC FSM&lt;/b&gt; &#8212; &lt;span style=&quot;font-family:Menlo,monospace;font-size:12px&quot;&gt;CHI-cache.sm&lt;/span&gt;&lt;div style=&quot;font-size:11px;color:#475569;font-weight:normal;margin-top:2px&quot;&gt;state &#215; event &#8594; action sequence &#8226; 1500+ transitions&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEF3C7;strokeColor=#c58b1b;strokeWidth=2.5;verticalAlign=top;fontSize=14;fontColor=#7c2d12;arcSize=4;" vertex="1" parent="1">
+        <mxCell id="fsm_box" value="&lt;b style=&quot;font-size:15px;color:#b45309&quot;&gt;SLICC FSM&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEF3C7;strokeColor=#c58b1b;strokeWidth=2.5;verticalAlign=top;fontSize=14;fontColor=#7c2d12;arcSize=4;" vertex="1" parent="1">
           <mxGeometry x="450" y="50" width="500" height="430" as="geometry"/>
         </mxCell>
 
-        <!-- Internal ready queues inside FSM box -->
-        <mxCell id="iq_label" value="&lt;b&gt;Internal scheduling MessageBuffers&lt;/b&gt; &#8212; never leave the controller &#8226; higher &lt;span style=&quot;font-family:Menlo,monospace&quot;&gt;rank&lt;/span&gt; fires first" style="text;html=1;fontSize=12;fontColor=#7c2d12;align=left;verticalAlign=middle;" vertex="1" parent="1">
+        <mxCell id="iq_label" value="&lt;b&gt;Internal MessageBuffers&lt;/b&gt;" style="text;html=1;fontSize=12;fontColor=#7c2d12;align=left;verticalAlign=middle;" vertex="1" parent="1">
           <mxGeometry x="466" y="100" width="470" height="22" as="geometry"/>
         </mxCell>
 
-        <mxCell id="reqRdy" value="&lt;b&gt;reqRdy&lt;/b&gt; &lt;span style=&quot;font-size:10px;color:#475569;font-weight:normal&quot;&gt;&#8226; CHIRequestMsg &#8226; TBE-backed&lt;/span&gt;&lt;div style=&quot;font-size:10px;color:#7c3aed;font-weight:bold&quot;&gt;reqRdyPort rank=3&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E7F0FF;strokeColor=#1d4ed8;strokeWidth=1.5;verticalAlign=middle;align=center;fontSize=11;fontColor=#1d4ed8;arcSize=8;" vertex="1" parent="1">
-          <mxGeometry x="466" y="138" width="230" height="42" as="geometry"/>
+        <mxCell id="reqRdy" value="&lt;b&gt;reqRdy&lt;/b&gt;&lt;div style=&quot;font-size:10px;color:#7c3aed;font-weight:bold&quot;&gt;reqRdyPort (rank 3)&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E7F0FF;strokeColor=#1d4ed8;strokeWidth=1.5;verticalAlign=middle;align=center;fontSize=12;fontColor=#1d4ed8;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="466" y="129" width="230" height="42" as="geometry"/>
         </mxCell>
 
-        <mxCell id="snpRdy" value="&lt;b&gt;snpRdy&lt;/b&gt; &lt;span style=&quot;font-size:10px;color:#475569;font-weight:normal&quot;&gt;&#8226; CHIRequestMsg &#8226; TBE-backed&lt;/span&gt;&lt;div style=&quot;font-size:10px;color:#7c3aed;font-weight:bold&quot;&gt;snpRdyPort rank=8&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2D8;strokeColor=#c58b1b;strokeWidth=1.5;verticalAlign=middle;align=center;fontSize=11;fontColor=#8a5a00;arcSize=8;" vertex="1" parent="1">
-          <mxGeometry x="704" y="138" width="230" height="42" as="geometry"/>
+        <mxCell id="snpRdy" value="&lt;b&gt;snpRdy&lt;/b&gt;&lt;div style=&quot;font-size:10px;color:#7c3aed;font-weight:bold&quot;&gt;snpRdyPort (rank 8)&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2D8;strokeColor=#c58b1b;strokeWidth=1.5;verticalAlign=middle;align=center;fontSize=12;fontColor=#8a5a00;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="704" y="129" width="230" height="42" as="geometry"/>
         </mxCell>
 
-        <mxCell id="trigQ" value="&lt;b&gt;triggerQueue&lt;/b&gt; &lt;span style=&quot;font-size:10px;color:#475569;font-weight:normal&quot;&gt;&#8226; TriggerMsg&lt;/span&gt;&lt;div style=&quot;font-size:10px;color:#7c3aed;font-weight:bold&quot;&gt;triggerInPort rank=5&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE9FE;strokeColor=#7c3aed;strokeWidth=1.5;verticalAlign=middle;align=center;fontSize=11;fontColor=#5d33bf;arcSize=8;" vertex="1" parent="1">
-          <mxGeometry x="466" y="186" width="230" height="42" as="geometry"/>
+        <mxCell id="trigQ" value="&lt;b&gt;triggerQueue&lt;/b&gt;&lt;div style=&quot;font-size:10px;color:#7c3aed;font-weight:bold&quot;&gt;triggerInPort (rank 5)&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE9FE;strokeColor=#7c3aed;strokeWidth=1.5;verticalAlign=middle;align=center;fontSize=12;fontColor=#5d33bf;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="466" y="177" width="230" height="42" as="geometry"/>
         </mxCell>
 
-        <mxCell id="retryQ" value="&lt;b&gt;retryTriggerQueue&lt;/b&gt; &lt;span style=&quot;font-size:10px;color:#475569;font-weight:normal&quot;&gt;&#8226; RetryTriggerMsg&lt;/span&gt;&lt;div style=&quot;font-size:10px;color:#7c3aed;font-weight:bold&quot;&gt;retryTriggerInPort rank=6&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE9FE;strokeColor=#7c3aed;strokeWidth=1.5;verticalAlign=middle;align=center;fontSize=11;fontColor=#5d33bf;arcSize=8;" vertex="1" parent="1">
-          <mxGeometry x="704" y="186" width="230" height="42" as="geometry"/>
+        <mxCell id="retryQ" value="&lt;b&gt;retryTriggerQueue&lt;/b&gt;&lt;div style=&quot;font-size:10px;color:#7c3aed;font-weight:bold&quot;&gt;retryTriggerInPort (rank 6)&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE9FE;strokeColor=#7c3aed;strokeWidth=1.5;verticalAlign=middle;align=center;fontSize=12;fontColor=#5d33bf;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="704" y="177" width="230" height="42" as="geometry"/>
         </mxCell>
 
-        <mxCell id="replQ" value="&lt;b&gt;replTriggerQueue&lt;/b&gt; &lt;span style=&quot;font-size:10px;color:#475569;font-weight:normal&quot;&gt;&#8226; ReplacementMsg &#8226; victim evictions&lt;/span&gt;&lt;div style=&quot;font-size:10px;color:#7c3aed;font-weight:bold&quot;&gt;replTriggerInPort rank=4&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE9FE;strokeColor=#7c3aed;strokeWidth=1.5;verticalAlign=middle;align=center;fontSize=11;fontColor=#5d33bf;arcSize=8;" vertex="1" parent="1">
-          <mxGeometry x="466" y="234" width="468" height="42" as="geometry"/>
+        <mxCell id="replQ" value="&lt;b&gt;replTriggerQueue&lt;/b&gt;&lt;div style=&quot;font-size:10px;color:#7c3aed;font-weight:bold&quot;&gt;replTriggerInPort (rank 4)&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE9FE;strokeColor=#7c3aed;strokeWidth=1.5;verticalAlign=middle;align=center;fontSize=12;fontColor=#5d33bf;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="466" y="225" width="468" height="42" as="geometry"/>
         </mxCell>
 
         <!-- FSM core block -->
-        <mxCell id="fsm_core" value="&lt;b style=&quot;font-size:14px&quot;&gt;transitions(state, event)&lt;/b&gt;&lt;div style=&quot;font-size:11px;color:#334155;font-weight:normal;margin-top:4px&quot;&gt;Generated by SLICC from&lt;br&gt;&lt;span style=&quot;font-family:Menlo,monospace&quot;&gt;CHI-cache-transitions.sm&lt;/span&gt;&lt;br&gt;actions from &lt;span style=&quot;font-family:Menlo,monospace&quot;&gt;CHI-cache-actions.sm&lt;/span&gt;&lt;/div&gt;&lt;div style=&quot;font-size:11px;color:#b45309;font-weight:bold;margin-top:6px&quot;&gt;alloc TBE &#8226; lookup cache &#8226; send msg&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDE68A;strokeColor=#b45309;strokeWidth=2;verticalAlign=middle;align=center;fontSize=12;fontColor=#78350f;arcSize=6;" vertex="1" parent="1">
-          <mxGeometry x="466" y="292" width="468" height="115" as="geometry"/>
+        <mxCell id="fsm_core" value="&lt;b style=&quot;font-size:14px&quot;&gt;transitions(state, event)&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDE68A;strokeColor=#b45309;strokeWidth=2;verticalAlign=middle;align=center;fontSize=12;fontColor=#78350f;arcSize=6;" vertex="1" parent="1">
+          <mxGeometry x="466" y="283" width="468" height="115" as="geometry"/>
         </mxCell>
 
-        <!-- TimerTable note -->
-        <mxCell id="timer" value="&lt;b&gt;useTimerTable&lt;/b&gt; &lt;span style=&quot;font-size:10px;color:#475569;font-weight:normal&quot;&gt;&#8226; UD_T store-lock timeout&lt;/span&gt; &lt;span style=&quot;font-size:10px;color:#7c3aed;font-weight:bold&quot;&gt;useTimerTable_in rank=11&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEF3C7;strokeColor=#c58b1b;strokeWidth=1;verticalAlign=middle;align=center;fontSize=11;fontColor=#78350f;dashed=1;arcSize=8;" vertex="1" parent="1">
+        <mxCell id="timer" value="&lt;b&gt;useTimerTable&lt;/b&gt; &lt;span style=&quot;font-size:10px;color:#7c3aed;font-weight:bold&quot;&gt;useTimerTable_in (rank 11)&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEF3C7;strokeColor=#c58b1b;strokeWidth=1;verticalAlign=middle;align=center;fontSize=11;fontColor=#78350f;dashed=1;arcSize=8;" vertex="1" parent="1">
           <mxGeometry x="466" y="417" width="468" height="30" as="geometry"/>
         </mxCell>
 
         <!-- =============================================================== -->
-        <!-- TBE storage block (bottom-center)                                -->
+        <!-- TBE storage block                                                -->
         <!-- =============================================================== -->
-        <mxCell id="tbe_box" value="&lt;b style=&quot;font-size:14px;color:#c2410c&quot;&gt;TBE storage&lt;/b&gt; &#8212; &lt;span style=&quot;font-family:Menlo,monospace;font-size:12px;font-weight:normal&quot;&gt;TBEStorage + TBETable&lt;/span&gt;&lt;div style=&quot;font-size:11px;color:#475569;font-weight:normal;margin-top:2px&quot;&gt;one TBE per in-flight transaction &#8226; class-separated to avoid deadlock&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEE2E2;strokeColor=#c2410c;strokeWidth=2.5;verticalAlign=top;fontSize=13;fontColor=#7c2d12;arcSize=4;" vertex="1" parent="1">
-          <mxGeometry x="450" y="500" width="500" height="195" as="geometry"/>
+        <mxCell id="tbe_box" value="&lt;b style=&quot;font-size:14px;color:#c2410c&quot;&gt;TBE storage&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEE2E2;strokeColor=#c2410c;strokeWidth=2.5;verticalAlign=top;fontSize=13;fontColor=#7c2d12;arcSize=4;" vertex="1" parent="1">
+          <mxGeometry x="450" y="500" width="500" height="180" as="geometry"/>
         </mxCell>
 
-        <mxCell id="tbe1" value="&lt;b&gt;storTBEs&lt;/b&gt;&lt;div style=&quot;font-size:10px;color:#7c2d12;font-weight:normal&quot;&gt;REQ pool &#8226; number_of_TBEs&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEF2F2;strokeColor=#c2410c;strokeWidth=1;verticalAlign=middle;align=center;fontSize=12;fontColor=#7c2d12;arcSize=6;" vertex="1" parent="1">
+        <mxCell id="tbe1" value="&lt;b&gt;storTBEs&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEF2F2;strokeColor=#c2410c;strokeWidth=1;verticalAlign=middle;align=center;fontSize=13;fontColor=#7c2d12;arcSize=6;" vertex="1" parent="1">
           <mxGeometry x="466" y="548" width="230" height="42" as="geometry"/>
         </mxCell>
 
-        <mxCell id="tbe2" value="&lt;b&gt;storSnpTBEs&lt;/b&gt;&lt;div style=&quot;font-size:10px;color:#7c2d12;font-weight:normal&quot;&gt;SNP pool &#8226; independent progress&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEF2F2;strokeColor=#c2410c;strokeWidth=1;verticalAlign=middle;align=center;fontSize=12;fontColor=#7c2d12;arcSize=6;" vertex="1" parent="1">
+        <mxCell id="tbe2" value="&lt;b&gt;storSnpTBEs&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEF2F2;strokeColor=#c2410c;strokeWidth=1;verticalAlign=middle;align=center;fontSize=13;fontColor=#7c2d12;arcSize=6;" vertex="1" parent="1">
           <mxGeometry x="704" y="548" width="230" height="42" as="geometry"/>
         </mxCell>
 
-        <mxCell id="tbe3" value="&lt;b&gt;storReplTBEs&lt;/b&gt;&lt;div style=&quot;font-size:10px;color:#7c2d12;font-weight:normal&quot;&gt;writebacks / victim evictions&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEF2F2;strokeColor=#c2410c;strokeWidth=1;verticalAlign=middle;align=center;fontSize=12;fontColor=#7c2d12;arcSize=6;" vertex="1" parent="1">
-          <mxGeometry x="466" y="596" width="230" height="42" as="geometry"/>
+        <mxCell id="tbe3" value="&lt;b&gt;storReplTBEs&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEF2F2;strokeColor=#c2410c;strokeWidth=1;verticalAlign=middle;align=center;fontSize=13;fontColor=#7c2d12;arcSize=6;" vertex="1" parent="1">
+          <mxGeometry x="466" y="604" width="230" height="42" as="geometry"/>
         </mxCell>
 
-        <mxCell id="tbe4" value="&lt;b&gt;storDvmTBEs&lt;/b&gt; &#8226; &lt;b&gt;storDvmSnpTBEs&lt;/b&gt;&lt;div style=&quot;font-size:10px;color:#7c2d12;font-weight:normal&quot;&gt;TLBI / DVM maintenance&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEF2F2;strokeColor=#c2410c;strokeWidth=1;verticalAlign=middle;align=center;fontSize=12;fontColor=#7c2d12;arcSize=6;" vertex="1" parent="1">
-          <mxGeometry x="704" y="596" width="230" height="42" as="geometry"/>
-        </mxCell>
-
-        <mxCell id="tbe_note" value="&lt;span style=&quot;font-family:Menlo,monospace&quot;&gt;check_allocate(storTBEs)&lt;/span&gt; &#8594; &lt;b&gt;ResourceStall / RetryAck&lt;/b&gt; &#8226; exhaustion = real backpressure" style="text;html=1;fontSize=11;fontColor=#7c2d12;align=center;verticalAlign=middle;" vertex="1" parent="1">
-          <mxGeometry x="466" y="648" width="468" height="30" as="geometry"/>
+        <mxCell id="tbe4" value="&lt;b&gt;storDvmTBEs&lt;/b&gt; &#8226; &lt;b&gt;storDvmSnpTBEs&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEF2F2;strokeColor=#c2410c;strokeWidth=1;verticalAlign=middle;align=center;fontSize=12;fontColor=#7c2d12;arcSize=6;" vertex="1" parent="1">
+          <mxGeometry x="704" y="604" width="230" height="42" as="geometry"/>
         </mxCell>
 
         <!-- =============================================================== -->
         <!-- Right column: boundary MessageBuffers (per VNet)                 -->
         <!-- =============================================================== -->
-        <mxCell id="in_hdr" value="&lt;b style=&quot;color:#334155&quot;&gt;From ICN&lt;/b&gt; &#8212; &lt;span style=&quot;font-family:Menlo,monospace;font-size:11px&quot;&gt;setFromNetQueue&lt;/span&gt;" style="text;html=1;fontSize=12;fontColor=#334155;align=left;verticalAlign=middle;" vertex="1" parent="1">
+        <mxCell id="in_hdr" value="&lt;b style=&quot;color:#334155&quot;&gt;From ICN&lt;/b&gt;" style="text;html=1;fontSize=12;fontColor=#334155;align=left;verticalAlign=middle;" vertex="1" parent="1">
           <mxGeometry x="980" y="48" width="390" height="20" as="geometry"/>
         </mxCell>
 
-        <mxCell id="reqIn" value="&lt;b&gt;reqIn&lt;/b&gt; &lt;span style=&quot;font-size:10px;color:#1d4ed8;font-weight:normal&quot;&gt;vnet=0 REQ &#8226; CHIRequestMsg&lt;/span&gt;&lt;div style=&quot;font-size:10px;color:#7c3aed;font-weight:bold&quot;&gt;reqInPort rank=2 &#8226; never stalls&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E7F0FF;strokeColor=#1d4ed8;strokeWidth=2;verticalAlign=middle;align=center;fontSize=12;fontColor=#1d4ed8;arcSize=8;" vertex="1" parent="1">
+        <mxCell id="reqIn" value="&lt;b&gt;reqIn&lt;/b&gt; &lt;span style=&quot;font-size:11px;color:#1d4ed8;font-weight:normal&quot;&gt;vnet 0 REQ&lt;/span&gt;&lt;div style=&quot;font-size:10px;color:#7c3aed;font-weight:bold&quot;&gt;reqInPort (rank 2)&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E7F0FF;strokeColor=#1d4ed8;strokeWidth=2;verticalAlign=middle;align=center;fontSize=13;fontColor=#1d4ed8;arcSize=8;" vertex="1" parent="1">
           <mxGeometry x="980" y="72" width="380" height="48" as="geometry"/>
         </mxCell>
 
-        <mxCell id="snpIn" value="&lt;b&gt;snpIn&lt;/b&gt; &lt;span style=&quot;font-size:10px;color:#8a5a00;font-weight:normal&quot;&gt;vnet=1 SNP &#8226; CHIRequestMsg&lt;/span&gt;&lt;div style=&quot;font-size:10px;color:#7c3aed;font-weight:bold&quot;&gt;snpInPort rank=7 &#8226; stall on TBE miss&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2D8;strokeColor=#c58b1b;strokeWidth=2;verticalAlign=middle;align=center;fontSize=12;fontColor=#8a5a00;arcSize=8;" vertex="1" parent="1">
+        <mxCell id="snpIn" value="&lt;b&gt;snpIn&lt;/b&gt; &lt;span style=&quot;font-size:11px;color:#8a5a00;font-weight:normal&quot;&gt;vnet 1 SNP&lt;/span&gt;&lt;div style=&quot;font-size:10px;color:#7c3aed;font-weight:bold&quot;&gt;snpInPort (rank 7)&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2D8;strokeColor=#c58b1b;strokeWidth=2;verticalAlign=middle;align=center;fontSize=13;fontColor=#8a5a00;arcSize=8;" vertex="1" parent="1">
           <mxGeometry x="980" y="126" width="380" height="48" as="geometry"/>
         </mxCell>
 
-        <mxCell id="rspIn" value="&lt;b&gt;rspIn&lt;/b&gt; &lt;span style=&quot;font-size:10px;color:#15803d;font-weight:normal&quot;&gt;vnet=2 RSP &#8226; CHIResponseMsg&lt;/span&gt;&lt;div style=&quot;font-size:10px;color:#7c3aed;font-weight:bold&quot;&gt;rspInPort rank=10 &#8226; never stalls&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F7EC;strokeColor=#15803d;strokeWidth=2;verticalAlign=middle;align=center;fontSize=12;fontColor=#15803d;arcSize=8;" vertex="1" parent="1">
+        <mxCell id="rspIn" value="&lt;b&gt;rspIn&lt;/b&gt; &lt;span style=&quot;font-size:11px;color:#15803d;font-weight:normal&quot;&gt;vnet 2 RSP&lt;/span&gt;&lt;div style=&quot;font-size:10px;color:#7c3aed;font-weight:bold&quot;&gt;rspInPort (rank 10)&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F7EC;strokeColor=#15803d;strokeWidth=2;verticalAlign=middle;align=center;fontSize=13;fontColor=#15803d;arcSize=8;" vertex="1" parent="1">
           <mxGeometry x="980" y="180" width="380" height="48" as="geometry"/>
         </mxCell>
 
-        <mxCell id="datIn" value="&lt;b&gt;datIn&lt;/b&gt; &lt;span style=&quot;font-size:10px;color:#5d33bf;font-weight:normal&quot;&gt;vnet=3 DAT &#8226; CHIDataMsg &#8226; vnet_type=response&lt;/span&gt;&lt;div style=&quot;font-size:10px;color:#7c3aed;font-weight:bold&quot;&gt;datInPort rank=9 &#8226; never stalls&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F0E9FF;strokeColor=#7c3aed;strokeWidth=2;verticalAlign=middle;align=center;fontSize=12;fontColor=#5d33bf;arcSize=8;" vertex="1" parent="1">
+        <mxCell id="datIn" value="&lt;b&gt;datIn&lt;/b&gt; &lt;span style=&quot;font-size:11px;color:#5d33bf;font-weight:normal&quot;&gt;vnet 3 DAT&lt;/span&gt;&lt;div style=&quot;font-size:10px;color:#7c3aed;font-weight:bold&quot;&gt;datInPort (rank 9)&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F0E9FF;strokeColor=#7c3aed;strokeWidth=2;verticalAlign=middle;align=center;fontSize=13;fontColor=#5d33bf;arcSize=8;" vertex="1" parent="1">
           <mxGeometry x="980" y="234" width="380" height="48" as="geometry"/>
         </mxCell>
 
         <!-- Outbound -->
-        <mxCell id="out_hdr" value="&lt;b style=&quot;color:#334155&quot;&gt;To ICN&lt;/b&gt; &#8212; &lt;span style=&quot;font-family:Menlo,monospace;font-size:11px&quot;&gt;setToNetQueue&lt;/span&gt;" style="text;html=1;fontSize=12;fontColor=#334155;align=left;verticalAlign=middle;" vertex="1" parent="1">
+        <mxCell id="out_hdr" value="&lt;b style=&quot;color:#334155&quot;&gt;To ICN&lt;/b&gt;" style="text;html=1;fontSize=12;fontColor=#334155;align=left;verticalAlign=middle;" vertex="1" parent="1">
           <mxGeometry x="980" y="310" width="390" height="20" as="geometry"/>
         </mxCell>
 
-        <mxCell id="reqOut" value="&lt;b&gt;reqOut&lt;/b&gt; &lt;span style=&quot;font-size:10px;color:#1d4ed8;font-weight:normal&quot;&gt;vnet=0 REQ&lt;/span&gt;&lt;div style=&quot;font-size:10px;color:#7c3aed;font-weight:bold&quot;&gt;out_port reqOutPort&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E7F0FF;strokeColor=#1d4ed8;strokeWidth=2;verticalAlign=middle;align=center;fontSize=12;fontColor=#1d4ed8;arcSize=8;" vertex="1" parent="1">
+        <mxCell id="reqOut" value="&lt;b&gt;reqOut&lt;/b&gt; &lt;span style=&quot;font-size:11px;color:#1d4ed8;font-weight:normal&quot;&gt;vnet 0 REQ&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E7F0FF;strokeColor=#1d4ed8;strokeWidth=2;verticalAlign=middle;align=center;fontSize=13;fontColor=#1d4ed8;arcSize=8;" vertex="1" parent="1">
           <mxGeometry x="980" y="334" width="380" height="48" as="geometry"/>
         </mxCell>
 
-        <mxCell id="snpOut" value="&lt;b&gt;snpOut&lt;/b&gt; &lt;span style=&quot;font-size:10px;color:#8a5a00;font-weight:normal&quot;&gt;vnet=1 SNP (HN issues snoops)&lt;/span&gt;&lt;div style=&quot;font-size:10px;color:#7c3aed;font-weight:bold&quot;&gt;out_port snpOutPort&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2D8;strokeColor=#c58b1b;strokeWidth=2;verticalAlign=middle;align=center;fontSize=12;fontColor=#8a5a00;arcSize=8;" vertex="1" parent="1">
+        <mxCell id="snpOut" value="&lt;b&gt;snpOut&lt;/b&gt; &lt;span style=&quot;font-size:11px;color:#8a5a00;font-weight:normal&quot;&gt;vnet 1 SNP&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2D8;strokeColor=#c58b1b;strokeWidth=2;verticalAlign=middle;align=center;fontSize=13;fontColor=#8a5a00;arcSize=8;" vertex="1" parent="1">
           <mxGeometry x="980" y="388" width="380" height="48" as="geometry"/>
         </mxCell>
 
-        <mxCell id="rspOut" value="&lt;b&gt;rspOut&lt;/b&gt; &lt;span style=&quot;font-size:10px;color:#15803d;font-weight:normal&quot;&gt;vnet=2 RSP&lt;/span&gt;&lt;div style=&quot;font-size:10px;color:#7c3aed;font-weight:bold&quot;&gt;out_port rspOutPort&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F7EC;strokeColor=#15803d;strokeWidth=2;verticalAlign=middle;align=center;fontSize=12;fontColor=#15803d;arcSize=8;" vertex="1" parent="1">
+        <mxCell id="rspOut" value="&lt;b&gt;rspOut&lt;/b&gt; &lt;span style=&quot;font-size:11px;color:#15803d;font-weight:normal&quot;&gt;vnet 2 RSP&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F7EC;strokeColor=#15803d;strokeWidth=2;verticalAlign=middle;align=center;fontSize=13;fontColor=#15803d;arcSize=8;" vertex="1" parent="1">
           <mxGeometry x="980" y="442" width="380" height="48" as="geometry"/>
         </mxCell>
 
-        <mxCell id="datOut" value="&lt;b&gt;datOut&lt;/b&gt; &lt;span style=&quot;font-size:10px;color:#5d33bf;font-weight:normal&quot;&gt;vnet=3 DAT &#8226; vnet_type=response&lt;/span&gt;&lt;div style=&quot;font-size:10px;color:#7c3aed;font-weight:bold&quot;&gt;out_port datOutPort&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F0E9FF;strokeColor=#7c3aed;strokeWidth=2;verticalAlign=middle;align=center;fontSize=12;fontColor=#5d33bf;arcSize=8;" vertex="1" parent="1">
+        <mxCell id="datOut" value="&lt;b&gt;datOut&lt;/b&gt; &lt;span style=&quot;font-size:11px;color:#5d33bf;font-weight:normal&quot;&gt;vnet 3 DAT&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F0E9FF;strokeColor=#7c3aed;strokeWidth=2;verticalAlign=middle;align=center;fontSize=13;fontColor=#5d33bf;arcSize=8;" vertex="1" parent="1">
           <mxGeometry x="980" y="496" width="380" height="48" as="geometry"/>
-        </mxCell>
-
-        <!-- ICN hint -->
-        <mxCell id="icn_note" value="&lt;b&gt;8&#215; MessageBuffer SimObjects per controller&lt;/b&gt;&lt;div style=&quot;font-size:10px;color:#475569;font-weight:normal;margin-top:2px&quot;&gt;priority heap of MsgPtr &#8226; one slot = one whole message&lt;/div&gt;&lt;div style=&quot;font-size:10px;color:#475569;font-weight:normal&quot;&gt;the network owns everything beyond this boundary&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F1F5F9;strokeColor=#94a3b8;strokeWidth=1;dashed=1;verticalAlign=middle;align=center;fontSize=11;fontColor=#334155;arcSize=6;" vertex="1" parent="1">
-          <mxGeometry x="980" y="570" width="380" height="76" as="geometry"/>
         </mxCell>
 
         <!-- =============================================================== -->
         <!-- Edges                                                             -->
         <!-- =============================================================== -->
 
-        <!-- Sequencer -> mandatoryQueue -->
         <mxCell id="e_seq_mand" style="endArrow=classic;html=1;strokeColor=#475569;strokeWidth=2;" edge="1" parent="1" source="seq" target="mand">
           <mxGeometry relative="1" as="geometry"/>
         </mxCell>
 
-        <!-- Prefetcher -> prefetchQueue -->
         <mxCell id="e_pf_pfq" style="endArrow=classic;html=1;strokeColor=#475569;strokeWidth=2;" edge="1" parent="1" source="pf" target="pfq">
           <mxGeometry relative="1" as="geometry"/>
         </mxCell>
 
-        <!-- mandatoryQueue -> FSM (alloc seq TBE) -->
-        <mxCell id="e_mand_fsm" value="AllocSeqRequest" style="endArrow=classic;html=1;strokeColor=#475569;strokeWidth=2;fontSize=10;fontColor=#475569;labelBackgroundColor=#F8FAFC;" edge="1" parent="1" source="mand" target="fsm_box">
+        <mxCell id="e_mand_fsm" style="endArrow=classic;html=1;strokeColor=#475569;strokeWidth=2;" edge="1" parent="1" source="mand" target="fsm_box">
           <mxGeometry relative="1" as="geometry"/>
         </mxCell>
 
-        <!-- prefetchQueue -> FSM -->
-        <mxCell id="e_pfq_fsm" value="AllocPfRequest" style="endArrow=classic;html=1;strokeColor=#475569;strokeWidth=2;fontSize=10;fontColor=#475569;labelBackgroundColor=#F8FAFC;" edge="1" parent="1" source="pfq" target="fsm_box">
+        <mxCell id="e_pfq_fsm" style="endArrow=classic;html=1;strokeColor=#475569;strokeWidth=2;" edge="1" parent="1" source="pfq" target="fsm_box">
           <mxGeometry relative="1" as="geometry"/>
         </mxCell>
 
@@ -214,9 +193,7 @@
 
         <!-- FSM -> outbound network -->
         <mxCell id="e_fsm_reqOut" style="endArrow=classic;html=1;strokeColor=#1d4ed8;strokeWidth=2;" edge="1" parent="1" source="fsm_box" target="reqOut">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="952" y="350" as="sourcePoint"/>
-          </mxGeometry>
+          <mxGeometry relative="1" as="geometry"/>
         </mxCell>
         <mxCell id="e_fsm_snpOut" style="endArrow=classic;html=1;strokeColor=#c58b1b;strokeWidth=2;" edge="1" parent="1" source="fsm_box" target="snpOut">
           <mxGeometry relative="1" as="geometry"/>
@@ -229,17 +206,17 @@
         </mxCell>
 
         <!-- FSM <-> TBE storage -->
-        <mxCell id="e_fsm_tbe" value="alloc / lookup / dealloc" style="endArrow=classic;startArrow=classic;html=1;strokeColor=#c2410c;strokeWidth=2;fontSize=10;fontColor=#c2410c;labelBackgroundColor=#F8FAFC;" edge="1" parent="1" source="fsm_box" target="tbe_box">
+        <mxCell id="e_fsm_tbe" style="endArrow=classic;startArrow=classic;html=1;strokeColor=#c2410c;strokeWidth=2;" edge="1" parent="1" source="fsm_box" target="tbe_box">
           <mxGeometry relative="1" as="geometry"/>
         </mxCell>
 
         <!-- FSM <-> cache -->
-        <mxCell id="e_fsm_cache" value="tag lookup&#10;DataBlk r/w" style="endArrow=classic;startArrow=classic;html=1;strokeColor=#0f766e;strokeWidth=2;fontSize=10;fontColor=#0f766e;labelBackgroundColor=#F8FAFC;" edge="1" parent="1" source="fsm_box" target="cache">
+        <mxCell id="e_fsm_cache" style="endArrow=classic;startArrow=classic;html=1;strokeColor=#0f766e;strokeWidth=2;" edge="1" parent="1" source="fsm_box" target="cache">
           <mxGeometry relative="1" as="geometry"/>
         </mxCell>
 
         <!-- FSM <-> directory (HN only) -->
-        <mxCell id="e_fsm_dir" value="sharer filter&#10;(HN only)" style="endArrow=classic;startArrow=classic;html=1;strokeColor=#7c3aed;strokeWidth=1.5;dashed=1;fontSize=10;fontColor=#7c3aed;labelBackgroundColor=#F8FAFC;" edge="1" parent="1" source="fsm_box" target="dir">
+        <mxCell id="e_fsm_dir" style="endArrow=classic;startArrow=classic;html=1;strokeColor=#7c3aed;strokeWidth=1.5;dashed=1;" edge="1" parent="1" source="fsm_box" target="dir">
           <mxGeometry relative="1" as="geometry"/>
         </mxCell>
 
