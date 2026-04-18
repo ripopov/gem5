@@ -1920,6 +1920,147 @@ transactions).
 ---
 
 <!-- ================================================================== -->
+<!-- SLIDE 17b: Request Retry — the P-Credit handshake -->
+<!-- ================================================================== -->
+
+## Request Retry — the P-Credit handshake
+
+<style scoped>
+.retry-layout {
+  display: flex;
+  gap: 28px;
+  align-items: flex-start;
+}
+.retry-layout > div:first-child { flex: 3; min-width: 0; }
+.retry-layout > div:last-child  { flex: 2; min-width: 0; font-size: 14px; line-height: 1.3; }
+.retry-layout img { max-height: 486px; max-width: 90%; width: 90%; }
+</style>
+
+<div class="retry-layout">
+<div>
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant RN as Requester (RN-F)
+    participant HN as Completer (HN-F)
+
+    Note over RN,HN: 1. First attempt — no credit held
+    RN->>HN: REQ  ReadShared<br/>AllowRetry=1, PCrdType=0b0000
+    Note right of HN: tracker / pCAM full<br/>cannot accept
+    HN-->>RN: RSP  RetryAck<br/>PCrdType = K
+
+    Note over RN,HN: 2. HN frees a slot of class K
+    HN-->>RN: RSP  PCrdGrant<br/>PCrdType = K
+
+    Note over RN,HN: 3. Retry — credit-backed, must be accepted
+    RN->>HN: REQ  ReadShared<br/>AllowRetry=0, PCrdType = K
+    HN-->>RN: RSP  Comp / DBIDResp …
+    Note over RN,HN: (or PCrdReturn if credit no longer needed)
+```
+
+</div>
+<div>
+
+**Field invariants** *(B2.10.2.2)*
+
+| AllowRetry | PCrdType         | Meaning           |
+|------------|------------------|-------------------|
+| `1`        | `0b0000`         | First attempt    |
+| `0`        | value from grant | Credit-backed retry |
+
+**Channels:** <span class="pill req">REQ</span> original + reissue, `PCrdReturn` &nbsp;·&nbsp; <span class="pill rsp">RSP</span> `RetryAck`, `PCrdGrant`
+
+**Per-type credits — 4 b ⇒ 16 classes**
+
+- Partition Completer resources (trackers, snoop filters, write buffers, QoS bands).
+- One saturated class can't starve another.
+- Class semantics are **IMPLEMENTATION SPECIFIC**; single-class designs use `0b0000`.
+
+</div>
+</div>
+
+<div class="takeaway" style="margin-top: 12px; font-size: 14px; line-height: 1.35; padding: 10px 14px;">
+Retry is a three-step handshake on REQ + RSP: <code>RetryAck</code> tells the Requester <em>which</em> credit class to wait on, <code>PCrdGrant</code> hands that credit over, and the reissued request consumes it with <code>AllowRetry=0</code>. The Completer is then obliged to accept — that obligation is the only forward-progress guarantee CHI gives you.
+</div>
+
+<!-- Speaker Notes:
+Time budget: 4 minutes.
+
+The Request Retry flow is CHI's flow-control valve. Without it, a
+Home Node with a full tracker has nowhere to put a back-pressure
+signal — REQ has no ready/valid back-pressure semantics beyond
+link-level credits, and link credits guard the channel, not the
+protocol resources behind it. Retry is how the Completer says
+"I heard you, I cannot serve you yet, here is how to wait."
+
+Walk the diagram top to bottom.
+
+Step 1. The Requester sends its original transaction — say a
+ReadShared. AllowRetry is 1, meaning "I have no credit, please
+serve me if you can, otherwise tell me to retry." PCrdType must be
+all zeros on this first attempt; that is a hard rule from B2.10.2.2.
+The Completer looks at its resources — pCAM slot, snoop filter
+entry, response buffer, QoS quota — and decides it cannot accept.
+It returns RetryAck on the RSP channel and stamps a PCrdType value
+on it, call it K. K is the Completer's choice; it identifies which
+credit pool the Requester must wait on.
+
+Step 2. Time passes. Eventually a transaction of class K completes
+at the Completer and frees its resource. The Completer then sends
+PCrdGrant on RSP, also tagged with PCrdType = K. This is the
+moment the credit transfers — the Requester now owns one P-Credit
+of class K.
+
+Step 3. The Requester reissues the original request on REQ. Two
+fields change from the first attempt: AllowRetry flips to 0, and
+PCrdType is set to K. That combination tells the Completer
+"this is credit-backed — you promised to accept it." The Completer
+is obliged. From here the transaction proceeds normally — Comp,
+DBIDResp, data, CompAck, whatever the opcode requires.
+
+One escape hatch worth knowing: PCrdReturn. If the Requester ends
+up not needing the credit — say the request was killed by software,
+or coalesced with another transaction — it returns the credit using
+the PCrdReturn opcode on REQ, also stamped with PCrdType = K. This
+prevents credit leakage across the fabric. A real implementation
+must track outstanding granted credits per type to know whether a
+return is owed.
+
+Two design points to anchor.
+
+First, why per-type credits. The PCrdType field is 4 bits, so up
+to 16 independent credit classes. The intent is to partition the
+Completer's resource pool — separate trackers for reads vs writes,
+separate buffers per QoS band, separate snoop-filter entries vs
+data-buffer entries. Without classification, a flood of writes
+could starve reads even after the Completer freed a read slot,
+because the Requester would have no way to know which class of
+credit it was holding. Classification gives the Completer fine-
+grained back-pressure that does not break ordering or fairness
+between request types. The actual mapping of K values to resource
+classes is implementation-specific — the spec only mandates the
+handshake, not the semantics of K. Single-class implementations
+are encouraged to use 0b0000 for everything.
+
+Second, this is the only forward-progress guarantee in CHI.
+Once a PCrdGrant is sent, the Completer must accept the matching
+retry. That obligation is what lets the Requester treat the retry
+as a guaranteed-success transaction. Verification engineers spend
+real effort on credit accounting bugs: lost grants cause hangs,
+double-grants cause spec violations, and PCrdReturn leaks slowly
+exhaust the Completer's pool. When a CHI system wedges, the retry
+ledger is the first place to look — it sits at the intersection of
+REQ and RSP and touches every flow that can ever back-pressure.
+
+In gem5's CHI model the handshake is present (PCrdGrant appears as
+an RSP opcode in CHI-msg.sm) but the multi-class typing is
+simplified — most paths use the single-class convention.
+-->
+
+---
+
+<!-- ================================================================== -->
 <!-- SLIDE 18: Ruby CHI Cache Controller Architecture -->
 <!-- ================================================================== -->
 
