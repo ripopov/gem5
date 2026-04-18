@@ -357,35 +357,40 @@ multiple flits.
 <!-- SLIDE 6: Flit Fields -->
 <!-- ================================================================== -->
 
-## Flit Fields — a typical REQ flit
+## REQ flit fields
 
-```systemverilog
-// CHI REQ flit — AMBA 5 CHI Issue H, Table B13.6 (subset).
-// Feature-gated fields (stashing, DMT, tagging, MPAM, RME) omitted.
+<div class="columns" style="font-size: 14px; line-height: 1.25;">
+<div>
 
-parameter int NODE_ID_W  = 7;   // B16.1.12 — NodeID_Width  (7..16)
-parameter int REQ_ADDR_W = 44;  // B16.1.11 — Req_Addr_Width (44..52)
+| Name         | W  | Description                          |
+|--------------|----|--------------------------------------|
+| QoS          | 4  | Priority for fabric arbitration       |
+| TgtID        | 7  | Target node (NODE_ID_W: 7..16)       |
+| SrcID        | 7  | Source node (NODE_ID_W)              |
+| TxnID        | 12 | Transaction identifier                |
+| Opcode       | 7  | REQ opcode (Table B13.12)             |
+| Size         | 3  | Bytes = 2^Size (1..64)                |
+| Addr         | 44 | Physical addr (REQ_ADDR_W: 44..52)   |
+| PAS          | 3  | Physical Address Space (security)     |
+| LikelyShared | 1  | Cache-placement hint                  |
 
-typedef struct packed {
-  logic                   ExpCompAck;   // [106]    CompAck mandated
-  logic                   Excl;         // [105]    exclusive monitor  -- optional
-  logic [4:0]             LPID;         // [104:100] logical processor -- optional
-  logic                   SnpAttr;      // [99]     snoop hint
-  logic [3:0]             MemAttr;      // [98:95]  cacheability  (AXI AxCACHE-like)
-  logic [3:0]             PCrdType;     // [94:91]  retry credit type
-  logic [1:0]             Order;        // [90:89]  ordering contract
-  logic                   AllowRetry;   // [88]     target may issue Retry
-  logic                   LikelyShared; // [87]     cache-placement hint
-  logic [2:0]             PAS;          // [86:84]  Physical Address Space (security)
-  logic [REQ_ADDR_W-1:0]  Addr;         // [83:40]  physical address
-  logic [2:0]             Size;         // [39:37]  bytes = 2^Size  (1..64)
-  logic [6:0]             Opcode;       // [36:30]  REQ opcode (Table B13.12)
-  logic [11:0]            TxnID;        // [29:18]  transaction identifier
-  logic [NODE_ID_W-1:0]   SrcID;        // [17:11]  source node
-  logic [NODE_ID_W-1:0]   TgtID;        // [10: 4]  target node
-  logic [3:0]             QoS;          // [ 3: 0]  priority for fabric arbitration
-} chi_req_flit_t;
-```
+</div>
+<div>
+
+| Name         | W  | Description                          |
+|--------------|----|--------------------------------------|
+| AllowRetry   | 1  | Target may issue Retry                |
+| Order        | 2  | Ordering contract                     |
+| PCrdType     | 4  | Retry credit type                     |
+| MemAttr      | 4  | Cacheability (AXI AxCACHE-like)      |
+| SnpAttr      | 1  | Snoop hint                            |
+| LPID         | 5  | Logical processor — *optional*        |
+| Excl         | 1  | Exclusive monitor — *optional*        |
+| ExpCompAck   | 1  | CompAck mandated                      |
+| TraceTag     | 1  | Trace/debug tag                       |
+
+</div>
+</div>
 
 <div class="takeaway">
 Field <em>order</em> in Table B13.6 is architectural — implementations may not reshuffle bit positions. What the implementer controls is field <em>widths</em> (<code>NODE_ID_W</code>, <code>REQ_ADDR_W</code>, <code>DATA_W</code>) and which optional features (stashing, DMT, tagging, MPAM, RME, exclusives) contribute extra fields.
@@ -396,15 +401,13 @@ Time budget: 3 minutes.
 
 A flit is the packetised bundle of control fields that carries one
 protocol message across a CHI link. Spec Table B13.6 pins down
-exactly which fields appear in a REQ flit, their bit positions, and
-their widths. This slide writes them as a SystemVerilog packed
-struct — which is how CHI RTL and verification collateral usually
-model the wire. Two design-time parameters set the variable widths:
+exactly which fields appear in a REQ flit, their order, and their
+widths. The slide lists them in bit order, QoS first at bit 0,
+ExpCompAck last. Two design-time parameters set the variable widths:
 NodeID_Width, spec B16.1.12, defaults to 7 and can go up to 16;
 Req_Addr_Width, B16.1.11, defaults to 44 and can go up to 52.
 
-Read the struct bottom-up, because the lowest-declared field sits at
-bit 0.
+Walk the table top-down.
 
 QoS, 4 bits at bit 0, is the priority that fabric arbitration
 consumes.
@@ -439,7 +442,7 @@ MemAttr, 4 bits, selects cacheable/non-cacheable, bufferable,
 early-write-acknowledge — same concept as AXI's AxCACHE. SnpAttr,
 1 bit, is the snoop hint.
 
-Three control bits at the top. LPID, 5 bits, names a logical
+Three control bits at the end. LPID, 5 bits, names a logical
 processor within a multi-threaded node — paired with SrcID and Excl
 it uniquely identifies an exclusive-monitor reservation; optional.
 Excl marks the request as part of an exclusive-monitor pair — the
@@ -460,37 +463,312 @@ same table but that only materialise when the feature is on.
 ---
 
 <!-- ================================================================== -->
-<!-- SLIDE 7: TBD -->
+<!-- SLIDE 7: DAT Flit Fields -->
 <!-- ================================================================== -->
 
-## TBD
+## DAT flit fields
+
+<div class="columns" style="font-size: 14px; line-height: 1.25;">
+<div>
+
+| Name       | W   | Description                               |
+|------------|-----|-------------------------------------------|
+| QoS        | 4   | Priority for fabric arbitration            |
+| TgtID      | 7   | Target node (NODE_ID_W: 7..16)            |
+| SrcID      | 7   | Source node (NODE_ID_W)                   |
+| TxnID      | 12  | Transaction identifier                     |
+| HomeNID    | 7   | Home node — target for CompAck            |
+| Opcode     | 4   | DAT opcode (CompData, WriteData, …)        |
+| RespErr    | 2   | Error status (OK / ExOK / DERR / NDERR)   |
+| Resp       | 3   | Cache state (I / SC / UC / UD / SD / PD)  |
+
+</div>
+<div>
+
+| Name       | W   | Description                               |
+|------------|-----|-------------------------------------------|
+| DBID       | 12  | Data Buffer ID — echoed by CompAck        |
+| DataSource | 8   | Hint: which node supplied the data        |
+| FwdState   | 3   | State forwarded — snoop-fwd *only*        |
+| CCID       | 2   | Critical Chunk Identifier                  |
+| DataID     | 2   | Packet index (0..3 for 128-bit DATA_W)    |
+| CBusy      | 3   | Completer busy hint                        |
+| TraceTag   | 1   | Trace/debug tag                            |
+| BE         | 16  | Byte enables (DATA_W/8)                   |
+| Data       | 128 | Payload (DATA_W: 128 / 256 / 512)         |
+
+</div>
+</div>
+
+<div class="takeaway">
+DAT flit is much wider than REQ because it carries the payload. <code>DATA_W</code> is the main design-time knob (128/256/512). One DAT message fills <code>line_size / (DATA_W/8)</code> flits, each tagged with <code>DataID</code> — that's how a 64 B line becomes 4 DAT packets at 128-bit <code>DATA_W</code>.
+</div>
 
 <!-- Speaker Notes:
 Time budget: 3 minutes.
+
+This is the DAT flit — same story as REQ, but wider because it
+carries the data payload. Spec Table B13.9 defines the format.
+DAT_W is the key design-time parameter: 128, 256, or 512 bits. At
+128-bit default the full flit is roughly 240 bits of control +
+16 bits of byte-enable + 128 bits of data.
+
+Left column, the routing and response core.
+
+QoS, TgtID, SrcID and TxnID mean the same thing they did in REQ:
+priority, destination, source, transaction identifier. The
+interesting new field is HomeNID — it names the Home node the
+Requester must target its final CompAck back to. For CompData
+arriving at the Requester, HomeNID is how the Requester knows where
+to close the transaction.
+
+Opcode is only 4 bits on DAT, not 7 — the DAT channel has far fewer
+opcode values: CompData, DataSepResp, NonCopyBackWriteData,
+CopyBackWriteData, SnpRespData, and a few more. Table B13.16 is the
+dictionary.
+
+RespErr, 2 bits, reports transport-level errors: OK, Exclusive OK,
+DERR for data error, NDERR for non-data error. Separate from Resp
+by design — one says "did the transfer succeed", the other says
+"what coherence state is the line in".
+
+Resp, 3 bits, carries the cache state the Requester should install:
+Invalid, Shared-Clean, Unique-Clean, Unique-Dirty, Shared-Dirty,
+Partial-Dirty. For the ReadClean example two slides back, Resp =
+SC.
+
+Right column, the data-path metadata.
+
+DBID, 12 bits, is the home's data-buffer identifier. It pairs with
+HomeNID: the Requester echoes DBID on CompAck to close the
+transaction at the home.
+
+DataSource, 8 bits, is a hint telling the Requester which node
+actually supplied the data — useful for NoC analytics and for
+DCT/DMT paths.
+
+FwdState is only populated on snoop-forward responses —
+SnpRespDataFwded tells the Home what state the snoopee has
+forwarded directly to the Requester.
+
+CCID, 2 bits, is the Critical Chunk Identifier — which 16-byte
+chunk of the line the Requester's core is actually waiting on. The
+home can send that chunk first to unblock the core.
+
+DataID, 2 bits, numbers the packets within one DAT message. At
+128-bit DATA_W a 64-byte line becomes four DAT packets with
+DataID = 0, 1, 2, 3. That is the same ReadClean we walked earlier.
+
+CBusy, 3 bits, is a busy hint from the Completer — the Requester
+can throttle or route around a hot node.
+
+BE, 16 bits at default, is the byte-enable mask — one bit per byte
+of the data payload. Crucial for partial writes.
+
+And Data — the payload itself, DATA_W bits wide.
+
+Three points to close. One, the field order is architectural just
+like REQ. Two, DATA_W is the main parameter; at 256 bits the Data
+field doubles and BE goes from 16 to 32. Three, RAS options —
+Poison and DataCheck — and stashing fields (DataPull, Tag) add more
+bits when enabled.
 -->
 
 ---
 
 <!-- ================================================================== -->
-<!-- SLIDE 8: TBD -->
+<!-- SLIDE 8: RSP flit fields -->
 <!-- ================================================================== -->
 
-## TBD
+## RSP flit fields
+
+<div class="columns" style="font-size: 14px; line-height: 1.25;">
+<div>
+
+| Name    | W  | Description                                   |
+|---------|----|-----------------------------------------------|
+| QoS     | 4  | Priority for fabric arbitration                |
+| TgtID   | 7  | Target node (NODE_ID_W: 7..16)                |
+| SrcID   | 7  | Source node (NODE_ID_W)                       |
+| TxnID   | 12 | Transaction identifier                         |
+| Opcode  | 5  | RSP opcode (CompAck, RetryAck, PCrdGrant, …) |
+| Resp    | 3  | Cache state (I / SC / UC / UD / SD / PD)      |
+| RespErr | 2  | Error status (OK / ExOK / DERR / NDERR)       |
+
+</div>
+<div>
+
+| Name        | W  | Description                                 |
+|-------------|----|---------------------------------------------|
+| DBID        | 12 | Data Buffer ID — paired with Data path      |
+| PCrdType    | 4  | Credit type — RetryAck / PCrdGrant flow     |
+| CBusy       | 3  | Completer busy hint                          |
+| FwdState    | 3  | State forwarded — snoop-fwd *only*          |
+| TraceTag    | 1  | Trace/debug tag                              |
+| CacheLineID | 6  | Bundle line index — *optional*              |
+| TagOp       | 2  | Memory-tagging op — *optional*              |
+
+</div>
+</div>
+
+<div class="takeaway">
+RSP carries no payload — it is all control. The same response channel services completions (<code>Comp</code>, <code>CompAck</code>), retry handshakes (<code>RetryAck</code> + <code>PCrdGrant</code>), and data-less snoop responses (<code>SnpResp</code>). Opcode (5 b) is the discriminator; <code>DBID</code> and <code>PCrdType</code> switch roles depending on which flow this flit belongs to.
+</div>
 
 <!-- Speaker Notes:
 Time budget: 3 minutes.
+
+RSP is the response channel. Unlike DAT, it carries no payload —
+the whole point is control flow. Spec Table B13.7 defines the
+format. At default NodeID_Width = 7 the always-present fields add
+up to about 56 bits, compared to 240+ for DAT.
+
+Left column — routing, identity, and the response trio.
+
+QoS, TgtID, SrcID, TxnID are the same four we've seen on REQ and
+DAT. Priority, destination, source, transaction identifier.
+
+Opcode is 5 bits on RSP — slightly wider than DAT's 4 bits because
+the RSP channel serves several distinct flows. The opcode dictionary
+in spec Table B13.14 includes: Comp for generic completion, CompAck
+for a Requester's acknowledgement to the home, CompDBIDResp which
+combines completion with DBID assignment, RetryAck where a Completer
+tells the Requester to retry later, PCrdGrant which grants a
+protocol credit for that retry, ReadReceipt for early acknowledgement
+of a ReadNoSnp, SnpResp for a data-less snoop response, and
+SnpRespFwded for a forwarded snoop response.
+
+Resp, 3 bits, carries the cache state — same encoding as DAT.
+Present on snoop responses too: tells the home what state the
+snoopee ended up in after servicing the snoop.
+
+RespErr, 2 bits, reports transport errors — OK, Exclusive OK,
+Data Error, Non-Data Error.
+
+Right column — data-path identifiers and flow control.
+
+DBID, 12 bits, is the Data Buffer ID. On the home's DBIDResp or
+CompDBIDResp it tells the Requester which DBID to echo on its
+subsequent WriteData or CompAck. On a Requester's CompAck it carries
+that echoed DBID back.
+
+PCrdType, 4 bits, is the star of the retry flow. When a Completer
+sends RetryAck because it cannot accept the request right now, it
+names a PCrdType on the RSP. Later it sends a PCrdGrant on RSP
+naming the same PCrdType — the Requester then reissues the original
+request with AllowRetry = 0 and that PCrdType value, and the
+Completer is obliged to accept it.
+
+CBusy, 3 bits, is a busy hint from the Completer.
+
+FwdState, 3 bits, is used only on SnpRespFwded — tells the home
+what state the snoopee forwarded directly to the Requester via the
+DAT path.
+
+Two feature-gated fields for completeness: CacheLineID, 6 bits,
+names a line within a multi-request bundle when MultiReq is used.
+TagOp, 2 bits, applies when memory tagging is enabled.
+
+One closing point. The RSP channel is where the retry handshake and
+CompAck closure live — two flows a seasoned designer will always
+probe first when a CHI system hangs.
 -->
 
 ---
 
 <!-- ================================================================== -->
-<!-- SLIDE 9: TBD -->
+<!-- SLIDE 9: SNP flit fields -->
 <!-- ================================================================== -->
 
-## TBD
+## SNP flit fields
+
+<div class="columns" style="font-size: 14px; line-height: 1.25;">
+<div>
+
+| Name    | W  | Description                                   |
+|---------|----|-----------------------------------------------|
+| QoS     | 4  | Priority for fabric arbitration                |
+| SrcID   | 7  | Home issuing the snoop (NODE_ID_W)            |
+| TxnID   | 12 | Transaction identifier                         |
+| Opcode  | 5  | SNP opcode (SnpShared, SnpUnique, SnpDVMOp, …) |
+| Addr    | 41 | Cache-line address — REQ_ADDR_W − 3           |
+| PAS     | 3  | Physical Address Space (security)              |
+
+</div>
+<div>
+
+| Name        | W  | Description                                 |
+|-------------|----|---------------------------------------------|
+| FwdNID      | 7  | DCT: forward target (*SnpXxxFwd only*)      |
+| FwdTxnID    | 12 | DCT: forwarded TxnID (*SnpXxxFwd only*)     |
+| DoNotGoToSD | 1  | Inhibit Shared-Dirty transition              |
+| RetToSrc    | 1  | Home wants the data returned to it           |
+| VMIDExt     | 8  | DVM VMID — *SnpDVMOp only*                  |
+| TraceTag    | 1  | Trace tagging                                |
+
+</div>
+</div>
+
+<div class="takeaway">
+Two things make SNP different: <strong>no <code>TgtID</code></strong> — the target is the RN-F that receives the flit (the ICN handles routing); and <strong>address is 3 bits narrower</strong> — snoops are cache-line granular, no byte offset. The <code>FwdNID</code> / <code>FwdTxnID</code> pair is what enables Direct Cache Transfer: the snoopee sends data straight to the original Requester.
+</div>
 
 <!-- Speaker Notes:
 Time budget: 3 minutes.
+
+SNP is the snoop channel — messages the Home sends to RN-Fs and
+DVM-capable RN-Ds to check, invalidate, or extract cached lines.
+Spec Table B13.8 defines the format. Two structural differences
+from the other channels make SNP distinctive.
+
+First, there is no TgtID field. The snoop target is whichever
+RN-F receives the flit. The interconnect routes it — the flit itself
+does not name the destination. That saves bits on a channel that
+needs to broadcast or multicast.
+
+Second, Addr is 41 bits instead of 44. The spec uses
+Req_Addr_Width minus 3 because a snoop always operates on a full
+cache line — there is no byte offset to carry.
+
+Left column, the routing and identity core.
+
+QoS is the priority. SrcID names the Home sending the snoop — the
+RN-F that responds will target its response back to this SrcID.
+TxnID is the Home's transaction identifier. PAS carries the
+security domain — Secure, Non-secure, Realm, Root.
+
+Opcode is 5 bits. The snoop-opcode dictionary in spec Table B13.15
+covers three families. First, the basic coherence snoops —
+SnpShared, SnpClean, SnpOnce, SnpUnique, SnpCleanInvalid,
+SnpMakeInvalid. Second, the Forward variants — SnpSharedFwd,
+SnpCleanFwd, SnpOnceFwd, SnpUniqueFwd. These are what enable Direct
+Cache Transfer, DCT: the snoopee sends data straight to the
+original Requester instead of back through the home. Third,
+SnpDVMOp for the DVM path — TLB invalidations and virtual-memory
+synchronisation.
+
+Right column, snoop behaviour and DCT fields.
+
+FwdNID and FwdTxnID are the DCT pair — present only on the Forward
+snoop opcodes. FwdNID names the Requester's node, FwdTxnID carries
+that Requester's TxnID. The snoopee's DAT response goes directly to
+FwdNID tagged with FwdTxnID.
+
+DoNotGoToSD is a 1-bit flag that tells the snoopee not to end up in
+Shared-Dirty state — used in certain protocol corners where SD is
+undesirable.
+
+RetToSrc tells the snoopee whether the Home also wants the data
+returned on the Home's CompData path, independent of any DCT
+forward.
+
+VMIDExt is 8 bits of VMID extension, populated only for SnpDVMOp.
+
+TraceTag is the usual 1-bit debug trace flag.
+
+Everything carrying data back — CompData, SnpRespData,
+SnpRespDataFwded — rides on the DAT channel you saw two slides
+back. SNP by itself is always data-less.
 -->
 
 ---
