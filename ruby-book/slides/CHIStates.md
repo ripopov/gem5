@@ -117,7 +117,7 @@ stateDiagram-v2
     I --> SC: read shared fill
     SC --> UC: gain uniqueness
     UC --> UD: local write
-    UD --> UD_T: timeout policy
+    UD_T --> UD: timeout expires (UseTimeout)
 
     I --> RU: requester-side unique owner
     I --> RSC: requester-side shared clean
@@ -202,11 +202,11 @@ Interpretation key:
 - suffix like `_RSC` = local state plus remembered requester-side state
 
 How to decode a state name:
-- `RU` = remembered requester-side unique owner
+- `RU` = remembered requester-side unique owner. Per the source comment "Upstream requester has line in UD/UC", `RU` collapses both the unique-clean and unique-dirty upstream cases into one stable state; the actual clean/dirty status is carried by the TBE flag `dataMaybeDirtyUpstream`.
 - `RSC` = remembered requester-side shared-clean copy
 - `RSD` = remembered requester-side shared-dirty owner
-- `RUSC` = remembered requester-side shared-clean state while exclusivity is still confined to that requester-side subtree
-- `RUSD` = remembered requester-side shared-dirty state while exclusivity is still confined to that requester-side subtree
+- `RUSC` = remembered requester-side shared-clean copies, AND this controller still holds system-wide exclusive access for the line. The leading `U` (per the source comment "RSC + this node still has exclusive access") records that no peer outside this subtree has the line, so uniqueness can later be granted upstream without further peer snooping.
+- `RUSD` = same as `RUSC`, but the remembered requester-side state is shared-dirty (one upstream dirty owner, possibly with shared-clean sharers).
 - `UD_RSC` = local `UD` plus remembered requester-side `RSC`
 - `SC_RSC` = local `SC` plus remembered requester-side `RSC`
 
@@ -229,12 +229,12 @@ For a leaf L1, many `R*` states are less central because it usually has no child
 | `UC` | The RN-F cache holds a unique clean copy locally. It has exclusive permission and may write without another ownership acquisition. The first write usually turns it into `UD`. |
 | `SD` | The RN-F cache holds dirty authoritative data locally, but the line may also be shared. This is the practical `Owned`-like state in gem5's CHI model. Other caches may read shared copies, but this RN-F cache is still responsible for supplying or writing back the authoritative data. |
 | `UD` | The RN-F cache holds the only writable authoritative copy locally, and it is dirty. Memory or the home side is stale. Eviction requires a writeback or another ownership-changing transaction. |
-| `UD_T` | Same ownership and data meaning as `UD`, but a use timeout is active. The line has remained dirty long enough that gem5 may force writeback behavior. |
-| `RU` | The RN-F cache no longer has a usable local copy, but it remembers that a requester-side child holds the line uniquely. Future coherence actions should be directed to that child owner. |
+| `UD_T` | Same ownership and data meaning as `UD`, but a "use timeout" is active. The timer is set in `Callback_Miss` after a store miss (via `scLockLatency()`) and exists "to prevent LL/SC livelocks" — not to force writeback. While `UD_T` is held, coherence snoops on the line are stalled (`CHI-cache-transitions.sm` routes them to `StallSnoop_NoTBE`). An eviction request does not stall — it cancels the timer (`Unset_Timeout_Cache`) and transitions to `UD`, after which normal eviction handling applies. The natural exit is the `UseTimeout` event, which performs `UD_T -> UD`. |
+| `RU` | The RN-F cache no longer has a usable local copy, but it remembers that one requester-side child holds the line as the unique owner. The owner may be in `UC` or `UD` upstream — the source defines `RU` as "Upstream requester has line in UD/UC", and the dirty/clean detail is tracked by TBE flags rather than encoded in the state name. Future coherence actions are directed to that child owner. |
 | `RSC` | The RN-F cache no longer has a usable local copy, but it remembers that requester-side child caches hold one or more clean shared copies. |
 | `RSD` | The RN-F cache no longer has a usable local copy, but it remembers that a requester-side child subtree contains the dirty authoritative owner, possibly along with other shared-clean children. |
-| `RUSC` | The RN-F cache no longer has a usable local copy, but it remembers requester-side shared-clean presence and also knows that exclusivity is still confined to that requester-side subtree. This is a directory optimization state that preserves stronger permission knowledge than plain `RSC`. |
-| `RUSD` | The RN-F cache no longer has a usable local copy, but it remembers requester-side dirty ownership and also knows that exclusivity is still confined to that requester-side subtree. |
+| `RUSC` | The RN-F cache no longer has a usable local copy, but it remembers requester-side shared-clean copies and also records that this controller still holds system-wide exclusive access (the line is not present in any peer subtree). This preserves stronger permission knowledge than plain `RSC`: a later child upgrade to `UC`/`UD` can be granted without snooping peers. |
+| `RUSD` | Same as `RUSC` but the remembered upstream state is shared-dirty: one requester-side cache is the dirty owner, possibly along with shared-clean sharers, while this controller still records system-wide exclusive access. |
 | `SC_RSC` | The RN-F cache has a local clean shared copy and also remembers that requester-side child caches have clean shared copies. This is useful for clusivity and silent clean eviction decisions. |
 | `SD_RSC` | The RN-F cache has local dirty authoritative data, while requester-side child caches have clean shared copies. The child copies are readers, but this RN-F cache remains the source of truth. |
 | `SD_RSD` | The RN-F cache has local dirty shared data and also remembers requester-side dirty-sharing state. The key point is that dirty responsibility is no longer a simple single-local-owner story. The controller must account for requester-side dirty authority as well. |
@@ -267,12 +267,12 @@ At the HN-F, the `R*` and `X_R*` states are often especially important because t
 | `UC` | The HN-F keeps a local unique clean copy and no requester-side owner is currently recorded. This state exists in the machine, although HN-F policy may make it less common than requester-side use. |
 | `SD` | The HN-F keeps dirty authoritative data locally, while no requester-side owner is currently recorded. This means the HN-F itself is the place that must answer with the latest data. |
 | `UD` | The HN-F keeps the only writable authoritative copy locally and it is dirty. The latest data is at the home node itself. |
-| `UD_T` | Same as `UD`, but the home node has marked the line with a use timeout so it may be pushed toward writeback or cleanup policy. |
-| `RU` | The HN-F does not have a usable local copy, but it remembers that one RN-F requester-side cache is the unique owner. This is the classic home-node directory fact: the owner is out in the requester side. |
+| `UD_T` | Same as `UD`, but the line is held under a "use timeout" set in `Callback_Miss` after a store miss to prevent LL/SC livelocks. While the timeout is held, coherence snoops on the line are stalled (`StallSnoop_NoTBE`); an eviction request cancels the timer and transitions to `UD` first. The natural exit is the `UseTimeout` event, which performs `UD_T -> UD`. The HN-F can reach this state only when it is the cache holder of a freshly-stored line and `scLockLatency()` is configured non-zero. |
+| `RU` | The HN-F does not have a usable local copy, but it remembers that one RN-F requester-side cache is the unique owner. The owner may hold the line in `UC` or `UD` upstream (the source comment says "Upstream requester has line in UD/UC"); the clean/dirty distinction is carried by TBE flags rather than the state name. This is the classic home-node directory fact: the owner is out in the requester side. |
 | `RSC` | The HN-F does not have a usable local copy, but it remembers one or more RN-F shared-clean copies. There is no dirty requester-side owner to fetch modified data from. |
 | `RSD` | The HN-F does not have a usable local copy, but it remembers that requester-side RN-F caches contain a dirty authoritative owner, possibly along with additional clean sharers. Requests that need the latest data must involve that requester-side owner. |
-| `RUSC` | The HN-F does not have a usable local copy, but it remembers requester-side clean sharing and also knows that exclusivity remains confined to that requester-side subtree. This preserves stronger ordering and permission information than plain `RSC`. |
-| `RUSD` | The HN-F does not have a usable local copy, but it remembers requester-side dirty ownership and still knows that exclusivity remains confined to that requester-side subtree. |
+| `RUSC` | The HN-F does not have a usable local copy, but it remembers requester-side shared-clean copies and also records that this home node still holds system-wide exclusive access for the line. This preserves stronger permission information than plain `RSC`: a later upstream upgrade can be granted without further peer coordination. |
+| `RUSD` | Same as `RUSC` but the remembered upstream state is shared-dirty: a requester-side cache is the dirty owner (possibly with shared-clean sharers), and the HN-F still records system-wide exclusive access. |
 | `SC_RSC` | The HN-F has a local clean shared copy and also remembers requester-side RN-F clean shared copies. This is a natural home-node state for mostly inclusive behavior: both the HN-F and requester side may hold clean shared copies. |
 | `SD_RSC` | The HN-F keeps the authoritative dirty data locally, while requester-side RN-F caches keep clean shared copies. The HN-F is still the source of truth. |
 | `SD_RSD` | The HN-F keeps dirty shared data locally and also remembers requester-side dirty-sharing state. This means dirty responsibility is distributed across the HN-F's own local state and requester-side directory state. |
@@ -292,7 +292,8 @@ HN-F mental model:
 
 ## Source Anchors
 
-- `src/mem/ruby/protocol/chi/CHI-cache.sm`
-- `src/mem/ruby/protocol/chi/CHI-cache-funcs.sm`
-- `src/mem/ruby/protocol/chi/CHI-cache-actions.sm`
-- `configs/ruby/CHI_config.py`
+- `src/mem/ruby/protocol/chi/CHI-cache.sm` — `state_declaration` and event enumeration.
+- `src/mem/ruby/protocol/chi/CHI-cache-funcs.sm` — `makeFinalState` / `makeFinalStateHelper` / `copyCacheAndDir` show how stable states are derived from TBE flags (`dataValid`, `dataDirty`, `dataUnique`, `dataMaybeDirtyUpstream`, `dir_ownerExists`, `dir_ownerIsExcl`, `dir_sharers`).
+- `src/mem/ruby/protocol/chi/CHI-cache-actions.sm` — actions invoked from transitions (e.g. `Callback_Miss` sets `hasUseTimeout`, leading to the final state `UD_T`).
+- `src/mem/ruby/protocol/chi/CHI-cache-transitions.sm` — the actual SLICC `transition(...)` rules, i.e. the real edges of the FSM (the diagrams in this note are illustrative, not literal copies of these rules).
+- `configs/ruby/CHI_config.py` — Python configuration that selects the controller's `is_HN` role and other parameters.

@@ -1977,6 +1977,8 @@ sequenceDiagram
 - One saturated class can't starve another.
 - Class semantics are **IMPLEMENTATION SPECIFIC**; single-class designs use `0b0000`.
 
+<p style="margin-top: 10px; font-size: 12px; line-height: 1.25;"><strong>gem5 note:</strong> This slide shows the full CHI spec view. Ruby CHI models <code>AllowRetry</code>, <code>RetryAck</code>, and <code>PCrdGrant</code>, but most paths use a simplified single-class retry scheme.</p>
+
 </div>
 </div>
 
