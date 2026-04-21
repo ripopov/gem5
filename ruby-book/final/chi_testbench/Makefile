@@ -10,7 +10,7 @@ TIMESTAMP  = $(shell date +%Y%m%d-%H%M%S)
 
 SCENARIOS := smoke_read smoke_write smoke_opcode_mix \
              ping_pong false_sharing \
-             memcpy memset
+             memcpy memset opcode_walk
 
 .PHONY: all help run-all clean
 .PHONY: $(addprefix run-,$(SCENARIOS))

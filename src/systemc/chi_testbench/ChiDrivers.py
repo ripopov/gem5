@@ -203,6 +203,36 @@ class MemcpyDriver(ChiDriverBase):
     )
 
 
+class OpcodeWalkDriver(ChiDriverBase):
+    """Scripted LD/ST walk with data-dependent assertions.
+
+    Verifies the end-to-end CHI coherence invariant: data written to a
+    line comes back identically on both the hot path (L1 hit) and the
+    cold path (after capacity-eviction forces a writeback-and-refill
+    round trip to SNF).
+    """
+
+    type = "OpcodeWalkDriver"
+    cxx_class = "gem5::chi_testbench::OpcodeWalkDriver"
+    cxx_header = "systemc/chi_testbench/opcode_walk.hh"
+    override_create = True
+
+    target_addr = Param.Addr(
+        0,
+        "Cache-line-aligned address the walk writes and re-reads",
+    )
+    filler_base = Param.Addr(
+        0,
+        "Base of the filler range used to evict the target line",
+    )
+    filler_lines = Param.UInt32(
+        2048,
+        "Number of distinct cache lines the filler loop touches; "
+        "must exceed the private-cache working set to guarantee "
+        "the target is evicted",
+    )
+
+
 class MemsetDriver(ChiDriverBase):
     """Pipelined memset using nb_transport multi-outstanding requests."""
 

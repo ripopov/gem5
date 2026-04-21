@@ -19,6 +19,7 @@ SimObject('ChiDrivers.py', sim_objects=[
     'FalseSharingDriver',
     'MemcpyDriver',
     'MemsetDriver',
+    'OpcodeWalkDriver',
 ])
 
 Source('driver_base.cc')
@@ -28,6 +29,7 @@ Source('finish_barrier.cc')
 Source('idle_driver.cc')
 Source('memcpy_driver.cc')
 Source('memset_driver.cc')
+Source('opcode_walk.cc')
 Source('ping_pong.cc')
 Source('smoke_read.cc')
 Source('smoke_write.cc')
