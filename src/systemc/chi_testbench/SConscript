@@ -1,0 +1,19 @@
+# Copyright (c) 2026 ripopov
+# SPDX-License-Identifier: BSD-3-Clause
+
+Import('*')
+
+if not env['CONF']['USE_SYSTEMC']:
+    Return()
+
+SimObject('ChiDrivers.py', sim_objects=[
+    'ChiTileSlot',
+    'ChiDriverBase',
+    'SmokeReadDriver',
+])
+
+Source('driver_base.cc')
+Source('smoke_read.cc')
+Source('tile_slot.cc')
+
+DebugFlag('ChiTestbench')
