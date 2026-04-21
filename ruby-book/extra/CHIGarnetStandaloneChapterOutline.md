@@ -41,32 +41,32 @@ before touching it.
 
 ---
 
-## Architectural Key Insight (drives the whole doc)
+## Architectural key insight
 
-The clean place to attach synthetic traffic when CHI must remain real
-is **at the sequencer, not at the NI**. This is the single most
-important design decision in the bench, and the doc is organized
-around it. The reasons:
+A synthetic traffic source for this bench can attach at three distinct
+points in the stack, and the bench adopts two of them as co-equal
+defaults:
 
-- A sequencer-side injector emits CPU-level loads and stores. The CHI
-  RN-F state machine (`CHI-cache.sm`) then *generates* the real CHI
-  transactions — ReadShared, ReadUnique, WriteBack, snoop responses,
-  DataSepResp, CompAck — exactly as it would under a real CPU. No CHI
-  message types are handcrafted.
-- The existing `GarnetSyntheticTraffic` injector sits at the NI and
-  assumes the three-vnet `Garnet_standalone` layout. CHI has a richer
-  vnet structure (REQ / SNP / RSP / DAT) and message semantics; an
-  NI-side injector would have to hand-roll CHI messages, which
-  defeats the purpose of "real CHI."
-- Existing testers already do this: `RubyTester` and `MemTest` connect
-  to a Ruby sequencer's `in_ports` and work with *any* Ruby protocol,
-  including CHI.
+- **Tier 1 (sequencer-side).** The injector emits CPU-level requests
+  (LD, ST, StoreLine, atomics, CMO, DVM) through the Ruby sequencer's
+  `in_port`. The real RN-F state machine in `CHI-cache.sm` derives
+  every CHI opcode, snoop, retry, and completion from the access
+  stream. Best for throughput-shaped NoC questions under realistic
+  CHI traffic.
+- **Tier 2 (CHI-request injector at the RN-F `reqIn`).** A small
+  SimObject that plays the role of a peer RN-F on the network,
+  emitting hand-crafted `CHIRequestMsg`s and owning the minimum
+  outstanding-transaction bookkeeping (TxnId, CompAck, retry). Best
+  for feature coverage and reproducibility — prescribed opcode
+  mixes, deterministic concurrent orderings, stash / `PrefetchTgt` /
+  `WriteUniqueZero` scenarios.
+- **Tier 3 (NI-side).** Cited only for contrast. Trades away CHI
+  semantics for flit-level injection precision; wrong attachment
+  point when the bench must measure NoC behavior under real CHI.
 
-So the bench the doc describes is, structurally, **`MemTest` or
-`RubyTester` → CHI RN-F sequencer → CHI cache controller → Garnet
-NI → Garnet mesh → HNF → SNF → memory**, with the ISA/CPU path
-surgically removed and the workload replaced by a parameterized
-synthetic address stream.
+§3.1 states this in full; this preamble exists so the reader knows,
+before entering the chapter, which two tiers the bench is built
+around and which one it rejects.
 
 ---
 
@@ -93,11 +93,12 @@ Sub-themes:
 - What the reader gains by keeping CHI real: **actual** CHI message
   mix, **actual** request→snoop→response dependency chains, **actual**
   vnet pressure profile.
-- What the reader gains by removing the ISA: controllable injection
-  rate, stationary traffic, no confound from CPU stalls or branch
+- What the reader gains by removing the ISA: controllable stimulus
+  (statistical injection for throughput questions, scripted schedule
+  for ordering questions), no confound from CPU stalls or branch
   mispredicts, fast turn-around.
 - What the reader gives up: correlation between traffic and real
-  program behavior. Discussed fully in section 8.
+  program behavior. Discussed fully in §9.
 
 The framing becomes sharper if the reader sees three nearby benches,
 not just two:
@@ -106,16 +107,20 @@ not just two:
 |---|---|---|---|
 | `Garnet_standalone` | Garnet routers, links, VCs, credits | No CHI message semantics, no snoops, no cache ownership | Pure NoC microarchitecture |
 | CHI-flavored 4-vnet standalone | Garnet plus REQ/SNP/RSP/DAT-like channel separation | Still no real CHI transaction legality, retries, or dependency chains | Channel provisioning and per-vnet resource studies |
-| CHI-Garnet standalone (this note) | Real CHI controllers and real Garnet | Less direct opcode-by-opcode control because cache and directory state matter | Protocol-network interaction under synthetic but legal CHI traffic |
+| CHI-Garnet standalone (this note) | Real CHI controllers and real Garnet, at both Tier 1 (sequencer) and Tier 2 (RN-F `reqIn`) | No workload-correlated phase behavior; no ISA happens-before | Protocol-network interaction under synthetic but legal CHI traffic |
 
 ### 2. The Bench at a Glance
 
 A Mermaid block diagram of the standalone system. Three horizontal
 bands:
 
-1. **Synthetic source band** (top) — one `MemTest` / `RubyTester` per
-   node. The only component that is not "real under test."
-2. **CHI band** (middle) — real CHI RN-F sequencer + L1 cache
+1. **Synthetic source band** (top) — either Tier 1 injectors
+   (`MemTest`, `RubyTester`, `ChiScenarioGen`) attached at the
+   sequencer, or the Tier 2 CHI-request injector attached at the
+   RN-F `reqIn`, or both in the same run. Either tier can drive the
+   bench standalone; the scenario author chooses based on the
+   question (§3.1). The only band that is not "real under test."
+2. **CHI band** (middle) — real CHI RN-F sequencer + cache
    controller per node, real HNF controllers, real SNF controllers.
    All SLICC state machines unchanged from `chi-with-isa.py`.
 3. **Garnet band** (bottom) — routers, NIs, links, credit channels,
@@ -124,7 +129,8 @@ bands:
 ```mermaid
 flowchart LR
     subgraph SRC["Synthetic source band"]
-        INJ["MemTest / RubyTester / ChiScenarioGen"]
+        INJ1["Tier 1:<br/>MemTest / RubyTester / ChiScenarioGen"]
+        INJ2["Tier 2:<br/>CHI-request injector"]
     end
 
     subgraph CHI["CHI protocol band"]
@@ -138,13 +144,15 @@ flowchart LR
         NOC["NIs + routers + links + credits"]
     end
 
-    INJ --> SEQ --> RN
+    INJ1 --> SEQ --> RN
+    INJ2 --> RN
     RN <--> NOC
     HNF <--> NOC
     SNF <--> NOC
 
     ABS["Absent: ISA cores, board, OS, workload"]
-    ABS -. replaced by synthetic source .-> INJ
+    ABS -. replaced by synthetic source .-> INJ1
+    ABS -. replaced by synthetic source .-> INJ2
 ```
 
 Annotations mark which pieces are *real under test* (everything in
@@ -154,115 +162,213 @@ workload, no disk).
 
 The section's prose emphasizes the architectural shape: the CHI stack
 is sandwiched between a controllable traffic source at the top and a
-Garnet network at the bottom that is the real measurement target; any
-stat that moves when you change a Garnet knob is attributable to
-Garnet, and any stat that moves when you change a CHI knob is
-attributable to CHI.
+Garnet network at the bottom that is the real measurement target.
+A stat that moves when a Garnet knob changes is attributable to
+Garnet; a stat that moves when a CHI knob changes is attributable to
+CHI; the choice of Tier 1 vs Tier 2 controls only the *stimulus*,
+never the *response*.
 
-### 3. The Synthetic Source — Why Sequencer-Side
+### 3. The Synthetic Source
 
-This is the doc's key architectural explanation. Subsections:
+The chapter's central architectural explanation: where the synthetic
+traffic enters the stack, what each attachment point can and cannot
+measure, and how the bench uses two of them together.
 
-#### 3.1 Two candidate attachment points
+#### 3.1 Three attachment tiers
+
+A synthetic traffic source for a CHI-Garnet bench can attach at three
+distinct points in the stack.
+The choice determines what the bench can and cannot measure, and the
+three points are not interchangeable.
+The bench adopts Tier 1 and Tier 2 as co-equal defaults; Tier 3 is
+cited for contrast only.
+Each tier answers a different family of questions.
 
 ```mermaid
 flowchart LR
-    subgraph NI["NI-side injector"]
-        NINJ["Synthetic injector"]
-        NNI["NI"]
-        NBYP["RN-F sequencer + CHI controller"]
-        NINJ --> NNI --> NNOC["Garnet network"]
-        NINJ -. bypasses .-> NBYP
+    subgraph T3["Tier 3: NI-side"]
+        T3I["Synthetic injector"]
+        T3N["NI"]
+        T3I --> T3N --> T3G["Garnet"]
     end
 
-    subgraph SQ["Sequencer-side injector"]
-        SINJ["Synthetic injector"]
-        SSEQ["RN-F sequencer"]
-        SRN["CHI cache controller"]
-        SNI["NI"]
-        SINJ --> SSEQ --> SRN --> SNI --> SNOC["Garnet network"]
+    subgraph T2["Tier 2: CHI-request injector"]
+        T2I["CHI-request injector<br/>(partial RN-F)"]
+        T2N["RN-F L2 reqIn"]
+        T2I --> T2N
+        T2N --> T2G["Garnet"]
+    end
+
+    subgraph T1["Tier 1: Sequencer-side"]
+        T1I["LD / ST / CMO /<br/>Atomic / DVM source"]
+        T1S["Sequencer"]
+        T1R["RN-F L1 cache ctrl"]
+        T1I --> T1S --> T1R --> T1G["Garnet"]
     end
 ```
 
-- **NI-side injector.** Pros: exact control over destination, packet
-  size, vnet, and cycle-by-cycle injection rate; excellent for a pure
-  router/link microscope; minimal harness with little protocol state.
-- **NI-side injector.** Cons: it bypasses the sequencer and CHI
-  controllers, so the injector must handcraft legal `REQ` / `SNP` /
-  `RSP` / `DAT` dependencies, retries, `TxnId` / `DBID` handling,
-  `CompAck`, and data-following-response rules. At that point the bench
-  is half injector and half protocol reimplementation, and it can emit
-  traffic that looks like CHI flits but is not a legal CHI execution.
-- **NI-side injector.** Verdict: useful when the question is "what does
-  Garnet do under an abstract packet mix?" The strongest NI-side
-  variant is a CHI-flavored 4-vnet standalone, which improves channel
-  separation but still does not give real CHI transaction semantics.
-  Wrong attachment point when the question is "what does Garnet do
-  under real CHI?"
-- **Sequencer-side injector.** Pros: injects the smallest stable
-  abstraction Ruby already understands — CPU-facing requests through
-  `in_ports` — and lets the real RN-F / HNF / SNF state machines derive
-  the CHI opcodes, snoops, responses, writebacks, retries, and
-  acknowledgments. The measured vnet mix is therefore a property of the
-  actual protocol implementation, not of the injector author's guess.
-- **Sequencer-side injector.** Cons: less direct control over the exact
-  wire-level opcode mix; cache state and directory state now matter, so
-  a 50% store source does not imply a 50% `WriteUnique` network mix;
-  scenario design must reason in terms of ownership, sharing, and
-  eviction, not just destinations and packet classes.
-- **Sequencer-side injector.** Verdict: the right attachment point for
-  this chapter because it preserves CHI semantics while still removing
-  the ISA and workload layers.
+##### Tier 1 — Sequencer-side injector
+
+A synthetic source that emits CPU-level requests (LD, ST, StoreLine,
+atomics, CMO, DVM) through the Ruby sequencer's `in_port`.
+The RN-F state machine in `CHI-cache.sm` then generates whatever CHI
+opcodes the access stream and the current cache state imply.
+
+- **Best for.** Aggregate, throughput-shaped NoC questions under
+  realistic CHI traffic: saturation curves, vnet pressure profiles,
+  topology sweeps, background-load composition. Any question
+  well-answered by *"what does the NoC do under a cacheable workload
+  of shape X?"*
+- **What is emergent.** Every CHI opcode, every snoop, every retry,
+  every completion. The bench does not choose them; the protocol does.
+- **What cannot be forced.** The exact concurrent ordering of two
+  in-flight transactions. The presence of opcodes that have no
+  sequencer path (`StashOnce*`, `WriteUniqueZero`, `PrefetchTgt` with
+  chosen timing). The exact CHI opcode mix on the REQ vnet.
+- **Cost.** Near zero. `MemTest` and `RubyTester` already exist and
+  already connect to the sequencer's `in_port`.
+
+##### Tier 2 — CHI-request injector at the RN-F `reqIn`
+
+A small new SimObject that plays the role of a peer RN-F on the
+network.
+It emits hand-crafted `CHIRequestMsg`s directly into the target cache
+controller's `reqIn`, and consumes `CHIDataMsg` / `CHIResponseMsg`
+traffic on its own `datIn` / `rspIn`.
+It owns a minimal outstanding-transaction table: TxnId allocation,
+CompAck retirement, `RetryAck` / `PCrdGrant` handling, and DMT
+bookkeeping if the target supports it.
+
+- **Best for.** Feature coverage and reproducibility. Any question of
+  the form *"what happens when this specific opcode arrives in this
+  specific relation to this other in-flight transaction?"*. Also any
+  question where the experiment prescribes an opcode mix the protocol
+  would not naturally produce.
+- **Prior art.** `CHI_RNI_DMA` already implements a partial RN-F for
+  IO-coherent sources; the Tier 2 injector borrows its shape — a
+  non-cache-backed CHI node with a minimum outstanding-transaction
+  table — and replaces the DMA front-end with a scripted stimulus.
+- **Legality guarantee.** The injector validates every outgoing message
+  against the CHI spec, and the target controller — being the real
+  RN-F L2 state machine — will refuse illegal sequences. Illegal
+  traffic surfaces as a controller assertion, not as silent corruption.
+- **What is still emergent.** The snoop and response traffic the target
+  produces in reaction to the injected request. Tier 2 controls the
+  *stimulus*; the *response* is still real CHI.
+- **Cost.** A few hundred lines of SimObject plus a small scenario
+  DSL. Non-trivial, but one-time.
+
+##### Tier 3 — NI-side injector
+
+The existing `GarnetSyntheticTraffic`-style source that writes flits
+directly onto the network interface.
+Cited for contrast; not part of this bench.
+
+- **Best for.** Pure router, link, VC, and credit studies where CHI
+  semantics are explicitly *not* under test. A NoC microscope.
+- **What it loses.** All CHI semantics. No real transaction legality,
+  no snoop chains, no writeback–read races, no CompAck ordering. A
+  "ReadShared-like" flit in this tier is a flit of the right size on
+  the right vnet, nothing more.
+- **Why not use it here.** The bench's purpose is NoC evaluation
+  *under real CHI*. Tier 3 trades that away for injection precision
+  the other two tiers already provide (Tier 2) or do not need
+  (Tier 1).
+
+##### Division of labor
+
+| Dimension | Tier 1 (sequencer) | Tier 2 (direct CHI) |
+|---|---|---|
+| Primary question shape | throughput / saturation | latency / reproducibility / feature |
+| Opcode selection | emergent from access pattern | explicit |
+| Concurrent ordering | best-effort via injection rate | cycle-exact via scheduling hooks |
+| Snoop chains | real, consequence-of-stimulus | real, consequence-of-stimulus |
+| Rare opcodes (stash, prefetch-tgt) | unreachable | reachable |
+| Implementation cost | near zero | moderate (one-time) |
+| Authoring surface | §6.2 (`ChiScenarioGen`) | §6.5 (CHI-request injector) |
+| Scenario catalog | §7.1, §7.2 | §7.3 |
+
+The remaining subsections specialize this split.
+§3.2 catalogs the Tier 1 injector family and the Tier 2 injector
+shape.
+§3.3 walks one transaction through each tier's path side by side, so
+the reader can see what "real CHI on the wire" looks like from
+either entry point.
+§3.4 states the coverage envelope of each tier separately.
+Scenario authoring (§6) and the scenario catalog (§7) are split the
+same way: §6.2 and §7.1–§7.2 are Tier 1, §6.5 and §7.3 are Tier 2.
 
 #### 3.2 The injector family
 
-The bench supports a *family* of sequencer-side injectors rather than a
-single one. Each injector answers a different style of question and
-all of them connect to CHI through exactly the same interface (the
-sequencer's CPU-facing port), which is what makes the bench
-extensible. Describe three categories:
+The bench supports a family of injectors across both tiers.
+Tier 1 injectors all connect through the same sequencer `in_port`;
+Tier 2 injectors all connect through the same RN-F `reqIn`.
+Within each tier, the injectors differ in what they schedule, not in
+how they attach.
 
-- **Statistical injectors.** `MemTest` (`src/cpu/testers/memtest/`)
-  and `RubyTester` (`src/cpu/testers/rubytest/`). Emit random or
+##### 3.2.1 Tier 1 injectors (sequencer-side)
+
+- **Statistical.** `MemTest` (`src/cpu/testers/memtest/`) and
+  `RubyTester` (`src/cpu/testers/rubytest/`). Emit random or
   pseudo-random reads and writes at a controlled rate. Answer
-  throughput and saturation questions. Cover §6.1.
-- **Named-scenario injectors.** A small CHI-aware scenario generator
-  (see §6) that emits *deterministic* access sequences — ping-pong,
-  producer–consumer, migratory sharing — designed to produce a
-  specific CHI transaction pattern. Answer microbenchmark and
-  transaction-latency questions. Cover §7.2.
-- **Trace-driven injectors** (mentioned briefly). Replay a recorded
-  memory trace through the sequencer. Useful when the goal is to
-  reproduce a specific workload's NoC footprint without carrying the
-  ISA.
+  throughput and saturation questions. Drive §7.1.
+- **Named-scenario.** `ChiScenarioGen` (see §6) emits deterministic
+  access sequences — ping-pong, producer–consumer, migratory sharing
+  — designed to produce a specific CHI transaction pattern. Answer
+  microbenchmark and transaction-latency questions. Drive §7.2.
+- **Trace-driven.** Replay a recorded memory trace through the
+  sequencer. Useful when the goal is to reproduce a specific
+  workload's NoC footprint without carrying the ISA.
 
-Discuss `RubyTester`'s built-in data consistency checker: in a bench
-where the network and protocol are real, a checker violation is a
-genuine finding, not just a performance signal. Keep the checker
-optional but available.
+`RubyTester`'s built-in data-consistency checker should remain
+available: in a bench where the network and protocol are real, a
+checker violation is a genuine finding, not just a performance
+signal.
 
-One-paragraph honorable mention of `src/cpu/testers/traffic_gen/`
-(TrafficGen family, including `PyTrafficGen`) and why it is not used
-as-is — it targets Classic caches, not Ruby sequencers. A port shim
-would be a reasonable future extension but is not required for the
-core bench.
+`src/cpu/testers/traffic_gen/` (TrafficGen, `PyTrafficGen`) is not
+used as-is because it targets Classic caches, not Ruby sequencers. A
+port shim would be a reasonable future extension but is not required
+for the core bench.
 
-> **Deep Dive:** A sibling bench can attach synthetic sources through
-> `dma_ports` so CHI instantiates `CHI_RNI_DMA` nodes rather than
-> cached RN-F nodes.
-> This is not the core bench for the chapter because it removes
-> private-cache ownership transfer, snoop fanout, and most of the
-> coherence effects that make CHI interesting.
-> It is, however, the right extension when the question is device-like
-> offered load: line-rate streams, burst trains, many-to-one incast, or
-> steady REQ / DAT pressure from NIC-like engines.
-> Keeping this as a sibling, not as the default, preserves the chapter's
-> main claim: cache-coherent RN-F traffic should enter at the sequencer.
+##### 3.2.2 Tier 2 injector (CHI-request side)
+
+A single injector shape, parameterized by scenario:
+
+- **CHI-request injector.** A SimObject that presents four CHI
+  MessageBuffers (`reqOut`, `rspOut`, `datOut`, plus `datIn` / `rspIn`
+  / `snpIn`) and a minimum outstanding-transaction table.
+  The injector emits scripted `CHIRequestMsg`s with explicit opcode,
+  target MachineID, TxnId, and issue cycle; it consumes responses
+  and emits `CompAck` on retirement; it handles `RetryAck` /
+  `PCrdGrant` per the CHI spec. The script — not the cache state —
+  determines which opcodes appear on the wire. Drives §7.3.
+
+The injector's shape is borrowed from `CHI_RNI_DMA` (which already
+implements a non-caching CHI requester for DMA traffic) with two
+changes: the stimulus is a scripted schedule rather than a
+packet-driven DMA front-end, and the injector does not need to claim
+full `CHI_RNI_DMA` IO coherence semantics — it only needs to be a
+legal peer on the network.
+
+> **Sibling bench — `CHI_RNI_DMA` at the dma_ports.** For
+> *device-like offered load* (NIC line-rate streams, DMA burst
+> trains, many-to-one incast, steady REQ / DAT pressure from engines
+> that never cache) the right extension is not Tier 2 but the stock
+> `CHI_RNI_DMA` node driven by a Packet-level traffic generator on
+> `dma_ports`. This sibling bench removes private-cache ownership
+> transfer and snoop fanout — the coherence effects the core bench is
+> about — which is why it is a sibling, not a variant.
 
 #### 3.3 What shows up on the wire
 
-Walk, in prose, through what a single synthetic load becomes as it
-crosses the bench:
+Three walks, one for each entry pattern the bench supports. The
+first two enter through Tier 1 (a statistical load and a scripted
+ping-pong store); the third enters through Tier 2 (a directly
+scripted `ReadUnique`). From the HNF onward every walk is identical
+— that is the point. The tier chooses *where* the CHI request is
+fabricated, not *what* the CHI network sees.
+
+##### 3.3.1 Tier 1 walk — sequencer-issued load
 
 ```mermaid
 sequenceDiagram
@@ -295,24 +401,21 @@ sequenceDiagram
 4. HNF issues the appropriate shared-read snoop on SNP vnet
    (`SnpSharedFwd`, `SnpShared`, or `SnpOnce`) depending on owner /
    sharer state.
-5. Snooped RN-Fs emit `SnpResp_*` on RSP vnet; if owner, `CompData` on
-   DAT vnet.
+5. Snooped RN-Fs emit `SnpResp_*` on RSP vnet; if owner, `CompData`
+   on DAT vnet.
 6. Data and completion arrive back at originator; `CompAck` on RSP
    vnet.
 
-Each hop is a Garnet packet whose latency, queueing, and link
-utilization are observable in the stats. This transaction — a single
-synthetic `ReadReq` — touches every CHI vnet. *That* is what makes the
-bench a CHI-real NoC instrument.
+##### 3.3.2 Tier 1 walk — sequencer-issued ping-pong store
 
-A second walk for a **ping-pong step**: node A writes line X (already
-owned by node B). RN-F A emits `WriteUniquePtl`, `WriteUniqueFull`, or
-`ReadUnique`; HNF forwards a `SnpUnique` to B; B responds with
-`CompData` carrying the line; A completes, line is now dirty-at-A.
-Next iteration reverses.
-Every ping-pong round-trip therefore touches REQ → SNP → DAT → RSP in
-a fixed sequence, and its latency is an interpretable combination of
-two NoC traversals plus the HNF pipeline. This walk motivates §7.2.
+Node A writes line X (already owned by node B). RN-F A emits
+`WriteUniquePtl`, `WriteUniqueFull`, or `ReadUnique`; HNF forwards a
+`SnpUnique` to B; B responds with `CompData` carrying the line; A
+completes, line is now dirty-at-A. Next iteration reverses.
+Every ping-pong round-trip therefore touches REQ → SNP → DAT → RSP
+in a fixed sequence, and its latency is an interpretable combination
+of two NoC traversals plus the HNF pipeline. This walk motivates
+§7.2.
 
 ```mermaid
 sequenceDiagram
@@ -332,9 +435,52 @@ sequenceDiagram
     A->>G: CompAck
 ```
 
-#### 3.4 Coverage envelope for sequencer-side injectors
+##### 3.3.3 Tier 2 walk — injector-scripted `ReadUnique`
 
-The coverage argument should be explicit rather than hand-wavy.
+A Tier 2 injector at node A is pre-programmed to issue a
+`ReadUnique` at cycle T against line L whose current owner is RN-F
+B. At cycle T the injector enqueues a
+`CHIRequestMsg{opcode=ReadUnique, target=HNF(L), txnId=N}` on its
+`reqOut` buffer — no sequencer, no cache lookup, no TBE allocation
+on the source side. The message enters Garnet on the REQ vnet; the
+HNF responds exactly as in §3.3.2 — `SnpUnique` to B, `CompData`
+via the NoC, `CompAck` from the injector to close the transaction.
+
+```mermaid
+sequenceDiagram
+    participant I as Tier 2 injector (node A)
+    participant G as Garnet
+    participant H as HNF
+    participant B as RN-F B (owner)
+
+    Note over I: scheduled at cycle T
+    I->>G: CHIRequestMsg (ReadUnique, txnId=N)
+    G->>H: REQ vnet
+    H->>G: SnpUnique
+    G->>B: SNP vnet
+    B->>G: SnpResp + CompData
+    G->>H: RSP / DAT vnets
+    H->>G: completion toward I
+    G->>I: DAT / RSP vnets
+    I->>G: CompAck
+```
+
+The three walks are structurally identical from the HNF onward;
+every hop is a Garnet packet whose latency, queueing, and link
+utilization are observable in the stats. Each single transaction —
+whichever tier launched it — touches every CHI vnet. *That* is what
+makes the bench a CHI-real NoC instrument, independent of the
+attachment tier.
+
+#### 3.4 Coverage envelope
+
+Coverage divides cleanly between the two tiers.
+Tier 1 reaches the CHI requests that follow from a CPU-visible access
+stream; Tier 2 fills the gaps Tier 1 cannot reach by construction.
+Neither tier is a superset of the other — they are complementary.
+
+##### 3.4.1 Tier 1 envelope (sequencer-side)
+
 A sequencer-side injector does not let the author choose an arbitrary
 `CHIRequestType` directly.
 It lets the author choose a CPU-visible access stream and then observe
@@ -348,14 +494,14 @@ flowchart TD
     REPL["Replacement traffic<br/>Evict / WriteBackFull<br/>WriteEvictFull / WriteCleanFull"]
     MEM["Home-to-memory traffic<br/>ReadNoSnp / ReadNoSnpSep<br/>WriteNoSnp / WriteNoSnpPtl"]
     EXT["Extended sequencer injectors<br/>AtomicReturn / AtomicNoReturn<br/>DvmOpNonSync / DvmOpSync"]
-    GAP["Weak or no coverage<br/>StashOnce* / WriteUniqueZero<br/>bespoke malformed combinations"]
+    GAP["Handled by Tier 2 (§3.4.2)<br/>StashOnce* / WriteUniqueZero<br/>PrefetchTgt / prescribed opcode mixes"]
 
     SEQ --> DEM
     DEM --> SIDE
     DEM --> REPL
     DEM --> MEM
     SEQ --> EXT
-    SEQ -. does not naturally expose .-> GAP
+    SEQ -. out of scope for Tier 1 .-> GAP
 ```
 
 - **Stock statistical injectors cover the core CHI data/coherence
@@ -384,12 +530,46 @@ flowchart TD
   source can emit atomic or DVM Ruby requests, the same attachment point
   can also exercise `AtomicReturn`, `AtomicNoReturn`, `DvmOpNonSync`,
   and `DvmOpSync`.
-- **Some request types are still niche or out of scope.** `ReadOnce` is
-  only reached when the request is modeled as non-filling, so it is not
-  a first-class output of stock cacheable traffic sources. Stash
-  operations, `WriteUniqueZero`, and deliberately malformed legal-
-  looking combinations are poor fits for this bench and belong in
-  targeted protocol or NI-level tests.
+- **Some request types are still niche or unreachable from Tier 1.**
+  `ReadOnce` is only reached when the request is modeled as
+  non-filling, so it is not a first-class output of stock cacheable
+  traffic sources. Stash operations, `WriteUniqueZero`, deterministic
+  concurrent orderings, and prescribed opcode mixes are not reachable
+  from a CPU-visible access stream at all. These are the Tier 2
+  envelope.
+
+##### 3.4.2 Tier 2 envelope (direct CHI injection)
+
+Tier 2 closes the gaps Tier 1 cannot reach by construction, because
+its stimulus is the CHI message itself rather than a CPU access that
+the protocol translates.
+The Tier 2 envelope covers four categories, and is bounded only by
+the legality rules the target controller enforces on its `reqIn`:
+
+- **Opcodes Tier 1 cannot produce.** `StashOnceShared`,
+  `StashOnceUnique`, `PrefetchTgt`, `WriteUniqueZero`, and the
+  non-filling form of `ReadOnce*`. Tier 2 emits them directly;
+  Tier 1 has no CPU-visible access that would.
+- **Prescribed opcode mixes.** A fixed ratio of `ReadUnique` to
+  `ReadShared` (or any other combination) on the REQ vnet,
+  independent of what cache-state evolution would naturally produce.
+  Useful for provisioning studies where the question is "what if the
+  REQ vnet carried mix X?" rather than "what mix does workload Y
+  produce?".
+- **Deterministic concurrent orderings.** Two transactions scheduled
+  to arrive at a shared resource (HNF pipeline stage, shared link,
+  coherence serialization point) on a chosen cycle offset. Tier 1
+  can produce the transactions; only Tier 2 can schedule the
+  collision.
+- **Backpressure and retry scenarios.** `RetryAck` / `PCrdGrant`
+  sequences driven to specific pool-credit depths, delayed
+  re-issue, and controlled `PCrdReturn` timing. Tier 1 only
+  produces these as incidental consequences of overload.
+
+What Tier 2 does *not* cover: the response traffic the target
+controller produces in reaction. Snoops, completions, and data
+returns remain emergent and real. Tier 2 controls the stimulus,
+not the response.
 
 ### 4. The CHI Stack Under Test
 
@@ -432,26 +612,46 @@ the *parameters* that matter for a CHI standalone run:
   `ruby-book/final/link-pressure` results as a concrete case study,
   without reproducing their numbers.
 
-### 6. Custom Traffic Generation — The Scenario Generator
+### 6. Custom Traffic Generation
 
-The statistical injectors (`MemTest`, `RubyTester`) answer
-throughput-shaped questions but not latency-shaped questions. A
-reader who wants to measure *the latency of a single CHI transaction
-under a known coherence state* — e.g., "how long does a cache-to-cache
-transfer take across three hops when the owner is at node 7 and the
-requester is at node 2?" — needs a source that emits *named*,
-*deterministic*, *synchronizable* access sequences. This section
-describes the architecture of that source.
+Statistical injectors (`MemTest`, `RubyTester`) answer
+throughput-shaped questions but not latency-shaped or ordering-
+shaped ones. A reader who wants to measure *the latency of a single
+CHI transaction under a known coherence state* — e.g., "how long
+does a cache-to-cache transfer take across three hops when the
+owner is at node 7 and the requester is at node 2?" — needs
+*named*, *deterministic*, *synchronizable* access sequences.
 
-#### 6.1 Why a new source
+Two authoring surfaces cover this, one per tier, and the choice is
+the scenario author's:
 
+- **Tier 1 — `ChiScenarioGen`** (§6.2). Scripts CPU-level
+  LD / ST / StoreLine / atomic / DVM sequences across multiple
+  nodes; lets the real CHI controllers derive the resulting
+  on-the-wire opcodes. Use when the experiment is expressed in
+  terms of accesses and sharing patterns.
+- **Tier 2 — CHI-request injector scenarios** (§6.5). Scripts
+  CHI messages directly on the `reqIn` / `rspIn` / `datIn` /
+  `snpIn` buffers of a synthetic peer. Use when the experiment is
+  expressed in terms of wire-level opcode identity, arrival cycle,
+  or retry / credit state.
+
+Both surfaces expect the same address-control layer (§6.2) because
+address placement decides which HNF, which owner, and which link
+each scenario exercises — that part is independent of tier.
+
+#### 6.1 Why a new source (for either tier)
+
+Neither `MemTest` nor `RubyTester` lets the scenario author
+coordinate across nodes or choose a precise transaction order.
 `MemTest`'s access pattern is random-per-tester-id with byte-level
-false sharing — useful for coherence stress, useless for reproducing a
-specific ping-pong round. `RubyTester` has similar randomness.
+false sharing — useful for coherence stress, useless for reproducing
+a specific ping-pong round. `RubyTester` has similar randomness.
 `GarnetSyntheticTraffic` is pattern-driven but NI-side and lives in
 the wrong world. A reader who wants "node A writes X, then node B
-reads X" needs per-node address control plus ordering between nodes.
-None of the existing injectors expose that.
+reads X" needs per-node stimulus control plus ordering between
+nodes. None of the existing injectors expose that — hence the need
+for authored scenarios at either tier.
 
 #### 6.2 Proposed extension: `ChiScenarioGen`
 
@@ -508,33 +708,61 @@ port shim that the TrafficGen family currently lacks for Ruby.
 Recommend `ChiScenarioGen` as the default and keep the Python option
 as an escape hatch for one-off measurements.
 
-#### 6.4 What the bench gives up by *not* generating CHI directly
+#### 6.4 When a `ChiScenarioGen` scenario should move to Tier 2
 
-Brief honesty, but more concrete than "not everything."
-Point back to §3.4 and separate the limits into categories the reader
-can act on:
+`ChiScenarioGen` cannot force opcode identity, prescribed mixes,
+rare opcodes (`StashOnce*`, `WriteUniqueZero`, `PrefetchTgt`), or
+cycle-exact concurrent orderings; those are the Tier 2 envelope
+(§3.4.2) and belong in §6.5 / §7.3. A scenario author whose
+question falls in that envelope should script it at Tier 2 rather
+than contort an address-schedule into approximating it at Tier 1.
+Conversely, a question answerable from an access stream belongs at
+Tier 1; scripting it at Tier 2 just shifts effort from the protocol
+to the author.
 
-- **Naturally covered.** Cacheable reads, stores, upgrades, evictions,
-  writebacks, and the snoops they induce.
-- **Covered only with a richer sequencer source.** Atomics and DVM
-  requests.
-- **Observed only as downstream side effects.** `ReadNoSnp*` and
-  `WriteNoSnp*` on the HNF↔SNF edge.
-- **Poorly covered or intentionally out of scope.** Stash operations,
-  `WriteUniqueZero`, deliberately malformed traffic, or experiments that
-  need the author to choose arbitrary CHI fields directly.
+#### 6.5 Proposed extension: CHI-request injector scenarios (Tier 2)
 
-This limitation should be framed as both a feature and a boundary.
-It is a feature because the bench refuses to generate impossible CHI
-traffic just because the author asked for it.
-It is a boundary because the bench is therefore a CHI-real NoC
-instrument, not a full CHI opcode fuzzer.
+The Tier 2 authoring surface is a scripted schedule fed into the
+injector SimObject described in §3.2.2. Parameters, at the
+conceptual level:
+
+- `schedule` — ordered list of `(cycle, opcode, address, target,
+  txn_id)` tuples that the injector enqueues on its `reqOut` /
+  `rspOut` / `datOut` buffers. The schedule *is* the scenario.
+- `target_naming` — symbolic handles (`HNF(line)`, `owner(line)`,
+  `peer(node_id)`) resolved to concrete MachineIDs at sim-start, so
+  scenarios remain portable across topology changes.
+- `retry_policy` — how to react to `RetryAck`: immediate retry,
+  scheduled retry at cycle T′, or hold (feeds the retry-storm
+  scenario in §7.3).
+- `compack_policy` — default-immediate CompAck retirement, or
+  delayed by K cycles for ordering-edge experiments.
+- `credit_hold` — cycles to delay `PCrdReturn` for credit-
+  starvation studies.
+- `peer_synchronization` — barriers between Tier 2 injectors so that
+  two or more can co-schedule a collision precisely.
+- `address_pattern` — same address-control hooks §6.2 requires
+  (HNF selection, same-line / adjacent-word / striped placement,
+  near-vs-far homing).
+
+The injector delegates all protocol bookkeeping — TxnId allocation,
+response matching, CompAck timing — to a small outstanding-
+transaction table (§3.2.2). The scenario author writes the
+schedule; the injector ensures each scripted message is a legal CHI
+message the target controller will accept.
+
+Like §6.2, this is a design description, not a coding proposal: the
+chapter describes the shape of the extension without claiming to
+implement it.
 
 ### 7. Scenario Catalog
 
-Two subsections, both written as **prose**, no commands. Each scenario
-follows the same shape: architectural question → knob(s) turned →
-expected result signature → interpretation for a real CHI workload.
+Three subsections, all written as prose, no commands. Each scenario
+follows the same shape: architectural question → stimulus (knob
+turned or schedule specified) → expected result signature →
+interpretation for a real CHI workload. §7.1 and §7.2 are Tier 1
+scenarios; §7.3 is Tier 2. Neither half is marked "primary" — the
+scenario author chooses the tier based on the question.
 
 #### 7.1 Statistical scenarios (random / uniform injection)
 
@@ -612,6 +840,93 @@ measurement, not a throughput measurement. 300–500 words apiece.
 Each case study closes with a one-paragraph bridge: "what this tells
 you about a real CHI workload."
 
+#### 7.3 CHI-exhaustion scenarios (Tier 2)
+
+Tier 2 scenarios answer questions the sequencer cannot.
+Each one specifies the CHI transactions on the wire up-front, injects
+them at chosen cycles, and observes the real RN-F / HNF / SNF
+reaction.
+The measurement is usually a rare control-flow path or a scheduled
+race, not an aggregate throughput number.
+Each scenario follows the same shape: architectural question →
+stimulus schedule → expected result signature → interpretation.
+300–500 words apiece.
+
+1. **Retry-storm under `PCrdGrant` starvation.** Saturate the HNF's
+   pool credit by scheduling N concurrent `ReadShared` / `ReadUnique`
+   requests so that the (N+1)-th receives `RetryAck`. The injector
+   holds back its `PCrdReturn` and the retried request until the pool
+   is deep in the backpressured regime. Question: how does the retry
+   cycle interact with the REQ and RSP vnets — does the retry stream
+   head-of-line-block fresh demand traffic, and for how long? Expected
+   signature: REQ vnet queue depth climbs monotonically while RSP
+   stays near-idle; saturation resolves as a sawtooth as credits
+   drain. A stock sequencer cannot produce this scenario because it
+   has no mechanism to hold back a specific retry; Tier 2 does it by
+   not issuing the re-request until the scheduled cycle.
+
+2. **Snoop-mid-WriteBack race.** RN-F A initiates a `WriteBackFull` on
+   line L. While that WriteBack is in flight toward the HNF, the
+   injector at RN-F B issues a `ReadUnique` for the same line,
+   scheduled to arrive at the HNF on a chosen cycle relative to the
+   `CopyBackWrData`. Question: which CHI ordering rule applies, and
+   what is the observable latency of B's `ReadUnique` as a function
+   of the race offset? Expected signature: a step function in B's
+   completion latency as the offset crosses the HNF's serialization
+   point; traffic shape includes a `SnpUnique` to A only on offsets
+   where the WriteBack has not yet committed. Reproduces an ordering
+   edge case that a sequencer-only bench would see only by accident,
+   rarely, and never at a chosen cycle.
+
+3. **Stash and `PrefetchTgt` coverage.** Inject `StashOnceShared`,
+   `StashOnceUnique`, and `PrefetchTgt` directly at the target
+   cache's `reqIn`. Question: do these messages measurably offload
+   work from the demand path, and what is their network footprint
+   relative to the demand transactions they replace? Expected
+   signature: stash-induced data movement shows up on the DAT vnet
+   without a preceding demand `Read*` on the REQ vnet; `PrefetchTgt`
+   appears as REQ traffic with no return path. A sequencer-only
+   bench cannot exercise either opcode class; Tier 2 can.
+
+4. **Prescribed opcode-mix on the REQ vnet.** Inject a stream with a
+   fixed ratio — for example, 80% `ReadUnique` / 20% `ReadShared` —
+   independent of what the cache state would naturally produce.
+   Question: at what ratio does the SNP vnet saturate, given that
+   `ReadUnique` induces strictly-stronger snoop traffic than
+   `ReadShared`? Expected signature: SNP latency grows superlinearly
+   in the `ReadUnique` fraction; the knee identifies the SNP vnet's
+   effective capacity under invalidating snoops. Tier 1 cannot force
+   this ratio because the mix is a consequence of the cache line
+   sharing pattern, not a knob.
+
+5. **Adversarial concurrent cache-to-cache transfer.** Two injectors
+   at opposite mesh corners each issue `ReadUnique` on distinct lines
+   whose HNF homes collide on a single router hop. The injectors are
+   scheduled so the two `SnpUnique` messages arrive at their targets
+   within one cycle of each other. Question: does the shared link
+   serialize the two transfers, and what is the tail-latency penalty
+   to the loser? Expected signature: one of the two completions
+   shifts by exactly the serialization cost; the other is unchanged.
+   Sequencer-driven injection can produce the traffic on average but
+   cannot schedule the collision deterministically.
+
+6. **Asymmetric per-vnet saturation.** Inject only DAT traffic at
+   saturation while REQ and RSP carry minimal background demand.
+   Question: does DAT saturation back-pressure REQ via completion
+   dependencies, and what is the quasi-steady latency of a demand
+   read when its `CompData` competes with the injected DAT flood?
+   Expected signature: read latency climbs even though REQ is lightly
+   loaded; the bottleneck is end-to-end, not per-vnet. Illustrates
+   why CHI vnet provisioning is coupled even when the vnets are
+   nominally independent. A sequencer-driven source cannot hit only
+   DAT without also loading REQ and RSP; Tier 2 can, because it emits
+   `CompData` messages without the preceding `Read*` request.
+
+Each of these closes with a one-paragraph bridge that maps the
+observed signature back to a property of the *real CHI
+implementation* — the limit is in CHI, not in the bench — so the
+reader can carry the finding forward to a production NoC evaluation.
+
 ### 8. Reading the Results
 
 Short section. Points at `RubyGarnetStats.md` and
@@ -667,27 +982,29 @@ Not identical cycle counts.
 
 ### 9. Limits of the Bench
 
-Honest accounting of what this bench cannot model:
+Honest accounting of what the bench cannot model, regardless of tier:
 
-- No phase behavior, no bursty traffic, no ramp-up/ramp-down — the
-  source is stationary.
-- No producer–consumer coupling at the ISA level — a synthetic store
-  followed by a synthetic load does not create the real happens-before
-  edges a program would.
-- No memory-model stress — the reader should not conclude anything
+- **No workload-correlated phase behavior.** The traffic shape is
+  programmer-scheduled, not program-derived. Burstiness,
+  ramp-up/ramp-down, and cross-phase coupling only appear if the
+  scenario author writes them in.
+- **No ISA-level happens-before.** A synthetic store followed by a
+  synthetic load does not create the memory-ordering edges a program
+  would; no LSQ, no fences, no load-address speculation.
+- **No memory-model stress.** The reader should not conclude anything
   about TSO / RVWMO consistency from this bench.
-- Memory controller effects are minimized by construction; for DRAM
-  studies, the reader should graduate to a workload-driven bench
-  (Part IV of the book).
-- Atomic / LR-SC traffic is absent unless the synthetic source is
-  extended — note this as a clean extension point but not required
-  for the core bench.
-- Device-like offered-load studies are not this bench's primary target;
-  if the reader wants NIC/DMA stream injection, burst trains, or
-  incast from non-cached requesters, a sibling `RNI/DMA`-oriented CHI
-  bench is the cleaner successor.
+- **Memory-controller effects are minimized by construction.** For
+  DRAM studies, graduate to a workload-driven bench (Part IV).
+- **Atomic / LR-SC / DVM traffic requires a Tier 1 source extension.**
+  Stock `MemTest` / `RubyTester` do not emit them; a richer sequencer
+  source (or Tier 2 scripting) is needed.
+- **Device-like offered-load is out of scope.** For NIC-line-rate
+  streams, DMA burst trains, or many-to-one incast from non-cached
+  requesters, use the `CHI_RNI_DMA` sibling bench (§3.2.2) rather
+  than extending this one.
 
-Forward pointers to the bench's successors for each limitation.
+Each limit has a named successor elsewhere in the book; forward
+pointers are given inline.
 
 ### 10. Cross-References and Further Reading
 
@@ -744,22 +1061,28 @@ Exposition-only note; verification is editorial:
 
 1. Every cited file path and node role is checked against the current
    tree and the current `src/mem/ruby/protocol/chi/` contents.
-2. CHI message-flow walk in §3.3 and coverage claims in §3.4 are
-   checked against `CHI-cache-actions.sm` and
-   `CHI-cache-transitions.sm`: first the sequencer-visible request set,
-   then the downstream CHI opcodes each path can induce.
-3. Mermaid diagrams in §§2, 3.1, 3.3, and 3.4 render in the book's
+2. CHI message-flow walk in §3.3 and Tier 1 coverage claims in §3.4.1
+   are checked against `CHI-cache-actions.sm` and
+   `CHI-cache-transitions.sm`: first the sequencer-visible request
+   set, then the downstream CHI opcodes each path can induce.
+3. Tier 2 coverage claims in §3.4.2 are checked against the same
+   files: specifically, that the RN-F cache controller accepts
+   `StashOnceShared`, `StashOnceUnique`, `PrefetchTgt`,
+   `WriteUniqueZero`, and non-filling `ReadOnce*` on `reqIn` and has
+   transitions for them. Any opcode the state machine does not handle
+   is removed from the Tier 2 envelope.
+4. Mermaid diagrams in §§2, 3.1, 3.3, and 3.4.1 render in the book's
    toolchain.
-4. Diff against `GarnetArch.md` and `RubyGarnetStats.md` — any
+5. Diff against `GarnetArch.md` and `RubyGarnetStats.md` — any
    overlap must be a pointer, never a restatement.
-5. Cross-check against `ruby-book/BookGuideline.md`, especially rules
+6. Cross-check against `ruby-book/BookGuideline.md`, especially rules
    1 (motivation first), 2 (three layers), 6 (failure modes), 7
    (tradeoffs explicit), 9 (consistent terminology — map every
    informal term to its `.sm` / `.hh` identifier).
-6. Cross-check against `ruby-book/BookPlan.md` to keep the note
+7. Cross-check against `ruby-book/BookPlan.md` to keep the note
    consistent with the planned Ch11 / Ch13 coverage and avoid
    pre-empting material those chapters own.
-7. If the note keeps the new faithfulness subsection in §8, verify that
-   each anchor points to an existing workload-driven experiment and that
-   the text compares *path activation and bottleneck class*, not exact
+8. For the faithfulness subsection in §8, verify that each anchor
+   points to an existing workload-driven experiment and that the
+   text compares *path activation and bottleneck class*, not exact
    cycle counts.
