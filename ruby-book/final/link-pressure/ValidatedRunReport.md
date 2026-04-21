@@ -3,14 +3,14 @@
 ## Result
 
 - Status: `PASS`
-- m5out directory: `/home/ripopov/work/riscv/gem5/m5out/rbook-link-pressure-pervnet-20260418-190438`
-- Console log: `/home/ripopov/work/riscv/gem5/m5out/rbook-link-pressure-pervnet-20260418-190438/console.log`
+- m5out directory: `/home/ripopov/work/riscv/gem5/m5out/rbook-link-pressure-pervnet-20260421-080130`
+- Console log: `/home/ripopov/work/riscv/gem5/m5out/rbook-link-pressure-pervnet-20260421-080130/console.log`
 - Stream pages: `1536` (buffer `6 MiB`, `98304` cache lines)
 - Stats blocks observed: `6` (report uses the first 5 dumped windows)
 - Main CPU: `0`
 - Worker CPUs: `1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15`
-- gem5 started Apr 18 2026 19:04:38
-- Command line: `/home/ripopov/work/riscv/gem5/build/RISCV/gem5.opt -d /home/ripopov/work/riscv/gem5/m5out/rbook-link-pressure-pervnet-20260418-190438 /home/ripopov/work/riscv/gem5/configs/example/rbook_mesh_config.py --mem-size=512MiB --cmd=/home/ripopov/work/riscv/gem5/ruby-book/final/link-pressure/rbook_test_link_pressure --options=1536 --per-vnet-links`
+- gem5 started Apr 21 2026 08:01:30
+- Command line: `/home/ripopov/work/riscv/gem5/build/RISCV/gem5.opt -d /home/ripopov/work/riscv/gem5/m5out/rbook-link-pressure-pervnet-20260421-080130 /home/ripopov/work/riscv/gem5/configs/example/rbook_mesh_config.py --mem-size=512MiB --cmd=/home/ripopov/work/riscv/gem5/ruby-book/final/link-pressure/rbook_test_link_pressure --options=1536 --per-vnet-links`
 
 ## Window Sweep
 

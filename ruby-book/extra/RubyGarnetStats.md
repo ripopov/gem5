@@ -316,6 +316,15 @@ The families are:
 - `system.ruby.RequestTypeMachineType.<RubyRequestType>.<MachineType>.miss_type_mach_latency_hist_seqr`
 - `system.ruby.RequestTypeMachineType.<RubyRequestType>.<MachineType>.miss_type_mach_latency_hist_coalsr`
 
+These families are source-defined rather than universally emitted.
+
+In the fresh `hop_latency`, `hotspot`, `hotspot-heavy`, and
+`link-pressure` reruns used for this reference, none of the
+`MachineType.*` or `RequestTypeMachineType.*` families were printed.
+
+Treat them as optional stats whose presence depends on the profiler path
+being populated in that configuration and measurement window.
+
 These are the most precise global latency-decomposition stats Ruby offers.
 
 Like the base sequencer histograms, they are keyed to non-aliased Ruby
@@ -814,6 +823,12 @@ Use these when you want to answer structural questions such as:
 - Does a topology or routing change alter path destinations the way you
   expected?
 
+In the fresh `link-pressure` reruns, the summed matrix counts tracked the
+received packet split closely but were not bit-for-bit identical.
+
+Use these as structural distribution counters, not as a stricter replacement
+for `packets_received`.
+
 ### Garnet Per-Router And Per-Link Stats
 
 #### Per-Router Stats
@@ -1142,23 +1157,35 @@ This is the signature of network pressure, not a single overloaded HNF.
 
 ## Validation And Sources
 
-This reference was verified against fresh runs of the two benchmark families
-requested in this task:
+This reference was revalidated against fresh reruns of the workload set used
+to spot-check names, block structure, and the main interpretation rules:
 
+- `ruby-book/final/hop_latency`
+- `ruby-book/final/hotspot`
 - `ruby-book/final/hotspot-heavy`
 - `ruby-book/final/link-pressure` with both shared links and
   `--per-vnet-links`
 
 The runs used for validation were:
 
-| Workload | Command | Outdir | Validation purpose |
-|---|---|---|---|
-| `hotspot-heavy` | `make -C ruby-book/final/hotspot-heavy report` | `m5out/rbook-hotspot-heavy-20260418-185639` | Single-hot-HNF case, queueing concentrated near one service point |
-| `link-pressure` shared | `SIM_TIMEOUT=15m make -C ruby-book/final/link-pressure compare` | `m5out/rbook-link-pressure-shared-20260418-185708` | Mesh-link contention with shared physical links |
-| `link-pressure` per-vnet | same compare target | `m5out/rbook-link-pressure-pervnet-20260418-190438` | Same workload with separated physical links per vnet |
+| Workload | Command | Outdir | Blocks | Validation purpose |
+|---|---|---|---|---|
+| `hop_latency` | `make -C ruby-book/final/hop_latency report` | `m5out/rbook-hop-latency-20260421-074743` | `3` | Near-vs-far path isolation, block handling, and per-link stat naming |
+| `hotspot` | `make -C ruby-book/final/hotspot report` | `m5out/rbook-hotspot-20260421-075058` | `6` | Multi-block hotspot sweep, destination skew, and router/link activity |
+| `hotspot-heavy` | `make -C ruby-book/final/hotspot-heavy report` | `m5out/rbook-hotspot-heavy-20260421-075346` | `2` | Single-hot-HNF case, queueing concentrated near one service point |
+| `link-pressure` shared | `SIM_TIMEOUT=15m make -C ruby-book/final/link-pressure compare` | `m5out/rbook-link-pressure-shared-20260421-075412` | `6` | Mesh-link contention with shared physical links |
+| `link-pressure` per-vnet | same compare target | `m5out/rbook-link-pressure-pervnet-20260421-080130` | `6` | Same workload with separated physical links per vnet |
 
 Unless stated otherwise, numeric examples in this reference come from those
-runs' `stats.txt` files.
+runs' `stats.txt` files, with most of the concrete performance examples drawn
+from `hotspot-heavy` and `link-pressure`.
+
+These reruns also reconfirmed two assumptions used in the main text:
+
+- in the 16-thread `link-pressure` shared and per-vnet measured blocks,
+  `avg_vc_load::total` exactly matched `avg_link_utilization`
+- credit-link `flits_per_vnet` rows printed only `vnet-0` plus `::total`,
+  while traffic-carrying network links printed `vnet-0` through `vnet-3`
 
 When benchmark throughput is relevant, this reference cites the matching
 `console.log` lines explicitly.
