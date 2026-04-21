@@ -14,6 +14,20 @@ from m5.params import (
 )
 
 
+class ChiEventBus(SystemC_ScModule):
+    """Shared SystemC sc_event rendezvous for cross-tile coordination.
+
+    Drivers look up events by string name via the bus's `wait_on`/
+    `notify` helpers; multiple drivers sharing the same bus reference
+    see the same event instances.
+    """
+
+    type = "ChiEventBus"
+    cxx_class = "gem5::chi_testbench::ChiEventBus"
+    cxx_header = "systemc/chi_testbench/event_bus.hh"
+    override_create = True
+
+
 class ChiFinishBarrier(SystemC_ScModule):
     """Counter-based completion barrier.
 
@@ -129,3 +143,44 @@ class IdleDriver(ChiDriverBase):
     cxx_class = "gem5::chi_testbench::IdleDriver"
     cxx_header = "systemc/chi_testbench/idle_driver.hh"
     override_create = True
+
+
+class PingPongDriver(ChiDriverBase):
+    """Ownership ping-pong on one cache line between two tiles."""
+
+    type = "PingPongDriver"
+    cxx_class = "gem5::chi_testbench::PingPongDriver"
+    cxx_header = "systemc/chi_testbench/ping_pong.hh"
+    override_create = True
+
+    line_addr = Param.Addr(0, "Cache-line-aligned address to ping-pong on")
+    access_size = Param.UInt32(8, "Bytes per write")
+    iterations = Param.UInt32(100, "Number of rounds per driver")
+    initiator = Param.Bool(
+        False,
+        "True for the driver that writes first (the other waits first)",
+    )
+    wait_event = Param.String(
+        "",
+        "Event name this driver waits on before its write "
+        "(the peer's post_event)",
+    )
+    post_event = Param.String(
+        "",
+        "Event name this driver notifies after its write "
+        "(the peer's wait_event)",
+    )
+    bus = Param.ChiEventBus(NULL, "Shared sc_event rendezvous")
+
+
+class FalseSharingDriver(ChiDriverBase):
+    """Writes one byte at a fixed offset of a shared cache line."""
+
+    type = "FalseSharingDriver"
+    cxx_class = "gem5::chi_testbench::FalseSharingDriver"
+    cxx_header = "systemc/chi_testbench/false_sharing.hh"
+    override_create = True
+
+    line_addr = Param.Addr(0, "Cache-line-aligned address all sharers hit")
+    byte_offset = Param.UInt32(0, "Byte offset within the line (0..63)")
+    iterations = Param.UInt32(1000, "Number of writes")

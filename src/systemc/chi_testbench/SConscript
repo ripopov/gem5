@@ -7,6 +7,7 @@ if not env['CONF']['USE_SYSTEMC']:
     Return()
 
 SimObject('ChiDrivers.py', sim_objects=[
+    'ChiEventBus',
     'ChiFinishBarrier',
     'ChiTileSlot',
     'ChiDriverBase',
@@ -14,11 +15,16 @@ SimObject('ChiDrivers.py', sim_objects=[
     'SmokeReadDriver',
     'SmokeWriteDriver',
     'SmokeOpcodeMixDriver',
+    'PingPongDriver',
+    'FalseSharingDriver',
 ])
 
 Source('driver_base.cc')
+Source('event_bus.cc')
+Source('false_sharing.cc')
 Source('finish_barrier.cc')
 Source('idle_driver.cc')
+Source('ping_pong.cc')
 Source('smoke_read.cc')
 Source('smoke_write.cc')
 Source('smoke_opcode_mix.cc')
