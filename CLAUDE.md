@@ -24,7 +24,7 @@ When writing or reviewing book content, follow these principles strictly:
 7. **Tradeoffs explicit** — every concept includes alternatives and tradeoffs (latency, throughput, area, complexity, power). Never present designs as "the way it is."
 8. **Core vs optional** — mark optional material with `> **Deep Dive:**` blockquotes or `<details>` sections. Keep the core path clean.
 9. **Consistent terminology** — one term per concept (e.g., always "cache line", mapped to code names like `CacheBlk`, `MessageBuffer`, etc.). Maintain the glossary in Appendix F.
-10. **Markdown format** — ATX headings, one sentence per line, fenced code blocks with language tags, `$...$` / `$$...$$` for math, `[^1]` footnotes.
+10. **Markdown format** — ATX headings, semantic line breaks (one sentence per source line when practical, but keep consecutive sentences in the same paragraph and do not insert blank lines between every sentence), fenced code blocks with language tags, `$...$` / `$$...$$` for math, `[^1]` footnotes.
 11. **Chapter ending = compression** — end each chapter with: Key Ideas, 1-Page Mental Model, Common Misconceptions, "If You Remember One Thing…", and exercises.
 12. **Exercises force transfer** — "You add a 3-cycle instruction — what breaks?" not "List the stages of a pipeline."
 13. **Accuracy discipline** — cite primary sources (ISA manuals, architecture papers). Pin quantitative claims to specific systems and measurements.

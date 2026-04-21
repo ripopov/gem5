@@ -2,9 +2,7 @@
 
 This document is a source-checked reference for the Ruby and Garnet
 statistics that matter in the ruby-book CHI mesh workloads.
-
 It is designed as a lookup and diagnosis aid, not as a narrative chapter.
-
 For each family below, this reference says where the stat comes from, what
 exactly it measures, how it appears in `stats.txt`, and how to use it when
 diagnosing a workload.
@@ -12,7 +10,6 @@ diagnosing a workload.
 ## Purpose And Scope
 
 This reference includes stat families owned by Ruby or Garnet themselves.
-
 That means it includes:
 
 - Ruby profiler stats under `system.ruby.*`
@@ -24,9 +21,84 @@ That means it includes:
 
 This reference intentionally excludes generic inherited stats that happen to
 live under the same subtree but are not Ruby- or Garnet-specific.
-
 Examples of excluded noise are `power_state.pwrStateResidencyTicks::*` and
 generic SimObject power-state fields.
+
+## How These Stats Are Measured
+
+Before looking at stat names, separate the main measurement patterns.
+When gem5 dumps a stats block, it reports quantities accumulated since the
+previous reset or dump for that block.
+Ruby and Garnet do not measure everything in the same way.
+Some stats are raw counters.
+Some are time averages.
+Some are latency sums that later get divided into averages.
+Some are histograms over sampled events.
+
+### Common Measurement Patterns
+
+| Pattern | What the producer does | Example | Correct mental model |
+|---|---|---|---|
+| Raw event counter | Increment once when an event happens | `system.ruby.Cache_Controller.ReadShared::total`, `system.ruby.network.flits_received::total` | How many times something happened during the window |
+| Time-average occupancy | Track occupancy over simulated time and divide the occupancy integral by the window length | `*.TBEs.avg_size`, `*.<buffer>.m_buf_msgs` | Average number of entries resident, not a final snapshot |
+| Accumulated latency sum | Add one latency value when a sampled item completes | `system.ruby.network.flit_network_latency`, `system.ruby.network.packet_queueing_latency` | Sum of sampled delays, which must be divided by completions for a mean |
+| Histogram sample set | Add one sample to a bucketed distribution | `system.ruby.m_latencyHistSeqr`, `*.inTransLatHist.Load` | Distribution over sampled items, not over time |
+| Normalized activity rate | Divide raw activity by elapsed simulated cycles during stat collation | `system.ruby.network.avg_link_utilization`, `system.ruby.network.avg_vc_load` | Aggregate activity per cycle |
+
+Most interpretation mistakes come from reading all of these as if they were
+the same kind of average.
+They are not.
+
+### What The Sampled Object Actually Is
+
+This document uses a few overloaded words that are easy to blur together.
+
+- CPU-side Ruby request: one sequencer request that actually enters Ruby
+- Coalesced follower: a later CPU access that reuses an already-outstanding
+  Ruby request instead of creating a new one
+- Controller event: one SLICC state-machine input processed by one controller
+  instance
+- Ruby message: one protocol message moving through a `MessageBuffer`
+- Garnet packet: the network-level unit created from a Ruby message at the
+  network interface
+- Garnet flit: the flow-control unit used inside the network to carry a packet
+
+That distinction matters because one user-visible memory operation can map to
+several protocol events, one protocol message can become one packet, and one
+packet can become several flits.
+
+### What Latency Means In This Document
+
+Latency stats in this document do not all measure the same path.
+
+| Quantity | Start | End | Sampled once per |
+|---|---|---|---|
+| Sequencer request latency | request insertion into Ruby | sequencer completion | non-aliased Ruby request |
+| Controller transition latency | recorded transition start | recorded transition completion | recorded controller event instance |
+| Message delay | controller-specific message-delay observation point | controller-specific delay observation point | profiled message |
+| Packet latency | packet lifetime as reconstructed at the NI | packet completion at the destination NI | received packet |
+| Flit latency | flit lifetime as reconstructed at the NI | received flit completion point | received flit |
+
+So when two stats both contain the word `latency`, they may still describe
+different objects and different sampling points.
+
+### What Utilization Means In This Document
+
+Ruby and Garnet both use the word `utilization`, but they use it for different
+things.
+
+- Ruby occupancy-derived utilization, such as `*.TBEs.avg_util`, means
+  time-average slots in use divided by configured capacity
+- Message-buffer occupancy-derived utilization, such as `*.m_occupancy`, means
+  time-average messages resident divided by maximum queue depth
+- Garnet raw link-utilization stats such as `int_link_utilization` are not
+  utilizations in the usual fraction-of-time-busy sense; they are raw flit
+  counts
+- Garnet `avg_link_utilization` is an aggregate flits-per-cycle rate summed
+  over all flit-carrying links in the network
+If one hundred links each carried `0.5` flits per cycle on average,
+`avg_link_utilization` would report `50.0`, not `0.5`.
+That is why Garnet's link-utilization numbers can be much larger than `1`.
 
 ## Quick Navigation
 
@@ -80,7 +152,6 @@ If you only have time to inspect a small subset, start here.
 
 Pick the stats block that matches the measurement window you actually want to
 study.
-
 The clean measurement pattern is:
 
 - call `m5_reset_stats()` immediately before the region of interest
@@ -89,18 +160,13 @@ The clean measurement pattern is:
 
 `m5_reset_stats()` clears the accumulated counters so the next measurement
 window starts from zero.
-
 `m5_dump_reset_stats()` writes the current block to `stats.txt` and then
 clears the counters again for the next phase.
-
 If a benchmark repeats that pattern several times, `stats.txt` will contain
 several measured blocks.
-
 In that case, analyze the block that corresponds to the phase you care about.
-
 Ignore teardown-only blocks unless teardown behaviour is the thing you are
 studying.
-
 Without explicit stats control, one dump can mix warmup, steady-state, and
 teardown activity into the same block.
 
@@ -111,7 +177,6 @@ Ruby and Garnet use three output styles.
 #### Scalars
 
 These are single values.
-
 Examples:
 
 - `system.ruby.network.average_flit_network_latency`
@@ -121,9 +186,7 @@ Examples:
 #### Vectors
 
 These are one stat family split across indices.
-
 They usually show one oneline row plus a `::total` line.
-
 Examples:
 
 - `system.ruby.network.flits_received`
@@ -131,19 +194,15 @@ Examples:
 - `system.ruby.Cache_Controller.ReadShared`
 
 Important detail:
-
 For vectors emitted with `pdf | total | oneline`, the printed row is a
 per-index breakdown and `::total` is the sum across indices.
-
 For `system.ruby.Cache_Controller.<Event>`, the indices are controller
 instances of that machine type.
-
 For `system.ruby.network.flits_received`, the indices are vnets.
 
 #### Histograms
 
 Histograms emit a family of synthetic fields.
-
 You will usually see:
 
 - `::<bucket_size>`
@@ -157,24 +216,18 @@ You will usually see:
 
 For these histograms, `::total` is the total number of samples, not the sum
 of latency values.
-
 The `::mean` is the mean over samples recorded by the producer of that
 histogram.
-
 It is not automatically a time average.
-
 That distinction matters a lot for `m_outstandReqHistSeqr`, which is sampled
 at request insertion time in `Sequencer::insertRequest()`, not once per cycle.
 
 ### Zero-Suppressed Statistics
 
 Many Ruby and Garnet stats use `statistics::nozero`.
-
 If a stat is zero for the whole window, it may be omitted from `stats.txt`
 entirely.
-
 So absence often means zero, not missing instrumentation.
-
 This is especially common for:
 
 - message buffers that never carried traffic in that window
@@ -185,7 +238,6 @@ This is especially common for:
 
 For the CHI protocol used here, the virtual-network assignment is defined
 directly in the SLICC protocol files.
-
 `src/mem/ruby/protocol/chi/CHI-cache.sm` and `CHI-mem.sm` state:
 
 | Vnet | Meaning | Source proof |
@@ -197,7 +249,6 @@ directly in the SLICC protocol files.
 
 They also mark only vnet `3` as `vnet_type="response"`, which Garnet treats
 as the data vnet for traffic-distribution accounting.
-
 That means:
 
 - `system.ruby.network.data_traffic_distribution.*` counts only vnet `3`
@@ -208,11 +259,8 @@ That means:
 ### Naming Patterns
 
 Ruby and Garnet stats use a stable suffix vocabulary.
-
 The object prefix tells you where the pressure lives.
-
 The suffix tells you what kind of pressure it is.
-
 Examples:
 
 - `system.ruby.hnf15.cntrl.TBEs.avg_size`
@@ -231,18 +279,21 @@ Examples:
 
 Most interpretation mistakes happen because different families use different
 sampling rules.
-
 Keep these categories separate:
 
-- `*.TBEs.avg_size` and `*.<buffer>.m_buf_msgs` are time-average occupancies
+- `*.TBEs.avg_size` and `*.<buffer>.m_buf_msgs` are time-average occupancies,
+  meaning area under the occupancy curve divided by the window length
+- `*.TBEs.avg_util` and `*.<buffer>.m_occupancy` are normalized versions of
+  those occupancies, divided by configured capacity
 - `system.ruby.m_outstandReqHistSeqr` is issue-sampled concurrency, not a
   time-average occupancy
 - `packet_network_latency` and `flit_network_latency` are accumulated latency
-  sums, not averages
+  sums, not averages, so you must divide by completed packets or flits to get
+  a mean
 - `crossbar_activity`, `buffer_reads`, `buffer_writes`, `m_msg_count`, and
   per-link `flits_per_vnet` are raw window totals
-- histogram `::total` is sample count, not the sum of bucket values
-
+- histogram `::mean` is the arithmetic mean of recorded samples, while
+  histogram `::total` is sample count, not the sum of bucket values
 When comparing runs, normalize raw counts to a common denominator such as
 window cycles, measured operations, or received flits.
 
@@ -252,10 +303,16 @@ window cycles, measured operations, or received flits.
 
 These are the top-level `system.ruby.*` profiler stats defined in
 `src/mem/ruby/profiler/Profiler.cc`.
-
 They aggregate data from all relevant controllers and sequencers.
-
 They are sampled per completed request or per profiled message, not per cycle.
+The most important piece of background is that the sequencer does not always
+emit one latency sample per CPU memory instruction.
+If several CPU accesses merge onto one outstanding Ruby miss, Ruby usually
+records the request-level latency for the first request that actually enters
+Ruby.
+That is why this section repeatedly says `non-aliased Ruby request`.
+It means the request that actually allocated Ruby work, not every later CPU
+access that attached to it.
 
 | Stat family | Meaning | Source |
 |---|---|---|
@@ -268,13 +325,9 @@ They are sampled per completed request or per profiled message, not per cycle.
 
 Use these when you want the global shape of the memory system rather than a
 single object's local bottleneck.
-
 Do not use `m_outstandReqHistSeqr::mean` as an exact time-average occupancy.
-
 It is issue-sampled concurrency, not a per-cycle average.
-
 If you need a time-average occupancy, prefer `*.TBEs.avg_size`.
-
 `delayVCHist.vnet_<n>` is source-defined but may be absent in a given dump
 because of `nozero` suppression or because that workload never sampled
 controller message delays on that vnet.
@@ -282,7 +335,6 @@ controller message delays on that vnet.
 #### Request-Type Latency Histograms
 
 The profiler also emits histograms by `RubyRequestType`.
-
 The names look like this:
 
 - `system.ruby.RequestType.<RubyRequestType>.latency_hist_seqr`
@@ -291,7 +343,6 @@ The names look like this:
 
 Observed request types in the validated runs included `LD`, `ST`, and
 `IFETCH`.
-
 These histograms answer:
 
 - Are loads slower than instruction fetches?
@@ -302,7 +353,6 @@ These histograms answer:
 
 The profiler source also defines machine-type and request-machine-type
 histograms.
-
 The families are:
 
 - `system.ruby.MachineType.<MachineType>.hit_mach_latency_hist_seqr`
@@ -317,25 +367,18 @@ The families are:
 - `system.ruby.RequestTypeMachineType.<RubyRequestType>.<MachineType>.miss_type_mach_latency_hist_coalsr`
 
 These families are source-defined rather than universally emitted.
-
 In the fresh `hop_latency`, `hotspot`, `hotspot-heavy`, and
 `link-pressure` reruns used for this reference, none of the
 `MachineType.*` or `RequestTypeMachineType.*` families were printed.
-
 Treat them as optional stats whose presence depends on the profiler path
 being populated in that configuration and measurement window.
-
 These are the most precise global latency-decomposition stats Ruby offers.
-
 Like the base sequencer histograms, they are keyed to non-aliased Ruby
 requests rather than every CPU-side access that may have coalesced onto that
 request.
-
 The `*_coalsr` variants are mainly relevant for GPU-coalescer configurations
 and are usually absent in CPU-only CHI runs like the ones validated here.
-
 `incomplete_times_seqr` is especially important.
-
 If it is non-zero, the phase histograms for that machine type did not have a
 complete timestamp chain for every sample, so the phase totals will not
 reconstruct the full miss latency exactly.
@@ -344,18 +387,23 @@ reconstruct the full miss latency exactly.
 
 These stats tell you how often protocol events and transitions happened, and
 how long selected controller-local transition paths took.
+For a reader who is less familiar with SLICC, think of a controller as a local
+protocol state machine.
+An event stat tells you how many times that state machine processed a named
+input.
+A state-qualified event stat tells you how many times it processed that input
+while it was in one specific state.
+A transition-latency histogram tells you how long one recorded local
+controller action took from the controller's point of view.
 
 #### Aggregate Controller Event Vectors
 
 These are generated in the built CHI controller code under
 `build/RISCV/mem/ruby/protocol/CHI/*_Controller.cc`.
-
 They are global aggregates, placed under `system.ruby.*`, with one vector
 element per controller instance of that machine type.
-
 Only controller instance `0` of a given machine type creates these aggregate
 vectors.
-
 They live in the global profiler namespace and collate all sibling
 controllers of that machine type.
 
@@ -373,12 +421,9 @@ What they mean:
 - the row shows how the event count is distributed across those instances
 - `::total` is the total number of times that event fired across all
   instances in the window
-
 In this CHI configuration, `Cache_Controller` is especially broad.
-
 It aggregates all CHI cache-controller instances, including private
 cache-side controllers and home-node cache controllers.
-
 Example families observed in the CHI cache-controller aggregate stats
 include:
 
@@ -394,11 +439,8 @@ include:
 - `Final`
 
 Important interpretation rule:
-
 These are protocol-event counts, not request counts.
-
 One demand miss may trigger many internal events.
-
 That is why values such as
 `system.ruby.Cache_Controller.CheckCacheFill::total` can be far larger than
 `cache.m_demand_accesses`.
@@ -428,10 +470,8 @@ These are the best stats for answering questions such as:
 #### Per-Controller Transition Latency Histograms
 
 These are local stats owned by each SLICC-generated controller instance.
-
 They are defined in the generated controller code, not in the global
 profiler.
-
 You will see them on concrete controller objects such as:
 
 - `system.cpu0.l1d.*`
@@ -453,15 +493,14 @@ What they mean:
   events generated by that controller
 - `inTransLatHist.<Event>` records latency for selected incoming transition
   events handled by that controller
-- the `.retries` scalar is the retry-pressure companion for that event family
+- the `.retries` scalar is the retry-pressure companion for that event family,
+  so it counts how often recorded instances of that event had to retry rather
+  than making immediate forward progress
 - `.<InitialState>.<FinalState>.total` records how many times that incoming
   event ended with that exact state change
-
 These stats are invaluable because they stay local.
-
 They tell you whether the pain is in CPU0's L1D, CPU0's L2, or the hot HNF
 itself.
-
 Example from the validated `hotspot-heavy` measured block:
 
 - `system.cpu0.l1d.outTransLatHist.SendReadShared::mean = 481.22`
@@ -476,7 +515,6 @@ hot-line workload.
 
 These are defined in
 `src/mem/ruby/slicc_interface/AbstractController.cc`.
-
 Families:
 
 - `*.fullyBusyCycles`
@@ -488,22 +526,24 @@ What they mean:
   `transitions_per_cycle` limit
 - `delayHistogram` samples message delay values passed into
   `AbstractController::profileMsgDelay()`
-
 Use `fullyBusyCycles` to detect controller scheduling saturation.
-
 If it stays near zero while network buffers explode, the controller is not
 your bottleneck.
-
 These stats often disappear from the dump because they are flagged `nozero`.
 
 ### Controller Occupancy And Queueing Stats
 
 These families are the most direct view of local pressure inside Ruby.
+They also measure more persistent state than the event counters above.
+A TBE is a transient record for an in-flight miss or coherence transaction.
+A `MessageBuffer` is a queue of Ruby protocol messages between controllers,
+sequencers, and the network.
+That is why many of the stats in this section are time-average occupancies
+rather than simple event counts.
 
 #### TBE Storage Stats
 
 These are defined in `src/mem/ruby/structures/TBEStorage.cc`.
-
 Families:
 
 - `*.TBEs.avg_size`
@@ -523,9 +563,12 @@ What they mean:
 - `avg_util` is `avg_size / configured_capacity`
 - `avg_reserved` is the time-average number of reserved slots
 
+Operationally, a high `avg_size` means the controller spends much of the
+window with many transactions still in flight.
+A high `avg_reserved` means the controller is holding capacity aside for work
+that is not yet fully active.
 These are time averages, so they are valid occupancy inputs for Little's Law
 reasoning.
-
 Example from the validated `hotspot-heavy` measured block:
 
 - `system.ruby.hnf15.cntrl.TBEs.avg_size = 36.05`
@@ -536,7 +579,6 @@ That tells you HNF15 is busy, but not full, under the single-hot-HNF run.
 #### CacheMemory Stats
 
 These are defined in `src/mem/ruby/structures/CacheMemory.cc`.
-
 Families:
 
 - `*.cache.numDataArrayReads`
@@ -568,10 +610,8 @@ How to use them:
   downstream
 - use array read and write counts when you need microarchitectural activity
   rather than just request counts
-
 For the two validated workloads, the most useful member of this family was
 `*.cache.m_demand_accesses`.
-
 Examples:
 
 - `system.ruby.hnf15.cntrl.cache.m_demand_accesses = 8199` in the measured
@@ -582,7 +622,6 @@ Examples:
 #### MessageBuffer Stats
 
 These are defined in `src/mem/ruby/network/MessageBuffer.cc`.
-
 Families:
 
 - `*.<buffer>.m_not_avail_count`
@@ -608,17 +647,14 @@ Exact meanings from source:
 
 This is the most useful family for pinpointing where queueing physically
 lives inside Ruby.
-
+These counts are in messages, not flits.
+They tell you about queueing in the Ruby protocol layer before or after
+network serialization.
 Use `m_buf_msgs` when you want a stable queue-depth signal.
-
 Use `m_msg_count` when you want traffic volume.
-
 Do not confuse them.
-
 `m_msg_count` is throughput.
-
 `m_buf_msgs` is occupancy.
-
 Common buffer names observed in these runs were:
 
 | Controller class | Concrete buffer names observed |
@@ -638,6 +674,14 @@ fastest way to answer questions such as:
 
 These are defined in `src/mem/ruby/network/garnet/GarnetNetwork.cc` and
 updated by `NetworkInterface.cc`.
+Garnet adds another layer of object names that are worth separating up front.
+A Ruby protocol message arrives at the network interface and becomes a packet.
+That packet is then broken into one or more flits for movement through
+routers, links, and virtual channels.
+Control traffic is often one flit per packet.
+Data traffic often spans several flits per packet.
+So packet counters tell you how many messages completed at the NI, while flit
+counters tell you how much work the network fabric actually carried.
 
 #### Packet And Flit Counters
 
@@ -649,17 +693,14 @@ Families:
 - `system.ruby.network.flits_received`
 
 These are per-vnet vectors.
-
 `::total` is the sum across vnets.
-
+If one packet uses five flits, it contributes `1` to `packets_received` and
+`5` to `flits_received`.
 Important caveat:
-
 Injected and received totals do not have to match exactly inside a finite
 stats window.
-
 If the window ends with traffic still in flight, the counts can differ
 slightly.
-
 That behaviour was visible in the validated runs.
 
 #### Latency Accumulators
@@ -672,9 +713,11 @@ Families:
 - `system.ruby.network.flit_queueing_latency`
 
 These are per-vnet accumulated tick counts, not averages.
-
 The averages are computed from them.
-
+Conceptually, every received flit contributes two delay pieces.
+One piece is time spent moving through the network fabric itself.
+The other piece is time spent waiting in queues at the source or destination
+side of the NI path.
 Exact flit semantics from `NetworkInterface::incrementStats()`:
 
 - `network_delay = dequeue_time - enqueue_time - 1 cycle`
@@ -684,12 +727,9 @@ Exact flit semantics from `NetworkInterface::incrementStats()`:
 
 So `flit_network_latency` is time spent traversing routers and links after
 injection.
-
 And `flit_queueing_latency` is source-NI queueing plus destination-side
 queueing.
-
 Packet latencies are updated only for `TAIL_` or `HEAD_TAIL_` flits.
-
 That means packet latency is effectively measured at packet completion.
 
 #### Average Latencies
@@ -717,13 +757,13 @@ Exact formulas from source:
   sum(flits_received)`
 - `average_flit_latency = average_flit_network_latency +
   average_flit_queueing_latency`
-
 The packet versions follow the same pattern with packet counters.
-
+In plain language, a per-vnet average such as
+`average_flit_vqueue_latency::vnet-3` means:
+the average queueing delay seen by one completed flit on vnet `3` during this
+measurement window.
 Use the per-vnet vectors first.
-
 The all-vnet scalar average hides which traffic class is actually suffering.
-
 Example from the `link-pressure` 16-thread per-vnet block:
 
 - `average_flit_network_latency = 15121.50`
@@ -739,9 +779,7 @@ Families:
 - `system.ruby.network.average_hops`
 
 This is `total_hops / flits_received_total`.
-
 It is an average flit hop count, not a packet hop count.
-
 Use it to distinguish topological distance effects from pure queueing effects.
 
 #### Link Utilization And VC Load
@@ -755,14 +793,10 @@ Families:
 - `system.ruby.network.avg_vc_load`
 
 This family is easy to misuse.
-
 Here is the exact source behaviour.
-
 `GarnetNetwork::collateStats()` loops over every flit-carrying network link.
-
 For each link, it reads `activity = link->getLinkUtilization()`, where
 activity is the count of flits that traversed that link during the window.
-
 It then:
 
 - adds the raw count into `ext_in_link_utilization`,
@@ -778,16 +812,14 @@ This implies three critical interpretation rules.
 
 2. `avg_link_utilization` is an aggregate flits-per-cycle over all flit links
    in the network.
-
 It is not a 0-to-1 occupancy fraction of one link.
-
 That is why it can be much larger than `1`.
+Think of it as network throughput summed across links, not as one-link
+fullness.
 
 3. `avg_vc_load::total` must equal `avg_link_utilization` for the same block,
    because it is the same total activity partitioned by VC.
-
 This was directly verified in the validated runs.
-
 For the `link-pressure` 16-thread per-vnet block:
 
 - `avg_link_utilization = 81.566798`
@@ -795,7 +827,6 @@ For the `link-pressure` 16-thread per-vnet block:
 - `ext_in + ext_out + int = 30974510 + 30974532 + 53355741`
 - dividing that sum by the measured window cycles gives the same `81.57`
   flits per cycle
-
 That one example is enough to prove these are aggregate rates, not per-link
 percentages.
 
@@ -807,9 +838,7 @@ Families:
 - `system.ruby.network.ctrl_traffic_distribution.n<src>.n<dst>`
 
 These are packet counts indexed by source router and destination router.
-
 They are updated in `GarnetNetwork::update_traffic_distribution()`.
-
 The split is by vnet type:
 
 - data vnet packets increment `data_traffic_distribution`
@@ -822,10 +851,8 @@ Use these when you want to answer structural questions such as:
 - Is the data plane balanced while the control plane is skewed?
 - Does a topology or routing change alter path destinations the way you
   expected?
-
 In the fresh `link-pressure` reruns, the summed matrix counts tracked the
 received packet split closely but were not bit-for-bit identical.
-
 Use these as structural distribution counters, not as a stricter replacement
 for `packets_received`.
 
@@ -834,7 +861,6 @@ for `packets_received`.
 #### Per-Router Stats
 
 These are defined in `src/mem/ruby/network/garnet/Router.cc`.
-
 Families:
 
 - `system.ruby.network.routersXX.buffer_reads`
@@ -850,26 +876,19 @@ What they mean:
 - `crossbar_activity` counts flits that traversed that router's crossbar
 - `sw_input_arbiter_activity` and `sw_output_arbiter_activity` count
   allocator activity
-
 These are raw counts over the stats window.
-
 To compare routers fairly, divide by the window length in cycles.
-
 Do not assume the router count equals the visible mesh-tile count.
-
 In this CHI custom-mesh configuration, the stats show router IDs beyond
 `0..15` because the topology includes additional node-side routers as well as
 the 4x4 mesh routers.
-
 For the `link-pressure` 16-thread per-vnet block, the busiest mesh routers
 were obvious after that normalization.
-
 That is the correct way to build a heat map.
 
 #### Per-Link Stats
 
 These are defined in `src/mem/ruby/network/garnet/NetworkLink.cc`.
-
 Families:
 
 - `system.ruby.network.int_linksXX.network_link.flits_per_vnet::*`
@@ -883,24 +902,16 @@ What they mean:
 - every credit link also inherits the same stat
 
 This distinction is essential.
-
 `network_links*` carry traffic.
-
 `credit_links*` carry backpressure credits.
-
 One subtle but important implementation detail is that `Credit` flits are
 constructed with `vnet = 0` in
 `src/mem/ruby/network/garnet/Credit.cc`.
-
 So credit-link `flits_per_vnet` rows are not a faithful breakdown of request,
 snoop, response, and data traffic classes.
-
 They are mainly useful as a credit-return activity signal.
-
 Do not sum them together when estimating useful traffic volume.
-
 Use `network_links*` for throughput and hotspot diagnosis.
-
 Use `credit_links*` when you want to verify flow-control behaviour or credit
 return intensity.
 
@@ -908,23 +919,17 @@ return intensity.
 
 This workflow is the shortest reliable path from raw `stats.txt` output to a
 defensible diagnosis.
-
 Use it in order.
 
 ### Step 1. Lock Down The Measurement Window
 
 Pick the intended dumped block first.
-
 If a benchmark emits several measured blocks, map each block to the phase,
 thread count, traffic point, or parameter setting that produced it.
-
 Then compare like with like.
-
 Do not compare a warmup block against a steady-state block, or one sweep point
 against another, unless that contrast is the thing you are studying.
-
 Normalize all raw counters to the same denominator before comparing runs.
-
 Good normalizations are:
 
 - per CPU cycle: `count / measured_cycles`
@@ -935,7 +940,6 @@ Good normalizations are:
 ### Step 2. Decide Whether The Pressure Is Localized Or Distributed
 
 Start with service-point locality.
-
 Inspect:
 
 - `system.ruby.hnf*.cntrl.cache.m_demand_accesses`
@@ -953,7 +957,6 @@ fabric-wide pressure.
 ### Step 3. Split Local Queueing From Network Queueing
 
 Use both Ruby-local and Garnet-global queues.
-
 Inspect:
 
 - `*.<buffer>.m_buf_msgs`
@@ -979,7 +982,6 @@ Interpretation:
 ### Step 4. Identify The Pressure Class By Vnet
 
 Always inspect vnet splits before drawing conclusions.
-
 Use:
 
 - `system.ruby.network.flits_received`
@@ -1002,7 +1004,6 @@ If one vnet dominates both volume and queueing, optimize that class first.
 ### Step 5. Localize Hotspots To Routers And Links
 
 Once you know which vnet is suffering, map it onto the fabric.
-
 Use:
 
 - `system.ruby.network.routersXX.crossbar_activity`
@@ -1030,20 +1031,16 @@ This tells you whether the problem is:
 ### Step 6. Distinguish Fabric Saturation From Service-Point Saturation
 
 Use this decision rule.
-
 If `avg_link_utilization` is high, hot routers are widespread, and HNF demand
 is uniform, you are looking at a fabric bottleneck.
-
 If one HNF's `TBEs.avg_size` and local output buffers dominate while global
 network utilization remains modest, you are looking at a service-point
 bottleneck.
-
 The worked examples below show both cases clearly.
 
 ### Step 7. Use Transition Histograms To Tie Performance Back To Protocol Behaviour
 
 Once you know where the pressure lives, use transition stats to learn why.
-
 Use:
 
 - `system.ruby.Cache_Controller.<Event>::total`
@@ -1058,7 +1055,6 @@ Questions these answer:
   sends?
 - Which stable or transient state is responsible for most of the event
   traffic?
-
 This step is where you connect performance back to the protocol state machine
 rather than only to the network.
 
@@ -1073,10 +1069,8 @@ Use:
 
 These global histograms answer whether your local diagnosis is visible at the
 requester too.
-
 If controller-local queues explode but sequencer latencies stay flat, you
 probably looked at a non-critical path.
-
 If both rise together, you found a real bottleneck.
 
 ### Step 9. Avoid Three Common Mistakes
@@ -1084,29 +1078,22 @@ If both rise together, you found a real bottleneck.
 #### Mistake 1. Treating `avg_link_utilization` as a per-link percentage
 
 This is wrong.
-
 It is aggregate flits per cycle across all flit links.
-
 Values far above `1` are expected.
 
 #### Mistake 2. Treating `m_outstandReqHistSeqr::mean` as a time-average occupancy
 
 This is wrong.
-
 It is sampled when a new non-aliased Ruby request is inserted.
-
 Coalesced followers do not add another Ruby-latency or outstanding-request
 sample.
-
 Use TBE `avg_size` when you need a true time-average occupancy.
 
 #### Mistake 3. Treating `system.ruby.Cache_Controller.<Event>::total` as demand-request count
 
 This is wrong.
-
 Those are internal protocol event counts across all cache-controller
 instances.
-
 One request can trigger many such events.
 
 ## Worked Examples
@@ -1152,7 +1139,6 @@ Interpretation:
 - aggregate network activity is high in both runs
 - the system is fabric-limited enough that separating physical links by vnet
   helps materially
-
 This is the signature of network pressure, not a single overloaded HNF.
 
 ## Validation And Sources
@@ -1165,7 +1151,6 @@ to spot-check names, block structure, and the main interpretation rules:
 - `ruby-book/final/hotspot-heavy`
 - `ruby-book/final/link-pressure` with both shared links and
   `--per-vnet-links`
-
 The runs used for validation were:
 
 | Workload | Command | Outdir | Blocks | Validation purpose |
@@ -1179,17 +1164,14 @@ The runs used for validation were:
 Unless stated otherwise, numeric examples in this reference come from those
 runs' `stats.txt` files, with most of the concrete performance examples drawn
 from `hotspot-heavy` and `link-pressure`.
-
 These reruns also reconfirmed two assumptions used in the main text:
 
 - in the 16-thread `link-pressure` shared and per-vnet measured blocks,
   `avg_vc_load::total` exactly matched `avg_link_utilization`
 - credit-link `flits_per_vnet` rows printed only `vnet-0` plus `::total`,
   while traffic-carrying network links printed `vnet-0` through `vnet-3`
-
 When benchmark throughput is relevant, this reference cites the matching
 `console.log` lines explicitly.
-
 The implementation sources checked while writing this reference were:
 
 - `src/mem/ruby/profiler/Profiler.cc`
