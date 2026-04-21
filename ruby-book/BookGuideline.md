@@ -1,6 +1,34 @@
 # How to Write an Exceptional EECS Textbook
 *A practical, high-signal guideline for clarity, engagement, and rigor*
 
+## Primary Goal: Writing a Book on Memory/NoC Modeling in gem5
+
+The main purpose of this branch is authoring the book *Memory Architecture and NoC Modeling in gem5 — From Requests to Routers to DRAM*.
+The book teaches readers to read, modify, validate, and extend gem5's memory-system and NoC models through a guided walk of the actual codebase.
+
+- **Book plan**: `ruby-book/BookPlan.md` — chapter-by-chapter outline, code anchors, running system spine, and scope decisions.
+- **Writing guideline**: this file — authoring principles every chapter must follow.
+- **Book content**: chapters live under `ruby-book/`.
+- **Diagrams**: draw.io sources live in `ruby-book/resources/*.drawio`. After editing any `.drawio` file, run `ruby-book/export_drawio.sh` to regenerate the SVGs (handles white background and strips dark-mode CSS).
+
+## Book Structure (from BookPlan.md)
+
+| Part | Chapters | Focus |
+|------|----------|-------|
+| I — Memory Path Before Ruby | 1–4 | Traffic generators, event system, Classic caches, replacement/prefetch |
+| II — Ruby and Coherence | 5–8 | MI/MSI protocols, Ruby architecture, SLICC, production protocols (MESI/MOESI/Token) |
+| III — NoC Modeling | 9–11 | SimpleNetwork vs Garnet, router microarchitecture, topologies/routing |
+| IV — CHI and Memory Controllers | 12–15 | CHI protocol, CHI system config, DRAM controllers, advanced backends |
+| V — Integration and Extension | 16–17 | End-to-end debugging, final project (extend protocol or network) |
+| Appendices | A–F | Build/debug, code atlas, SLICC reference, Garnet reference, DRAM reference, glossary |
+
+## Reusable Experiment Harnesses
+
+- `tests/gem5/traffic_gen/configs/simple_traffic_run.py` — latency/bandwidth sweeps
+- `configs/example/ruby_random_test.py` / `configs/example/ruby_mem_test.py` — protocol validation
+- `configs/example/garnet_synth_traffic.py` — network saturation and routing studies
+- `tests/gem5/chi_protocol/configs/chi-with-isa.py` — modern stdlib CHI system
+
 ## Target Format
 
 This book is authored in **Markdown** and rendered to HTML/PDF via standard

@@ -2,52 +2,6 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Primary Goal: Writing a Book on Memory/NoC Modeling in gem5
-
-**The main purpose of this branch is authoring the book *Memory Architecture and NoC Modeling in gem5 — From Requests to Routers to DRAM*.** The book teaches readers to read, modify, validate, and extend gem5's memory-system and NoC models through a guided walk of the actual codebase.
-
-- **Book plan**: `ruby-book/BookPlan.md` — chapter-by-chapter outline, code anchors, running system spine, and scope decisions.
-- **Writing guideline**: `ruby-book/BookGuideline.md` — authoring principles every chapter must follow.
-- **Book content**: chapters live under `ruby-book/`.
-- **Diagrams**: draw.io sources live in `ruby-book/resources/*.drawio`. After editing any `.drawio` file, run `ruby-book/export_drawio.sh` to regenerate the SVGs (handles white background and strips dark-mode CSS).
-
-### Writing Rules (from BookGuideline.md)
-
-When writing or reviewing book content, follow these principles strictly:
-
-1. **Motivation before formalism** — every chapter opens with a concrete problem, failure, or measurement question. Never start with definitions or taxonomies.
-2. **Three-layer abstraction** — present every concept in three labeled layers: *Intuition* (diagrams, analogies), *Working Model* (step-by-step, back-of-envelope), *Formal and Code* (precise definitions, source files). Allow skipping layers.
-3. **Running system spine** — one evolving RISC-V multicore system grows across chapters (generator → Classic caches → Ruby → Garnet → CHI → DRAM). New concepts attach to this system rather than resetting context.
-4. **Visual-first** — diagram before text, then explanation, then formalization. Use Mermaid for structure (state machines, sequences, block diagrams) and ASCII art for spatial/tabular content (pipelines, bit fields, timelines). No external images unless unavoidable.
-5. **Execution semantics** — for every mechanism, specify inputs, internal state, step-by-step transformation, and outputs. The reader should be able to simulate it in their head.
-6. **Failure modes** — every "how it works" is immediately followed by "what can go wrong" and "where naive intuition fails."
-7. **Tradeoffs explicit** — every concept includes alternatives and tradeoffs (latency, throughput, area, complexity, power). Never present designs as "the way it is."
-8. **Core vs optional** — mark optional material with `> **Deep Dive:**` blockquotes or `<details>` sections. Keep the core path clean.
-9. **Consistent terminology** — one term per concept (e.g., always "cache line", mapped to code names like `CacheBlk`, `MessageBuffer`, etc.). Maintain the glossary in Appendix F.
-10. **Markdown format** — ATX headings, semantic line breaks (one sentence per source line when practical, but keep consecutive sentences in the same paragraph and do not insert blank lines between every sentence), fenced code blocks with language tags, `$...$` / `$$...$$` for math, `[^1]` footnotes.
-11. **Chapter ending = compression** — end each chapter with: Key Ideas, 1-Page Mental Model, Common Misconceptions, "If You Remember One Thing…", and exercises.
-12. **Exercises force transfer** — "You add a 3-cycle instruction — what breaks?" not "List the stages of a pipeline."
-13. **Accuracy discipline** — cite primary sources (ISA manuals, architecture papers). Pin quantitative claims to specific systems and measurements.
-14. **Reality anchors** — connect theory to real systems (RISC-V, x86, ARM, AMBA CHI, TileLink).
-
-### Book Structure (from BookPlan.md)
-
-| Part | Chapters | Focus |
-|------|----------|-------|
-| I — Memory Path Before Ruby | 1–4 | Traffic generators, event system, Classic caches, replacement/prefetch |
-| II — Ruby and Coherence | 5–8 | MI/MSI protocols, Ruby architecture, SLICC, production protocols (MESI/MOESI/Token) |
-| III — NoC Modeling | 9–11 | SimpleNetwork vs Garnet, router microarchitecture, topologies/routing |
-| IV — CHI and Memory Controllers | 12–15 | CHI protocol, CHI system config, DRAM controllers, advanced backends |
-| V — Integration and Extension | 16–17 | End-to-end debugging, final project (extend protocol or network) |
-| Appendices | A–F | Build/debug, code atlas, SLICC reference, Garnet reference, DRAM reference, glossary |
-
-### Reusable Experiment Harnesses
-
-- `tests/gem5/traffic_gen/configs/simple_traffic_run.py` — latency/bandwidth sweeps
-- `configs/example/ruby_random_test.py` / `configs/example/ruby_mem_test.py` — protocol validation
-- `configs/example/garnet_synth_traffic.py` — network saturation and routing studies
-- `tests/gem5/chi_protocol/configs/chi-with-isa.py` — modern stdlib CHI system
-
 ## gem5 Overview
 
 gem5 is a modular computer-system architecture simulator. **This branch targets RISC-V only.** It includes detailed CPU, memory hierarchy, and device models.
