@@ -78,21 +78,31 @@ If you only have time to inspect a small subset, start here.
 
 ### Measurement Window Selection
 
-Both workloads explicitly call `m5_reset_stats()` before the measured window
-and `m5_dump_reset_stats()` after it.
+Pick the stats block that matches the measurement window you actually want to
+study.
 
-That means the first dumped block is the one you want.
+The clean measurement pattern is:
 
-Both benchmarks also produce a small teardown block after the program exits.
+- call `m5_reset_stats()` immediately before the region of interest
+- run the region you want to measure
+- call `m5_dump_reset_stats()` immediately after that region
 
-Do not mix the teardown block with the intended measurement window.
+`m5_reset_stats()` clears the accumulated counters so the next measurement
+window starts from zero.
 
-In the validated runs:
+`m5_dump_reset_stats()` writes the current block to `stats.txt` and then
+clears the counters again for the next phase.
 
-- `hotspot-heavy` produced `2` blocks, and the first block is the measured one
-- each `link-pressure` run produced `6` blocks, with the first five
-  corresponding to `1, 2, 4, 8, 16` active threads, and the last block being
-  teardown noise
+If a benchmark repeats that pattern several times, `stats.txt` will contain
+several measured blocks.
+
+In that case, analyze the block that corresponds to the phase you care about.
+
+Ignore teardown-only blocks unless teardown behaviour is the thing you are
+studying.
+
+Without explicit stats control, one dump can mix warmup, steady-state, and
+teardown activity into the same block.
 
 ### Output Formats
 
@@ -890,11 +900,13 @@ Use it in order.
 
 Pick the intended dumped block first.
 
-For these workloads, that means:
+If a benchmark emits several measured blocks, map each block to the phase,
+thread count, traffic point, or parameter setting that produced it.
 
-- `hotspot-heavy`: first dumped block only
-- `link-pressure`: block `0` for 1 thread, block `1` for 2 threads, block `2`
-  for 4 threads, block `3` for 8 threads, block `4` for 16 threads
+Then compare like with like.
+
+Do not compare a warmup block against a steady-state block, or one sweep point
+against another, unless that contrast is the thing you are studying.
 
 Normalize all raw counters to the same denominator before comparing runs.
 
@@ -920,11 +932,8 @@ Interpretation:
 - one HNF dominating means a service-point hotspot
 - uniform HNF demand means the fabric is a more likely bottleneck
 
-This immediately separates the two validated workloads.
-
-`hotspot-heavy` is intentionally single-home-node.
-
-`link-pressure` intentionally spreads demand across all HNFs.
+This is the fastest first split between localized service pressure and
+fabric-wide pressure.
 
 ### Step 3. Split Local Queueing From Network Queueing
 
@@ -974,9 +983,6 @@ In this CHI configuration:
 - vnet `3` is data
 
 If one vnet dominates both volume and queueing, optimize that class first.
-
-In the validated `link-pressure` 16-thread per-vnet run, vnet `3` dominated
-both total flits and queueing latency.
 
 ### Step 5. Localize Hotspots To Routers And Links
 
