@@ -17,6 +17,8 @@ SimObject('ChiDrivers.py', sim_objects=[
     'SmokeOpcodeMixDriver',
     'PingPongDriver',
     'FalseSharingDriver',
+    'MemcpyDriver',
+    'MemsetDriver',
 ])
 
 Source('driver_base.cc')
@@ -24,6 +26,8 @@ Source('event_bus.cc')
 Source('false_sharing.cc')
 Source('finish_barrier.cc')
 Source('idle_driver.cc')
+Source('memcpy_driver.cc')
+Source('memset_driver.cc')
 Source('ping_pong.cc')
 Source('smoke_read.cc')
 Source('smoke_write.cc')

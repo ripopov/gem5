@@ -184,3 +184,39 @@ class FalseSharingDriver(ChiDriverBase):
     line_addr = Param.Addr(0, "Cache-line-aligned address all sharers hit")
     byte_offset = Param.UInt32(0, "Byte offset within the line (0..63)")
     iterations = Param.UInt32(1000, "Number of writes")
+
+
+class MemcpyDriver(ChiDriverBase):
+    """Pipelined memcpy using nb_transport multi-outstanding requests."""
+
+    type = "MemcpyDriver"
+    cxx_class = "gem5::chi_testbench::MemcpyDriver"
+    cxx_header = "systemc/chi_testbench/memcpy_driver.hh"
+    override_create = True
+
+    src_base = Param.Addr(0, "Base address of the source range")
+    dst_base = Param.Addr(0, "Base address of the destination range")
+    num_lines = Param.UInt32(256, "Number of cache lines to copy")
+    line_size = Param.UInt32(64, "Bytes per line")
+    pipeline_depth = Param.UInt32(
+        4, "Number of concurrent outstanding LD+ST slots"
+    )
+
+
+class MemsetDriver(ChiDriverBase):
+    """Pipelined memset using nb_transport multi-outstanding requests."""
+
+    type = "MemsetDriver"
+    cxx_class = "gem5::chi_testbench::MemsetDriver"
+    cxx_header = "systemc/chi_testbench/memset_driver.hh"
+    override_create = True
+
+    dst_base = Param.Addr(0, "Base address of the range to fill")
+    num_lines = Param.UInt32(256, "Number of cache lines to write")
+    line_size = Param.UInt32(64, "Bytes per line")
+    pipeline_depth = Param.UInt32(
+        4, "Number of concurrent outstanding store slots"
+    )
+    fill_byte = Param.UInt32(
+        0xAA, "Byte value to write into every destination line"
+    )

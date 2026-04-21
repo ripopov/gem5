@@ -9,7 +9,8 @@ RUN       := $(GEM5_ROOT)/util/run_with_timeout.sh
 TIMESTAMP  = $(shell date +%Y%m%d-%H%M%S)
 
 SCENARIOS := smoke_read smoke_write smoke_opcode_mix \
-             ping_pong false_sharing
+             ping_pong false_sharing \
+             memcpy memset
 
 .PHONY: all help run-all clean
 .PHONY: $(addprefix run-,$(SCENARIOS))

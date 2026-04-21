@@ -8,13 +8,16 @@
 
 #include <cstdint>
 #include <string>
+#include <unordered_map>
 
 #include "params/ChiDriverBase.hh"
 #include "systemc/chi_testbench/finish_barrier.hh"
+#include "systemc/ext/core/sc_event.hh"
 #include "systemc/ext/core/sc_module.hh"
 #include "systemc/ext/core/sc_module_name.hh"
 #include "systemc/ext/tlm_core/2/generic_payload/gp.hh"
 #include "systemc/ext/tlm_utils/simple_initiator_socket.h"
+#include "systemc/tlm_bridge/sc_mm.hh"
 #include "systemc/tlm_port_wrapper.hh"
 
 namespace gem5
@@ -66,6 +69,29 @@ class ChiDriverBase : public sc_core::sc_module
     // Write `len` bytes starting at addr. Suspends until response.
     void write(uint64_t addr, const uint8_t *data, uint32_t len);
 
+    // --- Non-blocking helpers (many outstanding per SC_THREAD) ---
+    //
+    // Issue the request via the TLM-2 AT (approximately-timed) path
+    // (nb_transport_fw) and return a handle immediately. Call
+    // resolve(handle) to wait for that specific transaction to
+    // retire, or resolve_all() to wait for every pending handle.
+    //
+    // The caller-supplied buffers (data for async_write, data_out for
+    // async_read) must remain valid until the matching resolve()
+    // returns.
+
+    using Handle = uint64_t;
+
+    Handle async_read(uint64_t addr, uint8_t *data_out, uint32_t len);
+    Handle async_write(uint64_t addr, const uint8_t *data, uint32_t len);
+    void resolve(Handle h);
+    void resolve_all();
+    std::size_t
+    outstanding() const
+    {
+        return inflight.size();
+    }
+
   private:
     // Trampoline registered with SC_THREAD; dispatches to virtual run()
     // and — if a finish_barrier was supplied — signals completion.
@@ -79,6 +105,39 @@ class ChiDriverBase : public sc_core::sc_module
     // Optional completion barrier; nullptr when the scenario does not
     // need one.
     ChiFinishBarrier *finish_barrier;
+
+    // --- nb_transport bookkeeping ---
+
+    // One entry per in-flight async_* transaction.
+    struct InFlight
+    {
+        tlm::tlm_generic_payload *trans;
+        sc_core::sc_event *done;
+        bool completed;
+    };
+
+    Handle next_handle;
+    std::unordered_map<Handle, InFlight> inflight;
+    std::unordered_map<tlm::tlm_generic_payload *, Handle> trans_to_handle;
+
+    // Memory manager for async payloads. TlmToGem5Bridge calls
+    // acquire()/release() on the payload, which requires a non-null
+    // tlm_mm_interface to be set on the payload.
+    Gem5SystemC::MemoryManager mm;
+
+    // Helpers: allocate/free an InFlight entry. `setup_payload` fills
+    // the generic_payload with caller-provided fields (addr, len,
+    // command, data ptr). `submit_async` issues BEGIN_REQ and records
+    // the handle.
+    Handle allocate_handle(tlm::tlm_generic_payload *trans);
+    void release_handle(Handle h);
+    Handle submit_async(tlm::tlm_generic_payload *trans);
+
+    // TLM backward-path callback. Fires when the bridge raises
+    // BEGIN_RESP on a pending transaction.
+    tlm::tlm_sync_enum nb_transport_bw(tlm::tlm_generic_payload &trans,
+                                       tlm::tlm_phase &phase,
+                                       sc_core::sc_time &t);
 };
 
 } // namespace chi_testbench
