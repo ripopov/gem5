@@ -10,6 +10,7 @@
 #include <string>
 
 #include "params/ChiDriverBase.hh"
+#include "systemc/chi_testbench/finish_barrier.hh"
 #include "systemc/ext/core/sc_module.hh"
 #include "systemc/ext/core/sc_module_name.hh"
 #include "systemc/ext/tlm_core/2/generic_payload/gp.hh"
@@ -66,13 +67,18 @@ class ChiDriverBase : public sc_core::sc_module
     void write(uint64_t addr, const uint8_t *data, uint32_t len);
 
   private:
-    // Trampoline registered with SC_THREAD; dispatches to virtual run().
+    // Trampoline registered with SC_THREAD; dispatches to virtual run()
+    // and — if a finish_barrier was supplied — signals completion.
     void thread_entry();
 
     // Local wrapper that exposes iSocket as a gem5::Port for Python
     // binding. Constructed lazily (on first gem5_getPort call) because
     // iSocket has its SystemC name by then.
     sc_gem5::TlmInitiatorWrapper<CHI_TB_BUSWIDTH> *iSocketWrapper;
+
+    // Optional completion barrier; nullptr when the scenario does not
+    // need one.
+    ChiFinishBarrier *finish_barrier;
 };
 
 } // namespace chi_testbench

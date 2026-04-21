@@ -16,7 +16,10 @@ namespace chi_testbench
 
 ChiDriverBase::ChiDriverBase(const Params &p,
                              const sc_core::sc_module_name &mn)
-    : sc_core::sc_module(mn), iSocket("iSocket"), iSocketWrapper(nullptr)
+    : sc_core::sc_module(mn),
+      iSocket("iSocket"),
+      iSocketWrapper(nullptr),
+      finish_barrier(p.finish_barrier)
 {
     // Spawn the test thread. sc_spawn binds through std::function so
     // virtual dispatch into the derived class's run() works correctly.
@@ -26,10 +29,14 @@ ChiDriverBase::ChiDriverBase(const Params &p,
 void
 ChiDriverBase::thread_entry()
 {
-    // Call the derived-class run(); when it returns, the SC_THREAD
-    // terminates quietly. Scenario code is expected to call
-    // sc_core::sc_stop() when the test is complete.
+    // Call the derived-class run(); on return, optionally signal the
+    // shared completion barrier. The barrier terminates the SystemC
+    // kernel (via sc_stop) once the configured number of drivers have
+    // signaled.
     run();
+    if (finish_barrier) {
+        finish_barrier->signal_finish();
+    }
 }
 
 gem5::Port &

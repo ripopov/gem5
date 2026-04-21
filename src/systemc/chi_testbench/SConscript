@@ -7,13 +7,21 @@ if not env['CONF']['USE_SYSTEMC']:
     Return()
 
 SimObject('ChiDrivers.py', sim_objects=[
+    'ChiFinishBarrier',
     'ChiTileSlot',
     'ChiDriverBase',
+    'IdleDriver',
     'SmokeReadDriver',
+    'SmokeWriteDriver',
+    'SmokeOpcodeMixDriver',
 ])
 
 Source('driver_base.cc')
+Source('finish_barrier.cc')
+Source('idle_driver.cc')
 Source('smoke_read.cc')
+Source('smoke_write.cc')
+Source('smoke_opcode_mix.cc')
 Source('tile_slot.cc')
 
 DebugFlag('ChiTestbench')

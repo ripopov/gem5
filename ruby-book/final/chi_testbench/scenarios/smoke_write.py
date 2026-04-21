@@ -1,21 +1,16 @@
 # Copyright (c) 2026 ripopov
 # SPDX-License-Identifier: BSD-3-Clause
 """
-smoke_read — Stage-1 smoke test.
+smoke_write — stage-1 smoke test.
 
-Tile 0 issues a blocking read to one cache line homed at each of the
-16 HNF slices, `iterations` times. Every other tile hosts an idle
-driver (empty address list, does not call sc_stop).
-
-What to check:
-- Simulation completes.
-- stats.txt shows non-zero m_demand_hits/m_demand_misses at every HNF
-  controller, roughly balanced.
+Tile 0 writes one cache line homed at each of the 16 HNF slices,
+`iterations` times. Exercises the ReadUnique -> WriteBackFull path
+at every slice; all other tiles are idle.
 """
 
 from m5.objects import (
     IdleDriver,
-    SmokeReadDriver,
+    SmokeWriteDriver,
 )
 
 
@@ -26,7 +21,7 @@ def build(args, planner):
     for tile in range(args.num_cpus):
         if tile == 0:
             drivers.append(
-                SmokeReadDriver(
+                SmokeWriteDriver(
                     addresses=addresses,
                     access_size=8,
                     iterations=args.scenario_iterations,
