@@ -1,0 +1,34 @@
+# Copyright (c) 2026 ripopov
+# SPDX-License-Identifier: BSD-3-Clause
+"""
+memcpy — Tile 7's driver pipelines async CHI ReadShared → WriteUniqueFull
+pairs, copying from an HNF-0 source range to an HNF-15 destination range.
+"""
+
+from m5.objects import (
+    ChiDriverNode,
+    ChiGem5V2Barrier,
+)
+
+
+def build(args, planner):
+    num_lines = 256
+    src_base = planner.address_for_hnf(hnf_idx=0, line_offset=0)
+    dst_base = planner.address_for_hnf(hnf_idx=15, line_offset=0)
+    barrier = ChiGem5V2Barrier(expected=1)
+
+    drivers = [None] * args.num_cpus
+    drivers[7] = ChiDriverNode(
+        sequence="memcpy",
+        tile_id=7,
+        src_base=src_base,
+        dst_base=dst_base,
+        num_lines=num_lines,
+        line_size=64,
+        pipeline_depth=4,
+        finish_barrier=barrier,
+    )
+    for tile in range(args.num_cpus):
+        if drivers[tile] is None:
+            drivers[tile] = ChiDriverNode(sequence="idle", tile_id=tile)
+    return drivers

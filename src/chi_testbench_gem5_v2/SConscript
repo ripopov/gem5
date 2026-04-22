@@ -1,0 +1,34 @@
+# Copyright (c) 2026 ripopov
+# SPDX-License-Identifier: BSD-3-Clause
+
+Import('*')
+
+# The driver node extends CHIGenericController, which requires CHI to
+# be among the enabled Ruby protocols. Harmless to skip on non-CHI
+# builds — v2 scenarios aren't usable without CHI anyway.
+if not env['CONF']['RUBY_PROTOCOL_CHI']:
+    Return()
+
+SimObject('ChiTestbenchGem5V2.py', sim_objects=[
+    'ChiDriverNode',
+    'ChiGem5V2Barrier',
+    'ChiGem5V2EventBus',
+])
+
+Source('driver.cc')  # driver.cc also defines SeqThread::main()
+Source('sync/barrier.cc')
+Source('sync/latch.cc')
+Source('sequences/registry.cc')
+Source('sequences/idle.cc')
+Source('sequences/smoke_read.cc')
+Source('sequences/smoke_write.cc')
+Source('sequences/smoke_opcode_mix.cc')
+Source('sequences/memcpy.cc')
+Source('sequences/memset.cc')
+Source('sequences/ping_pong.cc')
+Source('sequences/false_sharing.cc')
+Source('sequences/opcode_walk.cc')
+Source('sequences/read_ex_walk.cc')
+Source('sequences/atomic_rmw.cc')
+
+DebugFlag('ChiTestbenchGem5V2')
