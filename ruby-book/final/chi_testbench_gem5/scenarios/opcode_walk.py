@@ -5,6 +5,7 @@ opcode_walk — Tile 3 cold-read → write-pattern → evict → re-read with
 data-dependent assertions.
 """
 
+import m5
 from m5.objects import (
     ChiGem5Barrier,
     ChiSeqDriver,
@@ -12,6 +13,12 @@ from m5.objects import (
 
 
 def build(args, planner):
+    if args.rn_mode == "rni":
+        m5.fatal(
+            "opcode_walk asserts CHI opcode sequences that only emerge "
+            "from RN-side cache state transitions (ReadShared, ReadUnique, "
+            "CleanUnique). Re-run with --rn-mode=rnf_l2."
+        )
     target_addr = planner.address_for_hnf(hnf_idx=3, line_offset=0)
     filler_base = planner.address_for_hnf(hnf_idx=0, line_offset=16)
     barrier = ChiGem5Barrier(expected=1)

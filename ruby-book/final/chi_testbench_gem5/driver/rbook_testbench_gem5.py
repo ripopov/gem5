@@ -85,6 +85,17 @@ parser.add_argument(
     help="Sequencer deadlock threshold (cycles); testbench traffic can "
     "be sparse, so we raise this above the default",
 )
+parser.add_argument(
+    "--rn-mode",
+    choices=["rni", "rnf_l2"],
+    default="rnf_l2",
+    help="Per-tile CHI request-node mode. "
+    "'rnf_l2': Seq -> coherent L2-sized leaf cache -> mesh; "
+    "'rni': Seq -> cache-less DMA controller -> mesh. "
+    "Neither mode instantiates the side router that CHI_RNF normally "
+    "adds. Scenarios that rely on RN-side cache state transitions "
+    "(opcode_walk, read_ex_walk) require 'rnf_l2'.",
+)
 
 if buildEnv["PROTOCOL"] == "MULTIPLE" and not any(
     a.startswith("--protocol") for a in sys.argv
@@ -161,6 +172,39 @@ if len(drivers) != args.num_cpus:
 system.cpu = drivers
 
 # --- Ruby / CHI / Garnet -----------------------------------------------------
+
+# Swap CHI.create_system's request-node factory for our direct-mesh
+# Tile (see configs/ruby/CHI.py:125 for the _rnf_gen hook). Every tile
+# becomes `RubySequencer -> CHI_TileCacheController -> mesh router`,
+# with no L1, no L2-in-RNF, and no side router — the controller is
+# parameterized by --rn-mode to act as either a cache-less DMA node
+# (rni) or a coherent leaf cache (rnf_l2).
+from cfg_rn import CHI_Tile  # noqa: E402
+
+system._rnf_gen = CHI_Tile.make_generator(args.rn_mode)
+
+# Build the Misc Node (DVM coordinator) with no upstream L1Ds. The
+# stock CHI_MN.generate at configs/ruby/CHI_config.py:728 collects
+# `cpu.l1d` from every CPU to register DVM snoop targets, but our
+# tiles have no L1D. DVM is architecturally idle in RISC-V SE mode
+# anyway, so an empty upstream destination list is fine.
+#
+# We subclass locally to pin `router_list = [0]`; CustomMesh reads
+# `type(n).NoC_Params.router_list` and our noc_config's CHI_MN
+# shadow class is not reachable through the stock CHI_MN type.
+from ruby import CHI_config as _chi_cfg  # noqa: E402
+
+
+class _TestbenchMN(_chi_cfg.CHI_MN):
+    class NoC_Params(_chi_cfg.CHI_MN.NoC_Params):
+        router_list = [0]
+
+
+def _mn_gen_no_l1d(options, ruby_system, cpus):
+    return [_TestbenchMN(ruby_system, l1d_caches=[])]
+
+
+system._mn_gen = _mn_gen_no_l1d
 
 Ruby.create_system(args, False, system)
 assert args.num_cpus == len(system.ruby._cpu_ports)

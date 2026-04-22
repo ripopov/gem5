@@ -15,6 +15,7 @@ Observable signatures (compare to a run without role C):
   - C's write emits zero additional HNF transactions.
 """
 
+import m5
 from m5.objects import (
     ChiGem5Barrier,
     ChiGem5EventBus,
@@ -23,6 +24,13 @@ from m5.objects import (
 
 
 def build(args, planner):
+    if args.rn_mode == "rni":
+        m5.fatal(
+            "read_ex_walk demonstrates Shared->Unique ownership upgrade "
+            "via CleanUnique on the RN-side leaf cache. --rn-mode=rni "
+            "has no RN cache, so there is nothing to upgrade. Re-run "
+            "with --rn-mode=rnf_l2."
+        )
     target_addr = planner.address_for_hnf(hnf_idx=5, line_offset=0)
     barrier = ChiGem5Barrier(expected=3)
     bus = ChiGem5EventBus()

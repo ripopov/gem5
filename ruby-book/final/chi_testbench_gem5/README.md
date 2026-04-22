@@ -8,16 +8,20 @@ build flag. Each tile is a gem5 `ClockedObject` (`ChiSeqDriver`)
 whose sequence runs on a `Fiber` and issues `Packet`s directly into
 the RN-F sequencer's `in_ports`.
 
-The two testbenches are byte-identical on CHI traffic (see the
-**Parity** section). This testbench exists to let you read the two
-implementations side by side and pick the style that fits your
-project.
+This testbench exists to let you read the two implementations side
+by side and pick the style that fits your project. The per-tile CHI
+topology is deliberately simpler than the SystemC version's
+`CHI_RNF` stack: a single configurable cache controller attaches
+each sequencer directly to the mesh router (no L1, no L2-in-RNF, no
+side router). See [Differences from the old CHI_RNF
+topology](#differences-from-the-old-chi_rnf-topology).
 
 ## Layout
 
 | Path | Role |
 |------|------|
 | `driver/rbook_testbench_gem5.py` | Top-level config: 4×4 CHI mesh + scenario dispatch, no TLM bridge, no SystemC kernel |
+| `driver/cfg_rn.py`               | `CHI_Tile` node + configurable `CHI_TileCacheController` (rnf_l2 / rni modes, direct-mesh attach) |
 | `driver/address_planner.py`      | HNF-aware cache-line address math (copied from the SystemC testbench) |
 | `scenarios/*.py`                 | One Python module per scenario; exports `build(args, planner) -> [ChiSeqDriver × 16]` |
 | `Makefile`                       | Per-scenario `run-*` targets + `run-all` |
@@ -29,16 +33,18 @@ project.
 # USE_SYSTEMC is NOT required for this testbench.
 scons build/RISCV/gem5.opt -j$(nproc) PROTOCOL=CHI
 
-# one scenario
+# one scenario (default RN_MODE=rnf_l2; override with rni)
 make -C ruby-book/final/chi_testbench_gem5 run-smoke_read
+make -C ruby-book/final/chi_testbench_gem5 run-smoke_read RN_MODE=rni
 
 # all scenarios
 make -C ruby-book/final/chi_testbench_gem5 run-all
+make -C ruby-book/final/chi_testbench_gem5 run-all RN_MODE=rni  # skips opcode_walk / read_ex_walk
 ```
 
-Each run creates `m5out/rbook-tb-gem5-<scenario>-<timestamp>/` with
-gem5's usual outputs and updates a convenience symlink
-`m5out/last-<scenario>`.
+Each run creates `m5out/rbook-tb-gem5-<scenario>-<RN_MODE>-<timestamp>/`
+with gem5's usual outputs and updates a convenience symlink
+`m5out/last-<scenario>-<RN_MODE>`.
 
 ## Module architecture
 
@@ -53,16 +59,64 @@ gem5's usual outputs and updates a convenience symlink
 │   ├─ SeqThread  (Fiber subclass, per-driver)                 │
 │   ├─ DataPort   (RequestPort)  ──▶ system.ruby._cpu_ports[i] │
 │   │                                    .in_ports             │
-│   ├─ inst_sequencer, data_sequencer, l1i, l1d, l2            │
-│   │      (attached by CHI_RNF; parented under system.cpu[i]) │
 │   └─ kick/wake/xfer events (EventFunctionWrapper)            │
 └──────────────────────────────────────────────────────────────┘
-                                 ↓ CHI RN-F FSM → Garnet mesh → HNF / SNF / MN
+                              ↓
+       system.ruby.rnf[i] = CHI_Tile
+                                                       ┌─────────────────┐
+          RubySequencer ── CHI_TileCacheController ──▶ │ Mesh Router[i]  │
+             (in_ports)    (mode=rni | rnf_l2)         └─────────────────┘
+                                                       (direct ExtLink,
+                                                         no side router)
 ```
+
+One sequencer, one configurable cache controller, one ExtLink to a
+mesh router. No L1I, no L1D, no L2-in-RNF, no intermediate "node
+router" — `CHI_Tile` is classified by `CustomMesh.distributeNodes`
+(`configs/topologies/CustomMesh.py:235`) as a non-RNF node, so the
+RNF-specific side-router branch is skipped.
+
+The cache controller is parameterized at construction time by
+`--rn-mode`:
+
+- `rnf_l2` (default): coherent CHI leaf cache (L2-class size).
+  Participates in ReadShared / ReadUnique / CleanUnique / SnpShared
+  just like the L1D-in-RNF used to.
+- `rni`: cache-less (all `alloc_on_*` disabled, 128 B dummy cache).
+  Every `read`/`write` the driver issues becomes a wire transaction
+  on the mesh.
 
 Because `ChiSeqDriver` is a `ClockedObject`, it satisfies the
 sequencer's stat-namespace parent requirement directly — the
 `ChiTileSlot` shim from the SystemC testbench is not needed.
+
+### RN attachment mode (`--rn-mode`)
+
+Both modes share the `CHI_Cache_Controller` SLICC automaton; only the
+allocation/coherence parameters differ. See `driver/cfg_rn.py` for the
+parameter table.
+
+| | `rnf_l2` | `rni` |
+|---|---|---|
+| `alloc_on_seq_acc` | True | False |
+| `alloc_on_readshared/unique/writeback` | True | False |
+| `allow_SD`, `send_evictions` | True | False |
+| Cache | 256 KiB, 8-way | 128 B dummy, 1-way |
+| Wire opcodes on a read | ReadShared / ReadUnique | ReadOnce / ReadOnceCleanInvalid |
+| Wire opcodes on a write | CleanUnique + WriteBackFull / WriteUnique | WriteNoSnpFull |
+| RN participates in snoops | Yes (SnpShared, SnpUnique, SnpCleanInvalid) | No |
+| Supports `opcode_walk` / `read_ex_walk` | Yes | No — guard raises `m5.fatal` |
+
+Pass the mode via `RN_MODE` to the Makefile:
+
+```bash
+make run-smoke_read                     # default RN_MODE=rnf_l2
+make run-smoke_read RN_MODE=rni
+make run-all RN_MODE=rni                # skip the two coherence-only scenarios
+```
+
+Output directories are keyed by mode so both can coexist:
+`m5out/last-<scenario>-<rn_mode>/` (symlink).
 
 ### Component reference
 
@@ -132,41 +186,58 @@ workarounds.
 
 ## Scenarios and results
 
-Last-observed signatures from the committed run:
+Last-observed signatures (fresh runs; both modes):
 
-| Scenario | Drivers | Mechanism | Observed (this testbench) |
-|----------|---------|-----------|---------------------------|
-| `smoke_read`        | Tile 0 only | Blocking `read` | 16 HNF misses (1 per slice), sim finishes at 1.83 M ticks |
-| `smoke_write`       | Tile 0 only | Blocking `write` | 16 HNF misses, 1.83 M ticks |
-| `smoke_opcode_mix`  | All 16 tiles in parallel, private stripes | Blocking mixed R/W | 128 HNF misses total, 0.99 M ticks |
-| `ping_pong`         | Tiles 0 & 15 alternating | Blocking `write` + `ChiEventBus` rendezvous | 100 iterations, 200 HNF misses, 21.6 M ticks |
-| `false_sharing`     | Tiles 0 & 15 at different bytes of one line | Blocking `write(1 byte)` | 1000 iterations, 169 HNF misses, 16.9 M ticks |
-| `memcpy`            | Tile 7 | `async_read`+`async_write` pipelined, depth 4 | 256 lines, 271 HNF misses, 28.6 M ticks |
-| `memset`            | Tile 7 | `async_write` pipelined, depth 4 | 256 lines, 256 HNF misses, 12.7 M ticks |
-| `opcode_walk`       | Tile 3 | Scripted LD/ST/evict walk with per-byte asserts | 4/4 assertions pass, 241.8 M ticks |
-| `read_ex_walk` (new) | Tiles 0/8/15 as A/B/C | `read_exclusive` + `write` with 3-way bus rendezvous | A: 2 misses; B: 1 miss; C: 2 misses + 1 L1 hit; 2 SnpCleanInvalid fan-out; 1 CleanUnique upgrade; 0.51 M ticks |
+| Scenario | Drivers | Mechanism | `simTicks` — `rnf_l2` | `simTicks` — `rni` |
+|----------|---------|-----------|----------------------:|-------------------:|
+| `smoke_read`        | Tile 0 only | Blocking `read`          |    1 509 001 |    1 501 501 |
+| `smoke_write`       | Tile 0 only | Blocking `write`         |    1 509 001 |      561 501 |
+| `smoke_opcode_mix`  | 16 tiles, private stripes | Blocking mixed R/W |  848 501 |      762 501 |
+| `ping_pong`         | Tiles 0 & 15 alternating | Blocking `write` + `ChiEventBus` rendezvous | 14 251 501 | 7 899 001 |
+| `false_sharing`     | Tiles 0 & 15 same line  | Blocking `write(1 byte)` | 14 782 501 |   72 490 001 |
+| `memcpy`            | Tile 7                  | `async_read` + `async_write` pipelined | 18 759 001 | 18 471 501 |
+| `memset`            | Tile 7                  | `async_write` pipelined  |    8 107 001 |    7 854 501 |
+| `opcode_walk`       | Tile 3                  | Scripted LD/ST/evict walk with per-byte asserts |  196 976 501 | *guarded* |
+| `read_ex_walk`      | Tiles 0 / 8 / 15 as A / B / C | `read_exclusive` + `write` with 3-way bus rendezvous | 368 001 | *guarded* |
 
-## Parity with the SystemC testbench
+Why the modes diverge differently per scenario:
 
-After running both `chi_testbench` (SystemC) and `chi_testbench_gem5`
-with identical defaults, the observable CHI metrics match exactly:
+- `false_sharing` is dramatically slower under `rni` (72 M vs 14 M
+  ticks) because every single-byte write crosses the mesh to HNF.
+  In `rnf_l2` the line lives in the tile's leaf cache and the two
+  tiles ping-pong it via `SnpUnique` — far fewer hops per iteration.
+- `smoke_write` is faster under `rni` because there is no write
+  miss-fill (no cache allocation), no CleanUnique upgrade round-trip.
+- `smoke_read` and `memcpy` are about the same — the first access
+  always misses the HNF in either mode, and the leaf cache doesn't
+  see reuse in these scenarios.
 
-| Scenario | `simTicks` (SystemC) | `simTicks` (gem5-native) | Δ |
-|----------|----------------------|--------------------------|---|
-| smoke_read       | 1 833 001     | 1 833 001     | 0 |
-| smoke_write      | 1 833 001     | 1 833 001     | 0 |
-| smoke_opcode_mix |   997 001     |   997 001     | 0 |
-| ping_pong        | 21 631 001    | 21 631 001    | 0 |
-| false_sharing    | 16 867 001    | 16 867 001    | 0 |
-| memcpy           | 28 643 001    | 28 643 001    | 0 |
-| memset           | 12 660 001    | 12 660 001    | 0 |
-| opcode_walk      | 241 751 001   | 241 751 001   | 0 |
+For `read_ex_walk` in `rnf_l2` the per-tile leaf cache produces the
+exact CHI opcode sequence the old L1-in-RNF used to (verified by
+inspecting `SendReadShared` / `SendReadUnique` / `SendCleanUnique` /
+`SnpCleanInvalid` counters).
 
-Total HNF demand-miss counts match tick-for-tick across all 8
-shared scenarios (16, 16, 128, 200, 169, 271, 256, 2049
-respectively). Same network latency, same flit counts, same
-per-RN-F state transitions — the two driver stacks are
-indistinguishable to CHI/Garnet.
+## Differences from the old CHI_RNF topology
+
+Earlier iterations of this testbench wrapped each tile in a full
+`CHI_RNF` (inst_sequencer + data_sequencer + L1I + L1D + L2 + side
+router). That configuration achieved tick-for-tick parity with the
+SystemC testbench at `ruby-book/final/chi_testbench` because both
+implementations shared the exact same CHI stack — only the driver
+mechanism differed.
+
+The current topology intentionally drops two layers:
+
+| Layer (old CHI_RNF) | Reason dropped |
+|---|---|
+| inst_sequencer + L1I | `ChiSeqDriver` never issues instruction fetches |
+| L1D | Collapsed into the single tile cache |
+| Intermediate "node router" (CustomMesh side router) | Only needed when an RNF has multiple controllers to bundle |
+
+Tick parity with the SystemC testbench is therefore no longer the
+goal — the two testbenches now test different CHI topologies. If you
+want the old parity-matching topology back, subclass
+`CHI_config.CHI_RNF` in `cfg_rn.py` instead of `CHI_RNI_DMA`.
 
 ## SystemC ↔ gem5-native: trade-offs
 
@@ -203,11 +274,16 @@ When to pick which:
 | Metric (glob) | Question it answers |
 |---------------|---------------------|
 | `system.ruby.hnfN.cntrl.cache.m_demand_{hits,misses}` | Per-HNF demand pressure |
-| `system.cpuN.l1d.outTransLatHist.Send<Op>::total` | CHI opcode each RN-F emitted |
-| `system.cpuN.l1d.inTransLatHist.Snp<Op>::total`   | Snoops each RN-F received |
+| `system.ruby.rnfN.cntrl.cache.m_demand_{hits,misses}` | Per-tile leaf-cache hits/misses (`rnf_l2`; always 0 misses under `rni`) |
+| `system.ruby.rnfN.cntrl.outTransLatHist.Send<Op>::total` | CHI opcode each tile emitted |
+| `system.ruby.rnfN.cntrl.inTransLatHist.Snp<Op>::total`   | Snoops each tile received (`rnf_l2` only) |
 | `system.ruby.network.average_flit_latency`        | End-to-end flit timing |
 | `system.ruby.network.int_linkN.flits_received`    | Per-link flit traffic |
 | `system.simTicks`                                 | Wall-clock of the simulated run |
+
+The old `system.cpuN.l1d.*` glob no longer exists — the tile cache
+now lives under `system.ruby.rnfN.cntrl.*` because `ChiSeqDriver`
+itself has no cache children.
 
 ## Stage tracker
 
@@ -216,6 +292,11 @@ When to pick which:
   completes with expected HNF distribution.
 - [x] Stage 2 — Latch + ChiEventBus; async_read/write/resolve;
   `ping_pong`, `false_sharing`, `memcpy`, `memset`, `opcode_walk`,
-  `read_ex_walk`. All 9 scenarios exit cleanly; CHI totals match
-  SystemC testbench tick-for-tick.
-- [x] Stage 3 — this README with the comparison table.
+  `read_ex_walk`. All 9 scenarios exit cleanly.
+- [x] Stage 3 — SystemC ↔ gem5-native comparison README.
+- [x] Stage 4 — direct-mesh attachment: swap `CHI_RNF` for a thin
+  `CHI_Tile` that wraps one `RubySequencer` + one configurable
+  `CHI_Cache_Controller` (`driver/cfg_rn.py`). `--rn-mode={rnf_l2,rni}`
+  picks leaf-cache coherence or DMA-style pass-through; neither mode
+  instantiates a side router. `opcode_walk` and `read_ex_walk` guard
+  against `rni` with `m5.fatal`.
