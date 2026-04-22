@@ -28,10 +28,10 @@ class SeqThread;
  * - `notify()`: if a waiter is recorded, resume it; otherwise set a
  *   "pending" flag that the next `wait()` consumes.
  *
- * Pending-notify semantics (rather than strict edge-triggered like
- * sc_event) make cross-fiber rendezvous robust against the
- * unspecified fiber start-up order — the scenario author doesn't
- * have to guarantee "waiter blocks before notifier fires".
+ * The pending-notify flag (rather than strict edge-triggered)
+ * makes cross-fiber rendezvous robust against the unspecified
+ * fiber start-up order — the scenario author doesn't have to
+ * guarantee "waiter blocks before notifier fires".
  *
  * A Latch handles at most one waiter at a time; a second wait() with
  * a waiter already present panics. Scenarios that need broadcast
@@ -64,7 +64,7 @@ class Latch
  * `get(name)` lazily creates a Latch per string key; drivers holding
  * the same bus reference see the same set of latches. Convenience
  * `wait_on` and `notify` helpers spare the caller from holding a
- * Latch& around. Analog of the SystemC ChiEventBus.
+ * Latch& around.
  */
 class ChiEventBus : public SimObject
 {

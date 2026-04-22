@@ -47,7 +47,6 @@ from ruby import CHI_config
 
 from m5.objects import (
     NULL,
-    MessageBuffer,
     RubyCache,
     RubySequencer,
 )

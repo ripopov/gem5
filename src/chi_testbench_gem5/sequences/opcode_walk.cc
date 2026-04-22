@@ -20,8 +20,7 @@ namespace chi_gem5tb
 namespace
 {
 
-// Scripted LD/ST walk with data-dependent assertions. Mirrors the
-// SystemC OpcodeWalkDriver exactly.
+// Scripted LD/ST walk with data-dependent assertions.
 void
 opcode_walk_seq(SequenceContext &ctx)
 {

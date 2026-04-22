@@ -25,8 +25,7 @@ namespace chi_gem5tb
  * (more signals than expected) is a fatal programming error.
  *
  * Exposed to Python as the ChiBarrier SimObject so scenarios can pass
- * the same barrier reference into each driver's params. Matches the
- * role of ChiFinishBarrier in the SystemC testbench.
+ * the same barrier reference into each driver's params.
  */
 class ChiBarrier : public SimObject
 {

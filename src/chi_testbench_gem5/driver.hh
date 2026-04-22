@@ -32,13 +32,11 @@ class ChiEventBus;
  * which registered sequence function its SeqThread runs.
  *
  * Architecture:
- *   - ChiSeqDriver is the ClockedObject at system.cpu[i]. CHI_RNF
- *     attaches inst_sequencer / data_sequencer / L1 / L2 children to
- *     it; the stat namespace parents cleanly because ChiSeqDriver is
- *     a real SimObject (no TileSlot shim needed, unlike the SystemC
- *     testbench).
- *   - getPort("port") returns a RequestPort connected to the RN-F
- *     data sequencer's in_ports (wiring happens in the Python shell).
+ *   - ChiSeqDriver is the ClockedObject at system.cpu[i]. Because it
+ *     is itself a SimObject, Ruby's per-sequencer stat paths parent
+ *     cleanly without any adapter layer.
+ *   - getPort("port") returns a RequestPort the Python shell wires to
+ *     the tile's sequencer in_ports (`system.ruby._cpu_ports[i]`).
  *   - startup() schedules kick_event at curTick(); when that event
  *     fires, seq_thread.run() enters the fiber for the first time.
  *   - Blocking read/write construct a Packet, call sendTimingReq,
@@ -103,18 +101,19 @@ class ChiSeqDriver : public ClockedObject
 
     void read(uint64_t addr, uint8_t *buf, uint32_t len);
     /**
-     * Issues a Packet tagged with `MemCmd::ReadExReq`. Intended to
-     * signal "read with exclusive intent" so the interconnect can
-     * skip a subsequent upgrade.
+     * Issues a Packet tagged with `MemCmd::ReadExReq`, an
+     * "exclusive-intent" read hint.
      *
-     * LIMITATION: In gem5's Ruby CHI today, the sequencer collapses
-     * any read to `RubyRequestType_LD` regardless of the MemCmd
-     * flavor (see src/mem/ruby/system/Sequencer.cc ~line 1061), so
-     * this call currently emits `ReadShared` on the wire — same as
-     * plain read(). The API is kept forward-compatible with a Ruby
-     * protocol that honors ReadExReq; to actually trigger CHI
-     * ReadUnique today, do a write() from a tile that doesn't hold
-     * the line.
+     * At runtime this is indistinguishable from read(): gem5's Ruby
+     * CHI sequencer maps both `MemCmd::ReadReq` and `MemCmd::ReadExReq`
+     * to `RubyRequestType_LD`, which becomes a CHI `ReadShared` on
+     * the wire. The `_exclusive` in the name preserves caller intent
+     * in case Ruby CHI starts honoring the hint; today it does not.
+     *
+     * To acquire exclusive ownership without writing data, issue a
+     * write() from a tile that doesn't hold the line — it produces a
+     * `CleanUnique` upgrade (or `ReadUnique` on a cold line). The
+     * `read_ex_walk` scenario demonstrates this pattern.
      */
     void read_exclusive(uint64_t addr, uint8_t *buf, uint32_t len);
     void write(uint64_t addr, const uint8_t *buf, uint32_t len);

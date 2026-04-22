@@ -39,8 +39,7 @@ smoke_write_seq(SequenceContext &ctx)
     const Tick t_start = curTick();
     for (uint32_t it = 0; it < iters; it++) {
         for (uint64_t addr : addresses) {
-            // Unique byte per iteration so stores carry non-trivial
-            // data (matches the SystemC smoke_write pattern).
+            // Unique byte per iteration so stores carry non-trivial data.
             buf[0] = static_cast<uint8_t>(it & 0xFF);
             drv.write(addr, buf.data(), len);
         }

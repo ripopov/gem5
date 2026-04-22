@@ -20,8 +20,7 @@ namespace
 {
 
 // Pipelined memcpy — K slots, each cycling READING→WRITING→free.
-// Up to pipeline_depth LD+ST pairs in flight at any moment. Ports
-// the SystemC MemcpyDriver directly onto the gem5-native async API.
+// Up to pipeline_depth LD+ST pairs in flight at any moment.
 void
 memcpy_seq(SequenceContext &ctx)
 {

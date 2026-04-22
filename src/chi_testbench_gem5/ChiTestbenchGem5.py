@@ -11,10 +11,10 @@ class ChiGem5Barrier(SimObject):
     """Counter-based completion barrier.
 
     When the configured number of participants call `signal_finish()`,
-    `exitSimLoop()` is invoked to terminate the simulation. Analog of
-    the SystemC testbench's ChiFinishBarrier. Named with the `Gem5`
-    infix to avoid a SimObject-name collision with the SystemC one
-    when both libraries are compiled into the same binary.
+    `exitSimLoop()` is invoked to terminate the simulation. The `Gem5`
+    infix in the SimObject name avoids a collision with `ChiBarrier`
+    elsewhere in the tree when both libraries are linked into the
+    same binary.
     """
 
     type = "ChiGem5Barrier"
@@ -31,7 +31,7 @@ class ChiGem5EventBus(SimObject):
 
     Drivers call `wait_on(name)` / `notify(name)` with string keys;
     multiple drivers sharing the same bus instance see the same
-    latches. Analog of the SystemC testbench's ChiEventBus.
+    latches.
     """
 
     type = "ChiGem5EventBus"

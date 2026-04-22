@@ -27,9 +27,7 @@ class ChiSeqDriver;
  * suspends the fiber via yield_to_primary() until the matching
  * event callback resumes it.
  *
- * This is the exact same stack-switching primitive that backs
- * SystemC's SC_THREAD suspension in gem5's SystemC integration; we
- * just expose it directly instead of going through a SystemC kernel.
+ * Stack-switching is provided by `gem5::Fiber` (src/base/fiber.hh).
  */
 class SeqThread : public Fiber
 {

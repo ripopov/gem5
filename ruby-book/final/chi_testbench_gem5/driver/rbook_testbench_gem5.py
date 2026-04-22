@@ -1,24 +1,15 @@
 # Copyright (c) 2026 ripopov
 # SPDX-License-Identifier: BSD-3-Clause
 """
-Top-level configuration for the gem5-native CPU-less CHI/Garnet Mesh
-testbench.
+Top-level configuration for the CPU-less CHI/Garnet mesh testbench.
 
-This is the native-API counterpart to the SystemC testbench at
-ruby-book/final/chi_testbench. The CHI/Garnet/SLICC stack from Chapter
-17 is reused verbatim; the only change is how the RN-F sequencers are
-stimulated:
-
-  * SystemC version  : per-tile TlmToGem5Bridge64 + SC_MODULE driver.
-  * This version     : per-tile ChiSeqDriver (gem5 ClockedObject with a
-                        Fiber-backed imperative sequence).
-
-Because ChiSeqDriver is itself a ClockedObject, it sits at
-`system.cpu[i]` directly — no TileSlot shim, no TLM bridge, no
-SystemC kernel. A single parameterized driver class plays any
-registered sequence selected by Python (`--scenario=<name>`); each
-scenario script under `scenarios/` picks a sequence per tile and wires
-up shared ChiBarrier / ChiEventBus instances.
+Reuses the Chapter 17 CHI/Garnet/SLICC stack verbatim. Each tile hosts
+a ChiSeqDriver (ClockedObject) running a Fiber-backed sequence, wired
+directly into a tile-local Ruby sequencer. The `--scenario` flag
+selects a registered sequence by name; each scenario module under
+`scenarios/` picks a sequence per tile and passes the shared
+ChiGem5Barrier / ChiGem5EventBus instances through each driver's
+params. `--rn-mode` picks the per-tile CHI attachment (see cfg_rn.py).
 """
 
 from __future__ import annotations
@@ -159,9 +150,8 @@ system.clk_domain = SrcClockDomain(
 )
 system.mem_mode = "timing"
 
-# Scenario returns one ChiSeqDriver per tile. Because ChiSeqDriver is
-# a ClockedObject, it can sit at system.cpu[i] directly — no
-# TileSlot/driver split like the SystemC testbench needs.
+# Scenario returns one ChiSeqDriver per tile. ChiSeqDriver is itself
+# a ClockedObject, so it sits at system.cpu[i] without any adapter.
 drivers = scenario.build(args, planner)
 if len(drivers) != args.num_cpus:
     m5.fatal(

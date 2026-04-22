@@ -34,8 +34,7 @@ smoke_opcode_mix_seq(SequenceContext &ctx)
 
     std::vector<uint8_t> buf(len, 0);
 
-    // Same deterministic LCG as the SystemC version so runs are
-    // stats-comparable.
+    // Deterministic LCG so runs are reproducible under a given seed.
     uint32_t rng = p.seed ? p.seed : 0x12345678u;
     auto next_rand = [&rng]() {
         rng = rng * 1664525u + 1013904223u;

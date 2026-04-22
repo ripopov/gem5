@@ -1,28 +1,22 @@
 # chi_testbench_gem5 — CPU-less CHI/Garnet testbench (pure gem5 APIs)
 
-Native-API counterpart to the SystemC testbench at
-`ruby-book/final/chi_testbench`. Same 4×4 CHI mesh, same 8 SystemC
-scenarios (plus one new `read_ex_walk`), same stimulus — but no
-SystemC kernel, no TLM ⇄ Packet bridge, no `USE_SYSTEMC=true`
-build flag. Each tile is a gem5 `ClockedObject` (`ChiSeqDriver`)
-whose sequence runs on a `Fiber` and issues `Packet`s directly into
-the RN-F sequencer's `in_ports`.
+A CPU-less stimulus testbench for the Chapter 17 4×4 CHI/Garnet mesh.
+Each tile is a gem5 `ClockedObject` (`ChiSeqDriver`) whose sequence
+runs on a `Fiber` and issues `Packet`s directly into a tile-local
+Ruby sequencer. A single parameterized driver class plays any
+registered sequence — no per-scenario C++ classes, no adapters.
 
-This testbench exists to let you read the two implementations side
-by side and pick the style that fits your project. The per-tile CHI
-topology is deliberately simpler than the SystemC version's
-`CHI_RNF` stack: a single configurable cache controller attaches
-each sequencer directly to the mesh router (no L1, no L2-in-RNF, no
-side router). See [Differences from the old CHI_RNF
-topology](#differences-from-the-old-chi_rnf-topology).
+A SystemC counterpart lives at `ruby-book/final/chi_testbench`; the
+[SystemC ↔ gem5-native](#systemc--gem5-native-comparison) section
+compares the two stacks.
 
 ## Layout
 
 | Path | Role |
 |------|------|
-| `driver/rbook_testbench_gem5.py` | Top-level config: 4×4 CHI mesh + scenario dispatch, no TLM bridge, no SystemC kernel |
+| `driver/rbook_testbench_gem5.py` | Top-level config: 4×4 CHI mesh + scenario dispatch + RN-mode wiring |
 | `driver/cfg_rn.py`               | `CHI_Tile` node + configurable `CHI_TileCacheController` (rnf_l2 / rni modes, direct-mesh attach) |
-| `driver/address_planner.py`      | HNF-aware cache-line address math (copied from the SystemC testbench) |
+| `driver/address_planner.py`      | HNF-aware cache-line address math |
 | `scenarios/*.py`                 | One Python module per scenario; exports `build(args, planner) -> [ChiSeqDriver × 16]` |
 | `Makefile`                       | Per-scenario `run-*` targets + `run-all` |
 | `src/chi_testbench_gem5/` *(out of tree)* | All C++ — ChiSeqDriver, SeqThread (Fiber subclass), sync primitives, 10 registered sequences |
@@ -30,7 +24,6 @@ topology](#differences-from-the-old-chi_rnf-topology).
 ## How to run
 
 ```bash
-# USE_SYSTEMC is NOT required for this testbench.
 scons build/RISCV/gem5.opt -j$(nproc) PROTOCOL=CHI
 
 # one scenario (default RN_MODE=rnf_l2; override with rni)
@@ -71,24 +64,11 @@ with gem5's usual outputs and updates a convenience symlink
 ```
 
 One sequencer, one configurable cache controller, one ExtLink to a
-mesh router. No L1I, no L1D, no L2-in-RNF, no intermediate "node
-router" — `CHI_Tile` is classified by `CustomMesh.distributeNodes`
-(`configs/topologies/CustomMesh.py:235`) as a non-RNF node, so the
-RNF-specific side-router branch is skipped.
-
-The cache controller is parameterized at construction time by
-`--rn-mode`:
-
-- `rnf_l2` (default): coherent CHI leaf cache (L2-class size).
-  Participates in ReadShared / ReadUnique / CleanUnique / SnpShared
-  just like the L1D-in-RNF used to.
-- `rni`: cache-less (all `alloc_on_*` disabled, 128 B dummy cache).
-  Every `read`/`write` the driver issues becomes a wire transaction
-  on the mesh.
-
-Because `ChiSeqDriver` is a `ClockedObject`, it satisfies the
-sequencer's stat-namespace parent requirement directly — the
-`ChiTileSlot` shim from the SystemC testbench is not needed.
+mesh router. `CHI_Tile` is classified by `CustomMesh.distributeNodes`
+(`configs/topologies/CustomMesh.py:235`) as a non-`CHI_RNF` node, so
+the intermediate "node router" that bundles multi-controller RNFs is
+skipped. `ChiSeqDriver` being a `ClockedObject` satisfies the
+sequencer's stat-namespace parent requirement with no adapter.
 
 ### RN attachment mode (`--rn-mode`)
 
@@ -125,7 +105,7 @@ Output directories are keyed by mode so both can coexist:
 | `ChiSeqDriver`        | `ClockedObject` (single C++ class)  | **The only driver class.** `sequence` param picks one of the registered sequences (`smoke_read`, `ping_pong`, `opcode_walk`, `read_ex_walk`, ...). Owns one `SeqThread` and one `RequestPort`. |
 | `SeqThread`           | `Fiber` subclass                    | Stack-switching thread that runs the registered sequence. Each blocking call yields to gem5's main event loop; response callbacks resume the fiber. |
 | `SequenceRegistry`    | C++ singleton                       | Name → `SequenceFn` table. Each `sequences/<name>.cc` registers itself at static-init time via `Registrar`. Adding a scenario means dropping one `.cc` and (optionally) one scenario Python module. |
-| `Latch`               | C++ class                           | 1-to-1 notify/wait with *pending-notify* semantics (notify-before-wait is consumed on the next wait). SystemC `sc_event` analog. |
+| `Latch`               | C++ class                           | 1-to-1 notify/wait with pending-notify semantics (notify-before-wait is consumed on the next wait). |
 | `Barrier` (`ChiGem5Barrier`) | C++ class + `SimObject` wrapper | Counter-based completion barrier. Last `signal_finish()` calls `exitSimLoop()` to terminate. Pass by pointer via Python param. |
 | `ChiEventBus` (`ChiGem5EventBus`) | `SimObject`                | Named-`Latch` registry shared between drivers. Drivers call `drv.wait_on(name)` / `drv.notify(name)`; lookups are by string and lazy. |
 | `Semaphore`, `Mailbox<T>` | C++ (library)                   | Stubs for counted-resource and 1-slot FIFO rendezvous. Not used by the current 9 scenarios; available to sequence authors. |
@@ -145,9 +125,9 @@ entry point, but the path differs depending on who calls whom:
   never return). Instead `Latch::notify()` calls
   `waiter->drv().schedule_xfer_wake()`, which schedules a zero-delay
   event; the current fiber keeps running, and B resumes from the
-  primary fiber when the event fires. This is the only piece of the
-  testbench where Fiber mechanics are visible — everything else looks
-  like an imperative SC_THREAD.
+  primary fiber when the event fires. This is the one place where
+  the fiber plumbing becomes user-visible — everywhere else the
+  sequence body reads as plain imperative code.
 
 ### Transport modes
 
@@ -157,32 +137,31 @@ entry point, but the path differs depending on who calls whom:
 | Non-blocking | `drv.async_read[_exclusive]` `drv.async_write` `drv.resolve(h)` `drv.resolve_all()` | Multi-outstanding. Each call returns a `Handle`; `resolve(h)` yields until that handle's response arrives. |
 | Time / rendezvous | `drv.wait_ticks(t)` `drv.wait_on(name)` `drv.notify(name)` | Schedule a wake event / latch hand-off. |
 
-Packet construction: `MemCmd::ReadReq` for `read`, `MemCmd::WriteReq`
-for `write`, `MemCmd::ReadExReq` for `read_exclusive`. **Note:** The
-Ruby CHI sequencer collapses all reads to `RubyRequestType_LD` today
-(`src/mem/ruby/system/Sequencer.cc` ~line 1061), so
-`read_exclusive()` emits `ReadShared` on the wire — same as plain
-`read()`. The API is kept forward-compatible with a Ruby protocol
-that honors ReadExReq. To actually force CHI `ReadUnique` today, do
-a `write()` from a tile that doesn't yet hold the line. See
-`read_ex_walk` for the exclusive-ownership demo.
+`read_exclusive()` is indistinguishable from `read()` at runtime
+today: gem5's Ruby CHI sequencer maps both `MemCmd::ReadReq` and
+`MemCmd::ReadExReq` to `RubyRequestType_LD`, which becomes a CHI
+`ReadShared` on the wire. The name preserves caller intent in case
+Ruby CHI starts honoring it. To acquire exclusive ownership without
+issuing data, use `write()` from a tile that doesn't hold the line —
+that produces a `CleanUnique` upgrade (or `ReadUnique` on a cold
+line). See the `read_ex_walk` scenario for the canonical pattern.
 
 ## Python shell (`driver/rbook_testbench_gem5.py`)
 
-The shell is much thinner than the SystemC one:
-
-1. Parse args (standard `common.Options` + `--scenario` + `--scenario-iterations`).
-2. Resolve `scenarios/<name>.py` and call `build(args, planner)`; get a list of 16 `ChiSeqDriver` objects.
-3. Build `System`, assign the drivers to `system.cpu` (they *are*
-   ClockedObjects — no TileSlot indirection).
-4. `Ruby.create_system(args, False, system)` attaches RN-F + HNF + SNF
-   + Garnet mesh as children.
-5. For each tile, wire `drv.port = system.ruby._cpu_ports[i].in_ports`.
-6. `Root(full_system=False, system=system)`, `m5.instantiate()`,
+1. Parse args (standard `common.Options` + `--scenario` +
+   `--scenario-iterations` + `--rn-mode`).
+2. Resolve `scenarios/<name>.py` and call `build(args, planner)`; get
+   a list of 16 `ChiSeqDriver` objects.
+3. Build `System`, assign the drivers to `system.cpu` (drivers are
+   themselves ClockedObjects).
+4. Install `system._rnf_gen = CHI_Tile.make_generator(args.rn_mode)`
+   and a `system._mn_gen` that provides a DVM Misc Node with no
+   upstream L1Ds (our tiles have none, and DVM is idle in SE mode).
+5. `Ruby.create_system(args, False, system)` attaches the RN tiles
+   plus HNFs and SNFs, building the Garnet mesh.
+6. Wire `drv.port = system.ruby._cpu_ports[i].in_ports` per tile.
+7. `Root(full_system=False, system=system)`, `m5.instantiate()`,
    `m5.simulate()`.
-
-No `TlmToGem5Bridge64`, no `SystemC_Kernel`, no reference-cycle
-workarounds.
 
 ## Scenarios and results
 
@@ -200,10 +179,10 @@ Last-observed signatures (fresh runs; both modes):
 | `opcode_walk`       | Tile 3                  | Scripted LD/ST/evict walk with per-byte asserts |  196 976 501 | *guarded* |
 | `read_ex_walk`      | Tiles 0 / 8 / 15 as A / B / C | `read_exclusive` + `write` with 3-way bus rendezvous | 368 001 | *guarded* |
 
-Why the modes diverge differently per scenario:
+Mode-dependent differences worth noting:
 
 - `false_sharing` is dramatically slower under `rni` (72 M vs 14 M
-  ticks) because every single-byte write crosses the mesh to HNF.
+  ticks) because every single-byte write crosses the mesh to the HNF.
   In `rnf_l2` the line lives in the tile's leaf cache and the two
   tiles ping-pong it via `SnpUnique` — far fewer hops per iteration.
 - `smoke_write` is faster under `rni` because there is no write
@@ -211,63 +190,85 @@ Why the modes diverge differently per scenario:
 - `smoke_read` and `memcpy` are about the same — the first access
   always misses the HNF in either mode, and the leaf cache doesn't
   see reuse in these scenarios.
+- `read_ex_walk` under `rnf_l2` produces the CHI opcode sequence the
+  scenario asserts (`SendReadShared` / `SendCleanUnique` /
+  `SnpCleanInvalid` counters visible in `stats.txt`). Under `rni`
+  the per-tile cache doesn't hold a line between accesses, so the
+  scenario's premise doesn't apply and a guard exits fast.
 
-For `read_ex_walk` in `rnf_l2` the per-tile leaf cache produces the
-exact CHI opcode sequence the old L1-in-RNF used to (verified by
-inspecting `SendReadShared` / `SendReadUnique` / `SendCleanUnique` /
-`SnpCleanInvalid` counters).
+## SystemC ↔ gem5-native comparison
 
-## Differences from the old CHI_RNF topology
+Both testbenches hit the same 4×4 CHI/Garnet mesh with the same 8
+shared scenarios (`read_ex_walk` is gem5-native only; SystemC has no
+direct analog yet). The scenario bodies look near-identical — loops,
+blocking reads/writes, rendezvous on a named event — but the driver
+stack underneath them differs at several layers.
 
-Earlier iterations of this testbench wrapped each tile in a full
-`CHI_RNF` (inst_sequencer + data_sequencer + L1I + L1D + L2 + side
-router). That configuration achieved tick-for-tick parity with the
-SystemC testbench at `ruby-book/final/chi_testbench` because both
-implementations shared the exact same CHI stack — only the driver
-mechanism differed.
+### Build
 
-The current topology intentionally drops two layers:
+| | SystemC testbench | gem5-native testbench |
+|---|---|---|
+| Required build flag | `USE_SYSTEMC=true` | none |
+| Extra gem5 dependencies | SystemC integration (`src/systemc/`), TLM bridge (`src/systemc/tlm_bridge/`) | `gem5::Fiber` only (already in-tree at `src/base/fiber.hh`) |
+| Binary size delta (.opt) | +SystemC kernel, +TLM wrappers | none beyond the testbench sources |
 
-| Layer (old CHI_RNF) | Reason dropped |
-|---|---|
-| inst_sequencer + L1I | `ChiSeqDriver` never issues instruction fetches |
-| L1D | Collapsed into the single tile cache |
-| Intermediate "node router" (CustomMesh side router) | Only needed when an RNF has multiple controllers to bundle |
+### Runtime
 
-Tick parity with the SystemC testbench is therefore no longer the
-goal — the two testbenches now test different CHI topologies. If you
-want the old parity-matching topology back, subclass
-`CHI_config.CHI_RNF` in `cfg_rn.py` instead of `CHI_RNI_DMA`.
+| | SystemC | gem5-native |
+|---|---|---|
+| Event loops | Two (gem5 EventQueue + SystemC kernel) with quantum-based sync | One (gem5 EventQueue) |
+| Fiber scheduling | Hidden inside `SC_THREAD` | Explicit `yield_to_primary()` + scheduled `xfer_wake` for cross-fiber wakes |
+| Cross-fiber wake workaround | Not needed (SystemC kernel mediates) | One ~20-line scheduled-event indirection (`Latch::notify` → `schedule_xfer_wake`) |
+| Packet path layers | `SC_THREAD → b_transport → TlmToGem5Bridge64 → gem5::Packet → sequencer.in_ports` (4) | `SeqThread → gem5::Packet → sequencer.in_ports` (1) |
+| Stack trace shape on a bad Packet | Crosses kernel boundary | Stays inside gem5 call frames |
 
-## SystemC ↔ gem5-native: trade-offs
+### Ergonomics / authoring cost
 
-Both testbenches give the scenario author an imperative API with
-blocking I/O, multi-outstanding requests, and cross-tile sync.
-They differ in how that API is plumbed:
+| | SystemC | gem5-native |
+|---|---|---|
+| Per-tile wiring objects | `TileSlot` + `TlmToGem5Bridge64` + `SC_MODULE` driver | one `ChiSeqDriver` |
+| Per-scenario C++ | Header + `.cc` + Python SimObject class | single `.cc` with a `Registrar` |
+| Scenario Python | Scenario module builds the `SimObject` subclass per scenario | Scenario module instantiates one `ChiSeqDriver` class per tile |
+| Sync primitives shipped | `sc_event`, `sc_semaphore`, `sc_fifo` (bundled with SystemC) | Hand-rolled `Latch`, `Barrier`, `Semaphore`, `Mailbox<T>` in `src/chi_testbench_gem5/sync/` |
+| Stat namespace parent | `ChiTileSlot` adapter needed (SC_MODULE isn't a SimObject) | `ClockedObject` parents directly |
+| External IP reuse | Accepts vendor SystemC/TLM IP through the TLM bridge | No cross-integration path |
+| Reader vocabulary | UVM / SystemC idioms (familiar to hardware-verification backgrounds) | gem5 idioms (familiar to gem5 contributors) |
 
-| Aspect | `chi_testbench` (SystemC) | `chi_testbench_gem5` (this) |
-|--------|---------------------------|------------------------------|
-| Build flag | Requires `USE_SYSTEMC=true` | Not required |
-| Python SimObjects | 13 (one per driver + bridge, kernel, sync, slot) | 3 (ChiSeqDriver + Barrier + EventBus) |
-| Config LOC (Python) | ~548 | ~470 |
-| C++ LOC (framework + scenarios) | ~1187 | ~1230 |
-| C++ header files | 13 | 6 |
-| Per-tile wiring | TileSlot + TLM bridge + SC_MODULE driver | Just a ChiSeqDriver |
-| Sync primitives | `sc_event`, `sc_semaphore`, `sc_fifo` (bundled with SystemC) | Hand-rolled `Latch`, `Barrier`, `Semaphore`, `Mailbox` (this library) |
-| Fiber mechanics | Hidden inside SystemC's SC_THREAD | Visible in `SeqThread::yield_to_primary` + `schedule_xfer_wake` |
-| New-scenario cost | 1 `.cc` + 1 `.hh` + Python SimObject class + scenario module | 1 `.cc` (function + `Registrar`) + scenario module |
-| Typecheck / stat parenting | Needs `ChiTileSlot` shim | No shim needed (driver is a ClockedObject) |
+### Sizes
 
-When to pick which:
+As-committed line counts (both testbenches, framework + per-scenario + Python config):
 
-- **SystemC** if the reader already thinks in UVM / wants free
-  `sc_event`, `sc_semaphore`, `sc_fifo`, or plans to integrate
-  external SystemC IP into the simulation. The per-scenario C++ class
-  overhead is worth the vocabulary alignment.
-- **gem5-native (this)** if the project doesn't otherwise need
-  SystemC, if you want one driver class across all scenarios, or if
-  stat-namespace parentage matters. Adding a scenario is strictly
-  less code.
+| | SystemC | gem5-native |
+|---|---:|---:|
+| C++ source | 1 835 | 1 921 |
+| Python | 591 | 666 |
+
+Lines-per-scenario is roughly comparable; the gem5-native version
+saves per-scenario boilerplate (one C++ file instead of two + SimObject
+class) but spends it back on the configurable cache controller
+(`cfg_rn.py`, ~200 lines) and one additional scenario (`read_ex_walk`).
+
+### CHI topology (implementation choice, not mechanism)
+
+| | SystemC | gem5-native |
+|---|---|---|
+| Per-tile RN | `CHI_RNF` (L1I + L1D + L2 + side router) | `CHI_Tile` (one cache controller, direct to mesh router) |
+| Side router | Yes, from `CustomMesh`'s `CHI_RNF` branch | No — `CHI_Tile` is classified as a non-RNF node |
+
+Either testbench can drop its chosen topology in for the other's
+without touching sequence code — both `CHI_RNF.generate` and
+`CHI_Tile.make_generator` are callables that get plugged into Ruby's
+`_rnf_gen` hook. The topology split reflects what each testbench
+chose to illustrate, not a constraint of the driver mechanism.
+
+### Summary
+
+For this class of CPU-less stimulus testbench the two approaches
+deliver the same observable CHI behavior; the choice is driven by
+host-project constraints — existing SystemC dependencies, plans to
+integrate vendor SystemC IP, team vocabulary, and how much the
+extra kernel / TLM bridge overhead matters. Neither is strictly
+"simpler" in the abstract — they shift different costs around.
 
 ## Reading stats.txt
 
@@ -280,23 +281,3 @@ When to pick which:
 | `system.ruby.network.average_flit_latency`        | End-to-end flit timing |
 | `system.ruby.network.int_linkN.flits_received`    | Per-link flit traffic |
 | `system.simTicks`                                 | Wall-clock of the simulated run |
-
-The old `system.cpuN.l1d.*` glob no longer exists — the tile cache
-now lives under `system.ruby.rnfN.cntrl.*` because `ChiSeqDriver`
-itself has no cache children.
-
-## Stage tracker
-
-- [x] Stage 1 — ChiSeqDriver, SeqThread, Barrier, `idle` + 3 smoke
-  sequences, Python shell + Makefile. `make run-smoke_read`
-  completes with expected HNF distribution.
-- [x] Stage 2 — Latch + ChiEventBus; async_read/write/resolve;
-  `ping_pong`, `false_sharing`, `memcpy`, `memset`, `opcode_walk`,
-  `read_ex_walk`. All 9 scenarios exit cleanly.
-- [x] Stage 3 — SystemC ↔ gem5-native comparison README.
-- [x] Stage 4 — direct-mesh attachment: swap `CHI_RNF` for a thin
-  `CHI_Tile` that wraps one `RubySequencer` + one configurable
-  `CHI_Cache_Controller` (`driver/cfg_rn.py`). `--rn-mode={rnf_l2,rni}`
-  picks leaf-cache coherence or DMA-style pass-through; neither mode
-  instantiates a side router. `opcode_walk` and `read_ex_walk` guard
-  against `rni` with `m5.fatal`.
