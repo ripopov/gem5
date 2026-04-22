@@ -1,0 +1,261 @@
+<mxfile host="Electron" modified="2026-04-22T00:00:00.000Z" agent="claude" version="24.0.0">
+  <diagram name="chi_testbench_gem5 architecture" id="chi-tb-gem5-arch">
+    <mxGraphModel dx="1400" dy="1900" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="1900" math="0" shadow="0" background="#ffffff">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <!-- ============================================================== -->
+        <!--  PANEL 1 — SINGLE TILE DEEP DIVE                                -->
+        <!-- ============================================================== -->
+        <mxCell id="p1_title" value="&lt;b style=&quot;font-size:17px&quot;&gt;Panel 1 — Single tile architecture&lt;/b&gt; &lt;span style=&quot;font-size:13px;color:#475569&quot;&gt;system.cpu[i] (gem5 side) ↔ system.ruby.rnf[i] (Ruby side)&lt;/span&gt;" style="text;html=1;align=left;verticalAlign=middle;fontSize=14;fontColor=#0f172a;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="20" y="10" width="1360" height="30" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="p1_frame" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8FAFC;strokeColor=#334155;strokeWidth=2;arcSize=2;" vertex="1" parent="1">
+          <mxGeometry x="20" y="50" width="1360" height="860" as="geometry"/>
+        </mxCell>
+
+        <!-- LEFT — gem5 domain (ChiSeqDriver) -->
+        <mxCell id="p1_gem5_frame" value="&lt;b style=&quot;color:#1e3a8a&quot;&gt;gem5 domain — ChiSeqDriver (ClockedObject)&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EFF6FF;strokeColor=#1d4ed8;strokeWidth=2;verticalAlign=top;fontSize=13;fontColor=#1e3a8a;arcSize=3;" vertex="1" parent="1">
+          <mxGeometry x="40" y="75" width="560" height="810" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="p1_params" value="&lt;b&gt;Python params (SimObject)&lt;/b&gt;&lt;div style=&quot;font-size:11px;color:#1e3a8a;font-weight:normal;margin-top:4px;text-align:left;padding:0 8px;&quot;&gt;sequence = &quot;ping_pong&quot; / &quot;opcode_walk&quot; / ...&lt;br/&gt;tile_id, addresses[], iterations, access_size&lt;br/&gt;target_addr, filler_base, filler_lines&lt;br/&gt;line_addr, byte_offset, pipeline_depth&lt;br/&gt;role, wait_event_name, post_event_name&lt;br/&gt;finish_barrier → ChiGem5Barrier (shared)&lt;br/&gt;event_bus      → ChiGem5EventBus (shared)&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DBEAFE;strokeColor=#1d4ed8;strokeWidth=1.2;verticalAlign=top;fontSize=12;fontColor=#1e3a8a;arcSize=6;" vertex="1" parent="1">
+          <mxGeometry x="60" y="110" width="520" height="150" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="p1_fiber_box" value="&lt;b style=&quot;color:#6d28d9&quot;&gt;SeqThread : gem5::Fiber&lt;/b&gt;&lt;div style=&quot;font-size:11px;color:#6d28d9;font-weight:normal;margin-top:2px&quot;&gt;stack-switched coroutine&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE9FE;strokeColor=#7c3aed;strokeWidth=2;verticalAlign=top;fontSize=13;fontColor=#4c1d95;arcSize=4;" vertex="1" parent="1">
+          <mxGeometry x="60" y="280" width="520" height="220" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="p1_seq_body" value="&lt;b&gt;sequence body (C++ fn resolved by SequenceRegistry)&lt;/b&gt;&lt;div style=&quot;font-size:11px;color:#334155;font-weight:normal;margin-top:4px;text-align:left;padding:0 8px;&quot;&gt;void my_seq(SequenceContext&amp;amp;) { ... }&lt;br/&gt;// issues reads/writes, yields on blocking calls,&lt;br/&gt;// wakes on responses or rendezvous notifications&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#7c3aed;strokeWidth=1.2;verticalAlign=top;fontSize=12;fontColor=#334155;arcSize=5;" vertex="1" parent="1">
+          <mxGeometry x="78" y="330" width="484" height="70" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="p1_api_label" value="&lt;b&gt;API surface the sequence calls&lt;/b&gt;" style="text;html=1;fontSize=11;fontColor=#4c1d95;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="78" y="405" width="484" height="18" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="p1_api_block" value="&lt;div style=&quot;font-size:11px;color:#4c1d95;font-weight:normal;text-align:left;padding:6px 10px;line-height:1.5&quot;&gt;&lt;b&gt;Blocking&lt;/b&gt;: read() · write() · read_exclusive()&lt;br/&gt;&lt;b&gt;Non-blocking&lt;/b&gt;: async_read{_exclusive}() · async_write() · resolve(h) · resolve_all()&lt;br/&gt;&lt;b&gt;Time / sync&lt;/b&gt;: wait_ticks() · wait_on(name) · notify(name) · barrier.signal_finish()&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#7c3aed;strokeWidth=1.2;verticalAlign=top;fontSize=12;fontColor=#4c1d95;arcSize=5;" vertex="1" parent="1">
+          <mxGeometry x="78" y="425" width="484" height="62" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="p1_events_box" value="&lt;b&gt;Event callbacks (on gem5 EventQueue)&lt;/b&gt;&lt;div style=&quot;font-size:11px;color:#334155;font-weight:normal;margin-top:4px;text-align:left;padding:0 8px;line-height:1.5&quot;&gt;&lt;b&gt;recvTimingResp&lt;/b&gt;(pkt) → seq_thread.run()  // response wakes fiber&lt;br/&gt;&lt;b&gt;kickEvent&lt;/b&gt;              → seq_thread.run()  // first entry into fiber&lt;br/&gt;&lt;b&gt;xfer_wake&lt;/b&gt; (0-tick)    → seq_thread.run()  // cross-fiber handoff&lt;br/&gt;&lt;b&gt;wait_event&lt;/b&gt;           → seq_thread.run()  // wait_ticks timer&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEF3C7;strokeColor=#c58b1b;strokeWidth=1.5;verticalAlign=top;fontSize=12;fontColor=#7c2d12;arcSize=5;" vertex="1" parent="1">
+          <mxGeometry x="60" y="520" width="520" height="120" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="p1_dataport" value="&lt;b&gt;DataPort : RequestPort&lt;/b&gt;&lt;div style=&quot;font-size:11px;color:#334155;font-weight:normal;margin-top:3px&quot;&gt;sendTimingReq(Packet*) &amp;nbsp;·&amp;nbsp; recvTimingResp() &amp;nbsp;·&amp;nbsp; recvReqRetry()&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E0F2FE;strokeColor=#0369a1;strokeWidth=2;verticalAlign=top;fontSize=13;fontColor=#0c4a6e;arcSize=4;" vertex="1" parent="1">
+          <mxGeometry x="60" y="670" width="520" height="60" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="p1_sync_note" value="&lt;b&gt;Shared sync objects&lt;/b&gt; (same Python instance wired into every driver)&lt;div style=&quot;font-size:11px;color:#334155;font-weight:normal;margin-top:4px;text-align:left;padding:0 8px&quot;&gt;ChiGem5Barrier   — counter-based, last signal_finish() calls exitSimLoop()&lt;br/&gt;ChiGem5EventBus  — named-Latch registry; wait_on(&amp;quot;foo&amp;quot;) / notify(&amp;quot;foo&amp;quot;)&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3E8FF;strokeColor=#7c3aed;strokeWidth=1.2;dashed=1;verticalAlign=top;fontSize=12;fontColor=#4c1d95;arcSize=6;" vertex="1" parent="1">
+          <mxGeometry x="60" y="750" width="520" height="110" as="geometry"/>
+        </mxCell>
+
+        <!-- CENTER — Packet flow arrows -->
+        <mxCell id="p1_center_req" value="" style="endArrow=classic;html=1;strokeColor=#1d4ed8;strokeWidth=2.5;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="p1_dataport" target="p1_seq_in">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1_center_req_lbl" value="&lt;b style=&quot;color:#1d4ed8&quot;&gt;sendTimingReq(Packet*)&lt;/b&gt;&lt;div style=&quot;font-size:10px;color:#1d4ed8&quot;&gt;fiber yields to primary&lt;/div&gt;" style="text;html=1;fontSize=11;fontColor=#1d4ed8;align=center;verticalAlign=middle;strokeColor=none;fillColor=#FFFFFF;" vertex="1" parent="1">
+          <mxGeometry x="608" y="665" width="184" height="34" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="p1_center_resp" value="" style="endArrow=classic;html=1;strokeColor=#be123c;strokeWidth=2.5;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;dashed=1;" edge="1" parent="1" source="p1_seq_in" target="p1_dataport">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1_center_resp_lbl" value="&lt;b style=&quot;color:#be123c&quot;&gt;recvTimingResp(Packet*)&lt;/b&gt;&lt;div style=&quot;font-size:10px;color:#be123c&quot;&gt;event → seq_thread.run()&lt;/div&gt;" style="text;html=1;fontSize=11;fontColor=#be123c;align=center;verticalAlign=middle;strokeColor=none;fillColor=#FFFFFF;" vertex="1" parent="1">
+          <mxGeometry x="608" y="708" width="184" height="32" as="geometry"/>
+        </mxCell>
+
+        <!-- RIGHT — Ruby/CHI domain -->
+        <mxCell id="p1_ruby_frame" value="&lt;b style=&quot;color:#0f766e&quot;&gt;Ruby/CHI domain — system.ruby.rnf[i] = CHI_Tile&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F0FDFA;strokeColor=#0f766e;strokeWidth=2;verticalAlign=top;fontSize=13;fontColor=#115e59;arcSize=3;" vertex="1" parent="1">
+          <mxGeometry x="800" y="75" width="560" height="810" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="p1_seq_in" value="&lt;b&gt;RubySequencer&lt;/b&gt;&lt;div style=&quot;font-size:11px;color:#115e59;font-weight:normal;margin-top:4px;text-align:left;padding:0 8px;line-height:1.5&quot;&gt;in_ports (slave)   ← DataPort&lt;br/&gt;out_ports (master) → recvTimingResp&lt;br/&gt;mandatoryQueue · coalescedTable · deadlock watchdog&lt;br/&gt;&lt;span style=&quot;color:#4a044e&quot;&gt;note: MemCmd::ReadReq and ReadExReq both→ RubyRequestType_LD&lt;/span&gt;&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#CCFBF1;strokeColor=#0f766e;strokeWidth=1.5;verticalAlign=top;fontSize=12;fontColor=#115e59;arcSize=5;" vertex="1" parent="1">
+          <mxGeometry x="820" y="110" width="520" height="140" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="p1_ctrl" value="&lt;b style=&quot;color:#7c2d12&quot;&gt;CHI_TileCacheController&lt;/b&gt;  &lt;span style=&quot;font-size:11px;color:#7c2d12;font-weight:normal&quot;&gt;— Base_CHI_Cache_Controller&lt;/span&gt;&lt;div style=&quot;font-size:11px;color:#7c2d12;font-weight:normal;margin-top:2px&quot;&gt;shared SLICC automaton (CHI_Cache_Controller.sm) · is_HN=False · DMT/DCT disabled&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEF3C7;strokeColor=#c58b1b;strokeWidth=2.5;verticalAlign=top;fontSize=13;fontColor=#7c2d12;arcSize=3;" vertex="1" parent="1">
+          <mxGeometry x="820" y="270" width="520" height="460" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="p1_cache_lbl" value="&lt;b&gt;Line storage + TBEs&lt;/b&gt;" style="text;html=1;fontSize=11;fontColor=#7c2d12;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="836" y="315" width="488" height="18" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="p1_cache_box" value="&lt;b&gt;cache : RubyCache&lt;/b&gt;&lt;div style=&quot;font-size:11px;color:#115e59;font-weight:normal;margin-top:2px&quot;&gt;mode-sized (see cards below)&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#CCFBF1;strokeColor=#0f766e;strokeWidth=1.2;verticalAlign=middle;align=center;fontSize=12;fontColor=#115e59;arcSize=5;" vertex="1" parent="1">
+          <mxGeometry x="836" y="335" width="240" height="60" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="p1_tbe_box" value="&lt;b&gt;TBE pools&lt;/b&gt;&lt;div style=&quot;font-size:11px;color:#7c2d12;font-weight:normal;margin-top:2px;text-align:left;padding:0 8px;line-height:1.4&quot;&gt;request: 32 · snoop: 16 · repl: 16&lt;br/&gt;DVM req/snoop: 1 / 1&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEFCE8;strokeColor=#c58b1b;strokeWidth=1.2;verticalAlign=top;fontSize=12;fontColor=#7c2d12;arcSize=5;" vertex="1" parent="1">
+          <mxGeometry x="1084" y="335" width="240" height="60" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="p1_mode_lbl" value="&lt;b&gt;Mode-dependent parameters&lt;/b&gt; &lt;span style=&quot;font-size:11px;color:#7c2d12;font-weight:normal&quot;&gt;— picked by --rn-mode at build time&lt;/span&gt;" style="text;html=1;fontSize=11;fontColor=#7c2d12;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="836" y="410" width="488" height="18" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="p1_mode_rnfl2" value="&lt;b style=&quot;color:#065f46&quot;&gt;mode = &quot;rnf_l2&quot;&lt;/b&gt; &lt;span style=&quot;font-size:10px;color:#065f46&quot;&gt;(coherent leaf cache)&lt;/span&gt;&lt;div style=&quot;font-size:11px;color:#065f46;font-weight:normal;margin-top:4px;text-align:left;padding:0 6px;line-height:1.45&quot;&gt;cache = 256 KiB, 8-way&lt;br/&gt;alloc_on_seq_acc = True&lt;br/&gt;alloc_on_read{shared,unique,once} = True&lt;br/&gt;alloc_on_writeback = True&lt;br/&gt;allow_SD = True · send_evictions = True&lt;br/&gt;dealloc_backinv_{unique,shared} = True&lt;hr style=&quot;border:0;border-top:1px dashed #065f46;margin:4px 0&quot;/&gt;&lt;b&gt;Wire opcodes&lt;/b&gt;&lt;br/&gt;read → ReadShared / ReadUnique&lt;br/&gt;write → CleanUnique + WriteBackFull&lt;br/&gt;accepts SnpShared / SnpUnique / SnpCleanInv&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D1FAE5;strokeColor=#059669;strokeWidth=2;verticalAlign=top;fontSize=12;fontColor=#065f46;arcSize=5;" vertex="1" parent="1">
+          <mxGeometry x="836" y="430" width="240" height="260" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="p1_mode_rni" value="&lt;b style=&quot;color:#9a3412&quot;&gt;mode = &quot;rni&quot;&lt;/b&gt; &lt;span style=&quot;font-size:10px;color:#9a3412&quot;&gt;(cache-less / DMA-like)&lt;/span&gt;&lt;div style=&quot;font-size:11px;color:#9a3412;font-weight:normal;margin-top:4px;text-align:left;padding:0 6px;line-height:1.45&quot;&gt;cache = 128 B dummy, 1-way&lt;br/&gt;alloc_on_seq_acc = False&lt;br/&gt;alloc_on_read{shared,unique,once} = False&lt;br/&gt;alloc_on_writeback = False&lt;br/&gt;allow_SD = False · send_evictions = False&lt;br/&gt;dealloc_backinv_{unique,shared} = False&lt;hr style=&quot;border:0;border-top:1px dashed #9a3412;margin:4px 0&quot;/&gt;&lt;b&gt;Wire opcodes&lt;/b&gt;&lt;br/&gt;read → ReadOnce / ReadOnceCleanInvalid&lt;br/&gt;write → WriteNoSnpFull&lt;br/&gt;never snooped (not a sharing RN)&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFEDD5;strokeColor=#ea580c;strokeWidth=2;verticalAlign=top;fontSize=12;fontColor=#9a3412;arcSize=5;" vertex="1" parent="1">
+          <mxGeometry x="1084" y="430" width="240" height="260" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="p1_router" value="&lt;b&gt;Mesh router (Garnet)&lt;/b&gt;&lt;div style=&quot;font-size:11px;color:#334155;font-weight:normal;margin-top:3px&quot;&gt;direct ExtLink from controller · no intermediate &amp;quot;node router&amp;quot;&lt;br/&gt;(CustomMesh isinstance branch for CHI_RNF is skipped)&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#334155;strokeWidth=2;verticalAlign=top;fontSize=13;fontColor=#0f172a;arcSize=4;" vertex="1" parent="1">
+          <mxGeometry x="820" y="760" width="520" height="90" as="geometry"/>
+        </mxCell>
+
+        <!-- arrows between seq → ctrl → router -->
+        <mxCell id="p1_seq_to_ctrl" value="" style="endArrow=classic;html=1;strokeColor=#0f766e;strokeWidth=2;" edge="1" parent="1" source="p1_seq_in" target="p1_ctrl">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="p1_ctrl_to_router" value="" style="endArrow=classic;html=1;strokeColor=#0f766e;strokeWidth=2;" edge="1" parent="1" source="p1_ctrl" target="p1_router">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- ============================================================== -->
+        <!--  PANEL 2 — HETEROGENEOUS 4x4 MESH                               -->
+        <!-- ============================================================== -->
+        <mxCell id="p2_title" value="&lt;b style=&quot;font-size:17px&quot;&gt;Panel 2 — 4×4 mesh with mixed per-tile sequences&lt;/b&gt; &lt;span style=&quot;font-size:13px;color:#475569&quot;&gt;every tile is a ChiSeqDriver; each scenario picks the per-tile &lt;code&gt;sequence&lt;/code&gt; param; --rn-mode selects the system-wide attach style&lt;/span&gt;" style="text;html=1;align=left;verticalAlign=middle;fontSize=14;fontColor=#0f172a;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="20" y="945" width="1360" height="38" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="p2_frame" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8FAFC;strokeColor=#334155;strokeWidth=2;arcSize=2;" vertex="1" parent="1">
+          <mxGeometry x="20" y="990" width="1360" height="880" as="geometry"/>
+        </mxCell>
+
+        <!-- Legend -->
+        <mxCell id="p2_legend_frame" value="&lt;b&gt;Legend&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#94a3b8;strokeWidth=1.2;verticalAlign=top;fontSize=11;fontColor=#334155;arcSize=3;" vertex="1" parent="1">
+          <mxGeometry x="40" y="1010" width="1320" height="70" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="p2_leg_rnfl2" value="&lt;b style=&quot;color:#065f46&quot;&gt;rnf_l2 tile&lt;/b&gt; coherent leaf cache" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D1FAE5;strokeColor=#059669;strokeWidth=1.5;verticalAlign=middle;align=center;fontSize=11;fontColor=#065f46;arcSize=4;" vertex="1" parent="1">
+          <mxGeometry x="60" y="1038" width="200" height="32" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2_leg_rni" value="&lt;b style=&quot;color:#9a3412&quot;&gt;rni tile&lt;/b&gt; DMA-like, no cache" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFEDD5;strokeColor=#ea580c;strokeWidth=1.5;verticalAlign=middle;align=center;fontSize=11;fontColor=#9a3412;arcSize=4;" vertex="1" parent="1">
+          <mxGeometry x="275" y="1038" width="200" height="32" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2_leg_hnf" value="&lt;b&gt;HN-F&lt;/b&gt; LLC slice (per router)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E0F2FE;strokeColor=#0369a1;strokeWidth=1.5;verticalAlign=middle;align=center;fontSize=11;fontColor=#0c4a6e;arcSize=4;" vertex="1" parent="1">
+          <mxGeometry x="490" y="1038" width="200" height="32" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2_leg_snf" value="&lt;b&gt;SN-F&lt;/b&gt; DDR (routers 0, 15)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E0E7FF;strokeColor=#4338ca;strokeWidth=1.5;verticalAlign=middle;align=center;fontSize=11;fontColor=#312e81;arcSize=4;" vertex="1" parent="1">
+          <mxGeometry x="705" y="1038" width="200" height="32" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2_leg_mn" value="&lt;b&gt;MN&lt;/b&gt; DVM coordinator (router 0)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FCE7F3;strokeColor=#be185d;strokeWidth=1.5;verticalAlign=middle;align=center;fontSize=11;fontColor=#831843;arcSize=4;" vertex="1" parent="1">
+          <mxGeometry x="920" y="1038" width="220" height="32" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2_leg_rtr" value="&lt;b&gt;R&lt;/b&gt; Garnet router" style="rhombus;whiteSpace=wrap;html=1;fillColor=#E2E8F0;strokeColor=#334155;strokeWidth=1.5;fontSize=11;fontColor=#0f172a;aspect=fixed;" vertex="1" parent="1">
+          <mxGeometry x="1160" y="1033" width="44" height="44" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2_leg_rtr_txt" value="Garnet router" style="text;html=1;fontSize=11;fontColor=#0f172a;align=left;verticalAlign=middle;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="1210" y="1038" width="150" height="32" as="geometry"/>
+        </mxCell>
+
+        <!-- 4x4 grid of tile cards, each at (col * 320 + 50, row * 180 + 1110) -->
+        <!-- ROW 0 -->
+        <mxCell id="t0" value="&lt;b&gt;Tile 0&lt;/b&gt; · R0&lt;br/&gt;&lt;span style=&quot;font-size:11px&quot;&gt;seq=&lt;b&gt;ping_pong&lt;/b&gt; (role A)&lt;/span&gt;&lt;br/&gt;&lt;span style=&quot;font-size:10px;color:#334155&quot;&gt;+HNF 0 +SNF 0 +MN&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D1FAE5;strokeColor=#059669;strokeWidth=2.5;verticalAlign=middle;align=center;fontSize=11;fontColor=#065f46;arcSize=5;" vertex="1" parent="1">
+          <mxGeometry x="60" y="1110" width="280" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="t1" value="&lt;b&gt;Tile 1&lt;/b&gt; · R1&lt;br/&gt;&lt;span style=&quot;font-size:11px;color:#64748b&quot;&gt;seq=idle&lt;/span&gt;&lt;br/&gt;&lt;span style=&quot;font-size:10px;color:#334155&quot;&gt;+HNF 1&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D1FAE5;strokeColor=#059669;strokeWidth=2.5;verticalAlign=middle;align=center;fontSize=11;fontColor=#065f46;arcSize=5;" vertex="1" parent="1">
+          <mxGeometry x="400" y="1110" width="280" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="t2" value="&lt;b&gt;Tile 2&lt;/b&gt; · R2&lt;br/&gt;&lt;span style=&quot;font-size:11px;color:#64748b&quot;&gt;seq=idle&lt;/span&gt;&lt;br/&gt;&lt;span style=&quot;font-size:10px;color:#334155&quot;&gt;+HNF 2&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFEDD5;strokeColor=#ea580c;strokeWidth=2.5;verticalAlign=middle;align=center;fontSize=11;fontColor=#9a3412;arcSize=5;" vertex="1" parent="1">
+          <mxGeometry x="740" y="1110" width="280" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="t3" value="&lt;b&gt;Tile 3&lt;/b&gt; · R3&lt;br/&gt;&lt;span style=&quot;font-size:11px&quot;&gt;seq=&lt;b&gt;opcode_walk&lt;/b&gt;&lt;/span&gt;&lt;br/&gt;&lt;span style=&quot;font-size:10px;color:#334155&quot;&gt;+HNF 3&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D1FAE5;strokeColor=#059669;strokeWidth=2.5;verticalAlign=middle;align=center;fontSize=11;fontColor=#065f46;arcSize=5;" vertex="1" parent="1">
+          <mxGeometry x="1080" y="1110" width="280" height="120" as="geometry"/>
+        </mxCell>
+
+        <!-- ROW 1 -->
+        <mxCell id="t4" value="&lt;b&gt;Tile 4&lt;/b&gt; · R4&lt;br/&gt;&lt;span style=&quot;font-size:11px;color:#64748b&quot;&gt;seq=idle&lt;/span&gt;&lt;br/&gt;&lt;span style=&quot;font-size:10px;color:#334155&quot;&gt;+HNF 4&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D1FAE5;strokeColor=#059669;strokeWidth=2.5;verticalAlign=middle;align=center;fontSize=11;fontColor=#065f46;arcSize=5;" vertex="1" parent="1">
+          <mxGeometry x="60" y="1270" width="280" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="t5" value="&lt;b&gt;Tile 5&lt;/b&gt; · R5&lt;br/&gt;&lt;span style=&quot;font-size:11px&quot;&gt;seq=&lt;b&gt;smoke_opcode_mix&lt;/b&gt;&lt;/span&gt;&lt;br/&gt;&lt;span style=&quot;font-size:10px;color:#334155&quot;&gt;+HNF 5&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFEDD5;strokeColor=#ea580c;strokeWidth=2.5;verticalAlign=middle;align=center;fontSize=11;fontColor=#9a3412;arcSize=5;" vertex="1" parent="1">
+          <mxGeometry x="400" y="1270" width="280" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="t6" value="&lt;b&gt;Tile 6&lt;/b&gt; · R6&lt;br/&gt;&lt;span style=&quot;font-size:11px;color:#64748b&quot;&gt;seq=idle&lt;/span&gt;&lt;br/&gt;&lt;span style=&quot;font-size:10px;color:#334155&quot;&gt;+HNF 6&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D1FAE5;strokeColor=#059669;strokeWidth=2.5;verticalAlign=middle;align=center;fontSize=11;fontColor=#065f46;arcSize=5;" vertex="1" parent="1">
+          <mxGeometry x="740" y="1270" width="280" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="t7" value="&lt;b&gt;Tile 7&lt;/b&gt; · R7&lt;br/&gt;&lt;span style=&quot;font-size:11px&quot;&gt;seq=&lt;b&gt;memcpy&lt;/b&gt;&lt;/span&gt;&lt;br/&gt;&lt;span style=&quot;font-size:10px;color:#334155&quot;&gt;+HNF 7&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFEDD5;strokeColor=#ea580c;strokeWidth=2.5;verticalAlign=middle;align=center;fontSize=11;fontColor=#9a3412;arcSize=5;" vertex="1" parent="1">
+          <mxGeometry x="1080" y="1270" width="280" height="120" as="geometry"/>
+        </mxCell>
+
+        <!-- ROW 2 -->
+        <mxCell id="t8" value="&lt;b&gt;Tile 8&lt;/b&gt; · R8&lt;br/&gt;&lt;span style=&quot;font-size:11px&quot;&gt;seq=&lt;b&gt;read_ex_walk&lt;/b&gt; (role B)&lt;/span&gt;&lt;br/&gt;&lt;span style=&quot;font-size:10px;color:#334155&quot;&gt;+HNF 8&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D1FAE5;strokeColor=#059669;strokeWidth=2.5;verticalAlign=middle;align=center;fontSize=11;fontColor=#065f46;arcSize=5;" vertex="1" parent="1">
+          <mxGeometry x="60" y="1430" width="280" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="t9" value="&lt;b&gt;Tile 9&lt;/b&gt; · R9&lt;br/&gt;&lt;span style=&quot;font-size:11px;color:#64748b&quot;&gt;seq=idle&lt;/span&gt;&lt;br/&gt;&lt;span style=&quot;font-size:10px;color:#334155&quot;&gt;+HNF 9&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D1FAE5;strokeColor=#059669;strokeWidth=2.5;verticalAlign=middle;align=center;fontSize=11;fontColor=#065f46;arcSize=5;" vertex="1" parent="1">
+          <mxGeometry x="400" y="1430" width="280" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="t10" value="&lt;b&gt;Tile 10&lt;/b&gt; · R10&lt;br/&gt;&lt;span style=&quot;font-size:11px;color:#64748b&quot;&gt;seq=idle&lt;/span&gt;&lt;br/&gt;&lt;span style=&quot;font-size:10px;color:#334155&quot;&gt;+HNF 10&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFEDD5;strokeColor=#ea580c;strokeWidth=2.5;verticalAlign=middle;align=center;fontSize=11;fontColor=#9a3412;arcSize=5;" vertex="1" parent="1">
+          <mxGeometry x="740" y="1430" width="280" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="t11" value="&lt;b&gt;Tile 11&lt;/b&gt; · R11&lt;br/&gt;&lt;span style=&quot;font-size:11px;color:#64748b&quot;&gt;seq=idle&lt;/span&gt;&lt;br/&gt;&lt;span style=&quot;font-size:10px;color:#334155&quot;&gt;+HNF 11&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D1FAE5;strokeColor=#059669;strokeWidth=2.5;verticalAlign=middle;align=center;fontSize=11;fontColor=#065f46;arcSize=5;" vertex="1" parent="1">
+          <mxGeometry x="1080" y="1430" width="280" height="120" as="geometry"/>
+        </mxCell>
+
+        <!-- ROW 3 -->
+        <mxCell id="t12" value="&lt;b&gt;Tile 12&lt;/b&gt; · R12&lt;br/&gt;&lt;span style=&quot;font-size:11px&quot;&gt;seq=&lt;b&gt;smoke_read&lt;/b&gt;&lt;/span&gt;&lt;br/&gt;&lt;span style=&quot;font-size:10px;color:#334155&quot;&gt;+HNF 12&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFEDD5;strokeColor=#ea580c;strokeWidth=2.5;verticalAlign=middle;align=center;fontSize=11;fontColor=#9a3412;arcSize=5;" vertex="1" parent="1">
+          <mxGeometry x="60" y="1590" width="280" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="t13" value="&lt;b&gt;Tile 13&lt;/b&gt; · R13&lt;br/&gt;&lt;span style=&quot;font-size:11px;color:#64748b&quot;&gt;seq=idle&lt;/span&gt;&lt;br/&gt;&lt;span style=&quot;font-size:10px;color:#334155&quot;&gt;+HNF 13&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D1FAE5;strokeColor=#059669;strokeWidth=2.5;verticalAlign=middle;align=center;fontSize=11;fontColor=#065f46;arcSize=5;" vertex="1" parent="1">
+          <mxGeometry x="400" y="1590" width="280" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="t14" value="&lt;b&gt;Tile 14&lt;/b&gt; · R14&lt;br/&gt;&lt;span style=&quot;font-size:11px&quot;&gt;seq=&lt;b&gt;read_ex_walk&lt;/b&gt; (role A)&lt;/span&gt;&lt;br/&gt;&lt;span style=&quot;font-size:10px;color:#334155&quot;&gt;+HNF 14&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D1FAE5;strokeColor=#059669;strokeWidth=2.5;verticalAlign=middle;align=center;fontSize=11;fontColor=#065f46;arcSize=5;" vertex="1" parent="1">
+          <mxGeometry x="740" y="1590" width="280" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="t15" value="&lt;b&gt;Tile 15&lt;/b&gt; · R15&lt;br/&gt;&lt;span style=&quot;font-size:11px&quot;&gt;seq=&lt;b&gt;ping_pong&lt;/b&gt; (role B)&lt;/span&gt;&lt;br/&gt;&lt;span style=&quot;font-size:10px;color:#334155&quot;&gt;+HNF 15 +SNF 1&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D1FAE5;strokeColor=#059669;strokeWidth=2.5;verticalAlign=middle;align=center;fontSize=11;fontColor=#065f46;arcSize=5;" vertex="1" parent="1">
+          <mxGeometry x="1080" y="1590" width="280" height="120" as="geometry"/>
+        </mxCell>
+
+        <!-- Mesh horizontal + vertical links (one thin line between adjacent cells, meeting at router positions) -->
+        <mxCell id="hlink_r0" value="" style="endArrow=none;html=1;strokeColor=#64748b;strokeWidth=1.2;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="t0" target="t1"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="hlink_r1" value="" style="endArrow=none;html=1;strokeColor=#64748b;strokeWidth=1.2;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="t1" target="t2"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="hlink_r2" value="" style="endArrow=none;html=1;strokeColor=#64748b;strokeWidth=1.2;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="t2" target="t3"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+        <mxCell id="hlink_r4" value="" style="endArrow=none;html=1;strokeColor=#64748b;strokeWidth=1.2;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="t4" target="t5"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="hlink_r5" value="" style="endArrow=none;html=1;strokeColor=#64748b;strokeWidth=1.2;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="t5" target="t6"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="hlink_r6" value="" style="endArrow=none;html=1;strokeColor=#64748b;strokeWidth=1.2;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="t6" target="t7"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+        <mxCell id="hlink_r8" value="" style="endArrow=none;html=1;strokeColor=#64748b;strokeWidth=1.2;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="t8" target="t9"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="hlink_r9" value="" style="endArrow=none;html=1;strokeColor=#64748b;strokeWidth=1.2;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="t9" target="t10"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="hlink_r10" value="" style="endArrow=none;html=1;strokeColor=#64748b;strokeWidth=1.2;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="t10" target="t11"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+        <mxCell id="hlink_r12" value="" style="endArrow=none;html=1;strokeColor=#64748b;strokeWidth=1.2;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="t12" target="t13"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="hlink_r13" value="" style="endArrow=none;html=1;strokeColor=#64748b;strokeWidth=1.2;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="t13" target="t14"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="hlink_r14" value="" style="endArrow=none;html=1;strokeColor=#64748b;strokeWidth=1.2;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="t14" target="t15"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+        <!-- vertical links -->
+        <mxCell id="vlink_c0a" value="" style="endArrow=none;html=1;strokeColor=#64748b;strokeWidth=1.2;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="t0" target="t4"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="vlink_c0b" value="" style="endArrow=none;html=1;strokeColor=#64748b;strokeWidth=1.2;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="t4" target="t8"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="vlink_c0c" value="" style="endArrow=none;html=1;strokeColor=#64748b;strokeWidth=1.2;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="t8" target="t12"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+        <mxCell id="vlink_c1a" value="" style="endArrow=none;html=1;strokeColor=#64748b;strokeWidth=1.2;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="t1" target="t5"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="vlink_c1b" value="" style="endArrow=none;html=1;strokeColor=#64748b;strokeWidth=1.2;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="t5" target="t9"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="vlink_c1c" value="" style="endArrow=none;html=1;strokeColor=#64748b;strokeWidth=1.2;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="t9" target="t13"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+        <mxCell id="vlink_c2a" value="" style="endArrow=none;html=1;strokeColor=#64748b;strokeWidth=1.2;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="t2" target="t6"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="vlink_c2b" value="" style="endArrow=none;html=1;strokeColor=#64748b;strokeWidth=1.2;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="t6" target="t10"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="vlink_c2c" value="" style="endArrow=none;html=1;strokeColor=#64748b;strokeWidth=1.2;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="t10" target="t14"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+        <mxCell id="vlink_c3a" value="" style="endArrow=none;html=1;strokeColor=#64748b;strokeWidth=1.2;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="t3" target="t7"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="vlink_c3b" value="" style="endArrow=none;html=1;strokeColor=#64748b;strokeWidth=1.2;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="t7" target="t11"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="vlink_c3c" value="" style="endArrow=none;html=1;strokeColor=#64748b;strokeWidth=1.2;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="t11" target="t15"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+        <!-- Example traffic callouts -->
+        <mxCell id="p2_note_pp" value="&lt;b&gt;ping_pong example&lt;/b&gt; (tiles 0 ↔ 15)&lt;br/&gt;&lt;span style=&quot;font-size:11px;color:#334155;font-weight:normal&quot;&gt;each turn: WriteUnique to shared line, notify via ChiGem5EventBus; peer wait_on() wakes, reads back. In rnf_l2 the line ping-pongs between leaf caches (SnpUnique); in rni every access crosses to the HN-F.&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#1d4ed8;strokeWidth=1.2;verticalAlign=top;fontSize=12;fontColor=#0f172a;dashed=1;arcSize=5;" vertex="1" parent="1">
+          <mxGeometry x="60" y="1740" width="640" height="110" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="p2_note_mix" value="&lt;b&gt;Mixed-mode caveat&lt;/b&gt;&lt;br/&gt;&lt;span style=&quot;font-size:11px;color:#334155;font-weight:normal&quot;&gt;Per-tile mode is possible mechanically — CHI_Tile&apos;s constructor takes a mode string — but the shipped generator (CHI_Tile.make_generator) passes one mode to every tile, so &lt;code&gt;--rn-mode&lt;/code&gt; is currently system-wide. The coloring above illustrates the shape of what a mixed generator would produce.&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#ea580c;strokeWidth=1.2;verticalAlign=top;fontSize=12;fontColor=#0f172a;dashed=1;arcSize=5;" vertex="1" parent="1">
+          <mxGeometry x="720" y="1740" width="640" height="110" as="geometry"/>
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

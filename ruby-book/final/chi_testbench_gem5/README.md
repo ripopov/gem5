@@ -70,6 +70,19 @@ the intermediate "node router" that bundles multi-controller RNFs is
 skipped. `ChiSeqDriver` being a `ClockedObject` satisfies the
 sequencer's stat-namespace parent requirement with no adapter.
 
+The drawio-rendered diagram below zooms in on the same path: panel 1
+breaks each of the four boxes above into the sub-objects a sequence
+author actually touches (Fiber, event callbacks, port, the mode-split
+parameter cards), and panel 2 shows how 16 of these tiles populate the
+4×4 mesh with per-tile sequence assignments alongside the HN-F, SN-F,
+and MN nodes that share the same routers.
+
+![chi_testbench_gem5 — single-tile detail + heterogeneous mesh overview](../../resources/chi_testbench_gem5_arch.svg)
+
+The drawio source is at
+[`ruby-book/resources/chi_testbench_gem5_arch.drawio`](../../resources/chi_testbench_gem5_arch.drawio);
+regenerate with `ruby-book/export_drawio.sh` after editing.
+
 ### RN attachment mode (`--rn-mode`)
 
 Both modes share the `CHI_Cache_Controller` SLICC automaton; only the
