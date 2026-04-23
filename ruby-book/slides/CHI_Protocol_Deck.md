@@ -1100,6 +1100,93 @@ LLC without any RN currently sharing it.
 ---
 
 <!-- ================================================================== -->
+<!-- SLIDE 11a: Data-provider fast paths — DCT, DMT, DWT -->
+<!-- ================================================================== -->
+
+## Data-provider fast paths — who may send data directly
+
+<div style="text-align: center;">
+<img src="../resources/chi_data_providers.svg" alt="CHI data-provider fast paths. HN-F Home sits in the centre with its directory + LLC slice. A peer RN-F on the left is linked to the Requester (top) by a red dashed DCT arrow labelled 'Peer → Requester (direct DAT)'. A Subordinate SN-F below the Home is linked to the Requester by a violet DMT arrow labelled 'Sub → Requester', and by a green DWT arrow in the opposite direction labelled 'Requester → Sub'. The Home is still connected to all three nodes by solid control-plane arrows carrying REQ, SNP, RSP so coherence state, snoop decisions, and transaction completion remain with the Home." class="tall" style="max-height: 600px;">
+</div>
+
+<!-- Speaker Notes:
+Time budget: 4 minutes.
+
+We now have a home node with a directory and an LLC. Every read and
+every write is logically a conversation with the home — it knows who
+shares what, it decides who to snoop, and it decides whether data has
+to come from a peer cache or from memory. The straightforward way to
+build this is: every data transfer passes through the home. The
+requester asks the home, the home either supplies data from its LLC,
+or it fetches data from a peer or from memory, and then the home
+forwards that data back to the requester. Correct, but expensive. Two
+hops on the data path, twice the latency, twice the bandwidth booked
+at the home, and the home's data buffers become the bottleneck of the
+whole interconnect.
+
+CHI's answer is not to move coherence out of the home — coherence
+still lives there — but to let *data* skip the home on the common
+paths. The spec calls out three such fast paths, and this diagram
+shows all three at once. Direct Cache Transfer, DCT, for data that
+lives in a peer cache. Direct Memory Transfer, DMT, for reads that
+miss to memory. And Direct Write-data Transfer, DWT, for writes whose
+data is ultimately going to memory anyway.
+
+Start with DCT, the red arrow across the top. A requester issues a
+read. The home looks in its directory, sees a peer RN-F has the line,
+and instead of asking the peer to send the data back to the home, it
+sends a *forwarding-type* snoop — SnpSharedFwd, SnpUniqueFwd, and
+friends. That snoop carries two extra fields, FwdNID and FwdTxnID,
+pointing at the original requester. The snoopee sends its CompData
+directly to the requester and tells the home what it did with a
+SnpRespFwded or SnpRespDataFwded, so the home can still retire the
+transaction and update its directory. One data hop instead of two, and
+the home's buffers never touch the line.
+
+DMT is the violet arrow from the subordinate up to the requester. When
+the home decides the data has to come from memory — either there is
+no snoop, or the snoops came back empty — it forwards the read to the
+SN-F as a ReadNoSnp, and it stamps the original requester's ID and
+TxnID into the ReturnNID and ReturnTxnID fields. The subordinate sends
+CompData straight to the requester. The home does not route the data
+at all; it only needs a ReadReceipt or a CompAck to know the
+transaction is done.
+
+DWT is the mirror image, the green arrow going the other way. The
+home takes a downstream write and sets DoDWT equal to one in the
+request to the subordinate, again stamping the requester's ID into
+ReturnNID and ReturnTxnID. The subordinate allocates a buffer and
+sends DBIDResp straight to the requester, which then streams
+NonCopyBackWriteData straight to the subordinate. The home sees the
+Comp from the subordinate, sends its own Comp to the requester, and is
+done — without the write data ever passing through it.
+
+Notice what has changed and what has not. What has changed is the
+data plane: DAT flits bypass the home on every one of these three
+paths. What has *not* changed is the control plane. Every transaction
+still starts at the home. The home still reads its directory, still
+issues snoops, still owns the coherence decision, still decides when
+the transaction is complete. The only reason this works is that CHI
+carries the forwarding identity inside the control messages — FwdNID,
+FwdTxnID for DCT, ReturnNID, ReturnTxnID for DMT and DWT — so the
+peer or the subordinate knows where to send data without going through
+the home again.
+
+Two practical notes. First, these are capabilities, not defaults.
+Each component advertises Direct_Cache_Transfer, Direct_Memory_Transfer,
+and DoDWT support in its configuration, and the home only uses a fast
+path when every party on the path supports it. Atomics, partial reads,
+passing-exclusive reads, and error paths all fall back to the classic
+home-in-the-middle flow. Second, DCT and DMT are recommended but not
+mandatory — the same request can be served the slow way if the home
+chooses. You will see both in the two practice transactions later: a
+plain ReadShared that goes through the home, and the DCT variant
+where the peer shortcuts to the requester.
+-->
+
+---
+
+<!-- ================================================================== -->
 <!-- SLIDE 12: CHI Cache States — Standard FSM per §B4.1 -->
 <!-- ================================================================== -->
 
