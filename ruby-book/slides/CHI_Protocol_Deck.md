@@ -1111,9 +1111,9 @@ stateDiagram-v2
 
     I --> UC: Read fill, no other copy
     I --> SC: Read fill, shared
-    I --> UCE: MakeUnique (no data)
-    I --> UD: Write allocate, full line
-    I --> UDP: Write allocate, partial
+    I --> SD: Read fill, passes dirty
+    I --> UCE: CleanUnique (no data)
+    I --> UD: ReadUnique / MakeUnique
 
     SC --> UC: Upgrade to unique
     SC --> I: Evict / invalidate
@@ -1127,14 +1127,14 @@ stateDiagram-v2
     UCE --> I: Evict empty
 
     UD --> SD: Snoop, keep dirty + share
-    UD --> SC: Writeback + downgrade
+    UD --> SC: Snoop, pass dirty + share
     UD --> I: Writeback + evict
 
-    UDP --> UD: Merge completes line
+    UDP --> UD: Store completes line
     UDP --> I: Writeback + evict
 
     SD --> UD: Upgrade to unique
-    SD --> SC: Writeback, stay shared
+    SD --> SC: Snoop, pass dirty + share
     SD --> I: Writeback + evict
 ```
 
@@ -1165,10 +1165,11 @@ The extra concept is empty or partial ownership. CHI lets a requester
 obtain store permission *without* pulling valid data from memory —
 useful before a full-line write, because it saves a read. That gives
 two additional unique states. UCE, Unique Clean Empty, is unique
-ownership with zero valid bytes; it comes from MakeUnique. UDP,
-Unique Dirty Partial, is unique ownership after some but not all
-bytes have been written. On eviction, UDP must merge with memory to
-form a complete line.
+ownership with zero valid bytes; a CleanUnique from Invalid lands
+here. UDP, Unique Dirty Partial, is unique ownership after some but
+not all bytes have been written — reached silently from UCE when a
+store writes only part of the line. On eviction, UDP must merge with
+memory to form a complete line.
 
 And of course, Invalid — the line is not present in the cache.
 
@@ -1176,10 +1177,13 @@ That's all seven: I, UC, UCE, UD, UDP, SC, SD.
 
 The arrows on this diagram are not the whole transaction system — B4.7
 and B4.8 of the spec describe those in full — but they illustrate why
-each state exists. Reads fill into UC or SC. Writes with full data
-fill into UD. MakeUnique gives UCE. Partial writes sit at UDP until
-they complete. Local stores upgrade clean to dirty. Snoops downgrade
-unique to shared. Evictions writeback-if-dirty and return to Invalid.
+each state exists. Reads fill into SC, UC, SD, or UD depending on
+whether the line is shared and whether dirty responsibility is being
+passed. CleanUnique from Invalid parks in UCE. A partial store on UCE
+drops the line into UDP; a full store or a follow-up store that
+completes the line moves it to UD. Snoops downgrade unique to shared,
+with or without passing dirty responsibility. Evictions writeback-
+if-dirty and return to Invalid.
 
 Key sentence from the spec: "A cache is permitted to implement a subset
 of these states." That is the opening we need for the next slide. A
