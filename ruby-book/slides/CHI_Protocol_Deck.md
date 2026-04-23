@@ -22,6 +22,93 @@ size: 16:9
 ---
 
 <!-- ================================================================== -->
+<!-- INTRO SLIDE: Why CHI? The Scalability Wall -->
+<!-- ================================================================== -->
+
+## Why CHI? The Scalability Wall
+
+<div class="comparison-grid smaller">
+<div class="card compact accent-red">
+<p class="eyebrow">Shared-bus coherence</p>
+<h3>Simple because the bus serializes everything</h3>
+<ul>
+<li>Every cache sees every transaction, so snooping is easy to reason about.</li>
+<li>That same broadcast model burns bandwidth on agents that are not involved.</li>
+<li>As cores, sockets, and accelerators grow, the bus becomes the bottleneck.</li>
+</ul>
+<span class="pill neutral">Broadcast to all</span>
+<span class="pill neutral">One shared queue</span>
+</div>
+<div class="card compact accent-blue">
+<p class="eyebrow">CHI's shift</p>
+<h3>Route coherence as targeted packets over the fabric</h3>
+<ul>
+<li>Point-to-point links replace one global wire.</li>
+<li>The home node directory narrows snoops to likely sharers.</li>
+<li>REQ, SNP, RSP, and DAT progress independently, with direct transfers when useful.</li>
+</ul>
+<span class="pill req">REQ</span>
+<span class="pill snp">SNP</span>
+<span class="pill rsp">RSP</span>
+<span class="pill dat">DAT</span>
+</div>
+</div>
+
+<div class="metric-strip">
+<div class="metric">
+<strong>Broadcast</strong>
+<span>Every coherence action wakes the whole system.</span>
+</div>
+<div class="metric">
+<strong>Serialize</strong>
+<span>One shared wire becomes the throughput wall.</span>
+</div>
+<div class="metric">
+<strong>Directory</strong>
+<span>HN-F targets only the owners and sharers.</span>
+</div>
+<div class="metric">
+<strong>Channels</strong>
+<span>REQ, SNP, RSP, and DAT move independently.</span>
+</div>
+</div>
+
+<div class="takeaway">
+CHI is ARM's answer to the scaling problem: stop using coherence traffic as a global broadcast, and turn it into routed transactions with explicit ownership and ordering.
+</div>
+
+<!-- Speaker Notes:
+Open with the familiar design point first: a small coherent cluster on a
+shared bus. That world is attractive because the bus gives us two things
+for free. First, everyone sees the same traffic, so snooping is easy to
+reason about. Second, the bus serializes requests, so a lot of ordering
+falls out of the fabric almost accidentally.
+
+That simplicity is exactly what stops scaling.
+
+Once the system grows into a mesh, multi-socket complex, or accelerator-
+heavy SoC, the bus becomes a tax on every transaction. A miss from one
+core wakes up everybody else. Ownership changes consume shared bandwidth
+even when only two nodes care. Latency stretches because the bus is one
+global serialization point. The protocol is still logically correct, but
+the fabric is now doing the wrong kind of work.
+
+CHI is the answer to that wall. Instead of observing coherence by broad-
+cast, CHI routes coherence as targeted packet traffic. Requests travel over
+point-to-point links. The home node tracks who might have the line, so the
+system snoops the likely sharers instead of broadcasting blindly. Control
+and data stop fighting on one wire because REQ, SNP, RSP, and DAT are sep-
+arate channels. And when the data is already sitting in the right place,
+direct transfers avoid needless intermediate hops.
+
+That is the framing for the rest of the talk. CHI is not just a new set of
+message names. It is the protocol shape you need once broadcast coherence
+is no longer affordable.
+-->
+
+---
+
+<!-- ================================================================== -->
 <!-- SLIDE 2: Scoping CHI — what it owns, what it leaves open -->
 <!-- ================================================================== -->
 
@@ -58,10 +145,10 @@ Left side is <em>why</em> the CHI spec is so large. Right side is <em>why</em> t
 </div>
 
 <!-- Speaker Notes:
-Before we look at any messages or state machines, set the scope. CHI is a
-standard, and like most standards it has edges — places where it reaches
-further than you might expect, and places where it stops short. Both edges
-matter, because both edges show up in gem5 as Ruby or Garnet configuration.
+The motivation slide gave the reason CHI exists. This slide gives the bound-
+ary. CHI reaches further than many first-time readers expect, and it also
+stops short in some of the places that matter most for performance. Both
+edges matter, because both show up in gem5 as Ruby or Garnet configuration.
 
 Four points on the left.
 
@@ -119,9 +206,11 @@ coverage, MPAM tags, persistence hints — all vary by issue, and for the
 optional features, by what the implementer turned on. Two CHI systems may
 both be "same spec" and still have different feature sets.
 
-The rest of the deck lives inside this frame. Ruby implements the left side;
-Garnet wraps the right side; the single RISC-V CHI system that ships with
-gem5 is where we will see both in action.
+The rest of the deck lives inside this frame. The last slide was the moti-
+vation for leaving bus coherence behind; this slide is the checklist for
+what CHI standardizes and what it leaves to the system designer. Ruby imple-
+ments the left side; Garnet wraps the right side; the single RISC-V CHI
+system that ships with gem5 is where we will see both in action.
 -->
 
 ---
@@ -2462,86 +2551,6 @@ h1 {
 </style>
 
 # Backup
-
----
-
-<!-- ================================================================== -->
-<!-- SLIDE 2: Why CHI? -->
-<!-- ================================================================== -->
-
-## Why CHI? The Scalability Wall
-
-<div class="columns">
-<div>
-
-**The Problem**
-- Traditional bus-based coherence does not scale past 4–8 cores
-- MOESI snooping on a shared wire $\Rightarrow$ bandwidth wall
-- Multi-socket, mesh NoC systems need a *different* protocol
-
-**CHI's Answer**
-- Point-to-point packetized channels (not broadcast wires)
-- Directory-based coherence at the Home Node
-- Separated request, snoop, response, and data lanes
-- Direct transfers bypass intermediate hops (DMT/DCT)
-
-</div>
-<div>
-
-```mermaid
-graph LR
-    subgraph "Traditional Bus"
-        direction TB
-        C1[Core 1] --- Bus[Shared Bus]
-        C2[Core 2] --- Bus
-        C3[Core 3] --- Bus
-        Bus --- MEM[Memory]
-    end
-```
-
-```mermaid
-graph LR
-    subgraph "CHI Mesh NoC"
-        RNF1["RN-F 1"] <--> R1["Router"]
-        RNF2["RN-F 2"] <--> R2["Router"]
-        R1 <--> R2
-        R1 <--> HNF["HN-F"]
-        R2 <--> HNF
-        HNF <--> SNF["SN-F"]
-    end
-```
-
-</div>
-</div>
-
-<!-- Speaker Notes:
-Let's start with why CHI exists. If you have designed or studied multi-core systems with 2 or 4 cores,
-you may have used a shared bus where every coherence transaction is broadcast to all participants.
-This works at small scale — the bus is simple, snooping is straightforward.
-
-But at 16, 64, or 128 cores? That shared bus becomes your bottleneck. Every transaction touches every
-agent, bandwidth is consumed by coherence traffic that most agents do not care about, and latency
-explodes because the bus is a single serialization point.
-
-CHI solves this with three key ideas:
-
-First, packetized channels. Instead of broadcasting on a wire, you send structured packets over
-a network-on-chip. The four channels — REQ, SNP, RSP, DAT — can flow independently, allowing
-out-of-order completion and better link utilization.
-
-Second, directory-based coherence. A Home Node (HN-F) maintains a directory of who has each cache
-line. Snoops are sent only to relevant nodes, not to everyone. This is the fundamental shift from
-snooping to directory protocols.
-
-Third, direct transfers. The Data Direct Transfer (DCT) lets a dirty cache line go straight from
-one core's cache to another, bypassing the home node's cache. Direct Memory Transfer (DMT) lets
-memory data go straight to the requester. These optimizations cut latency and bandwidth
-dramatically.
-
-As you can see in the diagrams, the left shows a traditional shared bus — all cores serialize
-through one wire. The right shows a CHI mesh where cores talk to routers, routers talk to the
-home node, and the home node talks to memory. Every link is independent and pipelined.
--->
 
 ---
 
