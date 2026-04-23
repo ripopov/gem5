@@ -1100,94 +1100,102 @@ LLC without any RN currently sharing it.
 ---
 
 <!-- ================================================================== -->
-<!-- SLIDE 12: HN-F FSM — start with the familiar local core -->
+<!-- SLIDE 12: CHI Cache States — Standard FSM per §B4.1 -->
 <!-- ================================================================== -->
 
-## HN-F FSM — start with the familiar local core
+## CHI Cache States — Standard FSM (spec §B4.1)
 
 ```mermaid
 stateDiagram-v2
     direction LR
 
-    I --> SC: ReadShared fill
-    I --> UC: ReadUnique fill
-    I --> UD: Write miss, ownership + data
+    I --> UC: Read fill, no other copy
+    I --> SC: Read fill, shared
+    I --> UCE: MakeUnique (no data)
+    I --> UD: Write allocate, full line
+    I --> UDP: Write allocate, partial
 
-    SC --> UC: Gain uniqueness
-    SC --> I: Evict clean
+    SC --> UC: Upgrade to unique
+    SC --> I: Evict / invalidate
 
-    UC --> UD: Local write
-    UC --> SC: Downgrade on share
+    UC --> UD: Local store
+    UC --> SC: Snoop downgrade
     UC --> I: Evict clean
 
-    UD --> SD: Another reader appears
-    UD --> SC: Writeback and downgrade
-    UD --> I: Writeback and evict
+    UCE --> UD: Store full line
+    UCE --> UDP: Store partial line
+    UCE --> I: Evict empty
 
-    SD --> UD: Re-gain uniqueness
-    SD --> I: Writeback and evict
+    UD --> SD: Snoop, keep dirty + share
+    UD --> SC: Writeback + downgrade
+    UD --> I: Writeback + evict
+
+    UDP --> UD: Merge completes line
+    UDP --> I: Writeback + evict
+
+    SD --> UD: Upgrade to unique
+    SD --> SC: Writeback, stay shared
+    SD --> I: Writeback + evict
 ```
 
 <div class="takeaway">
-The HN-F FSM begins with one cache controller's local view. Directory memory and in-flight bookkeeping are extra dimensions added to this base — not a separate machine.
+IHI0050H §B4.1 defines seven cache line states along two familiar axes — Unique/Shared and Clean/Dirty — plus two "empty/partial" unique states (UCE, UDP) for store-without-data ownership.
 </div>
 
 <!-- Speaker Notes:
 Time budget: 3 minutes.
 
-We just looked at what the HN-F remembers — the directory entry: state,
-sharers, owner, ownerExists, ownerIsExcl. That was the *data* side.
-Now we open the FSM that uses it.
+Before we dive into the gem5 HN-F controller, let's anchor on what the
+CHI specification itself prescribes. Section B4.1 of IHI0050H defines
+the cache line state vocabulary that every compliant CHI cache must
+speak at its boundary, regardless of how the controller is built
+internally.
 
-The trick to reading the CHI cache state names is to separate three
-questions instead of trying to memorize the whole alphabet.
+There are seven states, organized along two familiar axes plus one
+extra concept. The first axis is Unique versus Shared — does this
+cache hold the only copy of the line, or could peers also have it.
+The second axis is Clean versus Dirty — is this cache responsible for
+writing the data back to memory on eviction, or can it be dropped.
+Combine those two axes and you get the four "Full" states: UC, UD,
+SC, SD. A full state means all bytes of the line are valid. These
+four are the MOESI-like core: Unique Clean is Exclusive, Unique Dirty
+is Modified, Shared Clean is Shared, Shared Dirty is Owned.
 
-First question: does *this* controller have usable data locally — in
-its own tag and data array? Second question: does the *requester
-side* — the upstream caches above it in the hierarchy — also have a
-copy that the directory remembers? Third question: is the line in a
-stable resting state, or in the middle of a transaction? Once you
-split the names along those three axes, the two-letter and four-letter
-codes stop looking cryptic.
+The extra concept is empty or partial ownership. CHI lets a requester
+obtain store permission *without* pulling valid data from memory —
+useful before a full-line write, because it saves a read. That gives
+two additional unique states. UCE, Unique Clean Empty, is unique
+ownership with zero valid bytes; it comes from MakeUnique. UDP,
+Unique Dirty Partial, is unique ownership after some but not all
+bytes have been written. On eviction, UDP must merge with memory to
+form a complete line.
 
-This first diagram answers only question one. It shows the local-only
-core: I, SC, UC, SD, UD. These are the states you would expect from
-any CHI- or MOESI-like protocol. S versus U tells you shared versus
-unique. C versus D tells you clean versus dirty. The arrows are the
-familiar moves: a ReadShared fill, a write that gains uniqueness, a
-downgrade when another reader appears, a writeback on eviction.
+And of course, Invalid — the line is not present in the cache.
 
-Why start here? Because the same SLICC machine — `CHI-cache.sm` —
-runs as a private L1 when `is_HN` is false and as the HN-F when
-`is_HN` is true. There is no separate `*-dir.sm`. The directory
-bookkeeping we just saw is layered on top of *these* familiar states,
-not bolted on as a different controller. So the right way to read the
-HN-F FSM is to anchor first on this MOESI-like core, then add the
-directory dimension, then add the in-flight dimension.
+That's all seven: I, UC, UCE, UD, UDP, SC, SD.
 
-This diagram is deliberately simplified. It hides UD_T — the
-use-timeout variant of UD that gets set after a store miss to prevent
-LL/SC livelocks. It hides every R-prefixed state that records what the
-upstream caches still hold. It hides UC_RU and UD_RU, where the local
-data is bookkeeping residue and the real owner has moved upstream. And
-it hides the BUSY_INTR and BUSY_BLKD transient states that exist
-because coherence actions are spread over many cycles. The next slide
-adds all of those in one place and groups them into the four families:
-local only, remembered upstream only, local plus remembered upstream,
-and transient.
+The arrows on this diagram are not the whole transaction system — B4.7
+and B4.8 of the spec describe those in full — but they illustrate why
+each state exists. Reads fill into UC or SC. Writes with full data
+fill into UD. MakeUnique gives UCE. Partial writes sit at UDP until
+they complete. Local stores upgrade clean to dirty. Snoops downgrade
+unique to shared. Evictions writeback-if-dirty and return to Invalid.
 
-If the audience wants the complete written derivation, the full
-breakdown lives in `ruby-book/slides/CHIStates.md` — the file is
-structured around the same three-question decomposition.
+Key sentence from the spec: "A cache is permitted to implement a subset
+of these states." That is the opening we need for the next slide. A
+real implementation — like gem5's HN-F — layers extra internal states
+on top of this vocabulary to track in-flight transactions, upstream
+sharers, and transient bookkeeping. The B4.1 seven are what appears
+on the wire; what follows is what the controller carries internally.
 -->
 
 ---
 
 <!-- ================================================================== -->
-<!-- SLIDE 13: HN-F FSM — full state vocabulary -->
+<!-- SLIDE 13: gem5 HN-F FSM — full state vocabulary -->
 <!-- ================================================================== -->
 
-## HN-F FSM — full state vocabulary
+## gem5 HN-F FSM (CHI-cache.sm) — full state vocabulary
 
 <div class="columns" style="font-size: 14px; line-height: 1.25;">
 <div>
