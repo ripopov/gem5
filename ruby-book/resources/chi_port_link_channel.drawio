@@ -1,6 +1,6 @@
-<mxfile host="Electron" modified="2026-04-17T00:00:00.000Z" agent="draw.io" version="24.0.0">
+<mxfile host="Electron" modified="2026-04-23T00:00:00.000Z" agent="draw.io" version="24.0.0">
   <diagram name="CHI Port Link Channel" id="chi-port-link-channel">
-    <mxGraphModel dx="1500" dy="900" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1220" pageHeight="620" math="0" shadow="0" background="#ffffff">
+    <mxGraphModel dx="1500" dy="900" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1220" pageHeight="740" math="0" shadow="0" background="#ffffff">
       <root>
         <mxCell id="0"/>
         <mxCell id="1" parent="0"/>
@@ -9,21 +9,21 @@
         <!-- Port (RN) — the full interface bundle on the Request Node     -->
         <!-- ============================================================ -->
         <mxCell id="port_rn" value="&lt;b style=&quot;font-size:26px&quot;&gt;Port (RN)&lt;/b&gt;&lt;div style=&quot;font-size:14px;color:#475569;font-weight:normal;margin-top:4px&quot;&gt;Request Node interface&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F1F5F9;strokeColor=#334155;strokeWidth=2.5;verticalAlign=top;fontSize=14;fontColor=#334155;arcSize=4;" vertex="1" parent="1">
-          <mxGeometry x="50" y="40" width="230" height="540" as="geometry"/>
+          <mxGeometry x="50" y="40" width="230" height="680" as="geometry"/>
         </mxCell>
 
         <!-- ============================================================ -->
         <!-- Port (ICN) — the interface bundle on the Interconnect side    -->
         <!-- ============================================================ -->
         <mxCell id="port_icn" value="&lt;b style=&quot;font-size:26px&quot;&gt;Port (ICN)&lt;/b&gt;&lt;div style=&quot;font-size:14px;color:#475569;font-weight:normal;margin-top:4px&quot;&gt;Interconnect interface&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F1F5F9;strokeColor=#334155;strokeWidth=2.5;verticalAlign=top;fontSize=14;fontColor=#334155;arcSize=4;" vertex="1" parent="1">
-          <mxGeometry x="940" y="40" width="230" height="540" as="geometry"/>
+          <mxGeometry x="940" y="40" width="230" height="680" as="geometry"/>
         </mxCell>
 
         <!-- ============================================================ -->
         <!-- Outbound link group (RN transmits, ICN receives)              -->
         <!-- ============================================================ -->
         <mxCell id="link_out" value="&lt;b style=&quot;font-size:15px&quot;&gt;Outbound link&lt;/b&gt; &#8212; RN transmits, ICN receives" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#64748b;strokeWidth=1.5;verticalAlign=top;fontSize=14;fontColor=#334155;arcSize=4;dashed=1;" vertex="1" parent="1">
-          <mxGeometry x="300" y="80" width="630" height="220" as="geometry"/>
+          <mxGeometry x="300" y="80" width="630" height="300" as="geometry"/>
         </mxCell>
 
         <!-- Outbound REQ channel -->
@@ -33,34 +33,74 @@
 
         <!-- Outbound DAT channel -->
         <mxCell id="ch_dat_out" value="&lt;b&gt;DAT channel&lt;/b&gt; &#8212; write data" style="shape=singleArrow;html=1;fillColor=#EDE9FE;strokeColor=#7c3aed;strokeWidth=2;arrowWidth=0.7;arrowSize=0.06;verticalAlign=middle;align=center;fontSize=18;fontColor=#6d28d9;" vertex="1" parent="1">
-          <mxGeometry x="315" y="184" width="600" height="44" as="geometry"/>
+          <mxGeometry x="315" y="200" width="600" height="44" as="geometry"/>
         </mxCell>
 
         <!-- Outbound RSP channel -->
         <mxCell id="ch_rsp_out" value="&lt;b&gt;RSP channel&lt;/b&gt; &#8212; CompAck" style="shape=singleArrow;html=1;fillColor=#DCFCE7;strokeColor=#15803d;strokeWidth=2;arrowWidth=0.7;arrowSize=0.06;verticalAlign=middle;align=center;fontSize=18;fontColor=#166534;" vertex="1" parent="1">
-          <mxGeometry x="315" y="248" width="600" height="44" as="geometry"/>
+          <mxGeometry x="315" y="280" width="600" height="44" as="geometry"/>
+        </mxCell>
+
+        <!-- LCredit arrows for outbound channels (backpressure: receiver → transmitter) -->
+        <mxCell id="lcredit_out_req" value="&lt;i&gt;LCredit&lt;/i&gt;" style="endArrow=classic;html=1;strokeColor=#475569;strokeWidth=1.5;dashed=1;dashPattern=5 3;fontSize=11;fontColor=#334155;fontStyle=2;labelBackgroundColor=#ffffff;verticalAlign=bottom;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="870" y="184" as="sourcePoint"/>
+            <mxPoint x="360" y="184" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="lcredit_out_dat" value="&lt;i&gt;LCredit&lt;/i&gt;" style="endArrow=classic;html=1;strokeColor=#475569;strokeWidth=1.5;dashed=1;dashPattern=5 3;fontSize=11;fontColor=#334155;fontStyle=2;labelBackgroundColor=#ffffff;verticalAlign=bottom;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="870" y="264" as="sourcePoint"/>
+            <mxPoint x="360" y="264" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="lcredit_out_rsp" value="&lt;i&gt;LCredit&lt;/i&gt;" style="endArrow=classic;html=1;strokeColor=#475569;strokeWidth=1.5;dashed=1;dashPattern=5 3;fontSize=11;fontColor=#334155;fontStyle=2;labelBackgroundColor=#ffffff;verticalAlign=bottom;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="870" y="344" as="sourcePoint"/>
+            <mxPoint x="360" y="344" as="targetPoint"/>
+          </mxGeometry>
         </mxCell>
 
         <!-- ============================================================ -->
         <!-- Inbound link group (ICN transmits, RN receives)                -->
         <!-- ============================================================ -->
         <mxCell id="link_in" value="&lt;b style=&quot;font-size:15px&quot;&gt;Inbound link&lt;/b&gt; &#8212; ICN transmits, RN receives" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#64748b;strokeWidth=1.5;verticalAlign=top;fontSize=14;fontColor=#334155;arcSize=4;dashed=1;" vertex="1" parent="1">
-          <mxGeometry x="300" y="340" width="630" height="220" as="geometry"/>
+          <mxGeometry x="300" y="400" width="630" height="300" as="geometry"/>
         </mxCell>
 
         <!-- Inbound SNP channel (arrow points left: ICN → RN) -->
         <mxCell id="ch_snp" value="&lt;b&gt;SNP channel&lt;/b&gt; &#8212; snoops" style="shape=singleArrow;direction=west;html=1;fillColor=#FEF3C7;strokeColor=#c58b1b;strokeWidth=2;arrowWidth=0.7;arrowSize=0.06;verticalAlign=middle;align=center;fontSize=18;fontColor=#a16207;" vertex="1" parent="1">
-          <mxGeometry x="315" y="380" width="600" height="44" as="geometry"/>
+          <mxGeometry x="315" y="440" width="600" height="44" as="geometry"/>
         </mxCell>
 
         <!-- Inbound RSP channel -->
         <mxCell id="ch_rsp_in" value="&lt;b&gt;RSP channel&lt;/b&gt; &#8212; completions" style="shape=singleArrow;direction=west;html=1;fillColor=#DCFCE7;strokeColor=#15803d;strokeWidth=2;arrowWidth=0.7;arrowSize=0.06;verticalAlign=middle;align=center;fontSize=18;fontColor=#166534;" vertex="1" parent="1">
-          <mxGeometry x="315" y="444" width="600" height="44" as="geometry"/>
+          <mxGeometry x="315" y="520" width="600" height="44" as="geometry"/>
         </mxCell>
 
         <!-- Inbound DAT channel -->
         <mxCell id="ch_dat_in" value="&lt;b&gt;DAT channel&lt;/b&gt; &#8212; read data" style="shape=singleArrow;direction=west;html=1;fillColor=#EDE9FE;strokeColor=#7c3aed;strokeWidth=2;arrowWidth=0.7;arrowSize=0.06;verticalAlign=middle;align=center;fontSize=18;fontColor=#6d28d9;" vertex="1" parent="1">
-          <mxGeometry x="315" y="508" width="600" height="44" as="geometry"/>
+          <mxGeometry x="315" y="600" width="600" height="44" as="geometry"/>
+        </mxCell>
+
+        <!-- LCredit arrows for inbound channels (backpressure: RN → ICN) -->
+        <mxCell id="lcredit_in_snp" value="&lt;i&gt;LCredit&lt;/i&gt;" style="endArrow=classic;html=1;strokeColor=#475569;strokeWidth=1.5;dashed=1;dashPattern=5 3;fontSize=11;fontColor=#334155;fontStyle=2;labelBackgroundColor=#ffffff;verticalAlign=bottom;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="360" y="504" as="sourcePoint"/>
+            <mxPoint x="870" y="504" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="lcredit_in_rsp" value="&lt;i&gt;LCredit&lt;/i&gt;" style="endArrow=classic;html=1;strokeColor=#475569;strokeWidth=1.5;dashed=1;dashPattern=5 3;fontSize=11;fontColor=#334155;fontStyle=2;labelBackgroundColor=#ffffff;verticalAlign=bottom;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="360" y="584" as="sourcePoint"/>
+            <mxPoint x="870" y="584" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="lcredit_in_dat" value="&lt;i&gt;LCredit&lt;/i&gt;" style="endArrow=classic;html=1;strokeColor=#475569;strokeWidth=1.5;dashed=1;dashPattern=5 3;fontSize=11;fontColor=#334155;fontStyle=2;labelBackgroundColor=#ffffff;verticalAlign=bottom;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="360" y="664" as="sourcePoint"/>
+            <mxPoint x="870" y="664" as="targetPoint"/>
+          </mxGeometry>
         </mxCell>
 
         <!-- ============================================================ -->
@@ -70,19 +110,19 @@
           <mxGeometry x="180" y="128" width="90" height="28" as="geometry"/>
         </mxCell>
         <mxCell id="pin_txdat" value="&lt;b&gt;TXDAT&lt;/b&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=right;verticalAlign=middle;fontSize=16;fontColor=#6d28d9;fontStyle=1;" vertex="1" parent="1">
-          <mxGeometry x="180" y="192" width="90" height="28" as="geometry"/>
+          <mxGeometry x="180" y="208" width="90" height="28" as="geometry"/>
         </mxCell>
         <mxCell id="pin_txrsp" value="&lt;b&gt;TXRSP&lt;/b&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=right;verticalAlign=middle;fontSize=16;fontColor=#166534;fontStyle=1;" vertex="1" parent="1">
-          <mxGeometry x="180" y="256" width="90" height="28" as="geometry"/>
+          <mxGeometry x="180" y="288" width="90" height="28" as="geometry"/>
         </mxCell>
         <mxCell id="pin_rxsnp" value="&lt;b&gt;RXSNP&lt;/b&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=right;verticalAlign=middle;fontSize=16;fontColor=#a16207;fontStyle=1;" vertex="1" parent="1">
-          <mxGeometry x="180" y="388" width="90" height="28" as="geometry"/>
+          <mxGeometry x="180" y="448" width="90" height="28" as="geometry"/>
         </mxCell>
         <mxCell id="pin_rxrsp" value="&lt;b&gt;RXRSP&lt;/b&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=right;verticalAlign=middle;fontSize=16;fontColor=#166534;fontStyle=1;" vertex="1" parent="1">
-          <mxGeometry x="180" y="452" width="90" height="28" as="geometry"/>
+          <mxGeometry x="180" y="528" width="90" height="28" as="geometry"/>
         </mxCell>
         <mxCell id="pin_rxdat" value="&lt;b&gt;RXDAT&lt;/b&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=right;verticalAlign=middle;fontSize=16;fontColor=#6d28d9;fontStyle=1;" vertex="1" parent="1">
-          <mxGeometry x="180" y="516" width="90" height="28" as="geometry"/>
+          <mxGeometry x="180" y="608" width="90" height="28" as="geometry"/>
         </mxCell>
 
         <!-- ============================================================ -->
@@ -92,19 +132,19 @@
           <mxGeometry x="950" y="128" width="90" height="28" as="geometry"/>
         </mxCell>
         <mxCell id="pin_rxdat_i" value="&lt;b&gt;RXDAT&lt;/b&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=16;fontColor=#6d28d9;fontStyle=1;" vertex="1" parent="1">
-          <mxGeometry x="950" y="192" width="90" height="28" as="geometry"/>
+          <mxGeometry x="950" y="208" width="90" height="28" as="geometry"/>
         </mxCell>
         <mxCell id="pin_rxrsp_i" value="&lt;b&gt;RXRSP&lt;/b&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=16;fontColor=#166534;fontStyle=1;" vertex="1" parent="1">
-          <mxGeometry x="950" y="256" width="90" height="28" as="geometry"/>
+          <mxGeometry x="950" y="288" width="90" height="28" as="geometry"/>
         </mxCell>
         <mxCell id="pin_txsnp_i" value="&lt;b&gt;TXSNP&lt;/b&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=16;fontColor=#a16207;fontStyle=1;" vertex="1" parent="1">
-          <mxGeometry x="950" y="388" width="90" height="28" as="geometry"/>
+          <mxGeometry x="950" y="448" width="90" height="28" as="geometry"/>
         </mxCell>
         <mxCell id="pin_txrsp_i" value="&lt;b&gt;TXRSP&lt;/b&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=16;fontColor=#166534;fontStyle=1;" vertex="1" parent="1">
-          <mxGeometry x="950" y="452" width="90" height="28" as="geometry"/>
+          <mxGeometry x="950" y="528" width="90" height="28" as="geometry"/>
         </mxCell>
         <mxCell id="pin_txdat_i" value="&lt;b&gt;TXDAT&lt;/b&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=16;fontColor=#6d28d9;fontStyle=1;" vertex="1" parent="1">
-          <mxGeometry x="950" y="516" width="90" height="28" as="geometry"/>
+          <mxGeometry x="950" y="608" width="90" height="28" as="geometry"/>
         </mxCell>
 
       </root>
