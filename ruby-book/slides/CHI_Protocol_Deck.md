@@ -2251,6 +2251,763 @@ simplified — most paths use the single-class convention.
 ---
 
 <!-- ================================================================== -->
+<!-- SLIDE 17c: From CPU ISA to a RubyRequest -->
+<!-- ================================================================== -->
+
+<style scoped>
+section h2 { margin: 0 0 10px 0; font-size: 26px; }
+section h3 { font-size: 15px; margin: 2px 0 4px 0; color: var(--chi-blue-deep); font-weight: 700; }
+section table { font-size: 13.5px; border-collapse: collapse; width: 100%; margin: 0; }
+section th, section td { padding: 2px 8px; line-height: 1.35; border-bottom: 1px solid var(--chi-border); }
+section th { background: #eef3fb; color: var(--chi-blue-deep); font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.04em; }
+section code { font-size: 12.5px; padding: 0 1px; background: transparent; }
+section h2 code, section h2 em, section h2 strong { font-size: inherit; font-weight: inherit; font-style: inherit; letter-spacing: inherit; }
+section h3 code { font-size: inherit; font-weight: inherit; }
+.isa-diagram { text-align: center; margin: 0 0 10px 0; }
+.isa-diagram img { max-height: 180px; }
+.isa-cards .channel-card { padding: 9px 13px; margin-bottom: 7px; font-size: 12.5px; line-height: 1.38; }
+.isa-cards .channel-card strong { color: var(--chi-blue-deep); }
+.columns { gap: 22px; align-items: stretch; }
+.columns > div:first-child { flex: 1.25; }
+.isa-take { margin-top: 8px; padding: 10px 14px; font-size: 14px; line-height: 1.35; }
+</style>
+
+## Crossing over — from CPU ISA to a `RubyRequest` on `mandatoryQueue`
+
+<div class="isa-diagram">
+
+```mermaid
+flowchart LR
+  A["<b>CPU ISA op</b><br/>LD · ST · AMO<br/>LR/SC · CBO · SFENCE.VMA"]
+  B["<b>gem5 Packet</b><br/>MemCmd +<br/>Request flags"]
+  C["<b>Sequencer::makeRequest</b><br/>primary <i>(bookkeeping)</i><br/>+ secondary <i>(on queue)</i>"]
+  D["<b>mandatoryQueue</b><br/>RubyRequest<br/>(LineAddr, Size, Type)"]
+  E["<b>prefetchQueue</b><br/>HW prefetcher"]
+  F["<b>SLICC in_ports</b><br/>seqInPort · pfInPort<br/>→ CHI state machine"]
+  A --> B --> C --> D --> F
+  C -.-> E -.-> F
+  style A fill:#fff7e6,stroke:#c58b1b
+  style B fill:#fff7e6,stroke:#c58b1b
+  style C fill:#e3effa,stroke:#2563eb
+  style D fill:#e8f7ec,stroke:#15803d
+  style E fill:#e8f7ec,stroke:#15803d
+  style F fill:#f0e9ff,stroke:#7c3aed
+```
+
+</div>
+
+<div class="columns">
+<div>
+
+### What actually lands on the queue — RISC-V focus
+
+| RISC-V instruction | `secondary_type` |
+|---|---|
+| `L{B,H,W,D}` / `C.L*` / FP loads | `LD` |
+| `S{B,H,W,D}` / `C.S*` / FP stores | `ST` |
+| instruction fetch | `IFETCH` |
+| `LR.W/D` · `SC.W/D` | `LD` · `ST`  *(demoted)* |
+| `AMO*` with `rd ≠ x0` | `ATOMIC_RETURN` |
+| `AMO*` with `rd == x0` | `ATOMIC_NO_RETURN` |
+| `CBO.inval` / `clean` / `flush` | `FLUSH` &nbsp;❌&nbsp;*fatal* |
+| `SFENCE.VMA` | *(local TLB — no packet)* |
+
+</div>
+<div class="isa-cards">
+
+<div class="channel-card req">
+<strong>Narrow accept list.</strong> CHI's <code>seqInPort</code> dispatches only
+<code>LD · IFETCH · ST · ATOMIC_*</code>. Everything else fatals at
+<code>AllocateTBE_SeqRequest</code>.
+</div>
+
+<div class="channel-card snp">
+<strong>Exclusivity is erased.</strong> LL/SC, x86 locked-RMW, and generic RMW
+all collapse to plain <code>LD/ST</code>. CHI never sees an <code>Excl</code> attribute &mdash;
+the Sequencer serialises via a block list instead.
+</div>
+
+<div class="channel-card dat">
+<strong>RISC-V-only view.</strong> <code>TLBI_*</code> (ARM DVM) and
+<code>HTM_*</code> (ARM TME) exist in the enum but no RISC-V core emits them.
+<code>SFENCE.VMA</code> is a local TLB op &mdash; it never reaches Ruby.
+</div>
+
+</div>
+</div>
+
+<div class="takeaway isa-take">
+One pipe, five accepted types. Every coherent memory op a RISC-V gem5 CPU
+can execute arrives at the CHI cache controller as exactly one of
+<code>LD · IFETCH · ST · ATOMIC_RETURN · ATOMIC_NO_RETURN</code>.
+</div>
+
+<!-- Speaker Notes:
+Time budget: 3 to 4 minutes.
+
+Up to this slide, the deck has been all CHI, all the time. Channels,
+opcodes, transactions, retry. From here on the question shifts. Which CPU
+instruction becomes which CHI transaction? And it turns out every RISC-V
+program you ever run on a gem5 CHI system funnels through one narrow
+pipe on its way to the protocol — that pipe is the mandatoryQueue. This
+slide is the map of that pipe.
+
+Walk the diagram left to right.
+
+The CPU retires a memory instruction — a load, a store, an atomic, an
+LR or SC, a CBO line maintenance op, or an SFENCE.VMA. The core builds a
+gem5 Packet with a Request object carrying flags like isRead, isWrite,
+isLLSC, isAtomicOp, isFlush, isInstFetch, isTlbiCmd. That packet is
+handed to the Sequencer's makeRequest method. This is where the
+classification happens. The Sequencer picks two things: a primary_type,
+which it keeps for its own bookkeeping — profiling, LL/SC tracking,
+locked-RMW blocking — and a secondary_type, which is the thing that
+actually gets written into the RubyRequest on the queue.
+
+From the CHI cache controller's perspective, that secondary type is all
+it will ever see. It does not know whether the CPU issued an LR or a
+plain LD. It does not see LOCK prefixes. It does not know about
+exclusivity. It gets a line address, an access size, and a small enum
+value — that is it.
+
+Now look at the table. Left column is every relevant RISC-V instruction.
+Right column is the secondary_type value that lands on the queue.
+
+Plain loads and stores pass through as LD and ST — no surprise.
+Instruction fetches get their own tag, IFETCH, because the CHI
+controller can use it later to pick a clean-only fill policy.
+
+LR and SC — Load Reserved and Store Conditional — are the first
+surprise. The Sequencer tags them internally as Load_Linked and
+Store_Conditional for the primary type, so the LL/SC blocking logic
+works. But the secondary type, what the CHI controller actually sees,
+is just plain LD and plain ST. The CHI ProtocolInfo returns false for
+the useSecondaryLoadLinked and useSecondaryStoreConditional flags, so
+the demotion happens every time. If you were hoping to see a CHI
+ReadClean with the Excl attribute fire off the wire — sorry, it never
+happens. RISC-V LL/SC is enforced entirely above the protocol, using
+the same Locked_RMW block list x86 uses for its LOCK-prefixed loop.
+
+AMOs split on the return-value question. If rd is non-zero, the AMO
+wants its old value back, and the Sequencer tags it ATOMIC_RETURN. If
+rd is x0, nothing comes back, so it is ATOMIC_NO_RETURN. Both pass
+straight through to the queue. These two, plus LD, IFETCH, and ST, are
+the only secondary types CHI accepts. Five values. That is the entire
+accept list.
+
+Now the two rows that do NOT work, and they are a bit embarrassing.
+
+CBO.inval, CBO.clean, and CBO.flush from the RISC-V Zicbom extension
+all set the isFlush flag on the request. The Sequencer dutifully
+translates this to RubyRequestType FLUSH. The packet reaches the CHI
+mandatoryQueue. And then — boom — AllocateTBE_SeqRequest looks at the
+type, does not find a handler, and fatals with "Invalid
+RubyRequestType". So if your RISC-V binary does a CBO.flush on a
+CHI-coherent system today, you will not get a wire CMO — you will get
+a simulation crash. That is a genuine gap.
+
+SFENCE.VMA is the opposite story. It does not reach the queue at all
+because the RISC-V tlb.cc handles it entirely locally — no packet is
+ever emitted. So CHI's DVM transport stays dormant for RISC-V workloads
+even though the protocol wires are in place.
+
+The three cards on the right summarise the three rules you should walk
+away with. One, the accept list is narrow. Two, exclusivity is erased
+on the way down. Three, anything that feels ARM-specific — DVM, HTM —
+is not reachable from a RISC-V CPU, and CBO is a known crash today.
+
+The takeaway at the bottom is the one-line version. Five accepted
+types. That is the whole interface between the CPU and CHI.
+
+References. Sequencer dispatch is in src/mem/ruby/system/Sequencer.cc
+around line 966. The RubyRequestType enum is in
+src/mem/ruby/protocol/RubySlicc_Exports.sm line 171. The CHI accept
+list is in src/mem/ruby/protocol/chi/CHI-cache-actions.sm line 163.
+Zicbom decode is in src/arch/riscv/isa/decoder.isa around line 1348.
+-->
+
+---
+
+<!-- ================================================================== -->
+<!-- SLIDE 17d: From RubyRequest to the CHI wire opcode -->
+<!-- ================================================================== -->
+
+<style scoped>
+section h2 { margin: 0 0 10px 0; font-size: 26px; }
+section h3 { font-size: 14px; margin: 2px 0 4px 0; color: var(--chi-blue-deep); font-weight: 700; }
+section p { margin: 2px 0 8px 0; font-size: 14.5px; line-height: 1.35; }
+section table { font-size: 13px; border-collapse: collapse; width: 100%; margin: 0; }
+section th, section td { padding: 2px 7px; line-height: 1.3; border-bottom: 1px solid var(--chi-border); }
+section th { background: #eef3fb; color: var(--chi-blue-deep); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+section code { font-size: 12.5px; padding: 0 1px; background: transparent; }
+section h2 code, section h2 em, section h2 strong { font-size: inherit; font-weight: inherit; font-style: inherit; letter-spacing: inherit; }
+section h3 code { font-size: inherit; font-weight: inherit; }
+.columns { gap: 22px; align-items: stretch; }
+.columns > div:first-child { flex: 1.4; }
+.op-cards .card { padding: 9px 13px; margin-bottom: 6px; font-size: 12.5px; line-height: 1.35; border-radius: 10px; border: 1px solid var(--chi-border); background: linear-gradient(180deg, white 0%, var(--chi-surface) 100%); }
+.op-cards .card .pill { margin: 0 6px 0 0; font-size: 12px; padding: 2px 8px; vertical-align: 1px; }
+.op-cards .card strong { color: var(--chi-blue-deep); }
+.op-knob { margin-top: 8px; padding: 9px 13px; font-size: 12.5px; line-height: 1.35; background: var(--chi-surface-2); border-left: 4px solid var(--chi-blue); border-radius: 8px; }
+.op-take { margin-top: 8px; padding: 10px 14px; font-size: 14px; line-height: 1.35; }
+</style>
+
+## Where the opcode is picked — state × event, not the ISA
+
+The FSM looks up *(current state, internal event, clusivity knobs)* and
+picks the outbound CHI opcode. The CPU has no say — a single `Load`
+event can become `ReadShared`, `ReadOnce`, `ReadNotSharedDirty`, or
+nothing at all.
+
+<div class="columns">
+<div>
+
+### State × event → outbound CHI (B4.2.1 – B4.2.5)
+
+| Sequencer event | Local state | Outbound CHI request |
+|---|---|---|
+| `Load` *(hit)* | `UD/UC/SC/SD` | — *local callback* |
+| `Load` *(miss)* — cache-fill | `I` | `ReadShared` / `ReadNotSharedDirty` |
+| `Load` *(miss)* — bypass | `I` | `ReadOnce` |
+| `Store` *(hit)* | `UD/UC` | — *local callback* |
+| `Store` *(upgrade)* | `SC/SD` | `CleanUnique` |
+| `Store` *(miss)* — cache-fill | `I` | `ReadUnique` |
+| `Store` *(miss)* — bypass | `I` | `WriteUnique{Full,Ptl,Zero}` |
+| `AtomicLoad/Store` *(hit)* | `UC/UD` | — *near-execute* |
+| Atomic miss — `policy=0` | any | `ReadUnique` + local execute |
+| Atomic miss — `policy=1,2` | any | `AtomicReturn` / `AtomicNoReturn` |
+| Replacement — dirty line | — | `WriteBackFull` / `WriteCleanFull` |
+| Replacement — clean line | — | `WriteEvictFull` / `Evict` |
+| HN → Sub memory fetch | at HN | `ReadNoSnp` / `ReadNoSnpSep` |
+
+</div>
+<div class="op-cards">
+
+### Three data-provider fast-paths
+
+<div class="card accent-blue">
+<span class="pill req">DMT</span><strong>Sub → RN direct.</strong><br/>
+Gated at the HN: <code>tbe.use_DMT := is_HN && enable_DMT</code>.
+HN emits <code>ReadNoSnp</code> or <code>ReadNoSnpSep</code> with the RN's NID
+as forward target.
+</div>
+
+<div class="card accent-gold">
+<span class="pill snp">DCT</span><strong>Peer RN → RN direct.</strong><br/>
+Gated anywhere: <code>tbe.use_DCT := enable_DCT</code>. HN issues a forwarding
+snoop (<code>Snp*Fwd</code>); the snoopee ships data straight to the requester.
+</div>
+
+<div class="card accent-violet">
+<span class="pill dat">DWT</span><strong>RN → Sub direct.</strong><br/>
+HN tunnels the write with <code>WriteNoSnp*</code> carrying <code>DoDWT = 1</code>
+on the HN → Sub leg of coherent <code>WriteUnique*</code> flows.
+</div>
+
+<div class="op-knob">
+<strong>Clusivity knobs</strong> (<code>CHI-cache.sm</code> L152–165):
+<code>alloc_on_*</code> and <code>dealloc_on_*</code> flip
+<code>doCacheFill</code> and decide the post-transaction state. The same SLICC
+<code>machine(Cache)</code> becomes L1, L2, or HN-F by knob settings alone.
+</div>
+
+</div>
+</div>
+
+<div class="takeaway op-take">
+The CPU drives events. The <em>controller</em> picks opcodes &mdash; one
+<code>Load</code> fans out into four distinct wire behaviours, chosen by
+state and the six <code>alloc_on_*</code> flags. No ISA knob ever names a
+CHI opcode directly.
+</div>
+
+<!-- Speaker Notes:
+Time budget: 5 minutes.
+
+The previous slide got a RubyRequest onto the mandatoryQueue. This slide
+shows how that queue entry becomes a specific CHI wire opcode — and the
+surprising thing is that the CPU has no part in that decision.
+
+Here is the shape of the machinery. The CHI controller's seqInPort
+handler receives the RubyRequest, reserves a TBE, tags the message with
+a small internal label — Load, Store, StoreLine, AtomicLoad,
+AtomicStore — and drops it on an internal ready queue called reqRdy.
+One cycle later the reqRdy port fires an event into the state machine.
+The event has the internal label, the current state has the coherence
+status of the line, and a set of controller knobs — the six alloc_on
+flags, is_HN, enable_DMT, enable_DCT, policy_type, allow_SD — decides
+which of about 20 possible CHI opcodes actually goes out on the wire.
+That lookup is the entirety of what this slide captures.
+
+Walk the table top to bottom.
+
+A Load that hits a valid cached state needs no outbound request at all.
+The controller reads the data from its own data array and calls the
+Sequencer back. Nothing appears on the REQ channel. Good — the happy
+path costs zero network traffic.
+
+A Load miss branches on whether the line will be cached. The
+doCacheFill bit, computed from the alloc_on_* flags, decides. If yes,
+we go coherent with ReadShared — or ReadNotSharedDirty if the controller
+does not accept SD as a final state. If no, we bypass with ReadOnce. One
+event, three possible opcodes.
+
+A Store in UD or UC is the dream: we have write permission, we write
+locally, nobody on the wire cares. A Store on shared state, SC or SD,
+needs an upgrade — we have the data but not ownership — so the
+controller sends a dataless CleanUnique. A Store miss splits again: if
+we will cache, ReadUnique pulls the line in with ownership, and the
+store merges into the fill; if we will not cache, WriteUnique bypasses —
+Full if the store covers the line, Ptl if it does not, Zero for the
+write-zero optimization.
+
+The atomic rows are where gem5 gives you real policy control. Atomics
+on UC or UD are always executed locally — the line is yours, the AMO is
+purely arithmetic. Atomic misses are where policy_type rules. Zero is
+ALL-NEAR: every atomic is pulled to the L1 via ReadUnique and executed
+there. One and two are UNIQUE-NEAR and PRESENT-NEAR — the atomic itself
+flies to the Home or Slave as a CHI-native AtomicReturn or
+AtomicNoReturn. The spec defines both modes per B4.2.5; policy_type is
+the gem5 dial to choose between them.
+
+The replacement rows are not triggered by the Sequencer at all — they
+come from the replacement path when the cache evicts a victim. I include
+them to round out the picture. Dirty victims produce WriteBackFull or
+WriteCleanFull depending on dealloc policy; clean exclusive victims
+produce WriteEvictFull; clean shared victims produce a lightweight Evict.
+
+The last row is the Home-Node-to-Subordinate leg. When the HN has to
+actually fetch from memory, it emits ReadNoSnp, or ReadNoSnpSep if
+enable_DMT_early_dealloc is true. This is also where DMT lives on the
+wire — the HN's downstream read doubles as the RN's data fetch when
+DMT is on.
+
+Right column. Three data-provider fast-paths. This is where the
+protocol's DMT, DCT, and DWT actually come from in code.
+
+DMT is a pure HN switch. It means "let the Subordinate answer the
+Requester directly, skip me." In gem5 the gate is literally one line:
+tbe.use_DMT equals is_HN AND enable_DMT. At an RN-F L1, DMT is always
+off because an L1 is never a Home. At the HN, it is on whenever the
+system configuration asks for it. The mechanism is simple: the HN's
+ReadNoSnp carries the original requester's NodeID as the forward
+target, and the Subordinate ships the CompData directly back.
+
+DCT is peer-to-peer. It is gated anywhere by enable_DCT. When the HN
+decides during a read-with-snoops that a peer cache has the line, it
+sends a forwarding snoop — SnpSharedFwd, SnpUniqueFwd,
+SnpNotSharedDirtyFwd — and the snooped node ships data directly to the
+original requester. In gem5 the action is Send_SnpShared_Fwd and
+siblings.
+
+DWT is the Home-to-Sub fast-path for Immediate Writes. The HN passes
+the write straight through to the Subordinate in one message by
+emitting a WriteNoSnp carrying the DoDWT bit.
+
+Clusivity knobs are the last explainer card. The six alloc_on_* flags
+plus the two dealloc_on_* flags control doCacheFill and the final
+stable state. Flipping them is what turns one machine(Cache) definition
+into an L1 at the top, an L2 in the middle, and an HN-F at the system
+level cache. This is a real gem5 trick — there is literally one SLICC
+file, configured three different ways.
+
+The takeaway at the bottom is the headline. The CPU issues one event,
+and the controller picks one of about 20 possible CHI opcodes. The
+mapping is entirely state, internal type, and knob. No ISA-level field
+ever names a CHI opcode directly — by design.
+
+References. Internal type tagging — CHI-cache-actions.sm line 138.
+State × event transitions — CHI-cache-transitions.sm line 618.
+Opcode emitters — CHI-cache-actions.sm line 1553. DMT/DCT gating —
+CHI-cache-actions.sm line 273. Clusivity knobs — CHI-cache.sm line 152.
+Spec — IHI0050H B4.2.1 through B4.2.5.
+-->
+
+---
+
+<!-- ================================================================== -->
+<!-- SLIDE 17e: CHI features the gem5 CPU path never drives -->
+<!-- ================================================================== -->
+
+<style scoped>
+section h2 { margin: 0 0 10px 0; font-size: 26px; }
+section h3 { font-size: 15px; margin: 2px 0 6px 0; color: var(--chi-blue-deep); font-weight: 700; }
+section p { margin: 0 0 6px 0; font-size: 13.5px; line-height: 1.4; }
+section code { font-size: 12.5px; padding: 0 1px; background: transparent; }
+section h2 code, section h2 em, section h2 strong { font-size: inherit; font-weight: inherit; font-style: inherit; letter-spacing: inherit; }
+section h3 code { font-size: inherit; font-weight: inherit; }
+.columns { gap: 22px; align-items: stretch; }
+.gap-list .gap-row { padding: 7px 12px; margin-bottom: 6px; border-left: 4px solid var(--chi-muted); background: var(--chi-surface-2); border-radius: 0 8px 8px 0; font-size: 12.5px; line-height: 1.4; }
+.gap-list .gap-row .tag { display: inline-block; margin-right: 8px; padding: 2px 9px; border-radius: 999px; background: #e7f0ff; color: var(--chi-blue-deep); font-size: 11.5px; font-weight: 700; letter-spacing: 0.02em; }
+.gap-list .gap-row.cmo .tag { background: #fff3d6; color: #8a5a00; }
+.gap-list .gap-row.read .tag { background: #e8f7ec; color: #17603a; }
+.gap-list .gap-row.write .tag { background: #f0e9ff; color: #5d33bf; }
+.gap-list .gap-row.stash .tag { background: #ffe5cc; color: #c2410c; }
+.gap-list .gap-row.excl .tag { background: #edf2f7; color: var(--chi-muted); }
+.isa-gaps .channel-card { padding: 9px 13px; margin-bottom: 7px; font-size: 12.5px; line-height: 1.4; }
+.isa-gaps .channel-card strong { color: var(--chi-blue-deep); }
+.gap-warn { margin-top: 8px; padding: 10px 14px; font-size: 14px; line-height: 1.35; }
+</style>
+
+## CHI features the gem5 CPU path never drives
+
+<div class="columns">
+<div class="gap-list">
+
+### Never emitted from a sequencer today
+
+<div class="gap-row cmo"><span class="tag">CMO</span>
+<code>CleanShared</code>, <code>CleanSharedPersist</code>(<code>Sep</code>),
+<code>CleanInvalid</code>, <code>CleanInvalidPoPA/Storage</code>, <code>MakeInvalid</code> —
+no dispatch path. <em>B4.2.2</em>
+</div>
+
+<div class="gap-row read"><span class="tag">READ</span>
+<code>ReadClean</code>, <code>ReadPreferUnique</code>, <code>ReadOnceCleanInvalid</code>,
+<code>ReadOnceMakeInvalid</code> — load path emits only
+<code>ReadShared</code> / <code>ReadNotSharedDirty</code> / <code>ReadOnce</code>. <em>B4.2.1</em>
+</div>
+
+<div class="gap-row write"><span class="tag">WRITE</span>
+<code>MakeUnique</code> (dataless upgrade), <code>WriteNoSnpDef</code>,
+<code>WriteBackPtl</code>, <code>WriteEvictOrEvict</code>, all Combined
+Write+CMO opcodes. <em>B4.2.3 · B4.2.4</em>
+</div>
+
+<div class="gap-row stash"><span class="tag">STASH / PF</span>
+<code>StashOnce*</code>, <code>SnpStash*</code>, <code>PrefetchTgt</code> —
+received only; HW prefetch becomes an ordinary <code>Load</code>. <em>B4.2.2 · B4.2.6.2</em>
+</div>
+
+<div class="gap-row excl"><span class="tag">EXCL / DVM</span>
+CHI <code>Excl</code> attribute unused; <code>DVMOp</code> / <code>SnpDVMOp</code>
+wired but dormant on RISC-V. <em>B2.9 · B4.2.6.1</em>
+</div>
+
+</div>
+<div class="isa-gaps">
+
+### Why — the ISA side
+
+<div class="channel-card req">
+<strong>RISC-V Zicbom</strong> — <code>CBO.flush/clean/inval</code> set
+<code>isFlush</code>; the Sequencer translates to <code>FLUSH</code>;
+CHI dispatch <strong>fatals</strong>. No CMO ever leaves an RN-F.
+</div>
+
+<div class="channel-card snp">
+<strong>SFENCE.VMA</strong> is a local TLB op in
+<code>arch/riscv/tlb.cc</code>. No memory packet is emitted, so the CHI
+DVM transport stays dormant on every RISC-V system today.
+</div>
+
+<div class="channel-card rsp">
+<strong>LR/SC, locked-RMW</strong> are demoted to <code>LD/ST</code>
+upstream of CHI. Exclusivity is tracked by the Sequencer's
+<code>Locked_RMW</code> block list &mdash; CHI never sees Excl.
+</div>
+
+<div class="channel-card dat">
+<strong>HTM / TME</strong> is ARM-only in gem5
+(<code>arch/arm/insts/tme64ruby.cc</code>). There is no RISC-V hardware
+transactional memory, and CHI has no HTM wiring regardless.
+</div>
+
+</div>
+</div>
+
+<div class="callout warning gap-warn">
+<strong>Want to exercise one of these features?</strong> The three
+options are: extend the Sequencer dispatch with a new
+<code>RubyRequestType</code>, attach a DMA engine that emits the target
+opcode class directly, or drive the controller from a directed traffic
+generator like <code>Ruby_random_tester</code> or <code>protocol_tester</code>.
+</div>
+
+<!-- Speaker Notes:
+Time budget: 3 minutes.
+
+This is the closing slide of the three-part bridge between CPU and CHI.
+Slide 17c told you how a CPU instruction becomes a RubyRequest. Slide 17d
+told you how a RubyRequest becomes a CHI opcode. This slide tells you the
+honest part: if you look at the CHI Encyclopedia on slide 17 and compare
+it to what slide 17d actually produces, a lot of the protocol is dark.
+Gem5's CPU path drives roughly a dozen request opcodes. The spec defines
+several dozen. Here are the gaps.
+
+The five-row left column groups the unreachable opcodes by family, so
+you can spot what kind of feature you would lose touch with.
+
+CMO family. Cache Maintenance Operations — CleanShared, CleanSharedPersist
+and its Sep variant, CleanInvalid and its PoPA and Storage variants, and
+MakeInvalid. This is the entire B4.2.2 software-cache-management toolkit,
+and gem5's sequencer path generates none of it. Zicbom CBO.* in RISC-V
+does produce flush-flagged packets, but those get squashed at
+AllocateTBE_SeqRequest with "Invalid RubyRequestType". So software that
+relies on cache management instructions — think persistent-memory code,
+or DMA-cache-coherence code — cannot be modelled faithfully on a
+CHI-coherent gem5 system today. That is a real, practical gap.
+
+Read family. ReadClean for instruction-cache-only consumers;
+ReadPreferUnique for exclusive-access sequencing; the two
+ReadOnceCleanInvalid and ReadOnceMakeInvalid variants for IO-coherent
+DMA. None of them is emitted. The load path has only three outputs:
+ReadShared, ReadNotSharedDirty, ReadOnce. Functionally complete for a
+well-behaved RN-F, but narrower than what the spec allows.
+
+Write family. MakeUnique is the big one — a dataless upgrade that lets a
+requester overwrite a whole line without pulling data off the wire. Gem5
+does the functional equivalent via ReadUnique followed by local merge,
+so the upgrade works, but more bytes cross the fabric than the spec
+requires. WriteNoSnpDef, WriteBackPtl, WriteEvictOrEvict are similarly
+absent. Combined Write+CMO — the whole B4.2.4 fusion family, ten
+opcodes — is not generated either.
+
+Stash and Prefetch. StashOnceShared, StashOnceUnique, and the matching
+SnpStash* snoops appear in CHI-msg.sm and the FSM knows how to receive
+them, but nothing in gem5 builds one from a CPU instruction.
+PrefetchTgt is the really interesting one: CHI has a native
+fire-and-forget memory-warm request, and gem5 does not use it. The
+hardware prefetcher instead emits a normal load-shaped RubyRequest that
+becomes an ordinary ReadShared or ReadOnce. Functionally equivalent,
+spec-ly different.
+
+Exclusive and DVM. The CHI Excl attribute on reads and dataless requests
+would let the protocol participate in an exclusive-access monitor per
+B2.9. Gem5 does not use it — all exclusivity is tracked upstream. DVM
+is wired up in full; there is a CHI-dvm-misc-node machine and the
+CHI-cache FSM has SnpDvmOp transitions. But only ARM64 instructions
+call xc->initiateMemMgmtCmd — RISC-V SFENCE.VMA is handled locally by
+the TLB. So on a RISC-V gem5 system today, the DVM transport is
+dormant from boot.
+
+Right column summarises the four ISA-side gaps as cards, in one
+sentence each. Zicbom fatals. SFENCE.VMA is local. LR/SC is demoted.
+HTM is ARM-only.
+
+The bottom warning is the practical rule. If you need a feature that is
+not reachable through the CPU path, you have three levers. The cleanest
+is to extend the Sequencer — add a new RubyRequestType value, a decode
+branch in makeRequest, and a dispatch case in AllocateTBE_SeqRequest.
+The second is a DMA-shaped SimObject that hangs off the interconnect
+and emits the opcode directly. The third is a directed traffic
+generator — Ruby_random_tester and protocol_tester live in the
+tests/configs/example directory and are designed exactly for driving
+corners the CPU path cannot reach.
+
+Why does any of this matter? Two reasons. First, benchmark relevance —
+if your workload relies on CMOs or DMA stash for performance, a
+gem5 CHI run today will not model the benefit. Second, verification
+scope — if you are co-designing a new CHI-connected device and you
+want to exercise Stash or PrefetchTgt at system level, you need to know
+up front that the CPU side will not help you.
+
+References. RubyRequestType — RubySlicc_Exports.sm line 171. CHI accept
+list — CHI-cache-actions.sm line 163. Prefetch proxy —
+RubyPrefetcherProxy.cc line 106. DVM origin — arch/arm/isa/insts/
+misc64.isa. Zicbom decode — arch/riscv/isa/decoder.isa line 1348.
+Spec — IHI0050H B4.2.1 through B4.2.6.2.
+-->
+
+---
+
+<!-- ================================================================== -->
+<!-- SLIDE 17f: RISC-V memory/cache ISA features unmodeled in gem5 -->
+<!-- ================================================================== -->
+
+<style scoped>
+section h2 { margin: 0 0 6px 0; font-size: 24px; }
+section h3 { font-size: 13.5px; margin: 2px 0 4px 0; color: var(--chi-blue-deep); font-weight: 700; }
+section p { margin: 0 0 6px 0; font-size: 13px; line-height: 1.35; }
+section table { font-size: 11px; border-collapse: collapse; width: 100%; margin: 0; }
+section th, section td { padding: 2px 7px; line-height: 1.25; border-bottom: 1px solid var(--chi-border); vertical-align: top; }
+section th { background: #eef3fb; color: var(--chi-blue-deep); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em; }
+section code { font-size: 10.5px; padding: 0 1px; background: transparent; }
+section h2 code, section h2 em, section h2 strong { font-size: inherit; font-weight: inherit; font-style: inherit; letter-spacing: inherit; }
+section h3 code { font-size: inherit; font-weight: inherit; }
+.columns { gap: 20px; align-items: stretch; }
+.columns > div:first-child { flex: 1.75; }
+.rvca-cards .card { padding: 8px 12px; margin-bottom: 6px; font-size: 12px; line-height: 1.35; border-radius: 10px; border: 1px solid var(--chi-border); background: linear-gradient(180deg, white 0%, var(--chi-surface) 100%); }
+.rvca-cards .card strong { color: var(--chi-blue-deep); }
+.rvca-take { margin-top: 6px; padding: 9px 13px; font-size: 13px; line-height: 1.35; }
+.rvca-intro { font-size: 13px; line-height: 1.35; color: var(--chi-ink); margin-bottom: 8px; }
+.fatal { color: var(--chi-red); font-weight: 700; }
+.ok { color: var(--chi-green); font-weight: 700; }
+</style>
+
+## RISC-V memory/cache ISA extensions unmodeled in gem5 Ruby CHI
+
+<p class="rvca-intro">A decade of RISC-V memory/cache extensions ratified 2022&ndash;2025 &mdash;
+RVA23 requires most of them. Today, gem5&rsquo;s Ruby CHI lands only a fraction onto
+real CHI transactions; the rest either fatal, NOP, or go through as plain LD/ST.</p>
+
+<div class="columns">
+<div>
+
+### Ratified extensions &rarr; CHI-faithful lowering &rarr; gem5 today
+
+| Extension | RISC-V ops | gem5 Ruby CHI reality |
+|---|---|---|
+| `Zicbom` (2022) | `CBO.clean` · `CBO.flush` · `CBO.inval` | Decoded in `arch/riscv/isa/decoder.isa`; <span class="fatal">fatals</span> at the CHI boundary — `CleanInvalidReq` → `FLUSH` → `error` in `AllocateTBE_SeqRequest`; `InvalidateReq`/`CleanSharedReq` → `panic` in `Sequencer::makeRequest`. No CMO opcode ever crosses the wire. |
+| `Zicboz` (2022) | `CBO.zero` | Decoded with `CACHE_BLOCK_ZERO` flag; reaches the sequencer as plain `ST`. No `WriteUniqueZero` (B4.2.3.1) dataless optimisation — 64 B of zeros would cross on DAT if the ST ever ran. |
+| `Zicbop` (2022) | `PREFETCH.R/W/I` | Decoded (`decoder.isa` L1636); emitted as `SoftPFReq`/`SoftPFExReq`; reaches the CHI controller as ordinary `Load` → `ReadShared`/`ReadOnce`. **No distinct `PrefetchTgt`** (B4.2.6.2), so no fire-and-forget memory warm-up. |
+| `Zihintntl` (2022) | `NTL.{P1,PALL,S1,ALL}` | **Not decoded** &mdash; executes as `ADD x0,x0,xN` HINT NOP. No `MemAttr.Allocate=0`, no promotion to `ReadOnce*`. Locality hints vanish before the sequencer. |
+| `Zalrsc` (2024) | `LR.{W,D}` · `SC.{W,D}` | Decoded; Sequencer demotes to plain `LD`/`ST`. **No CHI `Excl=1`** attribute, no HN-F PoC monitor &mdash; exclusivity lives in the Sequencer&rsquo;s `Locked_RMW` block list. |
+| `Zacas` (2024) | `AMOCAS.{W,D,Q}` | **Not decoded** in RISC-V. No distinct CHI `AtomicCompare` opcode in gem5 either (only `AtomicReturn`/`AtomicNoReturn`) &mdash; the asymmetric CAS data shape is unreachable on both sides. |
+| `Zabha` (2024) | `AMO*.{B,H}` · `AMOCAS.{B,H}` | **Not decoded**. Byte/half-lane ALU at HN not modelled. Narrow far-atomics cannot be studied. |
+| `Zalasr` (2025) | `L{B,H,W,D}.AQ` · `S{B,H,W,D}.RL` | **Not decoded**. Moot because CHI&rsquo;s four-valued `Order` field (`00/01/10/11`) is not modelled either &mdash; release/acquire semantics would collapse to Sequencer drain. |
+| `Ztso` · RVWMO | `FENCE`, `FENCE.TSO`, `.aq`/`.rl` | `FENCE` decoded; enforced as a CPU-local drain + Sequencer wait-on-outstanding. **CHI `Order` field never set** &mdash; every REQ goes out with `Order=00`; no `RequestOrder`/`EndpointOrder` serialisation. |
+| `Svinval` (2022) | `SINVAL.VMA`, `SFENCE.W.INVAL`, `SFENCE.INVAL.IR`, `HINVAL.*` | Partially decoded (`sinval_vvma`: `warn("not implemented")`); no opportunistic `DVMOp(TLBI)` emission. Cross-hart shootdown stays IPI-driven. |
+| `Zawrs` (2022) | `WRS.NTO` · `WRS.STO` | **Not decoded** in RISC-V. No reservation-driven stall &mdash; HN-F PoC wake path is moot since LR/SC has no PoC monitor in gem5. |
+
+</div>
+<div class="rvca-cards">
+
+### Three ways gem5 fidelity leaks
+
+<div class="card accent-red">
+<strong>Software cache control is unreachable.</strong>
+Zicbom + Zicboz fatal or degrade silently. DMA coherence, persistent
+memory (`CleanSharedPersistSep`), and userspace `memset` optimisations
+cannot be studied in gem5 CHI today &mdash; a real blocker for DPDK,
+SPDK, and PMEM workloads.
+</div>
+
+<div class="card accent-gold">
+<strong>Atomics are half a story.</strong>
+Plain AMOs work near (<code>ReadUnique</code>&thinsp;+&thinsp;local) or far
+(<code>AtomicReturn/NoReturn</code>). <em>But:</em> LR/SC uses no
+<code>Excl=1</code>, <code>AMOCAS</code>/byte-AMOs aren&rsquo;t decoded,
+and far-atomic CAS has no distinct <code>AtomicCompare</code> opcode.
+</div>
+
+<div class="card accent-slate">
+<strong>Ordering is flat, DVM is dormant.</strong>
+CHI&rsquo;s <code>Order</code> field and DVM broadcast both sit idle on
+RISC-V. Zalasr, Ztso, and Svinval lose their wire-level fingerprint &mdash;
+reproducing an RVA23-class memory-model study requires custom SLICC.
+</div>
+
+</div>
+</div>
+
+<div class="takeaway rvca-take">
+A faithful RVA23-on-CHI model needs: a CMO dispatch path (extend
+<code>AllocateTBE_SeqRequest</code>), a <code>PrefetchTgt</code> emitter,
+<code>Excl=1</code> plumbing for LR/SC, an <code>Order</code>-field-aware
+RN-F, and an opportunistic DVM path for Svinval.
+</div>
+
+<!-- Speaker Notes:
+Time budget: 3 to 4 minutes.
+
+Slides 17c, d, and e came at this bridge from the CPU side outward. CPU
+instruction becomes RubyRequest, RubyRequest becomes CHI opcode, and
+here are the CHI opcodes that never fire. This slide tips the question
+over: which RISC-V memory and cache ISA extensions does gem5 Ruby CHI
+actually model faithfully, and which ones are left on the floor?
+
+The short answer is that most of the 2022 to 2025 wave of ratified
+extensions is unreachable. RVA23 pulls these in as mandatory or
+recommended, so if you are modelling a modern RISC-V workload on a CHI
+NoC, you will bump into at least one of these rows.
+
+Walk the table top to bottom.
+
+Row one, Zicbom. CBO dot clean, CBO dot flush, CBO dot inval. These
+are decoded in the RISC-V decoder — the `decoder.isa` file has all
+three — but the resulting packet carries CLEAN or INVALIDATE flags,
+which the Sequencer translates either into RubyRequestType FLUSH, which
+hits an error in AllocateTBE_SeqRequest, or leaves in a form that
+falls through to a straight panic in makeRequest. Three different
+paths, all fatal. No CMO ever leaves the RN-F.
+
+Row two, Zicboz. CBO dot zero. This one is decoded with a
+CACHE_BLOCK_ZERO flag and reaches the Sequencer as a plain ST —
+because it has neither CLEAN nor INVALIDATE bits, only the ZERO bit.
+The gem5 decoder also writes only one byte in the semantic, not a full
+64 byte block, but even if that were fixed, nothing in the Ruby CHI
+path promotes it to a WriteUniqueZero dataless optimisation. So CBO dot
+zero either misbehaves or wastes a data-channel round trip on a
+64 byte zero payload.
+
+Row three, Zicbop. The three prefetches. Here is the most common
+surprise: Zicbop IS decoded in gem5 and DOES generate memory traffic.
+PREFETCH.R and .I map to SoftPFReq, PREFETCH.W maps to SoftPFExReq.
+Both reach the Sequencer as Load and emit ReadShared or ReadOnce on
+the wire. So you do get warm lines — just ordinary coherent reads.
+What is missing is the distinct CHI PrefetchTgt opcode, the
+fire-and-forget memory-warm request with no response. If you are
+measuring the cost of a PrefetchTgt round-trip absence on chiplet
+traffic, you cannot do it in gem5 today.
+
+Row four, Zihintntl. The non-temporal locality hints. NOT decoded in
+the RISC-V frontend at all. They execute as ADD x0 comma x0 comma xN,
+which is a legal NOP. So the locality hint never even reaches the
+cache-allocation machinery. On a faithful CHI implementation you would
+set MemAttr dot Allocate to zero or promote the read to a deallocating
+variant; in gem5 the hint evaporates.
+
+Row five, Zalrsc. LR and SC. This is the one we covered on Slide 17c.
+Decoded, but the Sequencer demotes them to plain LD and ST. No CHI Excl
+equals 1 attribute is ever set. Exclusivity is tracked at the Sequencer
+level using a Locked_RMW block list. That means you cannot model a
+RISC-V LR slash SC contention pattern against a hardware PoC monitor at
+an HN-F, because gem5 does not have such a monitor. Which is a pretty
+fundamental gap for RVA23 lock-contention studies.
+
+Rows six and seven, Zacas and Zabha. AMOCAS at W, D, Q and byte-half
+granular AMOs. NOT decoded. Even if you extended the decoder, gem5's
+CHIRequestType enum does not have a distinct AtomicCompare — AMOCAS
+would have to fold into AtomicReturn, and the CHI asymmetric CAS data
+shape, where the outbound data is twice the inbound return, would be
+lost. For byte and halfword AMOs the HN's byte-lane ALU is also not
+modelled.
+
+Rows eight and nine, Zalasr and Ztso RVWMO. The release-acquire and
+TSO extensions. Zalasr is not decoded. RVWMO's fence is decoded and
+works as a local CPU drain, but the CHI Order field, four-valued
+`00/01/10/11`, is never set on any REQ — gem5 always emits Order=00 and
+relies on Sequencer serialisation for ordering. So RequestOrder and
+EndpointOrder semantics, particularly important for device memory
+banks, are not there.
+
+Row ten, Svinval. The batched TLB invalidation bracket. gem5 has a
+partial sinval_vvma decode that literally warns "not implemented".
+Even if it were implemented, there is no opportunistic DVMOp TLBI
+emission. Cross-hart TLB shootdown stays IPI-driven. On a real CHI
+system this is where RISC-V deliberately does not use DVM because the
+ISA does not require it; but as a performance optimisation a real
+implementation might emit DVM anyway — not in gem5.
+
+Row eleven, Zawrs. WRS NTO and STO. The reservation-driven stall-wait
+pattern. Not decoded in gem5 RISC-V. Even if added, its wake path
+depends on the PoC monitor that gem5 does not model — so Zawrs is
+deeply coupled to the Zalrsc gap.
+
+Right column, three summary cards. Software cache control is
+unreachable — Zicbom plus Zicboz blockers. Atomics are half a story —
+plain AMOs work, LR slash SC and CAS do not. Ordering is flat, DVM is
+dormant — CHI's richest fidelity machinery simply is not used.
+
+The takeaway closes the argument. To build a faithful RVA23-on-CHI
+model in gem5 you need five things: a CMO dispatch path, a PrefetchTgt
+emitter, Excl equals 1 plumbing, an Order-field-aware RN-F, and an
+opportunistic DVM path for Svinval. None of these are trivial. All
+five are tractable with SLICC extensions. This is the honest roadmap
+for anyone who wants to publish performance numbers on a modern
+RISC-V CHI system using gem5.
+
+References. The compass artefact at ruby-book slash slides slash
+compass_artifact_wf-d63250d0 dot text_markdown dot md is the primary
+source for the CHI-faithful lowering column. gem5 reality is from
+`arch/riscv/isa/decoder.isa` around lines 1348, 1414, 1636, 6308;
+`src/mem/ruby/system/Sequencer.cc` line 966; and
+`src/mem/ruby/protocol/chi/CHI-cache-actions.sm` line 163.
+-->
+
+---
+
+<!-- ================================================================== -->
 <!-- SLIDE 18: Ruby CHI Cache Controller Architecture -->
 <!-- ================================================================== -->
 
