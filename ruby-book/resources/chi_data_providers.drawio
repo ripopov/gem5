@@ -1,0 +1,220 @@
+<mxfile host="Electron" modified="2026-04-23T00:00:00.000Z" agent="draw.io" version="24.0.0">
+  <diagram name="CHI Data Providers (DCT/DMT/DWT)" id="chi-data-providers">
+    <mxGraphModel dx="1500" dy="900" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1340" pageHeight="900" math="0" shadow="0" background="#ffffff">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <!-- ============================================================ -->
+        <!-- Title                                                         -->
+        <!-- ============================================================ -->
+        <mxCell id="title" value="&lt;div style=&quot;font-size:22px;font-weight:bold;color:#0f172a&quot;&gt;Possible Data Providers for a Read / Write — DCT / DMT / DWT&lt;/div&gt;&lt;div style=&quot;font-size:12px;color:#475569;margin-top:3px&quot;&gt;Inspired by IHI0050H §B1.7, Figure B1.5 — shaded nodes can supply data&lt;/div&gt;" style="text;html=1;align=center;verticalAlign=middle;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="170" y="10" width="1000" height="46" as="geometry"/>
+        </mxCell>
+
+        <!-- ============================================================ -->
+        <!-- ICN pill — central, with Home inside                          -->
+        <!-- ============================================================ -->
+        <mxCell id="icn" value="&lt;div style=&quot;font-size:14px;color:#64748b;text-align:right;margin-right:26px;margin-top:8px&quot;&gt;&lt;b style=&quot;font-size:22px;color:#334155;letter-spacing:1px&quot;&gt;ICN&lt;/b&gt; · Interconnect Network&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F1F5F9;strokeColor=#475569;strokeWidth=3;verticalAlign=top;arcSize=4;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="430" y="320" width="520" height="260" as="geometry"/>
+        </mxCell>
+
+        <!-- Home inside the ICN, with SF + LLC slice child boxes -->
+        <mxCell id="home" value="&lt;b style=&quot;font-size:20px&quot;&gt;Home&lt;/b&gt; &lt;span style=&quot;font-size:11px;font-weight:normal;color:#6d28d9&quot;&gt;· cache within ICN&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE9FE;strokeColor=#7c3aed;strokeWidth=2.5;verticalAlign=top;fontSize=14;fontColor=#6d28d9;arcSize=6;spacingTop=6;" vertex="1" parent="1">
+          <mxGeometry x="490" y="390" width="400" height="150" as="geometry"/>
+        </mxCell>
+        <mxCell id="home_sf" value="&lt;b&gt;SF&lt;/b&gt;&lt;div style=&quot;font-size:9px;font-weight:normal;color:#6d28d9&quot;&gt;snoop filter&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#c4b5fd;strokeWidth=1.5;fontSize=12;fontColor=#6d28d9;arcSize=10;" vertex="1" parent="home">
+          <mxGeometry x="26" y="48" width="160" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="home_llc" value="&lt;b&gt;LLC slice&lt;/b&gt;&lt;div style=&quot;font-size:9px;font-weight:normal;color:#6d28d9&quot;&gt;cached lines&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#c4b5fd;strokeWidth=1.5;fontSize=12;fontColor=#6d28d9;arcSize=10;" vertex="1" parent="home">
+          <mxGeometry x="214" y="48" width="160" height="90" as="geometry"/>
+        </mxCell>
+
+        <!-- ============================================================ -->
+        <!-- Top row: Requester (left, plain) + Peer RN-F (right, shaded)  -->
+        <!-- ============================================================ -->
+        <mxCell id="req" value="&lt;b style=&quot;font-size:22px&quot;&gt;Requester&lt;/b&gt;&lt;div style=&quot;font-size:12px;font-weight:normal;margin-top:3px&quot;&gt;RN-F / RN-I&lt;/div&gt;&lt;div style=&quot;font-size:11px;font-weight:normal;color:#475569;margin-top:3px&quot;&gt;not a data provider&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#64748b;strokeWidth=2.5;verticalAlign=middle;fontSize=14;fontColor=#334155;arcSize=6;" vertex="1" parent="1">
+          <mxGeometry x="140" y="110" width="260" height="140" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="peer" value="&lt;b style=&quot;font-size:20px&quot;&gt;Peer RN-F&lt;/b&gt; &lt;span style=&quot;font-size:11px;font-weight:normal;color:#6d28d9&quot;&gt;· data provider via snoop&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE9FE;strokeColor=#7c3aed;strokeWidth=2.5;verticalAlign=top;fontSize=14;fontColor=#6d28d9;arcSize=6;spacingTop=6;" vertex="1" parent="1">
+          <mxGeometry x="970" y="95" width="280" height="165" as="geometry"/>
+        </mxCell>
+        <mxCell id="peer_cache" value="&lt;b&gt;private cache&lt;/b&gt;&lt;div style=&quot;font-size:10px;font-weight:normal;color:#6d28d9&quot;&gt;L1 / L2&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#c4b5fd;strokeWidth=1.5;fontSize=12;fontColor=#6d28d9;arcSize=10;" vertex="1" parent="peer">
+          <mxGeometry x="55" y="48" width="170" height="100" as="geometry"/>
+        </mxCell>
+
+        <!-- ============================================================ -->
+        <!-- Bottom: Subordinate (centered under Home)                     -->
+        <!-- ============================================================ -->
+        <mxCell id="sub" value="&lt;b style=&quot;font-size:20px&quot;&gt;Subordinate&lt;/b&gt; &lt;span style=&quot;font-size:11px;font-weight:normal;color:#6d28d9&quot;&gt;· SN-F / downstream memory&lt;/span&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE9FE;strokeColor=#7c3aed;strokeWidth=2.5;verticalAlign=top;fontSize=14;fontColor=#6d28d9;arcSize=6;spacingTop=6;" vertex="1" parent="1">
+          <mxGeometry x="540" y="645" width="300" height="165" as="geometry"/>
+        </mxCell>
+        <mxCell id="sub_dram" value="&lt;b&gt;DRAM&lt;/b&gt;" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=12;fillColor=#ffffff;strokeColor=#c4b5fd;strokeWidth=1.5;fontSize=13;fontColor=#6d28d9;verticalAlign=middle;" vertex="1" parent="sub">
+          <mxGeometry x="95" y="48" width="110" height="100" as="geometry"/>
+        </mxCell>
+
+        <!-- ============================================================ -->
+        <!-- DEFAULT via-Home arrows — orthogonal L-paths, channel-colored -->
+        <!-- Labels short; the page-level caption notes "via Home" is the  -->
+        <!-- default for all solid arrows.                                 -->
+        <!-- ============================================================ -->
+
+        <!-- Req -> Home : REQ (blue)   path: right from Req, down to Home top -->
+        <mxCell id="e_req_home" value="&lt;b&gt;REQ&lt;/b&gt;" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=classic;strokeColor=#2563eb;strokeWidth=2.25;fontSize=12;fontColor=#1e40af;labelBackgroundColor=#ffffff;exitX=1;exitY=0.6;exitDx=0;exitDy=0;entryX=0.15;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="req" target="home">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Home -> Req : DAT (violet)  path: up from Home, left to Req right -->
+        <mxCell id="e_home_req" value="&lt;b&gt;DAT&lt;/b&gt;" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=classic;strokeColor=#7c3aed;strokeWidth=2.25;fontSize=12;fontColor=#6d28d9;labelBackgroundColor=#ffffff;exitX=0.05;exitY=0;exitDx=0;exitDy=0;entryX=1;entryY=0.85;entryDx=0;entryDy=0;" edge="1" parent="1" source="home" target="req">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Home -> Peer : SNP (gold)  path: up-right from Home to Peer bottom -->
+        <mxCell id="e_home_peer" value="&lt;b&gt;SNP&lt;/b&gt;" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=classic;strokeColor=#d97706;strokeWidth=2.25;fontSize=12;fontColor=#b45309;labelBackgroundColor=#ffffff;exitX=0.95;exitY=0;exitDx=0;exitDy=0;entryX=0.15;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" source="home" target="peer">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Peer -> Home : DAT+RSP (violet; green hint in label) -->
+        <mxCell id="e_peer_home" value="&lt;b&gt;DAT&lt;/b&gt; + &lt;b style=&quot;color:#15803d&quot;&gt;RSP&lt;/b&gt;" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=classic;strokeColor=#7c3aed;strokeWidth=2.25;fontSize=12;fontColor=#6d28d9;labelBackgroundColor=#ffffff;exitX=0;exitY=0.6;exitDx=0;exitDy=0;entryX=0.85;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="peer" target="home">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Home -> Sub : REQ (blue) -->
+        <mxCell id="e_home_sub" value="&lt;b&gt;REQ&lt;/b&gt;" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=classic;strokeColor=#2563eb;strokeWidth=2.25;fontSize=12;fontColor=#1e40af;labelBackgroundColor=#ffffff;exitX=0.35;exitY=1;exitDx=0;exitDy=0;entryX=0.35;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="home" target="sub">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Sub -> Home : DAT (violet) -->
+        <mxCell id="e_sub_home" value="&lt;b&gt;DAT&lt;/b&gt;" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=classic;strokeColor=#7c3aed;strokeWidth=2.25;fontSize=12;fontColor=#6d28d9;labelBackgroundColor=#ffffff;exitX=0.65;exitY=0;exitDx=0;exitDy=0;entryX=0.65;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" source="sub" target="home">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- ============================================================ -->
+        <!-- FAST PATHS — DCT / DMT / DWT                                  -->
+        <!-- All routed OUTSIDE the ICN via explicit waypoints:            -->
+        <!--   DCT goes across the top gutter (above Req / Peer)           -->
+        <!--   DMT goes down the left margin (parallel to DWT, offset)     -->
+        <!--   DWT goes down the left margin (parallel to DMT, offset)     -->
+        <!-- ============================================================ -->
+
+        <!-- DCT: Peer.top -> top gutter -> Req.top -->
+        <mxCell id="e_dct" value="&lt;b style=&quot;font-size:14px&quot;&gt;DCT&lt;/b&gt; · peer → requester" style="html=1;endArrow=classic;startArrow=none;strokeColor=#dc2626;strokeWidth=3.5;dashed=1;dashPattern=10 5;fontSize=12;fontColor=#b91c1c;labelBackgroundColor=#fee2e2;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=1;" edge="1" parent="1" source="peer" target="req">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1110" y="70"/>
+              <mxPoint x="270" y="70"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- DMT: Sub.left -> OUTER left corridor (x=50) -> Req.left    -->
+        <!--   label positioned on the long bottom horizontal leg (y=730) -->
+        <mxCell id="e_dmt" value="" style="html=1;endArrow=classic;startArrow=none;strokeColor=#dc2626;strokeWidth=3.5;dashed=1;dashPattern=10 5;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.35;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=1;" edge="1" parent="1" source="sub" target="req">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="50" y="730"/>
+              <mxPoint x="50" y="159"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_dmt_label" value="&lt;b style=&quot;font-size:14px&quot;&gt;DMT&lt;/b&gt; · Sub → Requester  (direct DAT)" style="text;html=1;align=center;verticalAlign=middle;fontSize=12;fontColor=#b91c1c;fontStyle=1;fillColor=#fee2e2;strokeColor=#fca5a5;rounded=1;arcSize=20;spacingLeft=6;spacingRight=6;" vertex="1" parent="1">
+          <mxGeometry x="160" y="486" width="260" height="28" as="geometry"/>
+        </mxCell>
+
+        <!-- DWT: Req.left -> INNER left corridor (x=110) -> Sub.left    -->
+        <!--   label positioned on the long bottom horizontal leg (y=775) -->
+        <mxCell id="e_dwt" value="" style="html=1;endArrow=classic;startArrow=none;strokeColor=#dc2626;strokeWidth=3.5;dashed=1;dashPattern=10 5;exitX=0;exitY=0.85;exitDx=0;exitDy=0;entryX=0;entryY=0.75;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;rounded=1;" edge="1" parent="1" source="req" target="sub">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="110" y="229"/>
+              <mxPoint x="110" y="769"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_dwt_label" value="&lt;b style=&quot;font-size:14px&quot;&gt;DWT&lt;/b&gt; · Requester → Sub  (direct WDATA)" style="text;html=1;align=center;verticalAlign=middle;fontSize=12;fontColor=#b91c1c;fontStyle=1;fillColor=#fee2e2;strokeColor=#fca5a5;rounded=1;arcSize=20;spacingLeft=6;spacingRight=6;" vertex="1" parent="1">
+          <mxGeometry x="160" y="520" width="260" height="28" as="geometry"/>
+        </mxCell>
+
+        <!-- ============================================================ -->
+        <!-- Legend — strip at the bottom, outside the graph region         -->
+        <!-- ============================================================ -->
+        <mxCell id="legend" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cbd5e1;strokeWidth=1.5;arcSize=4;" vertex="1" parent="1">
+          <mxGeometry x="140" y="830" width="1100" height="42" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="legend_title" value="&lt;b style=&quot;color:#334155&quot;&gt;Legend&lt;/b&gt;" style="text;html=1;align=left;verticalAlign=middle;fontSize=12;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="152" y="835" width="55" height="32" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="legend_shaded_swatch" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE9FE;strokeColor=#7c3aed;strokeWidth=2;arcSize=30;" vertex="1" parent="1">
+          <mxGeometry x="210" y="842" width="22" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="legend_shaded_lbl" value="Data provider" style="text;html=1;align=left;verticalAlign=middle;fontSize=12;fontColor=#334155;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="238" y="835" width="100" height="32" as="geometry"/>
+        </mxCell>
+
+        <!-- REQ swatch -->
+        <mxCell id="legend_req_line" value="" style="endArrow=classic;html=1;strokeColor=#2563eb;strokeWidth=2.25;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="345" y="851" as="sourcePoint"/>
+            <mxPoint x="390" y="851" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="legend_req_lbl" value="REQ" style="text;html=1;align=left;verticalAlign=middle;fontSize=12;fontColor=#1e40af;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="395" y="835" width="50" height="32" as="geometry"/>
+        </mxCell>
+
+        <!-- SNP swatch -->
+        <mxCell id="legend_snp_line" value="" style="endArrow=classic;html=1;strokeColor=#d97706;strokeWidth=2.25;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="455" y="851" as="sourcePoint"/>
+            <mxPoint x="500" y="851" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="legend_snp_lbl" value="SNP" style="text;html=1;align=left;verticalAlign=middle;fontSize=12;fontColor=#b45309;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="505" y="835" width="50" height="32" as="geometry"/>
+        </mxCell>
+
+        <!-- RSP swatch -->
+        <mxCell id="legend_rsp_line" value="" style="endArrow=classic;html=1;strokeColor=#15803d;strokeWidth=2.25;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="565" y="851" as="sourcePoint"/>
+            <mxPoint x="610" y="851" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="legend_rsp_lbl" value="RSP" style="text;html=1;align=left;verticalAlign=middle;fontSize=12;fontColor=#15803d;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="615" y="835" width="50" height="32" as="geometry"/>
+        </mxCell>
+
+        <!-- DAT swatch -->
+        <mxCell id="legend_dat_line" value="" style="endArrow=classic;html=1;strokeColor=#7c3aed;strokeWidth=2.25;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="675" y="851" as="sourcePoint"/>
+            <mxPoint x="720" y="851" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="legend_dat_lbl" value="DAT / WDATA" style="text;html=1;align=left;verticalAlign=middle;fontSize=12;fontColor=#6d28d9;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="725" y="835" width="110" height="32" as="geometry"/>
+        </mxCell>
+
+        <!-- Fast path swatch -->
+        <mxCell id="legend_fast_line" value="" style="endArrow=classic;html=1;strokeColor=#dc2626;strokeWidth=3.5;dashed=1;dashPattern=10 5;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="855" y="851" as="sourcePoint"/>
+            <mxPoint x="915" y="851" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="legend_fast_lbl" value="Direct bypass (DCT / DMT / DWT)" style="text;html=1;align=left;verticalAlign=middle;fontSize=12;fontColor=#b91c1c;fontStyle=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="920" y="835" width="300" height="32" as="geometry"/>
+        </mxCell>
+
+        <!-- Footnote: clarifies via-Home vs direct-bypass semantics -->
+        <mxCell id="footnote" value="&lt;b&gt;Default path:&lt;/b&gt; data travels &lt;b&gt;via Home&lt;/b&gt; (two hops).  &lt;b&gt;DCT / DMT&lt;/b&gt; let the provider forward read data directly to the Requester; &lt;b&gt;DWT&lt;/b&gt; lets the Requester send write data directly to the Subordinate.  Home is still notified via a response so it can retire the transaction." style="text;html=1;align=center;verticalAlign=middle;fontSize=11;fontColor=#475569;strokeColor=none;fillColor=none;spacingLeft=8;spacingRight=8;" vertex="1" parent="1">
+          <mxGeometry x="140" y="880" width="1100" height="18" as="geometry"/>
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
