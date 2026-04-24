@@ -59,10 +59,11 @@ and common AXI crossbar implementations.
 14. [When Existing NoncoherentXBar Is Enough](#14-when-existing-noncoherentxbar-is-enough)
 15. [When You Need a More Detailed Custom SimObject](#15-when-you-need-a-more-detailed-custom-simobject)
 16. [When You Need SystemC/TLM or RTL Co-Simulation](#16-when-you-need-systemctlm-or-rtl-co-simulation)
-17. [Mental Model](#17-mental-model)
-18. [Checklist for Connecting a New Master and Slave](#18-checklist-for-connecting-a-new-master-and-slave)
-19. [Common Pitfalls](#19-common-pitfalls)
-20. [Bottom Line](#20-bottom-line)
+17. [Options for Matching RTL AXI Crossbar Cycle-Accurate Latency and Bandwidth](#17-options-for-matching-rtl-axi-crossbar-cycle-accurate-latency-and-bandwidth)
+18. [Mental Model](#18-mental-model)
+19. [Checklist for Connecting a New Master and Slave](#19-checklist-for-connecting-a-new-master-and-slave)
+20. [Common Pitfalls](#20-common-pitfalls)
+21. [Bottom Line](#21-bottom-line)
 
 ---
 
@@ -917,7 +918,333 @@ cannot be configured into that level of detail.
 
 ---
 
-## 17. Mental Model
+## 17. Options for Matching RTL AXI Crossbar Cycle-Accurate Latency and Bandwidth
+
+This section consolidates the practical options for modeling a real AXI
+crossbar in gem5 at higher fidelity than `NoncoherentXBar` provides out of the
+box. The problem space was raised directly on the gem5 project's own Q&A board
+in
+[Discussion #2785 "AXI protocol simulation in gem5"](https://github.com/orgs/gem5/discussions/2785)
+(November 2025), where user `mytbk` identified three gaps:
+
+- No ARID/AWID modeling.
+- "AXI read and write are two channels, but it seems that each port in XBar
+  and memory (e.g. SimpleMemory) only receive one request in a cycle in timing
+  mode."
+- No AXI-style interconnect arbitration for bursts.
+
+gem5 maintainer `giactra` responded the same day, acknowledging these are
+non-trivial and pointing to three constructive paths: `Request`/`Packet`
+extensions, custom non-`Packet` ports (with the existing CHI-TLM port as a
+worked example), and Arm's open-source AMBA TLM library. gem5 already ships a
+CHI-TLM integration in
+[`src/mem/ruby/protocol/chi/tlm/`](../../src/mem/ruby/protocol/chi/tlm/) that
+serves as the pattern for an AXI-TLM peer.
+
+An earlier gem5-users thread from March 2016 ([narkive
+archive](https://gem5-users.gem5.narkive.com/h1BGfQdK/about-the-xbar-and-arm-axi-bus))
+documents Andreas Sandberg (Arm, principal gem5 maintainer) describing
+`NoncoherentXBar` as "similar to an AXI multi-layer bus" and confirming that
+gem5 does not restrict AXI-style ordering and has no AXI ID field. A February
+2024 gem5-users thread ["Dual load cause xbar busy"](https://www.mail-archive.com/gem5-users@gem5.org/msg22257.html)
+shows a user hitting the same shared-layer serialization with two concurrent
+loads; the community answer there is to add more physical paths at the
+topology level, because the existing xbar does not offer a configurable
+policy.
+
+### 17.1 Recap: what `NoncoherentXBar` serializes and what it parallelizes
+
+Before choosing an option, it helps to be precise about the baseline, because
+"`NoncoherentXBar` serializes reads and writes" is only half true.
+
+Within `BaseXBar::Layer` (`src/mem/xbar.cc:146-313`), each layer is a simple
+`IDLE / BUSY / RETRY` state machine with a FIFO deque of waiting source
+ports. `NoncoherentXBar` instantiates:
+
+```cpp
+std::vector<ReqLayer*>  reqLayers;   // one per mem-side (slave) port
+std::vector<RespLayer*> respLayers;  // one per cpu-side (master) port
+```
+
+What this gives you:
+
+- **Request direction and response direction are independent.** A read request
+  and an unrelated read response on the same master can overlap in wall time
+  because they live on different layer objects.
+- **Different mem-side ports are independent.** Two requests to two different
+  memory controllers run on two different `ReqLayer` objects in parallel.
+
+What it does not give you:
+
+- **Reads and writes to the same slave share a single `ReqLayer`.** No AXI
+  AW/AR independence at a given destination.
+- **Write completions (B) and read responses (R) to the same master share a
+  single `RespLayer`.** No independent B/R bandwidth at a given origin.
+
+Bandwidth is modeled only through `width` (bytes) via
+`payloadDelay = ceil(pkt->getSize() / width) * clockPeriod()` in
+`BaseXBar::calcPacketTiming()` (`src/mem/xbar.cc:108-143`), applied once per
+data-bearing packet. Backpressure is `sendTimingReq` returning `false` when
+the destination layer is `BUSY`, plus a FIFO `waitingForLayer` deque for
+retries. There is no configurable arbitration policy, no per-port bandwidth
+knob separate from `width`, and no outstanding-transaction depth limit.
+
+One behavioral wart is worth flagging here: `NoncoherentXBar` hard-codes the
+layer header occupancy at `Cycles(1)` in `src/mem/noncoherent_xbar.cc:139` and
+`src/mem/noncoherent_xbar.cc:215`, ignoring the inherited `header_latency`
+parameter. Only `CoherentXBar` honors `headerLatency`. Setting
+`header_latency=3` on a `NoncoherentXBar` changes nothing.
+
+### 17.2 Options at a glance
+
+| Option | What changes | R/W parallelism | AxID ordering | Per-beat fidelity | New code |
+|---|---|---|---|---|---|
+| A. Use `NoncoherentXBar` as-is, tune `width`/latencies | none | no | no | no | none |
+| B. Two `NoncoherentXBar` instances (read + write) with Splitter/Merger SimObjects | topology + two new SimObjects | yes | no | no | Splitter + Merger |
+| C. Internal R/W layer split inside `NoncoherentXBar` | C++ change to one file | yes | no | no | patch xbar |
+| D. Arm AMBA TLM library + SystemC/TLM bridge (AXI peer of existing CHI-TLM) | TLM integration layer | yes | yes (library-level) | transaction-level | AXI-TLM integration |
+| E. RTL co-simulation via `libsystemctlm-soc` + TLM bridge | external RTL xbar | yes | yes (cycle-exact) | yes | none in gem5 |
+
+Options A through C stay in gem5 `Packet` land. Options D and E leave it.
+
+### 17.3 Option A: accept the approximation
+
+Use `NoncoherentXBar` or `IOXBar` with `width`, `frontend_latency`,
+`forward_latency`, `response_latency`, and the parent `clk_domain.clock` tuned
+to your AXI xbar's aggregate throughput and round-trip latency.
+
+Appropriate when:
+
+- Your analysis target is workload-level throughput or latency, not AXI
+  channel microarchitecture.
+- Your traffic is dominated by one direction at a time, so the shared-layer
+  approximation does not distort first-order results.
+- You do not need AxID, burst, or QoS behavior.
+
+This is the option Arm's own `IOXBar` preset implements and the one every
+mainline gem5 accelerator study (gem5-Aladdin, gem5-SALAM, Gem5-AcceSys)
+relies on today.
+
+### 17.4 Option B: two xbars, one for reads and one for writes
+
+Instantiate two `NoncoherentXBar` objects. Route read packets through one and
+write packets through the other. Each xbar keeps its own `reqLayers[dst]` and
+`respLayers[origin]` vectors, so read traffic and write traffic no longer
+contend at a shared slave, and B responses do not share bandwidth with R
+responses.
+
+Topology:
+
+```text
+master.RequestPort
+      |
+      v
+  Splitter   <- inspects pkt->isRead() / pkt->isWrite()
+  /      \
+ v        v
+read_xbar.cpu_side_ports    write_xbar.cpu_side_ports
+   |                            |
+   v                            v
+read_xbar.mem_side_ports    write_xbar.mem_side_ports
+   |                            |
+   +------------+---------------+
+                v
+             Merger
+                |
+                v
+         slave.ResponsePort
+```
+
+This maps 1:1 to a real AXI crossbar: the read xbar corresponds to (AR, R) and
+the write xbar corresponds to (AW, W, B).
+
+gem5 does not ship a Splitter or Merger SimObject. Both can be written in the
+style of `src/mem/bridge.cc` or `src/mem/comm_monitor.cc`. Essentials:
+
+- **Splitter:** one upstream `ResponsePort`, two downstream `RequestPort`s.
+  `recvTimingReq(pkt)` dispatches on `pkt->isRead()` vs `pkt->isWrite()`.
+  `recvTimingResp(pkt)` forwards upward. Tracks `blockedRead` and
+  `blockedWrite` state independently so retry callbacks only release the
+  correct path.
+- **Merger:** two upstream `ResponsePort`s, one downstream `RequestPort`.
+  Advertises the downstream slave's ranges on both upstream ports and forwards
+  `sendRangeChange()` upward on both.
+
+Things to decide:
+
+- **Atomics, AMOs, locked accesses.** `MemCmd::SwapReq`, `LoadLockedReq`,
+  `StoreCondReq`, FP atomics, and similar are neither pure reads nor pure
+  writes. Choose a single path for them (typically the read xbar, to keep them
+  ordered with loads to the same address) and document the choice.
+- **Ordering.** The two xbars give you no ordering between an outstanding read
+  and an outstanding write. If the upstream master enforces ordering (CPU
+  fences, memory consistency model), this is fine. If a device relies on
+  in-interconnect read-write ordering at the slave, add an explicit ordering
+  mechanism in the slave or in the Merger.
+- **Stats.** Layer occupancy and packet counts now split across two xbars.
+  Scripts that aggregated at `system.membus.*` need updating.
+
+Strengths: no changes to `NoncoherentXBar`; purely additive; easy to A/B test
+against the single-xbar baseline. Weaknesses: two new SimObjects to maintain;
+gives up some stats convenience; atomics handled only by convention.
+
+### 17.5 Option C: internal R/W layer split inside `NoncoherentXBar`
+
+Modify `NoncoherentXBar` so that each destination has two `ReqLayer` objects
+(one for reads, one for writes) and each origin has two `RespLayer` objects
+(one for read responses, one for write responses). Dispatch on `pkt->isRead()`
+and `pkt->isWrite()` inside `recvTimingReq` and `recvTimingResp`.
+
+Sketch in `src/mem/noncoherent_xbar.hh`:
+
+```cpp
+std::vector<ReqLayer*>  reqReadLayers;
+std::vector<ReqLayer*>  reqWriteLayers;
+std::vector<RespLayer*> respReadLayers;
+std::vector<RespLayer*> respWriteLayers;
+```
+
+And in `src/mem/noncoherent_xbar.cc::recvTimingReq`:
+
+```cpp
+auto& layers = pkt->isWrite() ? reqWriteLayers : reqReadLayers;
+if (!layers[mem_side_port_id]->tryTiming(src_port))
+    return false;
+```
+
+This matches the change `mytbk` proposed in gem5 Discussion #2785.
+
+Strengths: one file touched; same Python config, same address map, same
+default-port handling, same stats infrastructure; cleanest shape for upstream
+review; atomics automatically route through one path (`pkt->isRead()`
+classifies most of them as reads) with no extra SimObject.
+
+Weaknesses: still does not model AxID, bursts, or per-beat handshakes. Still
+`Packet`-level; `payloadDelay` is a scalar, not a beat stream.
+
+### 17.6 Option D: Arm AMBA TLM library integration
+
+This is the path `giactra` pointed to in gem5 Discussion #2785 and the path
+that matches how CHI is already integrated. gem5 ships
+[`src/mem/ruby/protocol/chi/tlm/`](../../src/mem/ruby/protocol/chi/tlm/) with:
+
+- `controller.cc` / `controller.hh` - translates between gem5 packets and CHI
+  TLM transactions.
+- `generator.cc` / `generator.hh` - traffic generation for the TLM side.
+- `port.hh` - a custom gem5 port that carries CHI TLM transactions rather
+  than gem5 `Packet`s.
+- `tlm_chi.cc` - the CHI TLM integration glue.
+- Python wrappers `TlmController.py` / `TlmGenerator.py`.
+
+An AXI integration would follow the same shape:
+
+- Define an `AxiTlmPort` that carries AXI TLM transactions with full
+  five-channel semantics (AW, W, B, AR, R).
+- Instantiate an Arm AMBA AXI TLM crossbar on the TLM side.
+- Write translators that convert gem5 `Packet`s into AXI transactions on the
+  requestor side and the reverse on the responder side.
+- Attach via the existing gem5 SystemC/TLM bridge infrastructure in
+  [`src/systemc/tlm_bridge/`](../../src/systemc/tlm_bridge/).
+
+The Arm AMBA TLM library is at
+[developer.arm.com/documentation/101459](https://developer.arm.com/documentation/101459/latest).
+It is open source and covers both CHI and AXI.
+
+Strengths: library-provided AXI data structures, AxID semantics, burst
+arbitration, QoS, ordering rules. Reuses a pattern already accepted upstream
+(CHI). Officially recommended by a gem5 maintainer. Faster than RTL
+co-simulation.
+
+Weaknesses: the largest integration effort among the in-gem5 options.
+Transaction-level, not cycle-exact at the beat level: a TLM AXI model
+typically does not emit per-cycle VALID/READY events even though it preserves
+five-channel semantics.
+
+### 17.7 Option E: RTL co-simulation via libsystemctlm-soc
+
+For strictly cycle-accurate AXI modeling, attach an RTL AXI crossbar (for
+example `pulp-platform/axi`'s `axi_xbar`, a vendor IP, or your own design) to
+gem5 via two links:
+
+1. [`src/systemc/tlm_bridge/`](../../src/systemc/tlm_bridge/) - gem5's
+   in-tree bridge between `RequestPort`/`ResponsePort` and SystemC TLM-2.0
+   sockets. Described in Menard et al., *"System simulation with gem5 and
+   SystemC: The keystone for full interoperability"* (DATE/SAMOS 2017).
+2. Xilinx's
+   [`libsystemctlm-soc`](https://github.com/Xilinx/libsystemctlm-soc) - a
+   maintained SystemC TLM-to-RTL bridge library with AXI, ACE, and CHI
+   adapters, including RTL bridges for driving Verilog/SystemVerilog designs
+   from SystemC.
+
+Topology:
+
+```text
+gem5 master
+  --RequestPort-->
+    TlmBridge
+      --TLM-->
+        libsystemctlm-soc AXI adapter
+          --RTL signals-->
+            Verilator/VCS RTL AXI xbar
+              --signals-->
+                RTL slave or TLM slave
+                  --TLM-->
+                    gem5 slave
+```
+
+The gem5 TLM bridge itself is not AXI-specific; the AXI fidelity comes from
+the external RTL or TLM model. Menard et al. reported about 7.6% TLM-side
+simulation overhead; RTL co-simulation adds significantly more depending on
+RTL size.
+
+Strengths: the only option that validates against signal-level AXI. Lets you
+instantiate exactly the RTL AXI xbar under study (AW/AR independence,
+register slices, reorder buffers, exclusive monitors, AxQOS arbitration).
+
+Weaknesses: simulation cost; build-system complexity (SystemC,
+Verilator or VCS, `libsystemctlm-soc`); only worth it when the question depends
+on signal-level behavior that no TLM abstraction preserves.
+
+### 17.8 Choosing an option
+
+Decision guide, in order of decreasing practicality:
+
+1. If your analysis target is workload throughput and the R-vs-W concurrency
+   approximation is not a first-order error for your traffic mix:
+   **Option A**.
+2. If you need independent R and W bandwidth and you want the smallest local
+   change: **Option C** (internal split). Keeps the public interface and
+   config stable.
+3. If you need the same bandwidth model as Option C but prefer purely additive
+   code in a fork, or you want to A/B test against Option A in the same
+   binary: **Option B** (two xbars plus Splitter and Merger).
+4. If you also need AxID and burst arbitration and want to reuse a
+   library-backed implementation: **Option D** (AMBA TLM). The upstream-
+   friendly long-term answer.
+5. If the question depends on per-cycle AXI signals or the exact RTL xbar's
+   microarchitecture: **Option E** (RTL co-simulation).
+
+Options B and C compose with D; nothing prevents you from building a B or C
+model today and migrating to D later.
+
+### 17.9 What none of these fix
+
+No option above gives you all of the following without additional work:
+
+- AxID-driven same-ID cross-slave stalls cross-referenced with your specific
+  AXI master's outstanding-ID discipline (you still have to tell the model
+  what "ID" means for each master).
+- AxQOS-based arbitration with configurable policies.
+- AxREGION or AxUSER semantics.
+- Burst splitting, data-width conversion, or AXI protocol conversion
+  (AXI3 <-> AXI4 <-> AXI4-Lite) unless you are in Option D or E.
+- CDC FIFO depth and clock-ratio effects unless you are in Option E.
+
+These gaps are why gem5 Discussion #2785 is still open.
+
+---
+
+## 18. Mental Model
 
 ```mermaid
 flowchart LR
@@ -963,7 +1290,7 @@ which READY path closes timing?
 
 ---
 
-## 18. Checklist for Connecting a New Master and Slave
+## 19. Checklist for Connecting a New Master and Slave
 
 ### Python checklist
 
@@ -1036,7 +1363,7 @@ which READY path closes timing?
 
 ---
 
-## 19. Common Pitfalls
+## 20. Common Pitfalls
 
 **Pitfall: connecting a master to `mem_side_ports`.**
 
@@ -1080,7 +1407,7 @@ connections.
 
 ---
 
-## 20. Bottom Line
+## 21. Bottom Line
 
 Use `NoncoherentXBar` as the built-in gem5 model for a non-coherent AXI-style
 crossbar when the modeling target is transaction routing, approximate latency,
