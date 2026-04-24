@@ -22,7 +22,7 @@ size: 16:9
 ---
 
 <!-- ================================================================== -->
-<!-- INTRO SLIDE: Why CHI? The Scalability Wall -->
+<!-- SLIDE 2: Why CHI? The Scalability Wall -->
 <!-- ================================================================== -->
 
 ## Why CHI? The Scalability Wall
@@ -109,7 +109,7 @@ is no longer affordable.
 ---
 
 <!-- ================================================================== -->
-<!-- SLIDE 2: Scoping CHI — what it owns, what it leaves open -->
+<!-- SLIDE 3: Scoping CHI — what it owns, what it leaves open -->
 <!-- ================================================================== -->
 
 ## Scoping CHI: what it owns, what it leaves open
@@ -216,7 +216,7 @@ system that ships with gem5 is where we will see both in action.
 ---
 
 <!-- ================================================================== -->
-<!-- SLIDE 3: CHI Node Types — a typical system -->
+<!-- SLIDE 4: CHI Node Types — a typical system -->
 <!-- ================================================================== -->
 
 ## CHI Node Types — a typical system
@@ -281,7 +281,7 @@ RN-D gold, HN-F violet, MN slate, SN-F green.
 ---
 
 <!-- ================================================================== -->
-<!-- SLIDE 4: Port, Link, and Channel -->
+<!-- SLIDE 5: Port, Link, and Channel -->
 <!-- ================================================================== -->
 
 ## Link layer: Port, Link, and Channel
@@ -345,7 +345,7 @@ spec guarantees at the port interface, not what happens inside.
 ---
 
 <!-- ================================================================== -->
-<!-- SLIDE 5: Network layer — addressing and routing -->
+<!-- SLIDE 6: Network layer — addressing and routing -->
 <!-- ================================================================== -->
 
 ## Network layer: addressing and routing
@@ -457,7 +457,7 @@ silicon.
 ---
 
 <!-- ================================================================== -->
-<!-- SLIDE 6: Transaction, Message, Packet, and Flit -->
+<!-- SLIDE 7: Transaction, Message, Packet, and Flit -->
 <!-- ================================================================== -->
 
 ## Transaction, Message, Packet, and Flit
@@ -555,7 +555,7 @@ multiple flits.
 ---
 
 <!-- ================================================================== -->
-<!-- SLIDE 7: Flit Fields -->
+<!-- SLIDE 8: REQ Flit Fields -->
 <!-- ================================================================== -->
 
 ## REQ flit fields
@@ -673,329 +673,103 @@ same table but that only materialise when the feature is on.
 ---
 
 <!-- ================================================================== -->
-<!-- SLIDE 8: DAT Flit Fields -->
+<!-- SLIDE 9: CHI Cache States — Standard FSM per §B4.1 -->
 <!-- ================================================================== -->
 
-## DAT flit fields
+## CHI Cache States — Standard FSM (spec §B4.1)
 
-<div class="columns" style="font-size: 14px; line-height: 1.25;">
-<div>
+```mermaid
+stateDiagram-v2
+    direction LR
 
-| Name       | W   | Description                               |
-|------------|-----|-------------------------------------------|
-| QoS        | 4   | Priority for fabric arbitration            |
-| TgtID      | 7   | Target node (NODE_ID_W: 7..16)            |
-| SrcID      | 7   | Source node (NODE_ID_W)                   |
-| TxnID      | 12  | Transaction identifier                     |
-| HomeNID    | 7   | Home node — target for CompAck            |
-| Opcode     | 4   | DAT opcode (CompData, WriteData, …)        |
-| RespErr    | 2   | Error status (OK / ExOK / DERR / NDERR)   |
-| Resp       | 3   | Cache state (I / SC / UC / UD / SD / PD)  |
-| DBID       | 12  | Data Buffer ID — echoed by CompAck        |
-| DataSource | 8   | Hint: which node supplied the data        |
+    I --> UC: Read fill, no other copy
+    I --> SC: Read fill, shared
+    I --> SD: Read fill, passes dirty
+    I --> UCE: CleanUnique (no data)
+    I --> UD: ReadUnique / MakeUnique
 
-</div>
-<div>
+    SC --> UC: Upgrade to unique
+    SC --> I: Evict / invalidate
 
-| Name       | W   | Description                               |
-|------------|-----|-------------------------------------------|
-| FwdState   | 3   | State forwarded — snoop-fwd *only*        |
-| CCID       | 2   | Critical Chunk Identifier                  |
-| DataID     | 2   | Packet index (0..3 for 128-bit DATA_W)    |
-| CBusy      | 3   | Completer busy hint                        |
-| TraceTag   | 1   | Trace/debug tag                            |
-| BE         | 16  | Byte enables (DATA_W/8)                   |
-| Data       | 128 | Payload (DATA_W: 128 / 256 / 512)         |
-| DataCheck  | 16  | RAS: per-byte data integrity (*optional*) |
-| Poison     | 2   | RAS: per-64-bit poison bit (*optional*)   |
+    UC --> UD: Local store
+    UC --> SC: Snoop downgrade
+    UC --> I: Evict clean
 
-</div>
-</div>
+    UCE --> UD: Store full line
+    UCE --> UDP: Store partial line
+    UCE --> I: Evict empty
+
+    UD --> SD: Snoop, keep dirty + share
+    UD --> SC: Snoop, pass dirty + share
+    UD --> I: Writeback + evict
+
+    UDP --> UD: Store completes line
+    UDP --> I: Writeback + evict
+
+    SD --> UD: Upgrade to unique
+    SD --> SC: Snoop, pass dirty + share
+    SD --> I: Writeback + evict
+```
 
 <div class="takeaway">
-DAT flit is much wider than REQ because it carries the payload. <code>DATA_W</code> is the main design-time knob (128/256/512). One DAT message fills <code>line_size / (DATA_W/8)</code> flits, each tagged with <code>DataID</code> — that's how a 64 B line becomes 4 DAT packets at 128-bit <code>DATA_W</code>.
+IHI0050H §B4.1 defines seven cache line states along two familiar axes — Unique/Shared and Clean/Dirty — plus two "empty/partial" unique states (UCE, UDP) for store-without-data ownership.
 </div>
 
 <!-- Speaker Notes:
 Time budget: 3 minutes.
 
-This is the DAT flit — same story as REQ, but wider because it
-carries the data payload. Spec Table B13.9 defines the format.
-DAT_W is the key design-time parameter: 128, 256, or 512 bits. At
-128-bit default the full flit is roughly 240 bits of control +
-16 bits of byte-enable + 128 bits of data.
+Before we dive into the gem5 HN-F controller, let's anchor on what the
+CHI specification itself prescribes. Section B4.1 of IHI0050H defines
+the cache line state vocabulary that every compliant CHI cache must
+speak at its boundary, regardless of how the controller is built
+internally.
 
-Left column, the routing and response core.
+There are seven states, organized along two familiar axes plus one
+extra concept. The first axis is Unique versus Shared — does this
+cache hold the only copy of the line, or could peers also have it.
+The second axis is Clean versus Dirty — is this cache responsible for
+writing the data back to memory on eviction, or can it be dropped.
+Combine those two axes and you get the four "Full" states: UC, UD,
+SC, SD. A full state means all bytes of the line are valid. These
+four are the MOESI-like core: Unique Clean is Exclusive, Unique Dirty
+is Modified, Shared Clean is Shared, Shared Dirty is Owned.
 
-QoS, TgtID, SrcID and TxnID mean the same thing they did in REQ:
-priority, destination, source, transaction identifier. The
-interesting new field is HomeNID — it names the Home node the
-Requester must target its final CompAck back to. For CompData
-arriving at the Requester, HomeNID is how the Requester knows where
-to close the transaction.
+The extra concept is empty or partial ownership. CHI lets a requester
+obtain store permission *without* pulling valid data from memory —
+useful before a full-line write, because it saves a read. That gives
+two additional unique states. UCE, Unique Clean Empty, is unique
+ownership with zero valid bytes; a CleanUnique from Invalid lands
+here. UDP, Unique Dirty Partial, is unique ownership after some but
+not all bytes have been written — reached silently from UCE when a
+store writes only part of the line. On eviction, UDP must merge with
+memory to form a complete line.
 
-Opcode is only 4 bits on DAT, not 7 — the DAT channel has far fewer
-opcode values: CompData, DataSepResp, NonCopyBackWriteData,
-CopyBackWriteData, SnpRespData, and a few more. Table B13.16 is the
-dictionary.
+And of course, Invalid — the line is not present in the cache.
 
-RespErr, 2 bits, reports transport-level errors: OK, Exclusive OK,
-DERR for data error, NDERR for non-data error. Separate from Resp
-by design — one says "did the transfer succeed", the other says
-"what coherence state is the line in".
+That's all seven: I, UC, UCE, UD, UDP, SC, SD.
 
-Resp, 3 bits, carries the cache state the Requester should install:
-Invalid, Shared-Clean, Unique-Clean, Unique-Dirty, Shared-Dirty,
-Partial-Dirty. For the ReadClean example two slides back, Resp =
-SC.
+The arrows on this diagram are not the whole transaction system — B4.7
+and B4.8 of the spec describe those in full — but they illustrate why
+each state exists. Reads fill into SC, UC, SD, or UD depending on
+whether the line is shared and whether dirty responsibility is being
+passed. CleanUnique from Invalid parks in UCE. A partial store on UCE
+drops the line into UDP; a full store or a follow-up store that
+completes the line moves it to UD. Snoops downgrade unique to shared,
+with or without passing dirty responsibility. Evictions writeback-
+if-dirty and return to Invalid.
 
-Right column, the data-path metadata.
-
-DBID, 12 bits, is the home's data-buffer identifier. It pairs with
-HomeNID: the Requester echoes DBID on CompAck to close the
-transaction at the home.
-
-DataSource, 8 bits, is a hint telling the Requester which node
-actually supplied the data — useful for NoC analytics and for
-DCT/DMT paths.
-
-FwdState is only populated on snoop-forward responses —
-SnpRespDataFwded tells the Home what state the snoopee has
-forwarded directly to the Requester.
-
-CCID, 2 bits, is the Critical Chunk Identifier — which 16-byte
-chunk of the line the Requester's core is actually waiting on. The
-home can send that chunk first to unblock the core.
-
-DataID, 2 bits, numbers the packets within one DAT message. At
-128-bit DATA_W a 64-byte line becomes four DAT packets with
-DataID = 0, 1, 2, 3. That is the same ReadClean we walked earlier.
-
-CBusy, 3 bits, is a busy hint from the Completer — the Requester
-can throttle or route around a hot node.
-
-BE, 16 bits at default, is the byte-enable mask — one bit per byte
-of the data payload. Crucial for partial writes.
-
-Data — the payload itself, DATA_W bits wide.
-
-The last two are RAS-optional. DataCheck carries one integrity bit
-per data byte — DATA_W/8 bits — typically used to hold parity or a
-compressed ECC syndrome computed at the producer. Poison carries
-one bit per 64-bit chunk — DATA_W/64 bits — marking that chunk as
-containing a known-bad value that must not be silently consumed;
-downstream hardware propagates the poison rather than trapping on it.
-Both fields are zero-width when the implementation does not enable
-data integrity or poisoning.
-
-Three points to close. One, the field order is architectural just
-like REQ. Two, DATA_W is the main parameter; at 256 bits the Data
-field doubles and BE goes from 16 to 32, DataCheck from 16 to 32,
-Poison from 2 to 4. Three, stashing fields (DataPull, Tag) add more
-bits when enabled.
+Key sentence from the spec: "A cache is permitted to implement a subset
+of these states." That is the opening we need for the next slide. A
+real implementation — like gem5's HN-F — layers extra internal states
+on top of this vocabulary to track in-flight transactions, upstream
+sharers, and transient bookkeeping. The B4.1 seven are what appears
+on the wire; what follows is what the controller carries internally.
 -->
 
 ---
 
 <!-- ================================================================== -->
-<!-- SLIDE 9: RSP flit fields -->
-<!-- ================================================================== -->
-
-## RSP flit fields
-
-<div class="columns" style="font-size: 14px; line-height: 1.25;">
-<div>
-
-| Name    | W  | Description                                   |
-|---------|----|-----------------------------------------------|
-| QoS     | 4  | Priority for fabric arbitration                |
-| TgtID   | 7  | Target node (NODE_ID_W: 7..16)                |
-| SrcID   | 7  | Source node (NODE_ID_W)                       |
-| TxnID   | 12 | Transaction identifier                         |
-| Opcode  | 5  | RSP opcode (CompAck, RetryAck, PCrdGrant, …) |
-| Resp    | 3  | Cache state (I / SC / UC / UD / SD / PD)      |
-| RespErr | 2  | Error status (OK / ExOK / DERR / NDERR)       |
-
-</div>
-<div>
-
-| Name        | W  | Description                                 |
-|-------------|----|---------------------------------------------|
-| DBID        | 12 | Data Buffer ID — paired with Data path      |
-| PCrdType    | 4  | Credit type — RetryAck / PCrdGrant flow     |
-| CBusy       | 3  | Completer busy hint                          |
-| FwdState    | 3  | State forwarded — snoop-fwd *only*          |
-| TraceTag    | 1  | Trace/debug tag                              |
-| CacheLineID | 6  | Bundle line index — *optional*              |
-| TagOp       | 2  | Memory-tagging op — *optional*              |
-
-</div>
-</div>
-
-<div class="takeaway">
-RSP carries no payload — it is all control. The same response channel services completions (<code>Comp</code>, <code>CompAck</code>), retry handshakes (<code>RetryAck</code> + <code>PCrdGrant</code>), and data-less snoop responses (<code>SnpResp</code>). Opcode (5 b) is the discriminator; <code>DBID</code> and <code>PCrdType</code> switch roles depending on which flow this flit belongs to.
-</div>
-
-<!-- Speaker Notes:
-Time budget: 3 minutes.
-
-RSP is the response channel. Unlike DAT, it carries no payload —
-the whole point is control flow. Spec Table B13.7 defines the
-format. At default NodeID_Width = 7 the always-present fields add
-up to about 56 bits, compared to 240+ for DAT.
-
-Left column — routing, identity, and the response trio.
-
-QoS, TgtID, SrcID, TxnID are the same four we've seen on REQ and
-DAT. Priority, destination, source, transaction identifier.
-
-Opcode is 5 bits on RSP — slightly wider than DAT's 4 bits because
-the RSP channel serves several distinct flows. The opcode dictionary
-in spec Table B13.14 includes: Comp for generic completion, CompAck
-for a Requester's acknowledgement to the home, CompDBIDResp which
-combines completion with DBID assignment, RetryAck where a Completer
-tells the Requester to retry later, PCrdGrant which grants a
-protocol credit for that retry, ReadReceipt for early acknowledgement
-of a ReadNoSnp, SnpResp for a data-less snoop response, and
-SnpRespFwded for a forwarded snoop response.
-
-Resp, 3 bits, carries the cache state — same encoding as DAT.
-Present on snoop responses too: tells the home what state the
-snoopee ended up in after servicing the snoop.
-
-RespErr, 2 bits, reports transport errors — OK, Exclusive OK,
-Data Error, Non-Data Error.
-
-Right column — data-path identifiers and flow control.
-
-DBID, 12 bits, is the Data Buffer ID. On the home's DBIDResp or
-CompDBIDResp it tells the Requester which DBID to echo on its
-subsequent WriteData or CompAck. On a Requester's CompAck it carries
-that echoed DBID back.
-
-PCrdType, 4 bits, is the star of the retry flow. When a Completer
-sends RetryAck because it cannot accept the request right now, it
-names a PCrdType on the RSP. Later it sends a PCrdGrant on RSP
-naming the same PCrdType — the Requester then reissues the original
-request with AllowRetry = 0 and that PCrdType value, and the
-Completer is obliged to accept it.
-
-CBusy, 3 bits, is a busy hint from the Completer.
-
-FwdState, 3 bits, is used only on SnpRespFwded — tells the home
-what state the snoopee forwarded directly to the Requester via the
-DAT path.
-
-Two feature-gated fields for completeness: CacheLineID, 6 bits,
-names a line within a multi-request bundle when MultiReq is used.
-TagOp, 2 bits, applies when memory tagging is enabled.
-
-One closing point. The RSP channel is where the retry handshake and
-CompAck closure live — two flows a seasoned designer will always
-probe first when a CHI system hangs.
--->
-
----
-
-<!-- ================================================================== -->
-<!-- SLIDE 10: SNP flit fields -->
-<!-- ================================================================== -->
-
-## SNP flit fields
-
-<div class="columns" style="font-size: 14px; line-height: 1.25;">
-<div>
-
-| Name    | W  | Description                                   |
-|---------|----|-----------------------------------------------|
-| QoS     | 4  | Priority for fabric arbitration                |
-| SrcID   | 7  | Home issuing the snoop (NODE_ID_W)            |
-| TxnID   | 12 | Transaction identifier                         |
-| Opcode  | 5  | SNP opcode (SnpShared, SnpUnique, SnpDVMOp, …) |
-| Addr    | 41 | Cache-line address — REQ_ADDR_W − 3           |
-| PAS     | 3  | Physical Address Space (security)              |
-
-</div>
-<div>
-
-| Name        | W  | Description                                 |
-|-------------|----|---------------------------------------------|
-| FwdNID      | 7  | DCT: forward target (*SnpXxxFwd only*)      |
-| FwdTxnID    | 12 | DCT: forwarded TxnID (*SnpXxxFwd only*)     |
-| DoNotGoToSD | 1  | Inhibit Shared-Dirty transition              |
-| RetToSrc    | 1  | Home wants the data returned to it           |
-| VMIDExt     | 8  | DVM VMID — *SnpDVMOp only*                  |
-| TraceTag    | 1  | Trace tagging                                |
-
-</div>
-</div>
-
-<div class="takeaway">
-Two things make SNP different: <strong>no <code>TgtID</code></strong> — the target is the RN-F that receives the flit (the ICN handles routing); and <strong>address is 3 bits narrower</strong> — snoops are cache-line granular, no byte offset. The <code>FwdNID</code> / <code>FwdTxnID</code> pair is what enables Direct Cache Transfer: the snoopee sends data straight to the original Requester.
-</div>
-
-<!-- Speaker Notes:
-Time budget: 3 minutes.
-
-SNP is the snoop channel — messages the Home sends to RN-Fs and
-DVM-capable RN-Ds to check, invalidate, or extract cached lines.
-Spec Table B13.8 defines the format. Two structural differences
-from the other channels make SNP distinctive.
-
-First, there is no TgtID field. The snoop target is whichever
-RN-F receives the flit. The interconnect routes it — the flit itself
-does not name the destination. That saves bits on a channel that
-needs to broadcast or multicast.
-
-Second, Addr is 41 bits instead of 44. The spec uses
-Req_Addr_Width minus 3 because a snoop always operates on a full
-cache line — there is no byte offset to carry.
-
-Left column, the routing and identity core.
-
-QoS is the priority. SrcID names the Home sending the snoop — the
-RN-F that responds will target its response back to this SrcID.
-TxnID is the Home's transaction identifier. PAS carries the
-security domain — Secure, Non-secure, Realm, Root.
-
-Opcode is 5 bits. The snoop-opcode dictionary in spec Table B13.15
-covers three families. First, the basic coherence snoops —
-SnpShared, SnpClean, SnpOnce, SnpUnique, SnpCleanInvalid,
-SnpMakeInvalid. Second, the Forward variants — SnpSharedFwd,
-SnpCleanFwd, SnpOnceFwd, SnpUniqueFwd. These are what enable Direct
-Cache Transfer, DCT: the snoopee sends data straight to the
-original Requester instead of back through the home. Third,
-SnpDVMOp for the DVM path — TLB invalidations and virtual-memory
-synchronisation.
-
-Right column, snoop behaviour and DCT fields.
-
-FwdNID and FwdTxnID are the DCT pair — present only on the Forward
-snoop opcodes. FwdNID names the Requester's node, FwdTxnID carries
-that Requester's TxnID. The snoopee's DAT response goes directly to
-FwdNID tagged with FwdTxnID.
-
-DoNotGoToSD is a 1-bit flag that tells the snoopee not to end up in
-Shared-Dirty state — used in certain protocol corners where SD is
-undesirable.
-
-RetToSrc tells the snoopee whether the Home also wants the data
-returned on the Home's CompData path, independent of any DCT
-forward.
-
-VMIDExt is 8 bits of VMID extension, populated only for SnpDVMOp.
-
-TraceTag is the usual 1-bit debug trace flag.
-
-Everything carrying data back — CompData, SnpRespData,
-SnpRespDataFwded — rides on the DAT channel you saw two slides
-back. SNP by itself is always data-less.
--->
-
----
-
-<!-- ================================================================== -->
-<!-- SLIDE 11: Directory Controller — the HN-F's coherence book -->
+<!-- SLIDE 10: Directory Controller — the HN-F's coherence book -->
 <!-- ================================================================== -->
 
 ## Directory Controller — what the HN-F remembers
@@ -1100,190 +874,7 @@ LLC without any RN currently sharing it.
 ---
 
 <!-- ================================================================== -->
-<!-- SLIDE 11a: Data-provider fast paths — DCT, DMT, DWT -->
-<!-- ================================================================== -->
-
-## Data-provider fast paths — who may send data directly
-
-<div style="text-align: center;">
-<img src="../resources/chi_data_providers.svg" alt="CHI data-provider fast paths. HN-F Home sits in the centre with its directory + LLC slice. A peer RN-F on the left is linked to the Requester (top) by a red dashed DCT arrow labelled 'Peer → Requester (direct DAT)'. A Subordinate SN-F below the Home is linked to the Requester by a violet DMT arrow labelled 'Sub → Requester', and by a green DWT arrow in the opposite direction labelled 'Requester → Sub'. The Home is still connected to all three nodes by solid control-plane arrows carrying REQ, SNP, RSP so coherence state, snoop decisions, and transaction completion remain with the Home." class="tall" style="max-height: 600px;">
-</div>
-
-<!-- Speaker Notes:
-Time budget: 4 minutes.
-
-We now have a home node with a directory and an LLC. Every read and
-every write is logically a conversation with the home — it knows who
-shares what, it decides who to snoop, and it decides whether data has
-to come from a peer cache or from memory. The straightforward way to
-build this is: every data transfer passes through the home. The
-requester asks the home, the home either supplies data from its LLC,
-or it fetches data from a peer or from memory, and then the home
-forwards that data back to the requester. Correct, but expensive. Two
-hops on the data path, twice the latency, twice the bandwidth booked
-at the home, and the home's data buffers become the bottleneck of the
-whole interconnect.
-
-CHI's answer is not to move coherence out of the home — coherence
-still lives there — but to let *data* skip the home on the common
-paths. The spec calls out three such fast paths, and this diagram
-shows all three at once. Direct Cache Transfer, DCT, for data that
-lives in a peer cache. Direct Memory Transfer, DMT, for reads that
-miss to memory. And Direct Write-data Transfer, DWT, for writes whose
-data is ultimately going to memory anyway.
-
-Start with DCT, the red arrow across the top. A requester issues a
-read. The home looks in its directory, sees a peer RN-F has the line,
-and instead of asking the peer to send the data back to the home, it
-sends a *forwarding-type* snoop — SnpSharedFwd, SnpUniqueFwd, and
-friends. That snoop carries two extra fields, FwdNID and FwdTxnID,
-pointing at the original requester. The snoopee sends its CompData
-directly to the requester and tells the home what it did with a
-SnpRespFwded or SnpRespDataFwded, so the home can still retire the
-transaction and update its directory. One data hop instead of two, and
-the home's buffers never touch the line.
-
-DMT is the violet arrow from the subordinate up to the requester. When
-the home decides the data has to come from memory — either there is
-no snoop, or the snoops came back empty — it forwards the read to the
-SN-F as a ReadNoSnp, and it stamps the original requester's ID and
-TxnID into the ReturnNID and ReturnTxnID fields. The subordinate sends
-CompData straight to the requester. The home does not route the data
-at all; it only needs a ReadReceipt or a CompAck to know the
-transaction is done.
-
-DWT is the mirror image, the green arrow going the other way. The
-home takes a downstream write and sets DoDWT equal to one in the
-request to the subordinate, again stamping the requester's ID into
-ReturnNID and ReturnTxnID. The subordinate allocates a buffer and
-sends DBIDResp straight to the requester, which then streams
-NonCopyBackWriteData straight to the subordinate. The home sees the
-Comp from the subordinate, sends its own Comp to the requester, and is
-done — without the write data ever passing through it.
-
-Notice what has changed and what has not. What has changed is the
-data plane: DAT flits bypass the home on every one of these three
-paths. What has *not* changed is the control plane. Every transaction
-still starts at the home. The home still reads its directory, still
-issues snoops, still owns the coherence decision, still decides when
-the transaction is complete. The only reason this works is that CHI
-carries the forwarding identity inside the control messages — FwdNID,
-FwdTxnID for DCT, ReturnNID, ReturnTxnID for DMT and DWT — so the
-peer or the subordinate knows where to send data without going through
-the home again.
-
-Two practical notes. First, these are capabilities, not defaults.
-Each component advertises Direct_Cache_Transfer, Direct_Memory_Transfer,
-and DoDWT support in its configuration, and the home only uses a fast
-path when every party on the path supports it. Atomics, partial reads,
-passing-exclusive reads, and error paths all fall back to the classic
-home-in-the-middle flow. Second, DCT and DMT are recommended but not
-mandatory — the same request can be served the slow way if the home
-chooses. You will see both in the two practice transactions later: a
-plain ReadShared that goes through the home, and the DCT variant
-where the peer shortcuts to the requester.
--->
-
----
-
-<!-- ================================================================== -->
-<!-- SLIDE 12: CHI Cache States — Standard FSM per §B4.1 -->
-<!-- ================================================================== -->
-
-## CHI Cache States — Standard FSM (spec §B4.1)
-
-```mermaid
-stateDiagram-v2
-    direction LR
-
-    I --> UC: Read fill, no other copy
-    I --> SC: Read fill, shared
-    I --> SD: Read fill, passes dirty
-    I --> UCE: CleanUnique (no data)
-    I --> UD: ReadUnique / MakeUnique
-
-    SC --> UC: Upgrade to unique
-    SC --> I: Evict / invalidate
-
-    UC --> UD: Local store
-    UC --> SC: Snoop downgrade
-    UC --> I: Evict clean
-
-    UCE --> UD: Store full line
-    UCE --> UDP: Store partial line
-    UCE --> I: Evict empty
-
-    UD --> SD: Snoop, keep dirty + share
-    UD --> SC: Snoop, pass dirty + share
-    UD --> I: Writeback + evict
-
-    UDP --> UD: Store completes line
-    UDP --> I: Writeback + evict
-
-    SD --> UD: Upgrade to unique
-    SD --> SC: Snoop, pass dirty + share
-    SD --> I: Writeback + evict
-```
-
-<div class="takeaway">
-IHI0050H §B4.1 defines seven cache line states along two familiar axes — Unique/Shared and Clean/Dirty — plus two "empty/partial" unique states (UCE, UDP) for store-without-data ownership.
-</div>
-
-<!-- Speaker Notes:
-Time budget: 3 minutes.
-
-Before we dive into the gem5 HN-F controller, let's anchor on what the
-CHI specification itself prescribes. Section B4.1 of IHI0050H defines
-the cache line state vocabulary that every compliant CHI cache must
-speak at its boundary, regardless of how the controller is built
-internally.
-
-There are seven states, organized along two familiar axes plus one
-extra concept. The first axis is Unique versus Shared — does this
-cache hold the only copy of the line, or could peers also have it.
-The second axis is Clean versus Dirty — is this cache responsible for
-writing the data back to memory on eviction, or can it be dropped.
-Combine those two axes and you get the four "Full" states: UC, UD,
-SC, SD. A full state means all bytes of the line are valid. These
-four are the MOESI-like core: Unique Clean is Exclusive, Unique Dirty
-is Modified, Shared Clean is Shared, Shared Dirty is Owned.
-
-The extra concept is empty or partial ownership. CHI lets a requester
-obtain store permission *without* pulling valid data from memory —
-useful before a full-line write, because it saves a read. That gives
-two additional unique states. UCE, Unique Clean Empty, is unique
-ownership with zero valid bytes; a CleanUnique from Invalid lands
-here. UDP, Unique Dirty Partial, is unique ownership after some but
-not all bytes have been written — reached silently from UCE when a
-store writes only part of the line. On eviction, UDP must merge with
-memory to form a complete line.
-
-And of course, Invalid — the line is not present in the cache.
-
-That's all seven: I, UC, UCE, UD, UDP, SC, SD.
-
-The arrows on this diagram are not the whole transaction system — B4.7
-and B4.8 of the spec describe those in full — but they illustrate why
-each state exists. Reads fill into SC, UC, SD, or UD depending on
-whether the line is shared and whether dirty responsibility is being
-passed. CleanUnique from Invalid parks in UCE. A partial store on UCE
-drops the line into UDP; a full store or a follow-up store that
-completes the line moves it to UD. Snoops downgrade unique to shared,
-with or without passing dirty responsibility. Evictions writeback-
-if-dirty and return to Invalid.
-
-Key sentence from the spec: "A cache is permitted to implement a subset
-of these states." That is the opening we need for the next slide. A
-real implementation — like gem5's HN-F — layers extra internal states
-on top of this vocabulary to track in-flight transactions, upstream
-sharers, and transient bookkeeping. The B4.1 seven are what appears
-on the wire; what follows is what the controller carries internally.
--->
-
----
-
-<!-- ================================================================== -->
-<!-- SLIDE 13: gem5 HN-F FSM — full state vocabulary -->
+<!-- SLIDE 11: gem5 HN-F FSM — full state vocabulary -->
 <!-- ================================================================== -->
 
 ## gem5 HN-F FSM (CHI-cache.sm) — full state vocabulary
@@ -1414,7 +1005,94 @@ for the actual `transition(...)` rules.
 ---
 
 <!-- ================================================================== -->
-<!-- SLIDE 14: Allocating Read — B2.3.1.1 / Figure B2.1 -->
+<!-- SLIDE 12: Data-provider fast paths — DCT, DMT, DWT -->
+<!-- ================================================================== -->
+
+## Data-provider fast paths — who may send data directly
+
+<div style="text-align: center;">
+<img src="../resources/chi_data_providers.svg" alt="CHI data-provider fast paths. HN-F Home sits in the centre with its directory + LLC slice. A peer RN-F on the left is linked to the Requester (top) by a red dashed DCT arrow labelled 'Peer → Requester (direct DAT)'. A Subordinate SN-F below the Home is linked to the Requester by a violet DMT arrow labelled 'Sub → Requester', and by a green DWT arrow in the opposite direction labelled 'Requester → Sub'. The Home is still connected to all three nodes by solid control-plane arrows carrying REQ, SNP, RSP so coherence state, snoop decisions, and transaction completion remain with the Home." class="tall" style="max-height: 600px;">
+</div>
+
+<!-- Speaker Notes:
+Time budget: 4 minutes.
+
+We now have a home node with a directory and an LLC. Every read and
+every write is logically a conversation with the home — it knows who
+shares what, it decides who to snoop, and it decides whether data has
+to come from a peer cache or from memory. The straightforward way to
+build this is: every data transfer passes through the home. The
+requester asks the home, the home either supplies data from its LLC,
+or it fetches data from a peer or from memory, and then the home
+forwards that data back to the requester. Correct, but expensive. Two
+hops on the data path, twice the latency, twice the bandwidth booked
+at the home, and the home's data buffers become the bottleneck of the
+whole interconnect.
+
+CHI's answer is not to move coherence out of the home — coherence
+still lives there — but to let *data* skip the home on the common
+paths. The spec calls out three such fast paths, and this diagram
+shows all three at once. Direct Cache Transfer, DCT, for data that
+lives in a peer cache. Direct Memory Transfer, DMT, for reads that
+miss to memory. And Direct Write-data Transfer, DWT, for writes whose
+data is ultimately going to memory anyway.
+
+Start with DCT, the red arrow across the top. A requester issues a
+read. The home looks in its directory, sees a peer RN-F has the line,
+and instead of asking the peer to send the data back to the home, it
+sends a *forwarding-type* snoop — SnpSharedFwd, SnpUniqueFwd, and
+friends. That snoop carries two extra fields, FwdNID and FwdTxnID,
+pointing at the original requester. The snoopee sends its CompData
+directly to the requester and tells the home what it did with a
+SnpRespFwded or SnpRespDataFwded, so the home can still retire the
+transaction and update its directory. One data hop instead of two, and
+the home's buffers never touch the line.
+
+DMT is the violet arrow from the subordinate up to the requester. When
+the home decides the data has to come from memory — either there is
+no snoop, or the snoops came back empty — it forwards the read to the
+SN-F as a ReadNoSnp, and it stamps the original requester's ID and
+TxnID into the ReturnNID and ReturnTxnID fields. The subordinate sends
+CompData straight to the requester. The home does not route the data
+at all; it only needs a ReadReceipt or a CompAck to know the
+transaction is done.
+
+DWT is the mirror image, the green arrow going the other way. The
+home takes a downstream write and sets DoDWT equal to one in the
+request to the subordinate, again stamping the requester's ID into
+ReturnNID and ReturnTxnID. The subordinate allocates a buffer and
+sends DBIDResp straight to the requester, which then streams
+NonCopyBackWriteData straight to the subordinate. The home sees the
+Comp from the subordinate, sends its own Comp to the requester, and is
+done — without the write data ever passing through it.
+
+Notice what has changed and what has not. What has changed is the
+data plane: DAT flits bypass the home on every one of these three
+paths. What has *not* changed is the control plane. Every transaction
+still starts at the home. The home still reads its directory, still
+issues snoops, still owns the coherence decision, still decides when
+the transaction is complete. The only reason this works is that CHI
+carries the forwarding identity inside the control messages — FwdNID,
+FwdTxnID for DCT, ReturnNID, ReturnTxnID for DMT and DWT — so the
+peer or the subordinate knows where to send data without going through
+the home again.
+
+Two practical notes. First, these are capabilities, not defaults.
+Each component advertises Direct_Cache_Transfer, Direct_Memory_Transfer,
+and DoDWT support in its configuration, and the home only uses a fast
+path when every party on the path supports it. Atomics, partial reads,
+passing-exclusive reads, and error paths all fall back to the classic
+home-in-the-middle flow. Second, DCT and DMT are recommended but not
+mandatory — the same request can be served the slow way if the home
+chooses. You will see both in the two practice transactions later: a
+plain ReadShared that goes through the home, and the DCT variant
+where the peer shortcuts to the requester.
+-->
+
+---
+
+<!-- ================================================================== -->
+<!-- SLIDE 13: Allocating Read — B2.3.1.1 / Figure B2.1 -->
 <!-- ================================================================== -->
 
 ## Practice Transaction 1 — Allocating Read (B2.3.1.1, Fig B2.1)
@@ -1548,7 +1226,7 @@ slide because the typical RN-F load miss uses Order = 00.
 ---
 
 <!-- ================================================================== -->
-<!-- SLIDE 15: Allocating Read with DCT — B2.3.1.1 Alt 5 / Figure B2.1 -->
+<!-- SLIDE 14: Allocating Read with DCT — B2.3.1.1 Alt 5 / Figure B2.1 -->
 <!-- ================================================================== -->
 
 ## Practice Transaction 2 — Allocating Read with DCT (B2.3.1.1 Alt 5, Fig B2.1)
@@ -1717,7 +1395,7 @@ issuing the downstream `ReadNoSnp`, matching the diagram shown here.
 ---
 
 <!-- ================================================================== -->
-<!-- SLIDE 16: Write with DWT — B2.3.2.1 Alt 1 / B2.3.2.4 Alt 1 -->
+<!-- SLIDE 15: Write with DWT — B2.3.2.1 Alt 1 / B2.3.2.4 Alt 1 -->
 <!-- ================================================================== -->
 
 ## Practice Transaction 3 — Write with DWT: Plain vs Combined + CMO (B2.3.2.1, B2.3.2.4)
@@ -1901,214 +1579,7 @@ for the SLICC machinery.
 ---
 
 <!-- ================================================================== -->
-<!-- SLIDE 17: CHI Transaction Encyclopedia -->
-<!-- ================================================================== -->
-
-<style scoped>
-section h2 { margin: 0 0 4px 0; font-size: 24px; }
-section h3 { font-size: 13px; margin: 4px 0 1px 0; padding: 0; color: #1f6feb; font-weight: 600; }
-section table { font-size: 10.5px; margin: 0 0 2px 0; border-collapse: collapse; width: 100%; }
-section th, section td { padding: 0px 5px; line-height: 1.15; border-bottom: 1px solid #e1e4e8; }
-section th { background: #eef3fb; }
-section code { font-size: 10px; padding: 0 1px; background: transparent; }
-.columns { gap: 18px; }
-</style>
-
-## CHI Transactions — a tour of what the protocol offers
-
-<div class="columns">
-<div>
-
-### Coherent (allocating) Reads — B4.2.1
-
-| Opcode | Purpose |
-|---|---|
-| `ReadShared` | Coherent load; accepts UC/UD/SC/SD |
-| `ReadNotSharedDirty` | Coherent load; SD state not permitted |
-| `ReadClean` | Load into clean-only cache (e.g. I-cache); UC/SC only |
-| `ReadUnique` | Load-to-store; returns UC or UD |
-| `ReadPreferUnique` | Prefer Unique; accepts Shared during exclusive sequences |
-| `MakeReadUnique` | Upgrade SC/SD → Unique; data return optional |
-
-### Non-coherent / IO-coherent Reads — B4.2.1
-
-| Opcode | Purpose |
-|---|---|
-| `ReadNoSnp` | Read to Non-snoopable region, or Home→Sub memory fetch |
-| `ReadOnce` | IO-coherent snapshot; not cached coherently |
-| `ReadOnceCleanInvalid` | Snapshot + hint to clean-invalidate other copies |
-| `ReadOnceMakeInvalid` | Snapshot + hint to invalidate (may drop Dirty) |
-
-### Dataless — ownership & CMO — B4.2.2
-
-| Opcode | Purpose |
-|---|---|
-| `CleanUnique` | Upgrade to Unique; Dirty sharers must writeback |
-| `MakeUnique` | Upgrade to Unique; overwrite whole line; Dirty discarded |
-| `Evict` | "Clean line dropped" — directory hint, no data |
-| `CleanShared` | CMO: flush Dirty to memory; keep Clean copies |
-| `CleanSharedPersist` / `…Sep` | CMO: flush to Point of Persistence (PoP) |
-| `CleanInvalid` | CMO: invalidate all; Dirty must be written to memory |
-| `CleanInvalidPoPA` | CMO: invalidate + push past Point of Physical Aliasing |
-| `CleanInvalidStorage` | CMO: invalidate + push to Point of Persistent Storage |
-| `MakeInvalid` | CMO: invalidate all; Dirty may be discarded |
-
-### Atomics — B4.2.5
-
-| Opcode | Purpose |
-|---|---|
-| `AtomicStore` | Op-and-store (ADD/CLR/EOR/SET/SMAX/SMIN/UMAX/UMIN); no data returned |
-| `AtomicLoad` | Same 8 ops; returns original value |
-| `AtomicSwap` | Unconditional swap; returns original value |
-| `AtomicCompare` | Compare-and-swap; returns original (half outbound size) |
-
-</div>
-<div>
-
-### Immediate (Non-CopyBack) Writes — B4.2.3.1
-
-| Opcode | Purpose |
-|---|---|
-| `WriteNoSnpFull` / `WriteNoSnpPtl` | Non-coherent write to Non-snoopable region |
-| `WriteNoSnpDef` | Deferrable non-coherent write; multiple outstanding OK |
-| `WriteNoSnpZero` / `WriteUniqueZero` | Write zero without transferring data bytes |
-| `WriteUniqueFull` / `WriteUniquePtl` | Coherent write from I; Home invalidates sharers |
-| `WriteUniqueFullStash` / `…PtlStash` | WriteUnique + Stash injection into target cache |
-
-### CopyBack Writes (writeback / eviction) — B4.2.3.2
-
-| Opcode | Purpose |
-|---|---|
-| `WriteBackFull` / `WriteBackPtl` | Dirty writeback (UD→I or SD→I) |
-| `WriteCleanFull` | Flush Dirty but keep a Clean copy in cache |
-| `WriteEvictFull` | UC eviction carrying data; stays in Snoop domain |
-| `WriteEvictOrEvict` | Eviction — Home chooses whether to accept data |
-
-### Combined Write + CMO — B4.2.4 (examples)
-
-| Opcode | Purpose |
-|---|---|
-| `WriteNoSnpFullCleanInv` | Non-coh write + CleanInvalid, atomically |
-| `WriteUniqueFullCleanSh` | Coherent write + CleanShared |
-| `WriteBackFullCleanInv` | Dirty writeback + CleanInvalid |
-| `WriteNoSnpFullCleanInvPoPA` | Write + cross-PAS invalidation |
-| `WriteBackFullCleanShPerSep` | Writeback + CleanSharedPersistSep (PCMO) |
-
-### Stash / DVM / Prefetch / System — B4.2.2, B4.2.6
-
-| Opcode | Purpose |
-|---|---|
-| `StashOnceUnique` / `…SepUnique` | Inject line into target cache for write-intent |
-| `StashOnceShared` / `…SepShared` | Inject line into target cache for read-intent |
-| `DVMOp` | TLB / I-cache / branch-predictor maintenance broadcast |
-| `PrefetchTgt` | Warm memory controller; no response expected |
-| `PCrdReturn` | Return an unused Protocol Credit to the Completer |
-
-### Child requests spawned by Home — B4.3, B2.3.9
-
-| Opcode | Where it fires |
-|---|---|
-| `ReadNoSnp` / `ReadNoSnpSep` | Home → Sub for any Read's memory fetch |
-| `WriteNoSnp*` with `DoDWT = 1` | Home → Sub for DWT on Immediate Writes |
-| `SnpShared` / `SnpUnique` / `SnpCleanInvalid` | Non-forwarding snoops (downgrade, invalidate, pull Dirty) |
-| `SnpSharedFwd` / `SnpUniqueFwd` / `SnpCleanFwd` | Forwarding snoops — power DCT (slide 15 Alt 5) |
-| `SnpMakeInvalid` | Invalidate without pulling Dirty (MakeUnique, stash non-targets) |
-| `SnpStashUnique` / `SnpStashShared` | Stash injection snoops |
-| `SnpDVMOp` | DVM broadcast (2 snoops per `DVMOp`; 1 combined response) |
-| `SnpQuery` | State-probe only; does not change Snoopee state |
-
-</div>
-</div>
-
-<!-- Speaker Notes:
-This slide is deliberately an encyclopedia, not a walkthrough. The aim is to show the
-breadth of the CHI protocol — how much territory a single "transaction opcode" field covers.
-All definitions here are condensed directly from IHI0050H B4.2 (Request types) and B4.3
-(Snoop request types); section references are in each table header so the listener can
-drop into the spec for any row.
-
-Reading the slide top-down by column.
-
-Left column.
-
-(1) Coherent Allocating Reads. These are the six opcodes an RN-F uses when it will put the
-line into a coherent cache state. They differ mainly in which final states the Requester
-can accept. ReadShared is the permissive case (any of UC/UD/SC/SD), ReadNotSharedDirty
-tightens that to UC/UD/SC (no SD), ReadClean is for caches that do not support Dirty lines
-(instruction caches — UC/SC only), ReadUnique is the load-to-store variant that demands
-UC or UD, ReadPreferUnique is the exclusive-sequence optimizer, and MakeReadUnique is the
-upgrade-without-data variant.
-
-(2) Non-coherent / IO-coherent Reads. ReadNoSnp is the Home→Sub fetch workhorse: all
-memory requests the Home issues downstream use it. ReadOnce and its two invalidating
-variants are for IO / DMA engines that want to see coherent data but do not intend to
-cache it. The CleanInvalid / MakeInvalid suffixes are hints, not guarantees — the spec is
-explicit that these do not replace proper CMOs.
-
-(3) Dataless — ownership and CMO. This box mixes two related families because both
-complete without a data response. CleanUnique, MakeUnique, and Evict change coherence
-ownership without moving data. The seven CMOs below are the software-cache-management
-toolkit: CleanShared / CleanSharedPersist / CleanSharedPersistSep push Dirty data out to
-memory or to the Point of Persistence; CleanInvalid and its PoPA and Storage variants
-invalidate plus push to progressively deeper memory hierarchy points; MakeInvalid is the
-"I do not care about the Dirty data, just invalidate" hammer.
-
-(4) Atomics. Four top-level opcodes. AtomicStore and AtomicLoad each cover eight named
-operations (ADD/CLR/EOR/SET plus signed/unsigned MAX/MIN). AtomicSwap and AtomicCompare
-are the full read-modify-write primitives; AtomicCompare is CAS and is the only one where
-inbound data size is half the outbound size (because the inbound is just the old value,
-not the compare-value side).
-
-Right column.
-
-(5) Immediate (Non-CopyBack) Writes. These are writes where the Requester ships new data
-that is not a writeback of a previously-cached dirty line. The Requester must be in state
-I when sending any of these. WriteNoSnp* are for Non-snoopable regions; WriteUnique* are
-coherent and cause Home to fire invalidating snoops. The …Stash variants add a Stash
-injection hint alongside the write.
-
-(6) CopyBack Writes. Writebacks and evictions. These move cached lines down the hierarchy.
-WriteBackFull / WriteBackPtl push Dirty data; WriteCleanFull pushes Dirty but keeps a
-Clean copy; WriteEvictFull pushes a UC line that must stay within the Snoop domain;
-WriteEvictOrEvict lets Home decide whether data is actually needed (this is the Alt 1a /
-Alt 1b branch we covered in our earlier practice slides).
-
-(7) Combined Write + CMO. The Write+CMO fusion family from B4.2.4 with ten concrete
-opcodes. The table shows representative examples: each opcode packages a write and a CMO
-against the same address into one transaction, so that ordering is trivial and DWT can
-be used for both halves. The PerSep suffix indicates a PCMO with a separate Persist
-response (CleanSharedPersistSep).
-
-(8) Stash / DVM / Prefetch / System. Everything else. StashOnce* let a producer hint
-"cache this line at that consumer" to reduce the consumer's first-touch latency. DVMOp is
-the TLBI / instruction-cache / branch-predictor invalidation broadcast primitive.
-PrefetchTgt is the speculative memory-warm operation — fire-and-forget, no response.
-PCrdReturn closes the protocol-credit loop when a retried request is abandoned.
-
-(9) Child requests — the last table. This is the answer to "what does Home actually
-issue while processing any of the above?" Two families: downstream Sub-side requests
-(ReadNoSnp, ReadNoSnpSep, WriteNoSnp* with DoDWT), and peer-side snoops. The snoop list
-itself shows the same three-way split that the Allocating Read figure showed us:
-non-forwarding snoops when Home will serve data itself, forwarding snoops for DCT, and
-the specialty snoops — stash, DVM broadcast, probe-only SnpQuery.
-
-Concluding point. Every opcode on this slide fits somewhere on one of the three axes CHI
-exposes: (a) data movement direction (in to the Requester, out from the Requester, or
-zero data), (b) coherence domain (coherent, IO-coherent, non-coherent), and (c) side
-effect (cache state change, CMO propagation, Stash injection, DVM broadcast, persistence).
-Any new CHI opcode introduced in a future revision of the spec will slot into the same
-grid.
-
-References. Definitions on the slide are drawn from IHI0050H sections:
-B4.2.1 (Read), B4.2.2 (Dataless + CMO), B4.2.3 (Write), B4.2.4 (Combined Write),
-B4.2.5 (Atomic), B4.2.6 (DVM / Prefetch), B4.3 (Snoop), B2.3.9 (Home-initiated child
-transactions).
--->
-
----
-
-<!-- ================================================================== -->
-<!-- SLIDE 17b: Request Retry — the P-Credit handshake -->
+<!-- SLIDE 16: Request Retry — the P-Credit handshake -->
 <!-- ================================================================== -->
 
 ## Request Retry — the P-Credit handshake
@@ -2251,7 +1722,7 @@ simplified — most paths use the single-class convention.
 ---
 
 <!-- ================================================================== -->
-<!-- SLIDE 17c: From CPU ISA to a RubyRequest -->
+<!-- SLIDE 17: From CPU ISA to a RubyRequest -->
 <!-- ================================================================== -->
 
 <style scoped>
@@ -2424,585 +1895,6 @@ around line 966. The RubyRequestType enum is in
 src/mem/ruby/protocol/RubySlicc_Exports.sm line 171. The CHI accept
 list is in src/mem/ruby/protocol/chi/CHI-cache-actions.sm line 163.
 Zicbom decode is in src/arch/riscv/isa/decoder.isa around line 1348.
--->
-
----
-
-<!-- ================================================================== -->
-<!-- SLIDE 17d: From RubyRequest to the CHI wire opcode -->
-<!-- ================================================================== -->
-
-<style scoped>
-section h2 { margin: 0 0 10px 0; font-size: 26px; }
-section h3 { font-size: 14px; margin: 2px 0 4px 0; color: var(--chi-blue-deep); font-weight: 700; }
-section p { margin: 2px 0 8px 0; font-size: 14.5px; line-height: 1.35; }
-section table { font-size: 13px; border-collapse: collapse; width: 100%; margin: 0; }
-section th, section td { padding: 2px 7px; line-height: 1.3; border-bottom: 1px solid var(--chi-border); }
-section th { background: #eef3fb; color: var(--chi-blue-deep); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
-section code { font-size: 12.5px; padding: 0 1px; background: transparent; }
-section h2 code, section h2 em, section h2 strong { font-size: inherit; font-weight: inherit; font-style: inherit; letter-spacing: inherit; }
-section h3 code { font-size: inherit; font-weight: inherit; }
-.columns { gap: 22px; align-items: stretch; }
-.columns > div:first-child { flex: 1.4; }
-.op-cards .card { padding: 9px 13px; margin-bottom: 6px; font-size: 12.5px; line-height: 1.35; border-radius: 10px; border: 1px solid var(--chi-border); background: linear-gradient(180deg, white 0%, var(--chi-surface) 100%); }
-.op-cards .card .pill { margin: 0 6px 0 0; font-size: 12px; padding: 2px 8px; vertical-align: 1px; }
-.op-cards .card strong { color: var(--chi-blue-deep); }
-.op-knob { margin-top: 8px; padding: 9px 13px; font-size: 12.5px; line-height: 1.35; background: var(--chi-surface-2); border-left: 4px solid var(--chi-blue); border-radius: 8px; }
-.op-take { margin-top: 8px; padding: 10px 14px; font-size: 14px; line-height: 1.35; }
-</style>
-
-## Where the opcode is picked — state × event, not the ISA
-
-The FSM looks up *(current state, internal event, clusivity knobs)* and
-picks the outbound CHI opcode. The CPU has no say — a single `Load`
-event can become `ReadShared`, `ReadOnce`, `ReadNotSharedDirty`, or
-nothing at all.
-
-<div class="columns">
-<div>
-
-### State × event → outbound CHI (B4.2.1 – B4.2.5)
-
-| Sequencer event | Local state | Outbound CHI request |
-|---|---|---|
-| `Load` *(hit)* | `UD/UC/SC/SD` | — *local callback* |
-| `Load` *(miss)* — cache-fill | `I` | `ReadShared` / `ReadNotSharedDirty` |
-| `Load` *(miss)* — bypass | `I` | `ReadOnce` |
-| `Store` *(hit)* | `UD/UC` | — *local callback* |
-| `Store` *(upgrade)* | `SC/SD` | `CleanUnique` |
-| `Store` *(miss)* — cache-fill | `I` | `ReadUnique` |
-| `Store` *(miss)* — bypass | `I` | `WriteUnique{Full,Ptl,Zero}` |
-| `AtomicLoad/Store` *(hit)* | `UC/UD` | — *near-execute* |
-| Atomic miss — `policy=0` | any | `ReadUnique` + local execute |
-| Atomic miss — `policy=1,2` | any | `AtomicReturn` / `AtomicNoReturn` |
-| Replacement — dirty line | — | `WriteBackFull` / `WriteCleanFull` |
-| Replacement — clean line | — | `WriteEvictFull` / `Evict` |
-| HN → Sub memory fetch | at HN | `ReadNoSnp` / `ReadNoSnpSep` |
-
-</div>
-<div class="op-cards">
-
-### Three data-provider fast-paths
-
-<div class="card accent-blue">
-<span class="pill req">DMT</span><strong>Sub → RN direct.</strong><br/>
-Gated at the HN: <code>tbe.use_DMT := is_HN && enable_DMT</code>.
-HN emits <code>ReadNoSnp</code> or <code>ReadNoSnpSep</code> with the RN's NID
-as forward target.
-</div>
-
-<div class="card accent-gold">
-<span class="pill snp">DCT</span><strong>Peer RN → RN direct.</strong><br/>
-Gated anywhere: <code>tbe.use_DCT := enable_DCT</code>. HN issues a forwarding
-snoop (<code>Snp*Fwd</code>); the snoopee ships data straight to the requester.
-</div>
-
-<div class="card accent-violet">
-<span class="pill dat">DWT</span><strong>RN → Sub direct.</strong><br/>
-HN tunnels the write with <code>WriteNoSnp*</code> carrying <code>DoDWT = 1</code>
-on the HN → Sub leg of coherent <code>WriteUnique*</code> flows.
-</div>
-
-<div class="op-knob">
-<strong>Clusivity knobs</strong> (<code>CHI-cache.sm</code> L152–165):
-<code>alloc_on_*</code> and <code>dealloc_on_*</code> flip
-<code>doCacheFill</code> and decide the post-transaction state. The same SLICC
-<code>machine(Cache)</code> becomes L1, L2, or HN-F by knob settings alone.
-</div>
-
-</div>
-</div>
-
-<div class="takeaway op-take">
-The CPU drives events. The <em>controller</em> picks opcodes &mdash; one
-<code>Load</code> fans out into four distinct wire behaviours, chosen by
-state and the six <code>alloc_on_*</code> flags. No ISA knob ever names a
-CHI opcode directly.
-</div>
-
-<!-- Speaker Notes:
-Time budget: 5 minutes.
-
-The previous slide got a RubyRequest onto the mandatoryQueue. This slide
-shows how that queue entry becomes a specific CHI wire opcode — and the
-surprising thing is that the CPU has no part in that decision.
-
-Here is the shape of the machinery. The CHI controller's seqInPort
-handler receives the RubyRequest, reserves a TBE, tags the message with
-a small internal label — Load, Store, StoreLine, AtomicLoad,
-AtomicStore — and drops it on an internal ready queue called reqRdy.
-One cycle later the reqRdy port fires an event into the state machine.
-The event has the internal label, the current state has the coherence
-status of the line, and a set of controller knobs — the six alloc_on
-flags, is_HN, enable_DMT, enable_DCT, policy_type, allow_SD — decides
-which of about 20 possible CHI opcodes actually goes out on the wire.
-That lookup is the entirety of what this slide captures.
-
-Walk the table top to bottom.
-
-A Load that hits a valid cached state needs no outbound request at all.
-The controller reads the data from its own data array and calls the
-Sequencer back. Nothing appears on the REQ channel. Good — the happy
-path costs zero network traffic.
-
-A Load miss branches on whether the line will be cached. The
-doCacheFill bit, computed from the alloc_on_* flags, decides. If yes,
-we go coherent with ReadShared — or ReadNotSharedDirty if the controller
-does not accept SD as a final state. If no, we bypass with ReadOnce. One
-event, three possible opcodes.
-
-A Store in UD or UC is the dream: we have write permission, we write
-locally, nobody on the wire cares. A Store on shared state, SC or SD,
-needs an upgrade — we have the data but not ownership — so the
-controller sends a dataless CleanUnique. A Store miss splits again: if
-we will cache, ReadUnique pulls the line in with ownership, and the
-store merges into the fill; if we will not cache, WriteUnique bypasses —
-Full if the store covers the line, Ptl if it does not, Zero for the
-write-zero optimization.
-
-The atomic rows are where gem5 gives you real policy control. Atomics
-on UC or UD are always executed locally — the line is yours, the AMO is
-purely arithmetic. Atomic misses are where policy_type rules. Zero is
-ALL-NEAR: every atomic is pulled to the L1 via ReadUnique and executed
-there. One and two are UNIQUE-NEAR and PRESENT-NEAR — the atomic itself
-flies to the Home or Slave as a CHI-native AtomicReturn or
-AtomicNoReturn. The spec defines both modes per B4.2.5; policy_type is
-the gem5 dial to choose between them.
-
-The replacement rows are not triggered by the Sequencer at all — they
-come from the replacement path when the cache evicts a victim. I include
-them to round out the picture. Dirty victims produce WriteBackFull or
-WriteCleanFull depending on dealloc policy; clean exclusive victims
-produce WriteEvictFull; clean shared victims produce a lightweight Evict.
-
-The last row is the Home-Node-to-Subordinate leg. When the HN has to
-actually fetch from memory, it emits ReadNoSnp, or ReadNoSnpSep if
-enable_DMT_early_dealloc is true. This is also where DMT lives on the
-wire — the HN's downstream read doubles as the RN's data fetch when
-DMT is on.
-
-Right column. Three data-provider fast-paths. This is where the
-protocol's DMT, DCT, and DWT actually come from in code.
-
-DMT is a pure HN switch. It means "let the Subordinate answer the
-Requester directly, skip me." In gem5 the gate is literally one line:
-tbe.use_DMT equals is_HN AND enable_DMT. At an RN-F L1, DMT is always
-off because an L1 is never a Home. At the HN, it is on whenever the
-system configuration asks for it. The mechanism is simple: the HN's
-ReadNoSnp carries the original requester's NodeID as the forward
-target, and the Subordinate ships the CompData directly back.
-
-DCT is peer-to-peer. It is gated anywhere by enable_DCT. When the HN
-decides during a read-with-snoops that a peer cache has the line, it
-sends a forwarding snoop — SnpSharedFwd, SnpUniqueFwd,
-SnpNotSharedDirtyFwd — and the snooped node ships data directly to the
-original requester. In gem5 the action is Send_SnpShared_Fwd and
-siblings.
-
-DWT is the Home-to-Sub fast-path for Immediate Writes. The HN passes
-the write straight through to the Subordinate in one message by
-emitting a WriteNoSnp carrying the DoDWT bit.
-
-Clusivity knobs are the last explainer card. The six alloc_on_* flags
-plus the two dealloc_on_* flags control doCacheFill and the final
-stable state. Flipping them is what turns one machine(Cache) definition
-into an L1 at the top, an L2 in the middle, and an HN-F at the system
-level cache. This is a real gem5 trick — there is literally one SLICC
-file, configured three different ways.
-
-The takeaway at the bottom is the headline. The CPU issues one event,
-and the controller picks one of about 20 possible CHI opcodes. The
-mapping is entirely state, internal type, and knob. No ISA-level field
-ever names a CHI opcode directly — by design.
-
-References. Internal type tagging — CHI-cache-actions.sm line 138.
-State × event transitions — CHI-cache-transitions.sm line 618.
-Opcode emitters — CHI-cache-actions.sm line 1553. DMT/DCT gating —
-CHI-cache-actions.sm line 273. Clusivity knobs — CHI-cache.sm line 152.
-Spec — IHI0050H B4.2.1 through B4.2.5.
--->
-
----
-
-<!-- ================================================================== -->
-<!-- SLIDE 17e: CHI features the gem5 CPU path never drives -->
-<!-- ================================================================== -->
-
-<style scoped>
-section h2 { margin: 0 0 10px 0; font-size: 26px; }
-section h3 { font-size: 15px; margin: 2px 0 6px 0; color: var(--chi-blue-deep); font-weight: 700; }
-section p { margin: 0 0 6px 0; font-size: 13.5px; line-height: 1.4; }
-section code { font-size: 12.5px; padding: 0 1px; background: transparent; }
-section h2 code, section h2 em, section h2 strong { font-size: inherit; font-weight: inherit; font-style: inherit; letter-spacing: inherit; }
-section h3 code { font-size: inherit; font-weight: inherit; }
-.columns { gap: 22px; align-items: stretch; }
-.gap-list .gap-row { padding: 7px 12px; margin-bottom: 6px; border-left: 4px solid var(--chi-muted); background: var(--chi-surface-2); border-radius: 0 8px 8px 0; font-size: 12.5px; line-height: 1.4; }
-.gap-list .gap-row .tag { display: inline-block; margin-right: 8px; padding: 2px 9px; border-radius: 999px; background: #e7f0ff; color: var(--chi-blue-deep); font-size: 11.5px; font-weight: 700; letter-spacing: 0.02em; }
-.gap-list .gap-row.cmo .tag { background: #fff3d6; color: #8a5a00; }
-.gap-list .gap-row.read .tag { background: #e8f7ec; color: #17603a; }
-.gap-list .gap-row.write .tag { background: #f0e9ff; color: #5d33bf; }
-.gap-list .gap-row.stash .tag { background: #ffe5cc; color: #c2410c; }
-.gap-list .gap-row.excl .tag { background: #edf2f7; color: var(--chi-muted); }
-.isa-gaps .channel-card { padding: 9px 13px; margin-bottom: 7px; font-size: 12.5px; line-height: 1.4; }
-.isa-gaps .channel-card strong { color: var(--chi-blue-deep); }
-.gap-warn { margin-top: 8px; padding: 10px 14px; font-size: 14px; line-height: 1.35; }
-</style>
-
-## CHI features the gem5 CPU path never drives
-
-<div class="columns">
-<div class="gap-list">
-
-### Never emitted from a sequencer today
-
-<div class="gap-row cmo"><span class="tag">CMO</span>
-<code>CleanShared</code>, <code>CleanSharedPersist</code>(<code>Sep</code>),
-<code>CleanInvalid</code>, <code>CleanInvalidPoPA/Storage</code>, <code>MakeInvalid</code> —
-no dispatch path. <em>B4.2.2</em>
-</div>
-
-<div class="gap-row read"><span class="tag">READ</span>
-<code>ReadClean</code>, <code>ReadPreferUnique</code>, <code>ReadOnceCleanInvalid</code>,
-<code>ReadOnceMakeInvalid</code> — load path emits only
-<code>ReadShared</code> / <code>ReadNotSharedDirty</code> / <code>ReadOnce</code>. <em>B4.2.1</em>
-</div>
-
-<div class="gap-row write"><span class="tag">WRITE</span>
-<code>MakeUnique</code> (dataless upgrade), <code>WriteNoSnpDef</code>,
-<code>WriteBackPtl</code>, <code>WriteEvictOrEvict</code>, all Combined
-Write+CMO opcodes. <em>B4.2.3 · B4.2.4</em>
-</div>
-
-<div class="gap-row stash"><span class="tag">STASH / PF</span>
-<code>StashOnce*</code>, <code>SnpStash*</code>, <code>PrefetchTgt</code> —
-received only; HW prefetch becomes an ordinary <code>Load</code>. <em>B4.2.2 · B4.2.6.2</em>
-</div>
-
-<div class="gap-row excl"><span class="tag">EXCL / DVM</span>
-CHI <code>Excl</code> attribute unused; <code>DVMOp</code> / <code>SnpDVMOp</code>
-wired but dormant on RISC-V. <em>B2.9 · B4.2.6.1</em>
-</div>
-
-</div>
-<div class="isa-gaps">
-
-### Why — the ISA side
-
-<div class="channel-card req">
-<strong>RISC-V Zicbom</strong> — <code>CBO.flush/clean/inval</code> set
-<code>isFlush</code>; the Sequencer translates to <code>FLUSH</code>;
-CHI dispatch <strong>fatals</strong>. No CMO ever leaves an RN-F.
-</div>
-
-<div class="channel-card snp">
-<strong>SFENCE.VMA</strong> is a local TLB op in
-<code>arch/riscv/tlb.cc</code>. No memory packet is emitted, so the CHI
-DVM transport stays dormant on every RISC-V system today.
-</div>
-
-<div class="channel-card rsp">
-<strong>LR/SC, locked-RMW</strong> are demoted to <code>LD/ST</code>
-upstream of CHI. Exclusivity is tracked by the Sequencer's
-<code>Locked_RMW</code> block list &mdash; CHI never sees Excl.
-</div>
-
-<div class="channel-card dat">
-<strong>HTM / TME</strong> is ARM-only in gem5
-(<code>arch/arm/insts/tme64ruby.cc</code>). There is no RISC-V hardware
-transactional memory, and CHI has no HTM wiring regardless.
-</div>
-
-</div>
-</div>
-
-<div class="callout warning gap-warn">
-<strong>Want to exercise one of these features?</strong> The three
-options are: extend the Sequencer dispatch with a new
-<code>RubyRequestType</code>, attach a DMA engine that emits the target
-opcode class directly, or drive the controller from a directed traffic
-generator like <code>Ruby_random_tester</code> or <code>protocol_tester</code>.
-</div>
-
-<!-- Speaker Notes:
-Time budget: 3 minutes.
-
-This is the closing slide of the three-part bridge between CPU and CHI.
-Slide 17c told you how a CPU instruction becomes a RubyRequest. Slide 17d
-told you how a RubyRequest becomes a CHI opcode. This slide tells you the
-honest part: if you look at the CHI Encyclopedia on slide 17 and compare
-it to what slide 17d actually produces, a lot of the protocol is dark.
-Gem5's CPU path drives roughly a dozen request opcodes. The spec defines
-several dozen. Here are the gaps.
-
-The five-row left column groups the unreachable opcodes by family, so
-you can spot what kind of feature you would lose touch with.
-
-CMO family. Cache Maintenance Operations — CleanShared, CleanSharedPersist
-and its Sep variant, CleanInvalid and its PoPA and Storage variants, and
-MakeInvalid. This is the entire B4.2.2 software-cache-management toolkit,
-and gem5's sequencer path generates none of it. Zicbom CBO.* in RISC-V
-does produce flush-flagged packets, but those get squashed at
-AllocateTBE_SeqRequest with "Invalid RubyRequestType". So software that
-relies on cache management instructions — think persistent-memory code,
-or DMA-cache-coherence code — cannot be modelled faithfully on a
-CHI-coherent gem5 system today. That is a real, practical gap.
-
-Read family. ReadClean for instruction-cache-only consumers;
-ReadPreferUnique for exclusive-access sequencing; the two
-ReadOnceCleanInvalid and ReadOnceMakeInvalid variants for IO-coherent
-DMA. None of them is emitted. The load path has only three outputs:
-ReadShared, ReadNotSharedDirty, ReadOnce. Functionally complete for a
-well-behaved RN-F, but narrower than what the spec allows.
-
-Write family. MakeUnique is the big one — a dataless upgrade that lets a
-requester overwrite a whole line without pulling data off the wire. Gem5
-does the functional equivalent via ReadUnique followed by local merge,
-so the upgrade works, but more bytes cross the fabric than the spec
-requires. WriteNoSnpDef, WriteBackPtl, WriteEvictOrEvict are similarly
-absent. Combined Write+CMO — the whole B4.2.4 fusion family, ten
-opcodes — is not generated either.
-
-Stash and Prefetch. StashOnceShared, StashOnceUnique, and the matching
-SnpStash* snoops appear in CHI-msg.sm and the FSM knows how to receive
-them, but nothing in gem5 builds one from a CPU instruction.
-PrefetchTgt is the really interesting one: CHI has a native
-fire-and-forget memory-warm request, and gem5 does not use it. The
-hardware prefetcher instead emits a normal load-shaped RubyRequest that
-becomes an ordinary ReadShared or ReadOnce. Functionally equivalent,
-spec-ly different.
-
-Exclusive and DVM. The CHI Excl attribute on reads and dataless requests
-would let the protocol participate in an exclusive-access monitor per
-B2.9. Gem5 does not use it — all exclusivity is tracked upstream. DVM
-is wired up in full; there is a CHI-dvm-misc-node machine and the
-CHI-cache FSM has SnpDvmOp transitions. But only ARM64 instructions
-call xc->initiateMemMgmtCmd — RISC-V SFENCE.VMA is handled locally by
-the TLB. So on a RISC-V gem5 system today, the DVM transport is
-dormant from boot.
-
-Right column summarises the four ISA-side gaps as cards, in one
-sentence each. Zicbom fatals. SFENCE.VMA is local. LR/SC is demoted.
-HTM is ARM-only.
-
-The bottom warning is the practical rule. If you need a feature that is
-not reachable through the CPU path, you have three levers. The cleanest
-is to extend the Sequencer — add a new RubyRequestType value, a decode
-branch in makeRequest, and a dispatch case in AllocateTBE_SeqRequest.
-The second is a DMA-shaped SimObject that hangs off the interconnect
-and emits the opcode directly. The third is a directed traffic
-generator — Ruby_random_tester and protocol_tester live in the
-tests/configs/example directory and are designed exactly for driving
-corners the CPU path cannot reach.
-
-Why does any of this matter? Two reasons. First, benchmark relevance —
-if your workload relies on CMOs or DMA stash for performance, a
-gem5 CHI run today will not model the benefit. Second, verification
-scope — if you are co-designing a new CHI-connected device and you
-want to exercise Stash or PrefetchTgt at system level, you need to know
-up front that the CPU side will not help you.
-
-References. RubyRequestType — RubySlicc_Exports.sm line 171. CHI accept
-list — CHI-cache-actions.sm line 163. Prefetch proxy —
-RubyPrefetcherProxy.cc line 106. DVM origin — arch/arm/isa/insts/
-misc64.isa. Zicbom decode — arch/riscv/isa/decoder.isa line 1348.
-Spec — IHI0050H B4.2.1 through B4.2.6.2.
--->
-
----
-
-<!-- ================================================================== -->
-<!-- SLIDE 17f: RISC-V memory/cache ISA features unmodeled in gem5 -->
-<!-- ================================================================== -->
-
-<style scoped>
-section h2 { margin: 0 0 6px 0; font-size: 24px; }
-section h3 { font-size: 13.5px; margin: 2px 0 4px 0; color: var(--chi-blue-deep); font-weight: 700; }
-section p { margin: 0 0 6px 0; font-size: 13px; line-height: 1.35; }
-section table { font-size: 11px; border-collapse: collapse; width: 100%; margin: 0; }
-section th, section td { padding: 2px 7px; line-height: 1.25; border-bottom: 1px solid var(--chi-border); vertical-align: top; }
-section th { background: #eef3fb; color: var(--chi-blue-deep); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em; }
-section code { font-size: 10.5px; padding: 0 1px; background: transparent; }
-section h2 code, section h2 em, section h2 strong { font-size: inherit; font-weight: inherit; font-style: inherit; letter-spacing: inherit; }
-section h3 code { font-size: inherit; font-weight: inherit; }
-.columns { gap: 20px; align-items: stretch; }
-.columns > div:first-child { flex: 1.75; }
-.rvca-cards .card { padding: 8px 12px; margin-bottom: 6px; font-size: 12px; line-height: 1.35; border-radius: 10px; border: 1px solid var(--chi-border); background: linear-gradient(180deg, white 0%, var(--chi-surface) 100%); }
-.rvca-cards .card strong { color: var(--chi-blue-deep); }
-.rvca-take { margin-top: 6px; padding: 9px 13px; font-size: 13px; line-height: 1.35; }
-.rvca-intro { font-size: 13px; line-height: 1.35; color: var(--chi-ink); margin-bottom: 8px; }
-.fatal { color: var(--chi-red); font-weight: 700; }
-.ok { color: var(--chi-green); font-weight: 700; }
-</style>
-
-## RISC-V memory/cache ISA extensions unmodeled in gem5 Ruby CHI
-
-<p class="rvca-intro">A decade of RISC-V memory/cache extensions ratified 2022&ndash;2025 &mdash;
-RVA23 requires most of them. Today, gem5&rsquo;s Ruby CHI lands only a fraction onto
-real CHI transactions; the rest either fatal, NOP, or go through as plain LD/ST.</p>
-
-<div class="columns">
-<div>
-
-### Ratified extensions &rarr; CHI-faithful lowering &rarr; gem5 today
-
-| Extension | RISC-V ops | gem5 Ruby CHI reality |
-|---|---|---|
-| `Zicbom` (2022) | `CBO.clean` · `CBO.flush` · `CBO.inval` | Decoded in `arch/riscv/isa/decoder.isa`; <span class="fatal">fatals</span> at the CHI boundary — `CleanInvalidReq` → `FLUSH` → `error` in `AllocateTBE_SeqRequest`; `InvalidateReq`/`CleanSharedReq` → `panic` in `Sequencer::makeRequest`. No CMO opcode ever crosses the wire. |
-| `Zicboz` (2022) | `CBO.zero` | Decoded with `CACHE_BLOCK_ZERO` flag; reaches the sequencer as plain `ST`. No `WriteUniqueZero` (B4.2.3.1) dataless optimisation — 64 B of zeros would cross on DAT if the ST ever ran. |
-| `Zicbop` (2022) | `PREFETCH.R/W/I` | Decoded (`decoder.isa` L1636); emitted as `SoftPFReq`/`SoftPFExReq`; reaches the CHI controller as ordinary `Load` → `ReadShared`/`ReadOnce`. **No distinct `PrefetchTgt`** (B4.2.6.2), so no fire-and-forget memory warm-up. |
-| `Zihintntl` (2022) | `NTL.{P1,PALL,S1,ALL}` | **Not decoded** &mdash; executes as `ADD x0,x0,xN` HINT NOP. No `MemAttr.Allocate=0`, no promotion to `ReadOnce*`. Locality hints vanish before the sequencer. |
-| `Zalrsc` (2024) | `LR.{W,D}` · `SC.{W,D}` | Decoded; Sequencer demotes to plain `LD`/`ST`. **No CHI `Excl=1`** attribute, no HN-F PoC monitor &mdash; exclusivity lives in the Sequencer&rsquo;s `Locked_RMW` block list. |
-| `Zacas` (2024) | `AMOCAS.{W,D,Q}` | **Not decoded** in RISC-V. No distinct CHI `AtomicCompare` opcode in gem5 either (only `AtomicReturn`/`AtomicNoReturn`) &mdash; the asymmetric CAS data shape is unreachable on both sides. |
-| `Zabha` (2024) | `AMO*.{B,H}` · `AMOCAS.{B,H}` | **Not decoded**. Byte/half-lane ALU at HN not modelled. Narrow far-atomics cannot be studied. |
-| `Zalasr` (2025) | `L{B,H,W,D}.AQ` · `S{B,H,W,D}.RL` | **Not decoded**. Moot because CHI&rsquo;s four-valued `Order` field (`00/01/10/11`) is not modelled either &mdash; release/acquire semantics would collapse to Sequencer drain. |
-| `Ztso` · RVWMO | `FENCE`, `FENCE.TSO`, `.aq`/`.rl` | `FENCE` decoded; enforced as a CPU-local drain + Sequencer wait-on-outstanding. **CHI `Order` field never set** &mdash; every REQ goes out with `Order=00`; no `RequestOrder`/`EndpointOrder` serialisation. |
-| `Svinval` (2022) | `SINVAL.VMA`, `SFENCE.W.INVAL`, `SFENCE.INVAL.IR`, `HINVAL.*` | Partially decoded (`sinval_vvma`: `warn("not implemented")`); no opportunistic `DVMOp(TLBI)` emission. Cross-hart shootdown stays IPI-driven. |
-| `Zawrs` (2022) | `WRS.NTO` · `WRS.STO` | **Not decoded** in RISC-V. No reservation-driven stall &mdash; HN-F PoC wake path is moot since LR/SC has no PoC monitor in gem5. |
-
-</div>
-<div class="rvca-cards">
-
-### Three ways gem5 fidelity leaks
-
-<div class="card accent-red">
-<strong>Software cache control is unreachable.</strong>
-Zicbom + Zicboz fatal or degrade silently. DMA coherence, persistent
-memory (`CleanSharedPersistSep`), and userspace `memset` optimisations
-cannot be studied in gem5 CHI today &mdash; a real blocker for DPDK,
-SPDK, and PMEM workloads.
-</div>
-
-<div class="card accent-gold">
-<strong>Atomics are half a story.</strong>
-Plain AMOs work near (<code>ReadUnique</code>&thinsp;+&thinsp;local) or far
-(<code>AtomicReturn/NoReturn</code>). <em>But:</em> LR/SC uses no
-<code>Excl=1</code>, <code>AMOCAS</code>/byte-AMOs aren&rsquo;t decoded,
-and far-atomic CAS has no distinct <code>AtomicCompare</code> opcode.
-</div>
-
-<div class="card accent-slate">
-<strong>Ordering is flat, DVM is dormant.</strong>
-CHI&rsquo;s <code>Order</code> field and DVM broadcast both sit idle on
-RISC-V. Zalasr, Ztso, and Svinval lose their wire-level fingerprint &mdash;
-reproducing an RVA23-class memory-model study requires custom SLICC.
-</div>
-
-</div>
-</div>
-
-<div class="takeaway rvca-take">
-A faithful RVA23-on-CHI model needs: a CMO dispatch path (extend
-<code>AllocateTBE_SeqRequest</code>), a <code>PrefetchTgt</code> emitter,
-<code>Excl=1</code> plumbing for LR/SC, an <code>Order</code>-field-aware
-RN-F, and an opportunistic DVM path for Svinval.
-</div>
-
-<!-- Speaker Notes:
-Time budget: 3 to 4 minutes.
-
-Slides 17c, d, and e came at this bridge from the CPU side outward. CPU
-instruction becomes RubyRequest, RubyRequest becomes CHI opcode, and
-here are the CHI opcodes that never fire. This slide tips the question
-over: which RISC-V memory and cache ISA extensions does gem5 Ruby CHI
-actually model faithfully, and which ones are left on the floor?
-
-The short answer is that most of the 2022 to 2025 wave of ratified
-extensions is unreachable. RVA23 pulls these in as mandatory or
-recommended, so if you are modelling a modern RISC-V workload on a CHI
-NoC, you will bump into at least one of these rows.
-
-Walk the table top to bottom.
-
-Row one, Zicbom. CBO dot clean, CBO dot flush, CBO dot inval. These
-are decoded in the RISC-V decoder — the `decoder.isa` file has all
-three — but the resulting packet carries CLEAN or INVALIDATE flags,
-which the Sequencer translates either into RubyRequestType FLUSH, which
-hits an error in AllocateTBE_SeqRequest, or leaves in a form that
-falls through to a straight panic in makeRequest. Three different
-paths, all fatal. No CMO ever leaves the RN-F.
-
-Row two, Zicboz. CBO dot zero. This one is decoded with a
-CACHE_BLOCK_ZERO flag and reaches the Sequencer as a plain ST —
-because it has neither CLEAN nor INVALIDATE bits, only the ZERO bit.
-The gem5 decoder also writes only one byte in the semantic, not a full
-64 byte block, but even if that were fixed, nothing in the Ruby CHI
-path promotes it to a WriteUniqueZero dataless optimisation. So CBO dot
-zero either misbehaves or wastes a data-channel round trip on a
-64 byte zero payload.
-
-Row three, Zicbop. The three prefetches. Here is the most common
-surprise: Zicbop IS decoded in gem5 and DOES generate memory traffic.
-PREFETCH.R and .I map to SoftPFReq, PREFETCH.W maps to SoftPFExReq.
-Both reach the Sequencer as Load and emit ReadShared or ReadOnce on
-the wire. So you do get warm lines — just ordinary coherent reads.
-What is missing is the distinct CHI PrefetchTgt opcode, the
-fire-and-forget memory-warm request with no response. If you are
-measuring the cost of a PrefetchTgt round-trip absence on chiplet
-traffic, you cannot do it in gem5 today.
-
-Row four, Zihintntl. The non-temporal locality hints. NOT decoded in
-the RISC-V frontend at all. They execute as ADD x0 comma x0 comma xN,
-which is a legal NOP. So the locality hint never even reaches the
-cache-allocation machinery. On a faithful CHI implementation you would
-set MemAttr dot Allocate to zero or promote the read to a deallocating
-variant; in gem5 the hint evaporates.
-
-Row five, Zalrsc. LR and SC. This is the one we covered on Slide 17c.
-Decoded, but the Sequencer demotes them to plain LD and ST. No CHI Excl
-equals 1 attribute is ever set. Exclusivity is tracked at the Sequencer
-level using a Locked_RMW block list. That means you cannot model a
-RISC-V LR slash SC contention pattern against a hardware PoC monitor at
-an HN-F, because gem5 does not have such a monitor. Which is a pretty
-fundamental gap for RVA23 lock-contention studies.
-
-Rows six and seven, Zacas and Zabha. AMOCAS at W, D, Q and byte-half
-granular AMOs. NOT decoded. Even if you extended the decoder, gem5's
-CHIRequestType enum does not have a distinct AtomicCompare — AMOCAS
-would have to fold into AtomicReturn, and the CHI asymmetric CAS data
-shape, where the outbound data is twice the inbound return, would be
-lost. For byte and halfword AMOs the HN's byte-lane ALU is also not
-modelled.
-
-Rows eight and nine, Zalasr and Ztso RVWMO. The release-acquire and
-TSO extensions. Zalasr is not decoded. RVWMO's fence is decoded and
-works as a local CPU drain, but the CHI Order field, four-valued
-`00/01/10/11`, is never set on any REQ — gem5 always emits Order=00 and
-relies on Sequencer serialisation for ordering. So RequestOrder and
-EndpointOrder semantics, particularly important for device memory
-banks, are not there.
-
-Row ten, Svinval. The batched TLB invalidation bracket. gem5 has a
-partial sinval_vvma decode that literally warns "not implemented".
-Even if it were implemented, there is no opportunistic DVMOp TLBI
-emission. Cross-hart TLB shootdown stays IPI-driven. On a real CHI
-system this is where RISC-V deliberately does not use DVM because the
-ISA does not require it; but as a performance optimisation a real
-implementation might emit DVM anyway — not in gem5.
-
-Row eleven, Zawrs. WRS NTO and STO. The reservation-driven stall-wait
-pattern. Not decoded in gem5 RISC-V. Even if added, its wake path
-depends on the PoC monitor that gem5 does not model — so Zawrs is
-deeply coupled to the Zalrsc gap.
-
-Right column, three summary cards. Software cache control is
-unreachable — Zicbom plus Zicboz blockers. Atomics are half a story —
-plain AMOs work, LR slash SC and CAS do not. Ordering is flat, DVM is
-dormant — CHI's richest fidelity machinery simply is not used.
-
-The takeaway closes the argument. To build a faithful RVA23-on-CHI
-model in gem5 you need five things: a CMO dispatch path, a PrefetchTgt
-emitter, Excl equals 1 plumbing, an Order-field-aware RN-F, and an
-opportunistic DVM path for Svinval. None of these are trivial. All
-five are tractable with SLICC extensions. This is the honest roadmap
-for anyone who wants to publish performance numbers on a modern
-RISC-V CHI system using gem5.
-
-References. The compass artefact at ruby-book slash slides slash
-compass_artifact_wf-d63250d0 dot text_markdown dot md is the primary
-source for the CHI-faithful lowering column. gem5 reality is from
-`arch/riscv/isa/decoder.isa` around lines 1348, 1414, 1636, 6308;
-`src/mem/ruby/system/Sequencer.cc` line 966; and
-`src/mem/ruby/protocol/chi/CHI-cache-actions.sm` line 163.
 -->
 
 ---
@@ -3364,30 +2256,6 @@ round-robin are in `ruby-book/extra/RequestToFlit.md`.
 ---
 
 <!-- ================================================================== -->
-<!-- SLIDE 20: TBD -->
-<!-- ================================================================== -->
-
-## TBD
-
-<!-- Speaker Notes:
-Time budget: 3 minutes.
--->
-
----
-
-<!-- ================================================================== -->
-<!-- SLIDE 21: TBD -->
-<!-- ================================================================== -->
-
-## TBD
-
-<!-- Speaker Notes:
-Time budget: 3 minutes.
--->
-
----
-
-<!-- ================================================================== -->
 <!-- SLIDE 1b: Backup divider — content below is the archived v1 deck -->
 <!-- ================================================================== -->
 
@@ -3407,6 +2275,1114 @@ h1 {
 </style>
 
 # Backup
+
+---
+
+<!-- ================================================================== -->
+<!-- BACKUP 1: DAT Flit Fields -->
+<!-- ================================================================== -->
+
+## DAT flit fields
+
+<div class="columns" style="font-size: 14px; line-height: 1.25;">
+<div>
+
+| Name       | W   | Description                               |
+|------------|-----|-------------------------------------------|
+| QoS        | 4   | Priority for fabric arbitration            |
+| TgtID      | 7   | Target node (NODE_ID_W: 7..16)            |
+| SrcID      | 7   | Source node (NODE_ID_W)                   |
+| TxnID      | 12  | Transaction identifier                     |
+| HomeNID    | 7   | Home node — target for CompAck            |
+| Opcode     | 4   | DAT opcode (CompData, WriteData, …)        |
+| RespErr    | 2   | Error status (OK / ExOK / DERR / NDERR)   |
+| Resp       | 3   | Cache state (I / SC / UC / UD / SD / PD)  |
+| DBID       | 12  | Data Buffer ID — echoed by CompAck        |
+| DataSource | 8   | Hint: which node supplied the data        |
+
+</div>
+<div>
+
+| Name       | W   | Description                               |
+|------------|-----|-------------------------------------------|
+| FwdState   | 3   | State forwarded — snoop-fwd *only*        |
+| CCID       | 2   | Critical Chunk Identifier                  |
+| DataID     | 2   | Packet index (0..3 for 128-bit DATA_W)    |
+| CBusy      | 3   | Completer busy hint                        |
+| TraceTag   | 1   | Trace/debug tag                            |
+| BE         | 16  | Byte enables (DATA_W/8)                   |
+| Data       | 128 | Payload (DATA_W: 128 / 256 / 512)         |
+| DataCheck  | 16  | RAS: per-byte data integrity (*optional*) |
+| Poison     | 2   | RAS: per-64-bit poison bit (*optional*)   |
+
+</div>
+</div>
+
+<div class="takeaway">
+DAT flit is much wider than REQ because it carries the payload. <code>DATA_W</code> is the main design-time knob (128/256/512). One DAT message fills <code>line_size / (DATA_W/8)</code> flits, each tagged with <code>DataID</code> — that's how a 64 B line becomes 4 DAT packets at 128-bit <code>DATA_W</code>.
+</div>
+
+<!-- Speaker Notes:
+Time budget: 3 minutes.
+
+This is the DAT flit — same story as REQ, but wider because it
+carries the data payload. Spec Table B13.9 defines the format.
+DAT_W is the key design-time parameter: 128, 256, or 512 bits. At
+128-bit default the full flit is roughly 240 bits of control +
+16 bits of byte-enable + 128 bits of data.
+
+Left column, the routing and response core.
+
+QoS, TgtID, SrcID and TxnID mean the same thing they did in REQ:
+priority, destination, source, transaction identifier. The
+interesting new field is HomeNID — it names the Home node the
+Requester must target its final CompAck back to. For CompData
+arriving at the Requester, HomeNID is how the Requester knows where
+to close the transaction.
+
+Opcode is only 4 bits on DAT, not 7 — the DAT channel has far fewer
+opcode values: CompData, DataSepResp, NonCopyBackWriteData,
+CopyBackWriteData, SnpRespData, and a few more. Table B13.16 is the
+dictionary.
+
+RespErr, 2 bits, reports transport-level errors: OK, Exclusive OK,
+DERR for data error, NDERR for non-data error. Separate from Resp
+by design — one says "did the transfer succeed", the other says
+"what coherence state is the line in".
+
+Resp, 3 bits, carries the cache state the Requester should install:
+Invalid, Shared-Clean, Unique-Clean, Unique-Dirty, Shared-Dirty,
+Partial-Dirty. For the ReadClean example two slides back, Resp =
+SC.
+
+Right column, the data-path metadata.
+
+DBID, 12 bits, is the home's data-buffer identifier. It pairs with
+HomeNID: the Requester echoes DBID on CompAck to close the
+transaction at the home.
+
+DataSource, 8 bits, is a hint telling the Requester which node
+actually supplied the data — useful for NoC analytics and for
+DCT/DMT paths.
+
+FwdState is only populated on snoop-forward responses —
+SnpRespDataFwded tells the Home what state the snoopee has
+forwarded directly to the Requester.
+
+CCID, 2 bits, is the Critical Chunk Identifier — which 16-byte
+chunk of the line the Requester's core is actually waiting on. The
+home can send that chunk first to unblock the core.
+
+DataID, 2 bits, numbers the packets within one DAT message. At
+128-bit DATA_W a 64-byte line becomes four DAT packets with
+DataID = 0, 1, 2, 3. That is the same ReadClean we walked earlier.
+
+CBusy, 3 bits, is a busy hint from the Completer — the Requester
+can throttle or route around a hot node.
+
+BE, 16 bits at default, is the byte-enable mask — one bit per byte
+of the data payload. Crucial for partial writes.
+
+Data — the payload itself, DATA_W bits wide.
+
+The last two are RAS-optional. DataCheck carries one integrity bit
+per data byte — DATA_W/8 bits — typically used to hold parity or a
+compressed ECC syndrome computed at the producer. Poison carries
+one bit per 64-bit chunk — DATA_W/64 bits — marking that chunk as
+containing a known-bad value that must not be silently consumed;
+downstream hardware propagates the poison rather than trapping on it.
+Both fields are zero-width when the implementation does not enable
+data integrity or poisoning.
+
+Three points to close. One, the field order is architectural just
+like REQ. Two, DATA_W is the main parameter; at 256 bits the Data
+field doubles and BE goes from 16 to 32, DataCheck from 16 to 32,
+Poison from 2 to 4. Three, stashing fields (DataPull, Tag) add more
+bits when enabled.
+-->
+
+---
+
+<!-- ================================================================== -->
+<!-- BACKUP 2: RSP Flit Fields -->
+<!-- ================================================================== -->
+
+## RSP flit fields
+
+<div class="columns" style="font-size: 14px; line-height: 1.25;">
+<div>
+
+| Name    | W  | Description                                   |
+|---------|----|-----------------------------------------------|
+| QoS     | 4  | Priority for fabric arbitration                |
+| TgtID   | 7  | Target node (NODE_ID_W: 7..16)                |
+| SrcID   | 7  | Source node (NODE_ID_W)                       |
+| TxnID   | 12 | Transaction identifier                         |
+| Opcode  | 5  | RSP opcode (CompAck, RetryAck, PCrdGrant, …) |
+| Resp    | 3  | Cache state (I / SC / UC / UD / SD / PD)      |
+| RespErr | 2  | Error status (OK / ExOK / DERR / NDERR)       |
+
+</div>
+<div>
+
+| Name        | W  | Description                                 |
+|-------------|----|---------------------------------------------|
+| DBID        | 12 | Data Buffer ID — paired with Data path      |
+| PCrdType    | 4  | Credit type — RetryAck / PCrdGrant flow     |
+| CBusy       | 3  | Completer busy hint                          |
+| FwdState    | 3  | State forwarded — snoop-fwd *only*          |
+| TraceTag    | 1  | Trace/debug tag                              |
+| CacheLineID | 6  | Bundle line index — *optional*              |
+| TagOp       | 2  | Memory-tagging op — *optional*              |
+
+</div>
+</div>
+
+<div class="takeaway">
+RSP carries no payload — it is all control. The same response channel services completions (<code>Comp</code>, <code>CompAck</code>), retry handshakes (<code>RetryAck</code> + <code>PCrdGrant</code>), and data-less snoop responses (<code>SnpResp</code>). Opcode (5 b) is the discriminator; <code>DBID</code> and <code>PCrdType</code> switch roles depending on which flow this flit belongs to.
+</div>
+
+<!-- Speaker Notes:
+Time budget: 3 minutes.
+
+RSP is the response channel. Unlike DAT, it carries no payload —
+the whole point is control flow. Spec Table B13.7 defines the
+format. At default NodeID_Width = 7 the always-present fields add
+up to about 56 bits, compared to 240+ for DAT.
+
+Left column — routing, identity, and the response trio.
+
+QoS, TgtID, SrcID, TxnID are the same four we've seen on REQ and
+DAT. Priority, destination, source, transaction identifier.
+
+Opcode is 5 bits on RSP — slightly wider than DAT's 4 bits because
+the RSP channel serves several distinct flows. The opcode dictionary
+in spec Table B13.14 includes: Comp for generic completion, CompAck
+for a Requester's acknowledgement to the home, CompDBIDResp which
+combines completion with DBID assignment, RetryAck where a Completer
+tells the Requester to retry later, PCrdGrant which grants a
+protocol credit for that retry, ReadReceipt for early acknowledgement
+of a ReadNoSnp, SnpResp for a data-less snoop response, and
+SnpRespFwded for a forwarded snoop response.
+
+Resp, 3 bits, carries the cache state — same encoding as DAT.
+Present on snoop responses too: tells the home what state the
+snoopee ended up in after servicing the snoop.
+
+RespErr, 2 bits, reports transport errors — OK, Exclusive OK,
+Data Error, Non-Data Error.
+
+Right column — data-path identifiers and flow control.
+
+DBID, 12 bits, is the Data Buffer ID. On the home's DBIDResp or
+CompDBIDResp it tells the Requester which DBID to echo on its
+subsequent WriteData or CompAck. On a Requester's CompAck it carries
+that echoed DBID back.
+
+PCrdType, 4 bits, is the star of the retry flow. When a Completer
+sends RetryAck because it cannot accept the request right now, it
+names a PCrdType on the RSP. Later it sends a PCrdGrant on RSP
+naming the same PCrdType — the Requester then reissues the original
+request with AllowRetry = 0 and that PCrdType value, and the
+Completer is obliged to accept it.
+
+CBusy, 3 bits, is a busy hint from the Completer.
+
+FwdState, 3 bits, is used only on SnpRespFwded — tells the home
+what state the snoopee forwarded directly to the Requester via the
+DAT path.
+
+Two feature-gated fields for completeness: CacheLineID, 6 bits,
+names a line within a multi-request bundle when MultiReq is used.
+TagOp, 2 bits, applies when memory tagging is enabled.
+
+One closing point. The RSP channel is where the retry handshake and
+CompAck closure live — two flows a seasoned designer will always
+probe first when a CHI system hangs.
+-->
+
+---
+
+<!-- ================================================================== -->
+<!-- BACKUP 3: SNP Flit Fields -->
+<!-- ================================================================== -->
+
+## SNP flit fields
+
+<div class="columns" style="font-size: 14px; line-height: 1.25;">
+<div>
+
+| Name    | W  | Description                                   |
+|---------|----|-----------------------------------------------|
+| QoS     | 4  | Priority for fabric arbitration                |
+| SrcID   | 7  | Home issuing the snoop (NODE_ID_W)            |
+| TxnID   | 12 | Transaction identifier                         |
+| Opcode  | 5  | SNP opcode (SnpShared, SnpUnique, SnpDVMOp, …) |
+| Addr    | 41 | Cache-line address — REQ_ADDR_W − 3           |
+| PAS     | 3  | Physical Address Space (security)              |
+
+</div>
+<div>
+
+| Name        | W  | Description                                 |
+|-------------|----|---------------------------------------------|
+| FwdNID      | 7  | DCT: forward target (*SnpXxxFwd only*)      |
+| FwdTxnID    | 12 | DCT: forwarded TxnID (*SnpXxxFwd only*)     |
+| DoNotGoToSD | 1  | Inhibit Shared-Dirty transition              |
+| RetToSrc    | 1  | Home wants the data returned to it           |
+| VMIDExt     | 8  | DVM VMID — *SnpDVMOp only*                  |
+| TraceTag    | 1  | Trace tagging                                |
+
+</div>
+</div>
+
+<div class="takeaway">
+Two things make SNP different: <strong>no <code>TgtID</code></strong> — the target is the RN-F that receives the flit (the ICN handles routing); and <strong>address is 3 bits narrower</strong> — snoops are cache-line granular, no byte offset. The <code>FwdNID</code> / <code>FwdTxnID</code> pair is what enables Direct Cache Transfer: the snoopee sends data straight to the original Requester.
+</div>
+
+<!-- Speaker Notes:
+Time budget: 3 minutes.
+
+SNP is the snoop channel — messages the Home sends to RN-Fs and
+DVM-capable RN-Ds to check, invalidate, or extract cached lines.
+Spec Table B13.8 defines the format. Two structural differences
+from the other channels make SNP distinctive.
+
+First, there is no TgtID field. The snoop target is whichever
+RN-F receives the flit. The interconnect routes it — the flit itself
+does not name the destination. That saves bits on a channel that
+needs to broadcast or multicast.
+
+Second, Addr is 41 bits instead of 44. The spec uses
+Req_Addr_Width minus 3 because a snoop always operates on a full
+cache line — there is no byte offset to carry.
+
+Left column, the routing and identity core.
+
+QoS is the priority. SrcID names the Home sending the snoop — the
+RN-F that responds will target its response back to this SrcID.
+TxnID is the Home's transaction identifier. PAS carries the
+security domain — Secure, Non-secure, Realm, Root.
+
+Opcode is 5 bits. The snoop-opcode dictionary in spec Table B13.15
+covers three families. First, the basic coherence snoops —
+SnpShared, SnpClean, SnpOnce, SnpUnique, SnpCleanInvalid,
+SnpMakeInvalid. Second, the Forward variants — SnpSharedFwd,
+SnpCleanFwd, SnpOnceFwd, SnpUniqueFwd. These are what enable Direct
+Cache Transfer, DCT: the snoopee sends data straight to the
+original Requester instead of back through the home. Third,
+SnpDVMOp for the DVM path — TLB invalidations and virtual-memory
+synchronisation.
+
+Right column, snoop behaviour and DCT fields.
+
+FwdNID and FwdTxnID are the DCT pair — present only on the Forward
+snoop opcodes. FwdNID names the Requester's node, FwdTxnID carries
+that Requester's TxnID. The snoopee's DAT response goes directly to
+FwdNID tagged with FwdTxnID.
+
+DoNotGoToSD is a 1-bit flag that tells the snoopee not to end up in
+Shared-Dirty state — used in certain protocol corners where SD is
+undesirable.
+
+RetToSrc tells the snoopee whether the Home also wants the data
+returned on the Home's CompData path, independent of any DCT
+forward.
+
+VMIDExt is 8 bits of VMID extension, populated only for SnpDVMOp.
+
+TraceTag is the usual 1-bit debug trace flag.
+
+Everything carrying data back — CompData, SnpRespData,
+SnpRespDataFwded — rides on the DAT channel you saw two slides
+back. SNP by itself is always data-less.
+-->
+
+---
+
+<!-- ================================================================== -->
+<!-- BACKUP 4: CHI Transaction Encyclopedia -->
+<!-- ================================================================== -->
+
+<style scoped>
+section h2 { margin: 0 0 4px 0; font-size: 24px; }
+section h3 { font-size: 13px; margin: 4px 0 1px 0; padding: 0; color: #1f6feb; font-weight: 600; }
+section table { font-size: 10.5px; margin: 0 0 2px 0; border-collapse: collapse; width: 100%; }
+section th, section td { padding: 0px 5px; line-height: 1.15; border-bottom: 1px solid #e1e4e8; }
+section th { background: #eef3fb; }
+section code { font-size: 10px; padding: 0 1px; background: transparent; }
+.columns { gap: 18px; }
+</style>
+
+## CHI Transactions — a tour of what the protocol offers
+
+<div class="columns">
+<div>
+
+### Coherent (allocating) Reads — B4.2.1
+
+| Opcode | Purpose |
+|---|---|
+| `ReadShared` | Coherent load; accepts UC/UD/SC/SD |
+| `ReadNotSharedDirty` | Coherent load; SD state not permitted |
+| `ReadClean` | Load into clean-only cache (e.g. I-cache); UC/SC only |
+| `ReadUnique` | Load-to-store; returns UC or UD |
+| `ReadPreferUnique` | Prefer Unique; accepts Shared during exclusive sequences |
+| `MakeReadUnique` | Upgrade SC/SD → Unique; data return optional |
+
+### Non-coherent / IO-coherent Reads — B4.2.1
+
+| Opcode | Purpose |
+|---|---|
+| `ReadNoSnp` | Read to Non-snoopable region, or Home→Sub memory fetch |
+| `ReadOnce` | IO-coherent snapshot; not cached coherently |
+| `ReadOnceCleanInvalid` | Snapshot + hint to clean-invalidate other copies |
+| `ReadOnceMakeInvalid` | Snapshot + hint to invalidate (may drop Dirty) |
+
+### Dataless — ownership & CMO — B4.2.2
+
+| Opcode | Purpose |
+|---|---|
+| `CleanUnique` | Upgrade to Unique; Dirty sharers must writeback |
+| `MakeUnique` | Upgrade to Unique; overwrite whole line; Dirty discarded |
+| `Evict` | "Clean line dropped" — directory hint, no data |
+| `CleanShared` | CMO: flush Dirty to memory; keep Clean copies |
+| `CleanSharedPersist` / `…Sep` | CMO: flush to Point of Persistence (PoP) |
+| `CleanInvalid` | CMO: invalidate all; Dirty must be written to memory |
+| `CleanInvalidPoPA` | CMO: invalidate + push past Point of Physical Aliasing |
+| `CleanInvalidStorage` | CMO: invalidate + push to Point of Persistent Storage |
+| `MakeInvalid` | CMO: invalidate all; Dirty may be discarded |
+
+### Atomics — B4.2.5
+
+| Opcode | Purpose |
+|---|---|
+| `AtomicStore` | Op-and-store (ADD/CLR/EOR/SET/SMAX/SMIN/UMAX/UMIN); no data returned |
+| `AtomicLoad` | Same 8 ops; returns original value |
+| `AtomicSwap` | Unconditional swap; returns original value |
+| `AtomicCompare` | Compare-and-swap; returns original (half outbound size) |
+
+</div>
+<div>
+
+### Immediate (Non-CopyBack) Writes — B4.2.3.1
+
+| Opcode | Purpose |
+|---|---|
+| `WriteNoSnpFull` / `WriteNoSnpPtl` | Non-coherent write to Non-snoopable region |
+| `WriteNoSnpDef` | Deferrable non-coherent write; multiple outstanding OK |
+| `WriteNoSnpZero` / `WriteUniqueZero` | Write zero without transferring data bytes |
+| `WriteUniqueFull` / `WriteUniquePtl` | Coherent write from I; Home invalidates sharers |
+| `WriteUniqueFullStash` / `…PtlStash` | WriteUnique + Stash injection into target cache |
+
+### CopyBack Writes (writeback / eviction) — B4.2.3.2
+
+| Opcode | Purpose |
+|---|---|
+| `WriteBackFull` / `WriteBackPtl` | Dirty writeback (UD→I or SD→I) |
+| `WriteCleanFull` | Flush Dirty but keep a Clean copy in cache |
+| `WriteEvictFull` | UC eviction carrying data; stays in Snoop domain |
+| `WriteEvictOrEvict` | Eviction — Home chooses whether to accept data |
+
+### Combined Write + CMO — B4.2.4 (examples)
+
+| Opcode | Purpose |
+|---|---|
+| `WriteNoSnpFullCleanInv` | Non-coh write + CleanInvalid, atomically |
+| `WriteUniqueFullCleanSh` | Coherent write + CleanShared |
+| `WriteBackFullCleanInv` | Dirty writeback + CleanInvalid |
+| `WriteNoSnpFullCleanInvPoPA` | Write + cross-PAS invalidation |
+| `WriteBackFullCleanShPerSep` | Writeback + CleanSharedPersistSep (PCMO) |
+
+### Stash / DVM / Prefetch / System — B4.2.2, B4.2.6
+
+| Opcode | Purpose |
+|---|---|
+| `StashOnceUnique` / `…SepUnique` | Inject line into target cache for write-intent |
+| `StashOnceShared` / `…SepShared` | Inject line into target cache for read-intent |
+| `DVMOp` | TLB / I-cache / branch-predictor maintenance broadcast |
+| `PrefetchTgt` | Warm memory controller; no response expected |
+| `PCrdReturn` | Return an unused Protocol Credit to the Completer |
+
+### Child requests spawned by Home — B4.3, B2.3.9
+
+| Opcode | Where it fires |
+|---|---|
+| `ReadNoSnp` / `ReadNoSnpSep` | Home → Sub for any Read's memory fetch |
+| `WriteNoSnp*` with `DoDWT = 1` | Home → Sub for DWT on Immediate Writes |
+| `SnpShared` / `SnpUnique` / `SnpCleanInvalid` | Non-forwarding snoops (downgrade, invalidate, pull Dirty) |
+| `SnpSharedFwd` / `SnpUniqueFwd` / `SnpCleanFwd` | Forwarding snoops — power DCT (slide 15 Alt 5) |
+| `SnpMakeInvalid` | Invalidate without pulling Dirty (MakeUnique, stash non-targets) |
+| `SnpStashUnique` / `SnpStashShared` | Stash injection snoops |
+| `SnpDVMOp` | DVM broadcast (2 snoops per `DVMOp`; 1 combined response) |
+| `SnpQuery` | State-probe only; does not change Snoopee state |
+
+</div>
+</div>
+
+<!-- Speaker Notes:
+This slide is deliberately an encyclopedia, not a walkthrough. The aim is to show the
+breadth of the CHI protocol — how much territory a single "transaction opcode" field covers.
+All definitions here are condensed directly from IHI0050H B4.2 (Request types) and B4.3
+(Snoop request types); section references are in each table header so the listener can
+drop into the spec for any row.
+
+Reading the slide top-down by column.
+
+Left column.
+
+(1) Coherent Allocating Reads. These are the six opcodes an RN-F uses when it will put the
+line into a coherent cache state. They differ mainly in which final states the Requester
+can accept. ReadShared is the permissive case (any of UC/UD/SC/SD), ReadNotSharedDirty
+tightens that to UC/UD/SC (no SD), ReadClean is for caches that do not support Dirty lines
+(instruction caches — UC/SC only), ReadUnique is the load-to-store variant that demands
+UC or UD, ReadPreferUnique is the exclusive-sequence optimizer, and MakeReadUnique is the
+upgrade-without-data variant.
+
+(2) Non-coherent / IO-coherent Reads. ReadNoSnp is the Home→Sub fetch workhorse: all
+memory requests the Home issues downstream use it. ReadOnce and its two invalidating
+variants are for IO / DMA engines that want to see coherent data but do not intend to
+cache it. The CleanInvalid / MakeInvalid suffixes are hints, not guarantees — the spec is
+explicit that these do not replace proper CMOs.
+
+(3) Dataless — ownership and CMO. This box mixes two related families because both
+complete without a data response. CleanUnique, MakeUnique, and Evict change coherence
+ownership without moving data. The seven CMOs below are the software-cache-management
+toolkit: CleanShared / CleanSharedPersist / CleanSharedPersistSep push Dirty data out to
+memory or to the Point of Persistence; CleanInvalid and its PoPA and Storage variants
+invalidate plus push to progressively deeper memory hierarchy points; MakeInvalid is the
+"I do not care about the Dirty data, just invalidate" hammer.
+
+(4) Atomics. Four top-level opcodes. AtomicStore and AtomicLoad each cover eight named
+operations (ADD/CLR/EOR/SET plus signed/unsigned MAX/MIN). AtomicSwap and AtomicCompare
+are the full read-modify-write primitives; AtomicCompare is CAS and is the only one where
+inbound data size is half the outbound size (because the inbound is just the old value,
+not the compare-value side).
+
+Right column.
+
+(5) Immediate (Non-CopyBack) Writes. These are writes where the Requester ships new data
+that is not a writeback of a previously-cached dirty line. The Requester must be in state
+I when sending any of these. WriteNoSnp* are for Non-snoopable regions; WriteUnique* are
+coherent and cause Home to fire invalidating snoops. The …Stash variants add a Stash
+injection hint alongside the write.
+
+(6) CopyBack Writes. Writebacks and evictions. These move cached lines down the hierarchy.
+WriteBackFull / WriteBackPtl push Dirty data; WriteCleanFull pushes Dirty but keeps a
+Clean copy; WriteEvictFull pushes a UC line that must stay within the Snoop domain;
+WriteEvictOrEvict lets Home decide whether data is actually needed (this is the Alt 1a /
+Alt 1b branch we covered in our earlier practice slides).
+
+(7) Combined Write + CMO. The Write+CMO fusion family from B4.2.4 with ten concrete
+opcodes. The table shows representative examples: each opcode packages a write and a CMO
+against the same address into one transaction, so that ordering is trivial and DWT can
+be used for both halves. The PerSep suffix indicates a PCMO with a separate Persist
+response (CleanSharedPersistSep).
+
+(8) Stash / DVM / Prefetch / System. Everything else. StashOnce* let a producer hint
+"cache this line at that consumer" to reduce the consumer's first-touch latency. DVMOp is
+the TLBI / instruction-cache / branch-predictor invalidation broadcast primitive.
+PrefetchTgt is the speculative memory-warm operation — fire-and-forget, no response.
+PCrdReturn closes the protocol-credit loop when a retried request is abandoned.
+
+(9) Child requests — the last table. This is the answer to "what does Home actually
+issue while processing any of the above?" Two families: downstream Sub-side requests
+(ReadNoSnp, ReadNoSnpSep, WriteNoSnp* with DoDWT), and peer-side snoops. The snoop list
+itself shows the same three-way split that the Allocating Read figure showed us:
+non-forwarding snoops when Home will serve data itself, forwarding snoops for DCT, and
+the specialty snoops — stash, DVM broadcast, probe-only SnpQuery.
+
+Concluding point. Every opcode on this slide fits somewhere on one of the three axes CHI
+exposes: (a) data movement direction (in to the Requester, out from the Requester, or
+zero data), (b) coherence domain (coherent, IO-coherent, non-coherent), and (c) side
+effect (cache state change, CMO propagation, Stash injection, DVM broadcast, persistence).
+Any new CHI opcode introduced in a future revision of the spec will slot into the same
+grid.
+
+References. Definitions on the slide are drawn from IHI0050H sections:
+B4.2.1 (Read), B4.2.2 (Dataless + CMO), B4.2.3 (Write), B4.2.4 (Combined Write),
+B4.2.5 (Atomic), B4.2.6 (DVM / Prefetch), B4.3 (Snoop), B2.3.9 (Home-initiated child
+transactions).
+-->
+
+---
+
+<!-- ================================================================== -->
+<!-- BACKUP 5: From RubyRequest to the CHI wire opcode -->
+<!-- ================================================================== -->
+
+<style scoped>
+section h2 { margin: 0 0 10px 0; font-size: 26px; }
+section h3 { font-size: 14px; margin: 2px 0 4px 0; color: var(--chi-blue-deep); font-weight: 700; }
+section p { margin: 2px 0 8px 0; font-size: 14.5px; line-height: 1.35; }
+section table { font-size: 13px; border-collapse: collapse; width: 100%; margin: 0; }
+section th, section td { padding: 2px 7px; line-height: 1.3; border-bottom: 1px solid var(--chi-border); }
+section th { background: #eef3fb; color: var(--chi-blue-deep); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+section code { font-size: 12.5px; padding: 0 1px; background: transparent; }
+section h2 code, section h2 em, section h2 strong { font-size: inherit; font-weight: inherit; font-style: inherit; letter-spacing: inherit; }
+section h3 code { font-size: inherit; font-weight: inherit; }
+.columns { gap: 22px; align-items: stretch; }
+.columns > div:first-child { flex: 1.4; }
+.op-cards .card { padding: 9px 13px; margin-bottom: 6px; font-size: 12.5px; line-height: 1.35; border-radius: 10px; border: 1px solid var(--chi-border); background: linear-gradient(180deg, white 0%, var(--chi-surface) 100%); }
+.op-cards .card .pill { margin: 0 6px 0 0; font-size: 12px; padding: 2px 8px; vertical-align: 1px; }
+.op-cards .card strong { color: var(--chi-blue-deep); }
+.op-knob { margin-top: 8px; padding: 9px 13px; font-size: 12.5px; line-height: 1.35; background: var(--chi-surface-2); border-left: 4px solid var(--chi-blue); border-radius: 8px; }
+.op-take { margin-top: 8px; padding: 10px 14px; font-size: 14px; line-height: 1.35; }
+</style>
+
+## Where the opcode is picked — state × event, not the ISA
+
+The FSM looks up *(current state, internal event, clusivity knobs)* and
+picks the outbound CHI opcode. The CPU has no say — a single `Load`
+event can become `ReadShared`, `ReadOnce`, `ReadNotSharedDirty`, or
+nothing at all.
+
+<div class="columns">
+<div>
+
+### State × event → outbound CHI (B4.2.1 – B4.2.5)
+
+| Sequencer event | Local state | Outbound CHI request |
+|---|---|---|
+| `Load` *(hit)* | `UD/UC/SC/SD` | — *local callback* |
+| `Load` *(miss)* — cache-fill | `I` | `ReadShared` / `ReadNotSharedDirty` |
+| `Load` *(miss)* — bypass | `I` | `ReadOnce` |
+| `Store` *(hit)* | `UD/UC` | — *local callback* |
+| `Store` *(upgrade)* | `SC/SD` | `CleanUnique` |
+| `Store` *(miss)* — cache-fill | `I` | `ReadUnique` |
+| `Store` *(miss)* — bypass | `I` | `WriteUnique{Full,Ptl,Zero}` |
+| `AtomicLoad/Store` *(hit)* | `UC/UD` | — *near-execute* |
+| Atomic miss — `policy=0` | any | `ReadUnique` + local execute |
+| Atomic miss — `policy=1,2` | any | `AtomicReturn` / `AtomicNoReturn` |
+| Replacement — dirty line | — | `WriteBackFull` / `WriteCleanFull` |
+| Replacement — clean line | — | `WriteEvictFull` / `Evict` |
+| HN → Sub memory fetch | at HN | `ReadNoSnp` / `ReadNoSnpSep` |
+
+</div>
+<div class="op-cards">
+
+### Three data-provider fast-paths
+
+<div class="card accent-blue">
+<span class="pill req">DMT</span><strong>Sub → RN direct.</strong><br/>
+Gated at the HN: <code>tbe.use_DMT := is_HN && enable_DMT</code>.
+HN emits <code>ReadNoSnp</code> or <code>ReadNoSnpSep</code> with the RN's NID
+as forward target.
+</div>
+
+<div class="card accent-gold">
+<span class="pill snp">DCT</span><strong>Peer RN → RN direct.</strong><br/>
+Gated anywhere: <code>tbe.use_DCT := enable_DCT</code>. HN issues a forwarding
+snoop (<code>Snp*Fwd</code>); the snoopee ships data straight to the requester.
+</div>
+
+<div class="card accent-violet">
+<span class="pill dat">DWT</span><strong>RN → Sub direct.</strong><br/>
+HN tunnels the write with <code>WriteNoSnp*</code> carrying <code>DoDWT = 1</code>
+on the HN → Sub leg of coherent <code>WriteUnique*</code> flows.
+</div>
+
+<div class="op-knob">
+<strong>Clusivity knobs</strong> (<code>CHI-cache.sm</code> L152–165):
+<code>alloc_on_*</code> and <code>dealloc_on_*</code> flip
+<code>doCacheFill</code> and decide the post-transaction state. The same SLICC
+<code>machine(Cache)</code> becomes L1, L2, or HN-F by knob settings alone.
+</div>
+
+</div>
+</div>
+
+<div class="takeaway op-take">
+The CPU drives events. The <em>controller</em> picks opcodes &mdash; one
+<code>Load</code> fans out into four distinct wire behaviours, chosen by
+state and the six <code>alloc_on_*</code> flags. No ISA knob ever names a
+CHI opcode directly.
+</div>
+
+<!-- Speaker Notes:
+Time budget: 5 minutes.
+
+The previous slide got a RubyRequest onto the mandatoryQueue. This slide
+shows how that queue entry becomes a specific CHI wire opcode — and the
+surprising thing is that the CPU has no part in that decision.
+
+Here is the shape of the machinery. The CHI controller's seqInPort
+handler receives the RubyRequest, reserves a TBE, tags the message with
+a small internal label — Load, Store, StoreLine, AtomicLoad,
+AtomicStore — and drops it on an internal ready queue called reqRdy.
+One cycle later the reqRdy port fires an event into the state machine.
+The event has the internal label, the current state has the coherence
+status of the line, and a set of controller knobs — the six alloc_on
+flags, is_HN, enable_DMT, enable_DCT, policy_type, allow_SD — decides
+which of about 20 possible CHI opcodes actually goes out on the wire.
+That lookup is the entirety of what this slide captures.
+
+Walk the table top to bottom.
+
+A Load that hits a valid cached state needs no outbound request at all.
+The controller reads the data from its own data array and calls the
+Sequencer back. Nothing appears on the REQ channel. Good — the happy
+path costs zero network traffic.
+
+A Load miss branches on whether the line will be cached. The
+doCacheFill bit, computed from the alloc_on_* flags, decides. If yes,
+we go coherent with ReadShared — or ReadNotSharedDirty if the controller
+does not accept SD as a final state. If no, we bypass with ReadOnce. One
+event, three possible opcodes.
+
+A Store in UD or UC is the dream: we have write permission, we write
+locally, nobody on the wire cares. A Store on shared state, SC or SD,
+needs an upgrade — we have the data but not ownership — so the
+controller sends a dataless CleanUnique. A Store miss splits again: if
+we will cache, ReadUnique pulls the line in with ownership, and the
+store merges into the fill; if we will not cache, WriteUnique bypasses —
+Full if the store covers the line, Ptl if it does not, Zero for the
+write-zero optimization.
+
+The atomic rows are where gem5 gives you real policy control. Atomics
+on UC or UD are always executed locally — the line is yours, the AMO is
+purely arithmetic. Atomic misses are where policy_type rules. Zero is
+ALL-NEAR: every atomic is pulled to the L1 via ReadUnique and executed
+there. One and two are UNIQUE-NEAR and PRESENT-NEAR — the atomic itself
+flies to the Home or Slave as a CHI-native AtomicReturn or
+AtomicNoReturn. The spec defines both modes per B4.2.5; policy_type is
+the gem5 dial to choose between them.
+
+The replacement rows are not triggered by the Sequencer at all — they
+come from the replacement path when the cache evicts a victim. I include
+them to round out the picture. Dirty victims produce WriteBackFull or
+WriteCleanFull depending on dealloc policy; clean exclusive victims
+produce WriteEvictFull; clean shared victims produce a lightweight Evict.
+
+The last row is the Home-Node-to-Subordinate leg. When the HN has to
+actually fetch from memory, it emits ReadNoSnp, or ReadNoSnpSep if
+enable_DMT_early_dealloc is true. This is also where DMT lives on the
+wire — the HN's downstream read doubles as the RN's data fetch when
+DMT is on.
+
+Right column. Three data-provider fast-paths. This is where the
+protocol's DMT, DCT, and DWT actually come from in code.
+
+DMT is a pure HN switch. It means "let the Subordinate answer the
+Requester directly, skip me." In gem5 the gate is literally one line:
+tbe.use_DMT equals is_HN AND enable_DMT. At an RN-F L1, DMT is always
+off because an L1 is never a Home. At the HN, it is on whenever the
+system configuration asks for it. The mechanism is simple: the HN's
+ReadNoSnp carries the original requester's NodeID as the forward
+target, and the Subordinate ships the CompData directly back.
+
+DCT is peer-to-peer. It is gated anywhere by enable_DCT. When the HN
+decides during a read-with-snoops that a peer cache has the line, it
+sends a forwarding snoop — SnpSharedFwd, SnpUniqueFwd,
+SnpNotSharedDirtyFwd — and the snooped node ships data directly to the
+original requester. In gem5 the action is Send_SnpShared_Fwd and
+siblings.
+
+DWT is the Home-to-Sub fast-path for Immediate Writes. The HN passes
+the write straight through to the Subordinate in one message by
+emitting a WriteNoSnp carrying the DoDWT bit.
+
+Clusivity knobs are the last explainer card. The six alloc_on_* flags
+plus the two dealloc_on_* flags control doCacheFill and the final
+stable state. Flipping them is what turns one machine(Cache) definition
+into an L1 at the top, an L2 in the middle, and an HN-F at the system
+level cache. This is a real gem5 trick — there is literally one SLICC
+file, configured three different ways.
+
+The takeaway at the bottom is the headline. The CPU issues one event,
+and the controller picks one of about 20 possible CHI opcodes. The
+mapping is entirely state, internal type, and knob. No ISA-level field
+ever names a CHI opcode directly — by design.
+
+References. Internal type tagging — CHI-cache-actions.sm line 138.
+State × event transitions — CHI-cache-transitions.sm line 618.
+Opcode emitters — CHI-cache-actions.sm line 1553. DMT/DCT gating —
+CHI-cache-actions.sm line 273. Clusivity knobs — CHI-cache.sm line 152.
+Spec — IHI0050H B4.2.1 through B4.2.5.
+-->
+
+---
+
+<!-- ================================================================== -->
+<!-- BACKUP 6: CHI features the gem5 CPU path never drives -->
+<!-- ================================================================== -->
+
+<style scoped>
+section h2 { margin: 0 0 10px 0; font-size: 26px; }
+section h3 { font-size: 15px; margin: 2px 0 6px 0; color: var(--chi-blue-deep); font-weight: 700; }
+section p { margin: 0 0 6px 0; font-size: 13.5px; line-height: 1.4; }
+section code { font-size: 12.5px; padding: 0 1px; background: transparent; }
+section h2 code, section h2 em, section h2 strong { font-size: inherit; font-weight: inherit; font-style: inherit; letter-spacing: inherit; }
+section h3 code { font-size: inherit; font-weight: inherit; }
+.columns { gap: 22px; align-items: stretch; }
+.gap-list .gap-row { padding: 7px 12px; margin-bottom: 6px; border-left: 4px solid var(--chi-muted); background: var(--chi-surface-2); border-radius: 0 8px 8px 0; font-size: 12.5px; line-height: 1.4; }
+.gap-list .gap-row .tag { display: inline-block; margin-right: 8px; padding: 2px 9px; border-radius: 999px; background: #e7f0ff; color: var(--chi-blue-deep); font-size: 11.5px; font-weight: 700; letter-spacing: 0.02em; }
+.gap-list .gap-row.cmo .tag { background: #fff3d6; color: #8a5a00; }
+.gap-list .gap-row.read .tag { background: #e8f7ec; color: #17603a; }
+.gap-list .gap-row.write .tag { background: #f0e9ff; color: #5d33bf; }
+.gap-list .gap-row.stash .tag { background: #ffe5cc; color: #c2410c; }
+.gap-list .gap-row.excl .tag { background: #edf2f7; color: var(--chi-muted); }
+.isa-gaps .channel-card { padding: 9px 13px; margin-bottom: 7px; font-size: 12.5px; line-height: 1.4; }
+.isa-gaps .channel-card strong { color: var(--chi-blue-deep); }
+.gap-warn { margin-top: 8px; padding: 10px 14px; font-size: 14px; line-height: 1.35; }
+</style>
+
+## CHI features the gem5 CPU path never drives
+
+<div class="columns">
+<div class="gap-list">
+
+### Never emitted from a sequencer today
+
+<div class="gap-row cmo"><span class="tag">CMO</span>
+<code>CleanShared</code>, <code>CleanSharedPersist</code>(<code>Sep</code>),
+<code>CleanInvalid</code>, <code>CleanInvalidPoPA/Storage</code>, <code>MakeInvalid</code> —
+no dispatch path. <em>B4.2.2</em>
+</div>
+
+<div class="gap-row read"><span class="tag">READ</span>
+<code>ReadClean</code>, <code>ReadPreferUnique</code>, <code>ReadOnceCleanInvalid</code>,
+<code>ReadOnceMakeInvalid</code> — load path emits only
+<code>ReadShared</code> / <code>ReadNotSharedDirty</code> / <code>ReadOnce</code>. <em>B4.2.1</em>
+</div>
+
+<div class="gap-row write"><span class="tag">WRITE</span>
+<code>MakeUnique</code> (dataless upgrade), <code>WriteNoSnpDef</code>,
+<code>WriteBackPtl</code>, <code>WriteEvictOrEvict</code>, all Combined
+Write+CMO opcodes. <em>B4.2.3 · B4.2.4</em>
+</div>
+
+<div class="gap-row stash"><span class="tag">STASH / PF</span>
+<code>StashOnce*</code>, <code>SnpStash*</code>, <code>PrefetchTgt</code> —
+received only; HW prefetch becomes an ordinary <code>Load</code>. <em>B4.2.2 · B4.2.6.2</em>
+</div>
+
+<div class="gap-row excl"><span class="tag">EXCL / DVM</span>
+CHI <code>Excl</code> attribute unused; <code>DVMOp</code> / <code>SnpDVMOp</code>
+wired but dormant on RISC-V. <em>B2.9 · B4.2.6.1</em>
+</div>
+
+</div>
+<div class="isa-gaps">
+
+### Why — the ISA side
+
+<div class="channel-card req">
+<strong>RISC-V Zicbom</strong> — <code>CBO.flush/clean/inval</code> set
+<code>isFlush</code>; the Sequencer translates to <code>FLUSH</code>;
+CHI dispatch <strong>fatals</strong>. No CMO ever leaves an RN-F.
+</div>
+
+<div class="channel-card snp">
+<strong>SFENCE.VMA</strong> is a local TLB op in
+<code>arch/riscv/tlb.cc</code>. No memory packet is emitted, so the CHI
+DVM transport stays dormant on every RISC-V system today.
+</div>
+
+<div class="channel-card rsp">
+<strong>LR/SC, locked-RMW</strong> are demoted to <code>LD/ST</code>
+upstream of CHI. Exclusivity is tracked by the Sequencer's
+<code>Locked_RMW</code> block list &mdash; CHI never sees Excl.
+</div>
+
+<div class="channel-card dat">
+<strong>HTM / TME</strong> is ARM-only in gem5
+(<code>arch/arm/insts/tme64ruby.cc</code>). There is no RISC-V hardware
+transactional memory, and CHI has no HTM wiring regardless.
+</div>
+
+</div>
+</div>
+
+<div class="callout warning gap-warn">
+<strong>Want to exercise one of these features?</strong> The three
+options are: extend the Sequencer dispatch with a new
+<code>RubyRequestType</code>, attach a DMA engine that emits the target
+opcode class directly, or drive the controller from a directed traffic
+generator like <code>Ruby_random_tester</code> or <code>protocol_tester</code>.
+</div>
+
+<!-- Speaker Notes:
+Time budget: 3 minutes.
+
+This is the closing slide of the three-part bridge between CPU and CHI.
+Slide 17c told you how a CPU instruction becomes a RubyRequest. Slide 17d
+told you how a RubyRequest becomes a CHI opcode. This slide tells you the
+honest part: if you look at the CHI Encyclopedia on slide 17 and compare
+it to what slide 17d actually produces, a lot of the protocol is dark.
+Gem5's CPU path drives roughly a dozen request opcodes. The spec defines
+several dozen. Here are the gaps.
+
+The five-row left column groups the unreachable opcodes by family, so
+you can spot what kind of feature you would lose touch with.
+
+CMO family. Cache Maintenance Operations — CleanShared, CleanSharedPersist
+and its Sep variant, CleanInvalid and its PoPA and Storage variants, and
+MakeInvalid. This is the entire B4.2.2 software-cache-management toolkit,
+and gem5's sequencer path generates none of it. Zicbom CBO.* in RISC-V
+does produce flush-flagged packets, but those get squashed at
+AllocateTBE_SeqRequest with "Invalid RubyRequestType". So software that
+relies on cache management instructions — think persistent-memory code,
+or DMA-cache-coherence code — cannot be modelled faithfully on a
+CHI-coherent gem5 system today. That is a real, practical gap.
+
+Read family. ReadClean for instruction-cache-only consumers;
+ReadPreferUnique for exclusive-access sequencing; the two
+ReadOnceCleanInvalid and ReadOnceMakeInvalid variants for IO-coherent
+DMA. None of them is emitted. The load path has only three outputs:
+ReadShared, ReadNotSharedDirty, ReadOnce. Functionally complete for a
+well-behaved RN-F, but narrower than what the spec allows.
+
+Write family. MakeUnique is the big one — a dataless upgrade that lets a
+requester overwrite a whole line without pulling data off the wire. Gem5
+does the functional equivalent via ReadUnique followed by local merge,
+so the upgrade works, but more bytes cross the fabric than the spec
+requires. WriteNoSnpDef, WriteBackPtl, WriteEvictOrEvict are similarly
+absent. Combined Write+CMO — the whole B4.2.4 fusion family, ten
+opcodes — is not generated either.
+
+Stash and Prefetch. StashOnceShared, StashOnceUnique, and the matching
+SnpStash* snoops appear in CHI-msg.sm and the FSM knows how to receive
+them, but nothing in gem5 builds one from a CPU instruction.
+PrefetchTgt is the really interesting one: CHI has a native
+fire-and-forget memory-warm request, and gem5 does not use it. The
+hardware prefetcher instead emits a normal load-shaped RubyRequest that
+becomes an ordinary ReadShared or ReadOnce. Functionally equivalent,
+spec-ly different.
+
+Exclusive and DVM. The CHI Excl attribute on reads and dataless requests
+would let the protocol participate in an exclusive-access monitor per
+B2.9. Gem5 does not use it — all exclusivity is tracked upstream. DVM
+is wired up in full; there is a CHI-dvm-misc-node machine and the
+CHI-cache FSM has SnpDvmOp transitions. But only ARM64 instructions
+call xc->initiateMemMgmtCmd — RISC-V SFENCE.VMA is handled locally by
+the TLB. So on a RISC-V gem5 system today, the DVM transport is
+dormant from boot.
+
+Right column summarises the four ISA-side gaps as cards, in one
+sentence each. Zicbom fatals. SFENCE.VMA is local. LR/SC is demoted.
+HTM is ARM-only.
+
+The bottom warning is the practical rule. If you need a feature that is
+not reachable through the CPU path, you have three levers. The cleanest
+is to extend the Sequencer — add a new RubyRequestType value, a decode
+branch in makeRequest, and a dispatch case in AllocateTBE_SeqRequest.
+The second is a DMA-shaped SimObject that hangs off the interconnect
+and emits the opcode directly. The third is a directed traffic
+generator — Ruby_random_tester and protocol_tester live in the
+tests/configs/example directory and are designed exactly for driving
+corners the CPU path cannot reach.
+
+Why does any of this matter? Two reasons. First, benchmark relevance —
+if your workload relies on CMOs or DMA stash for performance, a
+gem5 CHI run today will not model the benefit. Second, verification
+scope — if you are co-designing a new CHI-connected device and you
+want to exercise Stash or PrefetchTgt at system level, you need to know
+up front that the CPU side will not help you.
+
+References. RubyRequestType — RubySlicc_Exports.sm line 171. CHI accept
+list — CHI-cache-actions.sm line 163. Prefetch proxy —
+RubyPrefetcherProxy.cc line 106. DVM origin — arch/arm/isa/insts/
+misc64.isa. Zicbom decode — arch/riscv/isa/decoder.isa line 1348.
+Spec — IHI0050H B4.2.1 through B4.2.6.2.
+-->
+
+---
+
+<!-- ================================================================== -->
+<!-- BACKUP 7: RISC-V memory/cache ISA features unmodeled in gem5 -->
+<!-- ================================================================== -->
+
+<style scoped>
+section h2 { margin: 0 0 6px 0; font-size: 24px; }
+section h3 { font-size: 13.5px; margin: 2px 0 4px 0; color: var(--chi-blue-deep); font-weight: 700; }
+section p { margin: 0 0 6px 0; font-size: 13px; line-height: 1.35; }
+section table { font-size: 11px; border-collapse: collapse; width: 100%; margin: 0; }
+section th, section td { padding: 2px 7px; line-height: 1.25; border-bottom: 1px solid var(--chi-border); vertical-align: top; }
+section th { background: #eef3fb; color: var(--chi-blue-deep); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em; }
+section code { font-size: 10.5px; padding: 0 1px; background: transparent; }
+section h2 code, section h2 em, section h2 strong { font-size: inherit; font-weight: inherit; font-style: inherit; letter-spacing: inherit; }
+section h3 code { font-size: inherit; font-weight: inherit; }
+.columns { gap: 20px; align-items: stretch; }
+.columns > div:first-child { flex: 1.75; }
+.rvca-cards .card { padding: 8px 12px; margin-bottom: 6px; font-size: 12px; line-height: 1.35; border-radius: 10px; border: 1px solid var(--chi-border); background: linear-gradient(180deg, white 0%, var(--chi-surface) 100%); }
+.rvca-cards .card strong { color: var(--chi-blue-deep); }
+.rvca-take { margin-top: 6px; padding: 9px 13px; font-size: 13px; line-height: 1.35; }
+.rvca-intro { font-size: 13px; line-height: 1.35; color: var(--chi-ink); margin-bottom: 8px; }
+.fatal { color: var(--chi-red); font-weight: 700; }
+.ok { color: var(--chi-green); font-weight: 700; }
+</style>
+
+## RISC-V memory/cache ISA extensions unmodeled in gem5 Ruby CHI
+
+<p class="rvca-intro">A decade of RISC-V memory/cache extensions ratified 2022&ndash;2025 &mdash;
+RVA23 requires most of them. Today, gem5&rsquo;s Ruby CHI lands only a fraction onto
+real CHI transactions; the rest either fatal, NOP, or go through as plain LD/ST.</p>
+
+<div class="columns">
+<div>
+
+### Ratified extensions &rarr; CHI-faithful lowering &rarr; gem5 today
+
+| Extension | RISC-V ops | gem5 Ruby CHI reality |
+|---|---|---|
+| `Zicbom` (2022) | `CBO.clean` · `CBO.flush` · `CBO.inval` | Decoded in `arch/riscv/isa/decoder.isa`; <span class="fatal">fatals</span> at the CHI boundary — `CleanInvalidReq` → `FLUSH` → `error` in `AllocateTBE_SeqRequest`; `InvalidateReq`/`CleanSharedReq` → `panic` in `Sequencer::makeRequest`. No CMO opcode ever crosses the wire. |
+| `Zicboz` (2022) | `CBO.zero` | Decoded with `CACHE_BLOCK_ZERO` flag; reaches the sequencer as plain `ST`. No `WriteUniqueZero` (B4.2.3.1) dataless optimisation — 64 B of zeros would cross on DAT if the ST ever ran. |
+| `Zicbop` (2022) | `PREFETCH.R/W/I` | Decoded (`decoder.isa` L1636); emitted as `SoftPFReq`/`SoftPFExReq`; reaches the CHI controller as ordinary `Load` → `ReadShared`/`ReadOnce`. **No distinct `PrefetchTgt`** (B4.2.6.2), so no fire-and-forget memory warm-up. |
+| `Zihintntl` (2022) | `NTL.{P1,PALL,S1,ALL}` | **Not decoded** &mdash; executes as `ADD x0,x0,xN` HINT NOP. No `MemAttr.Allocate=0`, no promotion to `ReadOnce*`. Locality hints vanish before the sequencer. |
+| `Zalrsc` (2024) | `LR.{W,D}` · `SC.{W,D}` | Decoded; Sequencer demotes to plain `LD`/`ST`. **No CHI `Excl=1`** attribute, no HN-F PoC monitor &mdash; exclusivity lives in the Sequencer&rsquo;s `Locked_RMW` block list. |
+| `Zacas` (2024) | `AMOCAS.{W,D,Q}` | **Not decoded** in RISC-V. No distinct CHI `AtomicCompare` opcode in gem5 either (only `AtomicReturn`/`AtomicNoReturn`) &mdash; the asymmetric CAS data shape is unreachable on both sides. |
+| `Zabha` (2024) | `AMO*.{B,H}` · `AMOCAS.{B,H}` | **Not decoded**. Byte/half-lane ALU at HN not modelled. Narrow far-atomics cannot be studied. |
+| `Zalasr` (2025) | `L{B,H,W,D}.AQ` · `S{B,H,W,D}.RL` | **Not decoded**. Moot because CHI&rsquo;s four-valued `Order` field (`00/01/10/11`) is not modelled either &mdash; release/acquire semantics would collapse to Sequencer drain. |
+| `Ztso` · RVWMO | `FENCE`, `FENCE.TSO`, `.aq`/`.rl` | `FENCE` decoded; enforced as a CPU-local drain + Sequencer wait-on-outstanding. **CHI `Order` field never set** &mdash; every REQ goes out with `Order=00`; no `RequestOrder`/`EndpointOrder` serialisation. |
+| `Svinval` (2022) | `SINVAL.VMA`, `SFENCE.W.INVAL`, `SFENCE.INVAL.IR`, `HINVAL.*` | Partially decoded (`sinval_vvma`: `warn("not implemented")`); no opportunistic `DVMOp(TLBI)` emission. Cross-hart shootdown stays IPI-driven. |
+| `Zawrs` (2022) | `WRS.NTO` · `WRS.STO` | **Not decoded** in RISC-V. No reservation-driven stall &mdash; HN-F PoC wake path is moot since LR/SC has no PoC monitor in gem5. |
+
+</div>
+<div class="rvca-cards">
+
+### Three ways gem5 fidelity leaks
+
+<div class="card accent-red">
+<strong>Software cache control is unreachable.</strong>
+Zicbom + Zicboz fatal or degrade silently. DMA coherence, persistent
+memory (`CleanSharedPersistSep`), and userspace `memset` optimisations
+cannot be studied in gem5 CHI today &mdash; a real blocker for DPDK,
+SPDK, and PMEM workloads.
+</div>
+
+<div class="card accent-gold">
+<strong>Atomics are half a story.</strong>
+Plain AMOs work near (<code>ReadUnique</code>&thinsp;+&thinsp;local) or far
+(<code>AtomicReturn/NoReturn</code>). <em>But:</em> LR/SC uses no
+<code>Excl=1</code>, <code>AMOCAS</code>/byte-AMOs aren&rsquo;t decoded,
+and far-atomic CAS has no distinct <code>AtomicCompare</code> opcode.
+</div>
+
+<div class="card accent-slate">
+<strong>Ordering is flat, DVM is dormant.</strong>
+CHI&rsquo;s <code>Order</code> field and DVM broadcast both sit idle on
+RISC-V. Zalasr, Ztso, and Svinval lose their wire-level fingerprint &mdash;
+reproducing an RVA23-class memory-model study requires custom SLICC.
+</div>
+
+</div>
+</div>
+
+<div class="takeaway rvca-take">
+A faithful RVA23-on-CHI model needs: a CMO dispatch path (extend
+<code>AllocateTBE_SeqRequest</code>), a <code>PrefetchTgt</code> emitter,
+<code>Excl=1</code> plumbing for LR/SC, an <code>Order</code>-field-aware
+RN-F, and an opportunistic DVM path for Svinval.
+</div>
+
+<!-- Speaker Notes:
+Time budget: 3 to 4 minutes.
+
+Slides 17c, d, and e came at this bridge from the CPU side outward. CPU
+instruction becomes RubyRequest, RubyRequest becomes CHI opcode, and
+here are the CHI opcodes that never fire. This slide tips the question
+over: which RISC-V memory and cache ISA extensions does gem5 Ruby CHI
+actually model faithfully, and which ones are left on the floor?
+
+The short answer is that most of the 2022 to 2025 wave of ratified
+extensions is unreachable. RVA23 pulls these in as mandatory or
+recommended, so if you are modelling a modern RISC-V workload on a CHI
+NoC, you will bump into at least one of these rows.
+
+Walk the table top to bottom.
+
+Row one, Zicbom. CBO dot clean, CBO dot flush, CBO dot inval. These
+are decoded in the RISC-V decoder — the `decoder.isa` file has all
+three — but the resulting packet carries CLEAN or INVALIDATE flags,
+which the Sequencer translates either into RubyRequestType FLUSH, which
+hits an error in AllocateTBE_SeqRequest, or leaves in a form that
+falls through to a straight panic in makeRequest. Three different
+paths, all fatal. No CMO ever leaves the RN-F.
+
+Row two, Zicboz. CBO dot zero. This one is decoded with a
+CACHE_BLOCK_ZERO flag and reaches the Sequencer as a plain ST —
+because it has neither CLEAN nor INVALIDATE bits, only the ZERO bit.
+The gem5 decoder also writes only one byte in the semantic, not a full
+64 byte block, but even if that were fixed, nothing in the Ruby CHI
+path promotes it to a WriteUniqueZero dataless optimisation. So CBO dot
+zero either misbehaves or wastes a data-channel round trip on a
+64 byte zero payload.
+
+Row three, Zicbop. The three prefetches. Here is the most common
+surprise: Zicbop IS decoded in gem5 and DOES generate memory traffic.
+PREFETCH.R and .I map to SoftPFReq, PREFETCH.W maps to SoftPFExReq.
+Both reach the Sequencer as Load and emit ReadShared or ReadOnce on
+the wire. So you do get warm lines — just ordinary coherent reads.
+What is missing is the distinct CHI PrefetchTgt opcode, the
+fire-and-forget memory-warm request with no response. If you are
+measuring the cost of a PrefetchTgt round-trip absence on chiplet
+traffic, you cannot do it in gem5 today.
+
+Row four, Zihintntl. The non-temporal locality hints. NOT decoded in
+the RISC-V frontend at all. They execute as ADD x0 comma x0 comma xN,
+which is a legal NOP. So the locality hint never even reaches the
+cache-allocation machinery. On a faithful CHI implementation you would
+set MemAttr dot Allocate to zero or promote the read to a deallocating
+variant; in gem5 the hint evaporates.
+
+Row five, Zalrsc. LR and SC. This is the one we covered on Slide 17c.
+Decoded, but the Sequencer demotes them to plain LD and ST. No CHI Excl
+equals 1 attribute is ever set. Exclusivity is tracked at the Sequencer
+level using a Locked_RMW block list. That means you cannot model a
+RISC-V LR slash SC contention pattern against a hardware PoC monitor at
+an HN-F, because gem5 does not have such a monitor. Which is a pretty
+fundamental gap for RVA23 lock-contention studies.
+
+Rows six and seven, Zacas and Zabha. AMOCAS at W, D, Q and byte-half
+granular AMOs. NOT decoded. Even if you extended the decoder, gem5's
+CHIRequestType enum does not have a distinct AtomicCompare — AMOCAS
+would have to fold into AtomicReturn, and the CHI asymmetric CAS data
+shape, where the outbound data is twice the inbound return, would be
+lost. For byte and halfword AMOs the HN's byte-lane ALU is also not
+modelled.
+
+Rows eight and nine, Zalasr and Ztso RVWMO. The release-acquire and
+TSO extensions. Zalasr is not decoded. RVWMO's fence is decoded and
+works as a local CPU drain, but the CHI Order field, four-valued
+`00/01/10/11`, is never set on any REQ — gem5 always emits Order=00 and
+relies on Sequencer serialisation for ordering. So RequestOrder and
+EndpointOrder semantics, particularly important for device memory
+banks, are not there.
+
+Row ten, Svinval. The batched TLB invalidation bracket. gem5 has a
+partial sinval_vvma decode that literally warns "not implemented".
+Even if it were implemented, there is no opportunistic DVMOp TLBI
+emission. Cross-hart TLB shootdown stays IPI-driven. On a real CHI
+system this is where RISC-V deliberately does not use DVM because the
+ISA does not require it; but as a performance optimisation a real
+implementation might emit DVM anyway — not in gem5.
+
+Row eleven, Zawrs. WRS NTO and STO. The reservation-driven stall-wait
+pattern. Not decoded in gem5 RISC-V. Even if added, its wake path
+depends on the PoC monitor that gem5 does not model — so Zawrs is
+deeply coupled to the Zalrsc gap.
+
+Right column, three summary cards. Software cache control is
+unreachable — Zicbom plus Zicboz blockers. Atomics are half a story —
+plain AMOs work, LR slash SC and CAS do not. Ordering is flat, DVM is
+dormant — CHI's richest fidelity machinery simply is not used.
+
+The takeaway closes the argument. To build a faithful RVA23-on-CHI
+model in gem5 you need five things: a CMO dispatch path, a PrefetchTgt
+emitter, Excl equals 1 plumbing, an Order-field-aware RN-F, and an
+opportunistic DVM path for Svinval. None of these are trivial. All
+five are tractable with SLICC extensions. This is the honest roadmap
+for anyone who wants to publish performance numbers on a modern
+RISC-V CHI system using gem5.
+
+References. The compass artefact at ruby-book slash slides slash
+compass_artifact_wf-d63250d0 dot text_markdown dot md is the primary
+source for the CHI-faithful lowering column. gem5 reality is from
+`arch/riscv/isa/decoder.isa` around lines 1348, 1414, 1636, 6308;
+`src/mem/ruby/system/Sequencer.cc` line 966; and
+`src/mem/ruby/protocol/chi/CHI-cache-actions.sm` line 163.
+-->
 
 ---
 
