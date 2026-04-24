@@ -2808,6 +2808,264 @@ transactions).
 ---
 
 <!-- ================================================================== -->
+<!-- BACKUP 4b: Ordering in CHI -->
+<!-- ================================================================== -->
+
+<style scoped>
+section h2 { margin: 0 0 8px 0; font-size: 25px; }
+section h3 { font-size: 13.5px; margin: 2px 0 4px 0; color: var(--chi-blue-deep); font-weight: 700; letter-spacing: 0.01em; }
+section p { margin: 0 0 6px 0; font-size: 13px; line-height: 1.38; }
+section ul { margin: 2px 0 6px 16px; padding: 0; font-size: 12.5px; line-height: 1.38; }
+section ul li { margin: 0 0 2px 0; }
+section table { font-size: 11.5px; border-collapse: collapse; width: 100%; margin: 0 0 4px 0; }
+section th, section td { padding: 2px 7px; line-height: 1.25; border-bottom: 1px solid var(--chi-border); vertical-align: top; }
+section th { background: #eef3fb; color: var(--chi-blue-deep); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em; }
+section code { font-size: 11.5px; padding: 0 1px; background: transparent; }
+section h2 code, section h2 em, section h2 strong { font-size: inherit; font-weight: inherit; font-style: inherit; letter-spacing: inherit; }
+section h3 code { font-size: inherit; font-weight: inherit; }
+.columns { gap: 20px; align-items: stretch; }
+.ord-modes .card { padding: 6px 11px; margin-bottom: 5px; font-size: 12px; line-height: 1.35; border-radius: 8px; border: 1px solid var(--chi-border); background: linear-gradient(180deg, white 0%, var(--chi-surface) 100%); }
+.ord-modes .card strong { color: var(--chi-blue-deep); }
+.ord-modes .card .tag { display: inline-block; margin-right: 7px; padding: 1px 7px; border-radius: 999px; background: #e7f0ff; color: var(--chi-blue-deep); font-size: 10.5px; font-weight: 700; letter-spacing: 0.02em; }
+.ord-modes .card.owo .tag { background: #f0e9ff; color: #5d33bf; }
+.ord-modes .card.ep  .tag { background: #ffe5cc; color: #c2410c; }
+.ord-modes .card.acc .tag { background: #e8f7ec; color: #17603a; }
+.ord-modes .card.none .tag { background: #edf2f7; color: var(--chi-muted); }
+.ord-mech .channel-card { padding: 6px 11px; margin-bottom: 5px; font-size: 12px; line-height: 1.35; }
+.ord-mech .channel-card strong { color: var(--chi-blue-deep); }
+.ord-callout { margin-top: 6px; padding: 8px 13px; font-size: 12.5px; line-height: 1.35; }
+</style>
+
+## Ordering in CHI — why the protocol cares about when, not just what
+
+<div class="columns">
+<div>
+
+### The problem (§B2.7)
+
+CHI is **non-blocking**: a Requester may keep many transactions in flight
+on REQ, RSP, DAT, and SNP at once, and the fabric is free to reorder them.
+But software and devices still need **same-agent order** (PCIe writes,
+MMIO, lock releases), **multi-copy atomicity** across coherent caches,
+and **observation order** so one agent's CompAck cannot race a peer's
+Snoop to the same line. Ordering is the rule set that layers those
+guarantees on top of an otherwise reorderable fabric.
+
+### The four `Order[1:0]` modes — Table B2.9 / B13.22
+
+| Order | Meaning | Where legal |
+|---|---|---|
+| `0b00` | No ordering required | All channels |
+| `0b01` | **Request Accepted** — positive ack only | HN→SN only |
+| `0b10` | **Request Order** / **OWO** (if `ExpCompAck=1`) | RN↔HN, HN-I↔SN-I |
+| `0b11` | **Endpoint Order** — same endpoint range | RN↔HN, HN-I↔SN-I |
+
+<div class="ord-modes">
+
+<div class="card none"><span class="tag">NONE</span>
+<strong>No order.</strong> Default for coherent Reads & CopyBack — the cache
+FSM and CompAck already serialise same-line access (§B2.7.3).</div>
+
+<div class="card"><span class="tag">REQ ORD</span>
+<strong>Request Order.</strong> Same source, same address: next request
+waits for <code>ReadReceipt</code> (reads) or <code>DBIDResp*</code>
+(writes) before leaving (§B2.7.5.1).</div>
+
+<div class="card ep"><span class="tag">EP ORD</span>
+<strong>Endpoint Order.</strong> Stronger: order preserved across the whole
+endpoint address range — used by device/MMIO regions.</div>
+
+<div class="card owo"><span class="tag">OWO</span>
+<strong>Ordered Write Observation.</strong> `WriteUnique`/`WriteNoSnp`
+streams with `ExpCompAck=1`: Home must not expose write-B until
+write-A's `CompAck` — PCIe-style producer–consumer ordering (§B2.7.5.3).</div>
+
+</div>
+
+</div>
+<div class="ord-mech">
+
+### The four mechanisms that enforce it
+
+<div class="channel-card rsp">
+<strong><code>Comp</code> / <code>CompData</code> — §B2.7.2.</strong>
+"Observable to any later same-location transaction." The baseline
+ordering contract for every coherent Read, Write, Dataless, and Atomic.
+</div>
+
+<div class="channel-card rsp">
+<strong><code>CompAck</code> — §B2.7.3.</strong> Closes the
+completion→snoop race: Home must not send a later snoop to the same
+line until it receives `CompAck`. Required on RN-F coherent Reads;
+mandatory for OWO Writes.
+</div>
+
+<div class="channel-card req">
+<strong><code>ReadReceipt</code> — §B2.7.5.1.</strong> Gate for the next
+**ordered** `ReadNoSnp`/`ReadOnce*`: tells the Requester the prior read
+has reached the PoS and won't be retried.
+</div>
+
+<div class="channel-card dat">
+<strong><code>DBIDResp</code> / <code>DBIDRespOrd</code> — §B2.7.5.1.</strong>
+Gate for the next ordered Write: buffer is allocated *and* the write is
+serialised at the PoS. `DBIDRespOrd` additionally orders all later
+same-address requests — even non-Writes — behind this one.
+</div>
+
+<div class="channel-card snp">
+<strong><code>RespSepData</code> — §B2.7.4.</strong> For split
+completion, RespSepData acts as the ordering point; DataSepResp alone
+does not permit <code>CompAck</code>.
+</div>
+
+### In gem5 Ruby CHI
+
+No explicit `Order[1:0]` field in <code>CHI-msg.sm</code> — ordering is
+encoded in the FSM: per-address TBE hazards, `WaitCompAck` states,
+`ReadReceipt` on `ReadNoSnpSep` (<code>CHI-mem.sm:722</code>), and
+blocking until `CompAck` before deallocating. Streaming OWO and
+`DBIDRespOrd` are not modelled.
+
+</div>
+</div>
+
+<div class="callout warning ord-callout">
+<strong>Takeaway.</strong> The <em>address</em> tells Home <em>what</em>
+line to touch; the <em>Order field + completion handshake</em> tells Home
+<em>when</em> the Requester (and every other observer) is allowed to see
+the effect. Coherence ≠ ordering — CHI spells both out, separately.
+</div>
+
+<!-- Speaker Notes:
+Time budget: 3 minutes for the backup walk-through.
+
+Why this slide exists. Every preceding slide has shown CHI as a set of
+channels and transactions — a vocabulary for describing *what* a line
+movement is. This slide is the *when*. Coherence alone (MESI/MOESI
+invariants) only tells you that at any instant at most one copy is
+Dirty and writers are unique. It does not tell you that write-A is
+observable before write-B, or that an MMIO read finished before the
+next CSR poke leaves the core. Ordering is the layer that makes
+software memory models, device drivers, and persistent-memory flushes
+work on top of a non-blocking, multi-channel fabric.
+
+The problem, concretely. CHI lets a Requester fire REQ-A, REQ-B, REQ-C
+back to back without waiting for responses — that is the whole point of
+separate REQ/RSP/DAT/SNP channels with independent credit. The fabric
+can route them through different HN-F slices on different Garnet paths.
+Snoop responses and completions can return in any order. Without
+additional rules:
+  (a) two writes to the same peripheral from the same core could be
+      applied in the wrong order at the endpoint;
+  (b) a snoop caused by RN-B's later write could arrive at RN-A before
+      RN-A's own Comp for its earlier read — RN-A would see its line
+      invalidated before it thought its own transaction was done;
+  (c) producer–consumer PCIe traffic from an RN-I could expose the flag
+      write before the payload write.
+CHI §B2.7 fixes all three, but with different mechanisms — and this is
+the slide that names them.
+
+Left column walk-through.
+
+(1) Table B2.9 — the Order field encoding. Two bits in every REQ flit.
+The REQ flit slide earlier in this deck showed you this field; here we
+finally use it. Four encodings. `0b00` "no ordering required" is the
+default — it's what coherent Reads and CopyBacks use. `0b01` "Request
+Accepted" is a Subordinate-side ack used only on the HN→SN leg; it
+guarantees the request is taken and will not be retried. `0b10` does
+double duty: on RN↔HN it means Request Order *or* OWO depending on
+whether ExpCompAck is set, and on HN-I↔SN-I it's Request Order.
+`0b11` is Endpoint Order — the strongest, used for device MMIO regions.
+
+(2) The four mode cards. Request Order is the classic "same source,
+same address, next request waits for a receipt". Endpoint Order widens
+that to "same endpoint range" — the spec leaves the range
+implementation-defined, typically the size of the peripheral. OWO —
+Ordered Write Observation — is a narrower but subtler contract: it
+promises that a sequence of WriteUnique or WriteNoSnp from one agent
+become visible to any other agent in issue order. That is exactly what
+PCIe non-relaxed ordering expects, and it is why a root complex RN-I
+sets Order=0b10 with ExpCompAck=1 on its coherent write stream.
+
+Right column walk-through — the five signals that actually carry
+ordering on the wire.
+
+(3) Comp / CompData, B2.7.2. The foundational rule: once a Requester
+receives Comp for a transaction, that transaction is observable to any
+later transaction from any agent to the same location. This is the
+multi-copy atomicity contract. Every coherent Read, Write, Dataless and
+Atomic uses it. This is not "extra" ordering — it is the minimum every
+CHI transaction gets.
+
+(4) CompAck, B2.7.3. This is the one most often missed. CompAck is how
+CHI avoids the race between *your* completion and *someone else's*
+snoop to the same cache line. Rule: Home does not send a same-line
+snoop until it has your CompAck. For an RN-F coherent Read — ReadShared,
+ReadUnique, etc. — CompAck is mandatory. For OWO Writes, CompAck is
+also mandatory and it is additionally the visibility trigger: Home
+must not expose the write until CompAck arrives. For CopyBacks with a
+Home-chosen Comp path, CompAck is required regardless of ExpCompAck.
+
+(5) ReadReceipt, B2.7.5.1. The lightweight "next-ordered-read can go"
+token. Used on ReadNoSnp / ReadOnce* when the Order field is non-zero.
+Its job is to tell the Requester the prior read has reached the PoS
+and will not see a RetryAck. In split-completion flows, a RespSepData
+can subsume the ReadReceipt.
+
+(6) DBIDResp / DBIDRespOrd. The write-side analogue of ReadReceipt. On
+an ordered WriteNoSnp, the Requester cannot send the next ordered
+write until it receives DBIDResp. DBIDRespOrd is stronger: sending
+DBIDRespOrd commits the Completer to ordering *all* later same-address
+same-source requests — not just Writes — behind this one. DBIDRespOrd
+is how Home handles a write-then-read-to-same-line sequence without
+needing an additional fence.
+
+(7) RespSepData, B2.7.4. In the split-completion flow, the ordering
+point is the RespSepData response from Home — not the data. The
+Requester must receive RespSepData before sending CompAck.
+
+Bottom-right — gem5 Ruby CHI. Two honest things to say. First, Ruby's
+CHI message definition in src/mem/ruby/protocol/chi/CHI-msg.sm does not
+carry an Order[1:0] field at all. The ordering guarantees are encoded
+in the state machine: per-address transaction buffer entries (TBE)
+block concurrent same-line activity, the WaitCompAck and SendCompAck
+actions enforce the completion-then-snoop rule, ReadNoSnpSep triggers
+sendReadReceipt in CHI-mem.sm, and BUSY_BLKD / BUSY_INTR states
+serialise the critical window. Second, what is *not* modelled: the
+Streaming Ordered Writes optimisation — specifically DBIDRespOrd's
+ability to order a future read against a pending write — and the
+Endpoint-Order-vs-Request-Order distinction. For a coherent RN-F
+workload you will not notice; for PCIe-style RN-I traffic or a device
+model, you would.
+
+Bottom callout. Coherence and ordering are two distinct contracts in
+CHI, spelled out in two separate specs-within-the-spec — B4 for
+coherence, B2.7 for ordering. Address says *what*; Order + completion
+says *when*. Every CHI transaction participates in both.
+
+References. IHI0050H spec:
+  B2.7 Ordering (umbrella)
+  B2.7.1 Multi-copy atomicity
+  B2.7.2 Completion response and ordering (Table B2.7)
+  B2.7.3 Completion acknowledgment (Table B2.8)
+  B2.7.4 Ordering semantics of RespSepData / DataSepResp
+  B2.7.5 Transaction ordering — Request / Endpoint / OWO / Accepted
+  B2.7.5.3 Streaming Ordered Writes
+  B13.10.26 Ordering requirements, Order (Table B13.22)
+gem5 code pointers:
+  src/mem/ruby/protocol/chi/CHI-msg.sm — no explicit Order field
+  src/mem/ruby/protocol/chi/CHI-mem.sm:722 — sendReadReceipt on
+      ReadNoSnpSep
+  src/mem/ruby/protocol/chi/CHI-cache-transitions.sm:1166-1210 —
+      SendCompAck / WaitCompAck / ExpectCompAck
+  src/mem/ruby/protocol/chi/CHI-cache-transitions.sm:1484 —
+      ReadReceipt reception, BUSY_INTR → BUSY_BLKD
+-->
+
+---
+
+<!-- ================================================================== -->
 <!-- BACKUP 5: From RubyRequest to the CHI wire opcode -->
 <!-- ================================================================== -->
 
