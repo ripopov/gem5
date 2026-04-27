@@ -813,7 +813,7 @@ on the wire; what follows is what the controller carries internally.
 
 ## Directory Controller — what the HN-F remembers
 
-<div class="columns">
+<div class="columns compact-directory">
 <div>
 
 <img src="../resources/chi_directory.svg" alt="CHI directory: HN-F slice holds a Directory (PerfectCacheMemory, addr-to-DirEntry, unbounded) alongside an LLC (CacheMemory). One DirEntry expanded to show its five fields: state, sharers (NetDest bit-vector), owner, ownerExists, ownerIsExcl." class="tall">
@@ -830,16 +830,16 @@ on the wire; what follows is what the controller carries internally.
 
 ### In gem5
 
-- Lives inside `CHI-cache.sm`; **no separate `*-dir.sm`** — the `is_HN` flag turns it on
-- Entry fields above are declared at `CHI-cache.sm:590`
-- `PerfectCacheMemory` = **unbounded** map — no capacity, no evictions, no back-invalidations modeled
-- `sharers` is a **full bit-vector** of RN IDs — exact, not coarse-vector or pointer+overflow
-- One HN-F per slice; line address routed by the NUMA interleave bits set in `CHI_config.py`
+- `CHI-cache.sm` with `is_HN = true`; **no separate `*-dir.sm`**
+- DirEntry fields above are declared at `CHI-cache.sm:590`
+- `PerfectCacheMemory` is **unbounded**: no capacity, evictions, or back-invalidations
+- `sharers` is an exact **full bit-vector** of RN IDs, not pointer+overflow
+- One HN-F per slice; NUMA interleave bits in `CHI_config.py` route the line
 
 </div>
 </div>
 
-<div class="takeaway">
+<div class="takeaway dir-takeaway">
 Directory = what the home <em>knows</em>. LLC = what the home <em>holds</em>. Same address, different storage — a line can be tracked without being cached, and cached without being shared.
 </div>
 
