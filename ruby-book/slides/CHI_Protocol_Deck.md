@@ -1772,6 +1772,172 @@ simplified — most paths use the single-class convention.
 <!--
 ========================================================================================
 >>> SLIDE 17
+>>> Memory Subsystem Modeling Levels in gem5
+========================================================================================
+-->
+
+<style scoped>
+section h2 { margin: 0 0 6px 0; font-size: 26px; }
+.levels-img { text-align: center; margin: 0; }
+.levels-img img { max-height: 580px; max-width: 100%; }
+</style>
+
+## Memory subsystem modeling levels in gem5
+
+<div class="levels-img">
+
+<img src="../resources/gem5_modeling_levels.svg" alt="Three side-by-side panels showing the same logical hardware (two cores, two L1 caches, an interconnect band, and a home/memory tier) modeled at three fidelity levels. Left panel Classic: cores, two red L1 cache boxes labelled 'MOESI = valid·writable·dirty bits, transitions in Cache::access / handleSnoop' (state lives in the cache, not the crossbar), a slate CoherentXBar box labelled 'broadcast snoop · forwardTiming() + optional SnoopFilter (presence-tracking bitmasks), no protocol FSM · no virtual channels · no flits', and an L2 + Memory Controller box. Middle panel Ruby + SimpleNetwork: cores, two L1 SLICC ctrl boxes (.sm FSM, states / events / actions), a SimpleNetwork box that opens up to show four horizontal vnet lanes labelled REQ, SNP, RSP, DAT — each lane has a row of queue-slot rectangles followed by a small dark Throttle gate, with the footer 'queue per (output port × vnet) · physical_vnets_channels splits bw per vnet', and a HN-F SLICC ctrl + DRAM box. Right panel Ruby + Garnet: cores, L1 SLICC ctrl boxes (CHI-cache .sm with 4 VNets out), a NetworkInterface row (flitisize · VC alloc), two routers R0 and R1 each containing pipeline pills RC | VA | SA | XB and an OutBuf per-VC flit queue, connected by a solid violet flit/data arrow forward and a dashed green credit-return arrow back, with a 'flit / data' / 'credit return' legend below and a HN-F SLICC ctrl · SN-F · DRAM box at the bottom. A horizontal INTERCONNECT band marks the focal row in each panel. All connections from cores down through L1 and into the interconnect, and from the interconnect into the home / memory row, drop as straight vertical lines." />
+
+</div>
+
+<!-- Speaker Notes:
+Time budget: 5–6 minutes.
+
+Before we walk into the gem5 implementation of CHI, step back and look
+at the modeling menu gem5 actually offers and where CHI fits.
+
+The diagram has three columns, each modeling the same logical hardware
+— two cores, their L1 caches, an interconnect, and a home / memory
+tier. The rows line up across all three columns deliberately: cores at
+the top, caches just below, then the INTERCONNECT band, then the home
+and memory tier. What changes from left to right is precision. Read it
+as a fidelity ladder.
+
+Start on the **left, Classic** stack — `src/mem/cache/` and
+`coherent_xbar.cc`. Notice the colour cue: it is the *L1 cache* boxes
+that are red, not the crossbar. That is deliberate, and it is where
+new readers usually get the picture wrong. **MOESI state lives in the
+cache**, encoded as three flag bits per block — `valid`, `writable`,
+`dirty` — on `CacheBlk`. The five MOESI states fall out of those
+flags: M = `1·1·1`, O = `0·1·1`, E = `1·0·1`, S = `0·0·1`,
+I = `0·0·0`. The state machine that *transitions* those flags is
+distributed across `Cache::access`, `Cache::handleSnoop`, and `MSHR`
+— there is no DSL declaring "in state O on event SnpInvalidate go to
+state I", just C++ control flow that mutates the bits. The "alphabet"
+of the protocol is the `MemCmd` enum on packets — `ReadReq`,
+`ReadExReq`, `UpgradeReq`, `InvalidateReq`, the writeback variants —
+and the cache's choice of `MemCmd` plus its block flags is the entire
+state machine. *That* is what makes Classic rigid: the protocol is
+implicit in the C++ of multiple methods plus an enum, with no
+extension point.
+
+The grey box below — `CoherentXBar` — is the broadcast fabric. It
+takes a request from a CPU-side port, calls `forwardTiming()` to
+deliver snoops to peer caches, aggregates snoop responses, and routes
+the final reply. It does *not* own coherence state. Optionally it
+hosts a `SnoopFilter` SimObject — a hash-map keyed by line address
+holding two 256-bit bitmasks per entry: `requested` (in-flight) and
+`holder` (currently caching). With a filter wired in, the crossbar
+snoops only the ports that might hold the line; without it, it
+broadcasts to everyone. The filter tracks **presence**, never state —
+it cannot tell M from S — and it is exact except for one wrinkle:
+silent clean evictions are not always notified, so the filter is
+mildly pessimistic. The caption summarises this: the crossbar is a
+fabric plus an optional presence-tracking filter; no FSM, no virtual
+channels, no flits. Pick this stack when the CPU pipeline is the
+research subject — branch-predictor studies, ISA experiments —
+because Classic is the fastest to simulate and the protocol on the
+wire is not the question being asked.
+
+Move to the **middle, Ruby + SimpleNetwork**. Cores and L1 boxes are
+the same logical hardware, but their interior has changed: the L1 is
+now a SLICC controller — a state machine written in a domain-specific
+language with explicit states, events, and actions. You pick which
+protocol — MI, MESI, MOESI, CHI — at SCons build time, and SLICC
+generates the C++. That flexibility costs nothing visually; the L1
+box just gets a new label. Now look at the interconnect. The
+SimpleNetwork box has been opened up to show its actual queue
+structure: four horizontal lanes, one per virtual network — REQ, SNP,
+RSP, DAT. Inside each lane is a row of `MessageBuffer` slots, and at
+the right end a small Throttle gate. That is the gem5 reality: every
+`Switch` allocates **one `MessageBuffer` per output-port × per-vnet**
+(`Switch.cc:115` calls them "intermediary queues"), and a per-link
+Throttle gates dequeue rate by the link's bandwidth budget. There are
+no flits, no VC allocators — messages move atomically per vnet.
+Contention shows up in three places: (1) **PerfectSwitch arbitration**
+between input ports for the same output-port-and-vnet, with priority
+groups, (2) **Throttle bandwidth saturation** per link, and (3)
+**buffer-full backpressure** if you set `buffer_size > 0`. Crucially,
+by default all four vnets share one bandwidth pool. Setting
+`physical_vnets_channels` and `physical_vnets_bandwidth` partitions
+the link so REQ / SNP / RSP / DAT each get their own bandwidth budget
+and saturate independently — useful when you want to know whether
+your data network or your request network is the bottleneck. This is
+the right stack when the *protocol* is the research subject and the
+NoC microarchitecture is not.
+
+Now the **right, Ruby + Garnet**. Same cores. Same L1 SLICC
+controllers — except now the controller exposes that it has four VNets
+out, one per CHI channel. Then look down: there is a `NI`
+(NetworkInterface) row that did not exist in the middle column, and
+below it the interconnect is no longer one box — it is two routers,
+`R0` and `R1`, each opened up to show the per-cycle pipeline:
+`RC` route compute, `VA` virtual-channel allocator, `SA` switch
+allocator, `XB` crossbar — and below those an `OutBuf` per-VC flit
+queue. Flits are the unit of transfer here, and they walk through that
+pipeline cycle by cycle. Between the routers you see two arrows: the
+solid violet one carries flit data forward, and the dashed green one
+carries credits back. That is credit-based flow control, the
+fundamental backpressure mechanism of any real NoC. This is the
+slowest stack to simulate, because every byte of every cache line is
+chopped into flits and walked through routers. It is also the *only*
+stack where you can ask "what is my NoC latency under contention" or
+"does this routing algorithm deadlock" and get an architecturally
+faithful answer. **CHI in gem5 lives here**, and the rest of this deck
+runs in this column.
+
+A **fourth stack** exists but has no column on this slide because it
+has no caches and no protocol: Garnet standalone. The
+`Garnet_standalone-cache.sm` and `-dir.sm` files are intentionally
+trivial — their only job is to inject synthetic traffic patterns into
+Garnet routers for NoC microbenchmarking. Routing algorithms, mesh
+topologies, deadlock studies — that work happens without a real
+protocol on top.
+
+Three things worth saying out loud, because they trip people up.
+
+First, Classic and Ruby are *mutually exclusive at the cache level*.
+They do not share abstractions: Classic moves whole `Packet` objects
+across `Port` pairs; Ruby moves typed `Message` objects through
+`MessageBuffer`s. There is no incremental upgrade path. You commit
+when you wire the system in Python.
+
+Second, Garnet is not an alternative to Ruby. Ruby is the protocol
+framework; Garnet is one of two network back-ends Ruby can use. The
+other is SimpleNetwork. You cannot run "just Garnet" against classic
+caches — there is no NetworkInterface, no MessageBuffer on the
+classic side. The pragmatic mixed pattern — classic L1/L2 above a
+RubyPort, with Ruby+Garnet below — is supported and is what you reach
+for when you want NoC realism without rebuilding your core
+configuration.
+
+Third, why CHI is in Ruby and not in Classic. The CHI cache controller
+is 228 transition blocks across roughly ten thousand lines of SLICC,
+with four virtual channels and dozens of states. Recall the Classic
+side encodes its protocol as a `MemCmd` enum plus block-flag
+mutations spread across `Cache::access` and `handleSnoop` — there is
+no controller object to subclass, no DSL to extend, no
+multi-virtual-channel buffer system. To bring CHI into the Classic
+tree you would invent all of that from scratch: a controller class,
+typed messages, four virtual networks, atomic transitions with
+rollback on backpressure, dispatch tables. SLICC already provides all
+of that — it generates the dispatch, the wakeup, the message-buffer
+scheduling, and it enforces atomicity. So CHI's home is the rightmost
+column not by accident — it is the only column with the machinery
+the protocol needs.
+
+The next slide opens the implementation half of the deck: how a CPU
+instruction crosses from the Classic side into Ruby, becomes a
+RubyRequest on `mandatoryQueue`, and gets picked up by a SLICC
+controller. From there we dissect the Ruby controller, then the Garnet
+router. Everything that follows assumes the third column.
+-->
+
+---
+
+<!--
+========================================================================================
+>>> SLIDE 18
 >>> From CPU ISA to a RubyRequest
 ========================================================================================
 -->
@@ -1952,7 +2118,7 @@ Zicbom decode is in src/arch/riscv/isa/decoder.isa around line 1348.
 
 <!--
 ========================================================================================
->>> SLIDE 18
+>>> SLIDE 19
 >>> Ruby CHI Cache Controller Architecture
 ========================================================================================
 -->
@@ -2127,7 +2293,7 @@ Deeper treatment of buffering and backpressure is in
 
 <!--
 ========================================================================================
->>> SLIDE 19
+>>> SLIDE 20
 >>> Garnet Router Architecture
 ========================================================================================
 -->
@@ -2148,7 +2314,7 @@ lives under `src/mem/ruby/network/garnet/`, with the top-level SimObject being
 `GarnetNetwork` (`GarnetNetwork.hh/cc`).
 
 Start at the far left. The **RN-F controller** is the same box we dissected on
-slide 18, collapsed here to just its eight per-VNet MessageBuffers:
+slide 19, collapsed here to just its eight per-VNet MessageBuffers:
 `reqOut/snpOut/rspOut/datOut` going out, `reqIn/snpIn/rspIn/datIn` coming
 back. These are the only things the controller writes to and reads from the
 network — everything else is internal. Each MessageBuffer is bound to one
@@ -2314,7 +2480,7 @@ round-robin are in `ruby-book/extra/RequestToFlit.md`.
 
 <!--
 ========================================================================================
->>> SLIDE 20
+>>> SLIDE 21
 >>> Backup divider — content below is the archived v1 deck
 ========================================================================================
 -->
@@ -2340,7 +2506,7 @@ h1 {
 
 <!--
 ========================================================================================
->>> SLIDE 21 (BACKUP)
+>>> SLIDE 22 (BACKUP)
 >>> DAT Flit Fields
 ========================================================================================
 -->
@@ -2468,7 +2634,7 @@ bits when enabled.
 
 <!--
 ========================================================================================
->>> SLIDE 22 (BACKUP)
+>>> SLIDE 23 (BACKUP)
 >>> RSP Flit Fields
 ========================================================================================
 -->
@@ -2571,7 +2737,7 @@ probe first when a CHI system hangs.
 
 <!--
 ========================================================================================
->>> SLIDE 23 (BACKUP)
+>>> SLIDE 24 (BACKUP)
 >>> SNP Flit Fields
 ========================================================================================
 -->
@@ -2671,7 +2837,7 @@ back. SNP by itself is always data-less.
 
 <!--
 ========================================================================================
->>> SLIDE 24 (BACKUP)
+>>> SLIDE 25 (BACKUP)
 >>> CHI Transaction Encyclopedia
 ========================================================================================
 -->
@@ -2881,7 +3047,7 @@ transactions).
 
 <!--
 ========================================================================================
->>> SLIDE 25 (BACKUP)
+>>> SLIDE 26 (BACKUP)
 >>> Ordering in CHI
 ========================================================================================
 -->
@@ -3142,7 +3308,7 @@ gem5 code pointers:
 
 <!--
 ========================================================================================
->>> SLIDE 26 (BACKUP)
+>>> SLIDE 27 (BACKUP)
 >>> From RubyRequest to the CHI wire opcode
 ========================================================================================
 -->
@@ -3341,7 +3507,7 @@ Spec — IHI0050H B4.2.1 through B4.2.5.
 
 <!--
 ========================================================================================
->>> SLIDE 27 (BACKUP)
+>>> SLIDE 28 (BACKUP)
 >>> CHI features the gem5 CPU path never drives
 ========================================================================================
 -->
@@ -3530,7 +3696,7 @@ Spec — IHI0050H B4.2.1 through B4.2.6.2.
 
 <!--
 ========================================================================================
->>> SLIDE 28 (BACKUP)
+>>> SLIDE 29 (BACKUP)
 >>> RISC-V memory/cache ISA features unmodeled in gem5
 ========================================================================================
 -->
@@ -3730,7 +3896,7 @@ source for the CHI-faithful lowering column. gem5 reality is from
 
 <!--
 ========================================================================================
->>> SLIDE 29
+>>> SLIDE 30
 >>> CHI in the AMBA Family
 ========================================================================================
 -->
@@ -3799,7 +3965,7 @@ CHI is like a messaging system where you send targeted messages on dedicated lan
 
 <!--
 ========================================================================================
->>> SLIDE 30
+>>> SLIDE 31
 >>> Message Types Overview
 ========================================================================================
 -->
@@ -3872,7 +4038,7 @@ The others exist for I/O, atomics, DVM, and edge cases.
 
 <!--
 ========================================================================================
->>> SLIDE 31
+>>> SLIDE 32
 >>> Request Opcodes Deep Dive
 ========================================================================================
 -->
@@ -3956,7 +4122,7 @@ The mapping logic is in CHI-cache-funcs.sm, in functions like processNextState()
 
 <!--
 ========================================================================================
->>> SLIDE 32
+>>> SLIDE 33
 >>> ReadShared Transaction
 ========================================================================================
 -->
@@ -4032,7 +4198,7 @@ transition rules.
 
 <!--
 ========================================================================================
->>> SLIDE 33
+>>> SLIDE 34
 >>> ReadShared with Dirty Forwarding (DCT)
 ========================================================================================
 -->
@@ -4097,7 +4263,7 @@ It defaults to True in the standard configurations.
 
 <!--
 ========================================================================================
->>> SLIDE 34
+>>> SLIDE 35
 >>> Write Transaction
 ========================================================================================
 -->
@@ -4182,7 +4348,7 @@ based on whether it already has ownership. The logic is in CHI-cache-funcs.sm.
 
 <!--
 ========================================================================================
->>> SLIDE 35
+>>> SLIDE 36
 >>> Snoop Operations
 ========================================================================================
 -->
@@ -4273,7 +4439,7 @@ The snoop queues are separate from the request queues to avoid deadlock.
 
 <!--
 ========================================================================================
->>> SLIDE 36
+>>> SLIDE 37
 >>> DMT - Direct Memory Transfer
 ========================================================================================
 -->
@@ -4342,7 +4508,7 @@ depending on the placement of the RN-F, HN-F, and SN-F.
 
 <!--
 ========================================================================================
->>> SLIDE 37
+>>> SLIDE 38
 >>> Clusivity
 ========================================================================================
 -->
