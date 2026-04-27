@@ -190,6 +190,37 @@ blockquote p,
   max-height: 540px;
 }
 
+.columns.compact-directory {
+  gap: 24px;
+}
+
+.columns.compact-directory img.tall {
+  max-height: 430px;
+}
+
+.columns.compact-directory h3 {
+  font-size: 20px;
+  margin-bottom: 5px;
+}
+
+.columns.compact-directory ul {
+  margin: 6px 0 11px 22px;
+  padding: 0;
+}
+
+.columns.compact-directory li {
+  font-size: 18px;
+  line-height: 1.22;
+  margin-bottom: 4px;
+}
+
+.dir-takeaway {
+  margin-top: 10px;
+  padding: 10px 14px;
+  font-size: 17px;
+  line-height: 1.25;
+}
+
 .flow-step {
   padding: 10px 14px;
   border-radius: 12px;
