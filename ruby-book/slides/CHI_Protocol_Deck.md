@@ -5,9 +5,12 @@ paginate: true
 size: 16:9
 ---
 
-<!-- ================================================================== -->
-<!-- SLIDE 1: Title (new deck) -->
-<!-- ================================================================== -->
+<!--
+========================================================================================
+>>> SLIDE 1
+>>> Title (new deck)
+========================================================================================
+-->
 
 <!-- _class: hero -->
 <!-- _paginate: false -->
@@ -21,9 +24,12 @@ size: 16:9
 
 ---
 
-<!-- ================================================================== -->
-<!-- SLIDE 2: Why CHI? The Scalability Wall -->
-<!-- ================================================================== -->
+<!--
+========================================================================================
+>>> SLIDE 2
+>>> Why CHI? The Scalability Wall
+========================================================================================
+-->
 
 ## Why CHI? The Scalability Wall
 
@@ -108,9 +114,12 @@ is no longer affordable.
 
 ---
 
-<!-- ================================================================== -->
-<!-- SLIDE 3: Scoping CHI — what it owns, what it leaves open -->
-<!-- ================================================================== -->
+<!--
+========================================================================================
+>>> SLIDE 3
+>>> Scoping CHI — what it owns, what it leaves open
+========================================================================================
+-->
 
 ## Scoping CHI: what it owns, what it leaves open
 
@@ -215,9 +224,12 @@ system that ships with gem5 is where we will see both in action.
 
 ---
 
-<!-- ================================================================== -->
-<!-- SLIDE 4: CHI Node Types — a typical system -->
-<!-- ================================================================== -->
+<!--
+========================================================================================
+>>> SLIDE 4
+>>> CHI Node Types — a typical system
+========================================================================================
+-->
 
 ## CHI Node Types — a typical system
 
@@ -280,9 +292,12 @@ RN-D gold, HN-F violet, MN slate, SN-F green.
 
 ---
 
-<!-- ================================================================== -->
-<!-- SLIDE 5: Port, Link, and Channel -->
-<!-- ================================================================== -->
+<!--
+========================================================================================
+>>> SLIDE 5
+>>> Port, Link, and Channel
+========================================================================================
+-->
 
 ## Link layer: Port, Link, and Channel
 
@@ -344,9 +359,12 @@ spec guarantees at the port interface, not what happens inside.
 
 ---
 
-<!-- ================================================================== -->
-<!-- SLIDE 6: Network layer — addressing and routing -->
-<!-- ================================================================== -->
+<!--
+========================================================================================
+>>> SLIDE 6
+>>> Network layer — addressing and routing
+========================================================================================
+-->
 
 ## Network layer: addressing and routing
 
@@ -456,9 +474,12 @@ silicon.
 
 ---
 
-<!-- ================================================================== -->
-<!-- SLIDE 7: Transaction, Message, Packet, and Flit -->
-<!-- ================================================================== -->
+<!--
+========================================================================================
+>>> SLIDE 7
+>>> Transaction, Message, Packet, and Flit
+========================================================================================
+-->
 
 ## Transaction, Message, Packet, and Flit
 
@@ -554,9 +575,12 @@ multiple flits.
 
 ---
 
-<!-- ================================================================== -->
-<!-- SLIDE 8: REQ Flit Fields -->
-<!-- ================================================================== -->
+<!--
+========================================================================================
+>>> SLIDE 8
+>>> REQ Flit Fields
+========================================================================================
+-->
 
 ## REQ flit fields
 
@@ -672,9 +696,12 @@ same table but that only materialise when the feature is on.
 
 ---
 
-<!-- ================================================================== -->
-<!-- SLIDE 9: CHI Cache States — Standard FSM per §B4.1 -->
-<!-- ================================================================== -->
+<!--
+========================================================================================
+>>> SLIDE 9
+>>> CHI Cache States — Standard FSM per §B4.1
+========================================================================================
+-->
 
 ## CHI Cache States — Standard FSM (spec §B4.1)
 
@@ -768,9 +795,12 @@ on the wire; what follows is what the controller carries internally.
 
 ---
 
-<!-- ================================================================== -->
-<!-- SLIDE 10: Directory Controller — the HN-F's coherence book -->
-<!-- ================================================================== -->
+<!--
+========================================================================================
+>>> SLIDE 10
+>>> Directory Controller — the HN-F's coherence book
+========================================================================================
+-->
 
 ## Directory Controller — what the HN-F remembers
 
@@ -873,9 +903,12 @@ LLC without any RN currently sharing it.
 
 ---
 
-<!-- ================================================================== -->
-<!-- SLIDE 11: gem5 HN-F FSM — full state vocabulary -->
-<!-- ================================================================== -->
+<!--
+========================================================================================
+>>> SLIDE 11
+>>> gem5 HN-F FSM — full state vocabulary
+========================================================================================
+-->
 
 ## gem5 HN-F FSM (CHI-cache.sm) — full state vocabulary
 
@@ -1004,9 +1037,12 @@ for the actual `transition(...)` rules.
 
 ---
 
-<!-- ================================================================== -->
-<!-- SLIDE 12: Data-provider fast paths — DCT, DMT, DWT -->
-<!-- ================================================================== -->
+<!--
+========================================================================================
+>>> SLIDE 12
+>>> Data-provider fast paths — DCT, DMT, DWT
+========================================================================================
+-->
 
 ## Data-provider fast paths — who may send data directly
 
@@ -1091,9 +1127,12 @@ where the peer shortcuts to the requester.
 
 ---
 
-<!-- ================================================================== -->
-<!-- SLIDE 13: Allocating Read — B2.3.1.1 / Figure B2.1 -->
-<!-- ================================================================== -->
+<!--
+========================================================================================
+>>> SLIDE 13
+>>> Allocating Read — B2.3.1.1 / Figure B2.1
+========================================================================================
+-->
 
 ## Practice Transaction 1 — Allocating Read (B2.3.1.1, Fig B2.1)
 
@@ -1225,9 +1264,12 @@ slide because the typical RN-F load miss uses Order = 00.
 
 ---
 
-<!-- ================================================================== -->
-<!-- SLIDE 14: Allocating Read with DCT — B2.3.1.1 Alt 5 / Figure B2.1 -->
-<!-- ================================================================== -->
+<!--
+========================================================================================
+>>> SLIDE 14
+>>> Allocating Read with DCT — B2.3.1.1 Alt 5 / Figure B2.1
+========================================================================================
+-->
 
 ## Practice Transaction 2 — Allocating Read with DCT (B2.3.1.1 Alt 5, Fig B2.1)
 
@@ -1394,9 +1436,12 @@ issuing the downstream `ReadNoSnp`, matching the diagram shown here.
 
 ---
 
-<!-- ================================================================== -->
-<!-- SLIDE 15: Write with DWT — B2.3.2.1 Alt 1 / B2.3.2.4 Alt 1 -->
-<!-- ================================================================== -->
+<!--
+========================================================================================
+>>> SLIDE 15
+>>> Write with DWT — B2.3.2.1 Alt 1 / B2.3.2.4 Alt 1
+========================================================================================
+-->
 
 ## Practice Transaction 3 — Write with DWT: Plain vs Combined + CMO (B2.3.2.1, B2.3.2.4)
 
@@ -1578,9 +1623,12 @@ for the SLICC machinery.
 
 ---
 
-<!-- ================================================================== -->
-<!-- SLIDE 16: Request Retry — the P-Credit handshake -->
-<!-- ================================================================== -->
+<!--
+========================================================================================
+>>> SLIDE 16
+>>> Request Retry — the P-Credit handshake
+========================================================================================
+-->
 
 ## Request Retry — the P-Credit handshake
 
@@ -1721,9 +1769,12 @@ simplified — most paths use the single-class convention.
 
 ---
 
-<!-- ================================================================== -->
-<!-- SLIDE 17: From CPU ISA to a RubyRequest -->
-<!-- ================================================================== -->
+<!--
+========================================================================================
+>>> SLIDE 17
+>>> From CPU ISA to a RubyRequest
+========================================================================================
+-->
 
 <style scoped>
 section h2 { margin: 0 0 10px 0; font-size: 26px; }
@@ -1899,9 +1950,12 @@ Zicbom decode is in src/arch/riscv/isa/decoder.isa around line 1348.
 
 ---
 
-<!-- ================================================================== -->
-<!-- SLIDE 18: Ruby CHI Cache Controller Architecture -->
-<!-- ================================================================== -->
+<!--
+========================================================================================
+>>> SLIDE 18
+>>> Ruby CHI Cache Controller Architecture
+========================================================================================
+-->
 
 ## Anatomy of a Ruby CHI cache controller
 
@@ -2071,9 +2125,12 @@ Deeper treatment of buffering and backpressure is in
 
 ---
 
-<!-- ================================================================== -->
-<!-- SLIDE 19: Garnet Router Architecture -->
-<!-- ================================================================== -->
+<!--
+========================================================================================
+>>> SLIDE 19
+>>> Garnet Router Architecture
+========================================================================================
+-->
 
 ## Anatomy of a Garnet router
 
@@ -2255,9 +2312,12 @@ round-robin are in `ruby-book/extra/RequestToFlit.md`.
 
 ---
 
-<!-- ================================================================== -->
-<!-- SLIDE 1b: Backup divider — content below is the archived v1 deck -->
-<!-- ================================================================== -->
+<!--
+========================================================================================
+>>> SLIDE 20
+>>> Backup divider — content below is the archived v1 deck
+========================================================================================
+-->
 
 <!-- _paginate: false -->
 
@@ -2278,9 +2338,12 @@ h1 {
 
 ---
 
-<!-- ================================================================== -->
-<!-- BACKUP 1: DAT Flit Fields -->
-<!-- ================================================================== -->
+<!--
+========================================================================================
+>>> SLIDE 21 (BACKUP)
+>>> DAT Flit Fields
+========================================================================================
+-->
 
 ## DAT flit fields
 
@@ -2403,9 +2466,12 @@ bits when enabled.
 
 ---
 
-<!-- ================================================================== -->
-<!-- BACKUP 2: RSP Flit Fields -->
-<!-- ================================================================== -->
+<!--
+========================================================================================
+>>> SLIDE 22 (BACKUP)
+>>> RSP Flit Fields
+========================================================================================
+-->
 
 ## RSP flit fields
 
@@ -2503,9 +2569,12 @@ probe first when a CHI system hangs.
 
 ---
 
-<!-- ================================================================== -->
-<!-- BACKUP 3: SNP Flit Fields -->
-<!-- ================================================================== -->
+<!--
+========================================================================================
+>>> SLIDE 23 (BACKUP)
+>>> SNP Flit Fields
+========================================================================================
+-->
 
 ## SNP flit fields
 
@@ -2600,9 +2669,12 @@ back. SNP by itself is always data-less.
 
 ---
 
-<!-- ================================================================== -->
-<!-- BACKUP 4: CHI Transaction Encyclopedia -->
-<!-- ================================================================== -->
+<!--
+========================================================================================
+>>> SLIDE 24 (BACKUP)
+>>> CHI Transaction Encyclopedia
+========================================================================================
+-->
 
 <style scoped>
 section h2 { margin: 0 0 4px 0; font-size: 24px; }
@@ -2807,9 +2879,12 @@ transactions).
 
 ---
 
-<!-- ================================================================== -->
-<!-- BACKUP 4b: Ordering in CHI -->
-<!-- ================================================================== -->
+<!--
+========================================================================================
+>>> SLIDE 25 (BACKUP)
+>>> Ordering in CHI
+========================================================================================
+-->
 
 <style scoped>
 section h2 { margin: 0 0 8px 0; font-size: 25px; }
@@ -3065,9 +3140,12 @@ gem5 code pointers:
 
 ---
 
-<!-- ================================================================== -->
-<!-- BACKUP 5: From RubyRequest to the CHI wire opcode -->
-<!-- ================================================================== -->
+<!--
+========================================================================================
+>>> SLIDE 26 (BACKUP)
+>>> From RubyRequest to the CHI wire opcode
+========================================================================================
+-->
 
 <style scoped>
 section h2 { margin: 0 0 10px 0; font-size: 26px; }
@@ -3261,9 +3339,12 @@ Spec — IHI0050H B4.2.1 through B4.2.5.
 
 ---
 
-<!-- ================================================================== -->
-<!-- BACKUP 6: CHI features the gem5 CPU path never drives -->
-<!-- ================================================================== -->
+<!--
+========================================================================================
+>>> SLIDE 27 (BACKUP)
+>>> CHI features the gem5 CPU path never drives
+========================================================================================
+-->
 
 <style scoped>
 section h2 { margin: 0 0 10px 0; font-size: 26px; }
@@ -3447,9 +3528,12 @@ Spec — IHI0050H B4.2.1 through B4.2.6.2.
 
 ---
 
-<!-- ================================================================== -->
-<!-- BACKUP 7: RISC-V memory/cache ISA features unmodeled in gem5 -->
-<!-- ================================================================== -->
+<!--
+========================================================================================
+>>> SLIDE 28 (BACKUP)
+>>> RISC-V memory/cache ISA features unmodeled in gem5
+========================================================================================
+-->
 
 <style scoped>
 section h2 { margin: 0 0 6px 0; font-size: 24px; }
@@ -3644,9 +3728,12 @@ source for the CHI-faithful lowering column. gem5 reality is from
 
 ---
 
-<!-- ================================================================== -->
-<!-- SLIDE 3: CHI in the AMBA Family -->
-<!-- ================================================================== -->
+<!--
+========================================================================================
+>>> SLIDE 29
+>>> CHI in the AMBA Family
+========================================================================================
+-->
 
 ## CHI in the AMBA Family
 
@@ -3710,9 +3797,12 @@ CHI is like a messaging system where you send targeted messages on dedicated lan
 
 ---
 
-<!-- ================================================================== -->
-<!-- SLIDE 6: Message Types Overview -->
-<!-- ================================================================== -->
+<!--
+========================================================================================
+>>> SLIDE 30
+>>> Message Types Overview
+========================================================================================
+-->
 
 ## Message Types at a Glance
 
@@ -3780,9 +3870,12 @@ The others exist for I/O, atomics, DVM, and edge cases.
 
 ---
 
-<!-- ================================================================== -->
-<!-- SLIDE 7: Request Opcodes Deep Dive -->
-<!-- ================================================================== -->
+<!--
+========================================================================================
+>>> SLIDE 31
+>>> Request Opcodes Deep Dive
+========================================================================================
+-->
 
 ## Request Opcodes — Choosing the Right One
 
@@ -3861,113 +3954,12 @@ The mapping logic is in CHI-cache-funcs.sm, in functions like processNextState()
 
 ---
 
-<!-- ================================================================== -->
-<!-- SLIDE 8: Coherence States -->
-<!-- ================================================================== -->
-
-## Coherence States — MOESI in CHI
-
-<div class="columns">
-<div>
-
-<div class="state-grid smaller">
-<div class="state-card compact accent-red">
-<h3><code>I</code></h3>
-<p>Invalid. No local copy, no access rights.</p>
-</div>
-<div class="state-card compact accent-blue">
-<h3><code>SC</code></h3>
-<p>Shared clean. Readable, but not writable.</p>
-</div>
-<div class="state-card compact accent-teal">
-<h3><code>UC</code></h3>
-<p>Unique clean. Exclusive ownership before the line turns dirty.</p>
-</div>
-<div class="state-card compact accent-violet">
-<h3><code>UD</code></h3>
-<p>Unique dirty. Sole owner and authoritative data source.</p>
-</div>
-<div class="state-card compact accent-gold">
-<h3><code>SD</code></h3>
-<p>Shared dirty. Shared readers exist, but this node owes the eventual writeback.</p>
-</div>
-</div>
-
-<div class="comparison-grid smaller">
-<div class="card compact accent-blue">
-<h3><code>BUSY_INTR</code></h3>
-<p>Transaction in flight, but snoops may still proceed safely.</p>
-</div>
-<div class="card compact accent-red">
-<h3><code>BUSY_BLKD</code></h3>
-<p>Transaction in flight and snoops must wait to preserve protocol invariants.</p>
-</div>
-</div>
-
-</div>
-<div>
-
-```mermaid
-stateDiagram-v2
-    [*] --> I
-    I --> SC : ReadShared
-    I --> UC : ReadUnique\n(no other holder)
-    I --> UD : ReadUnique\n(dirty data returned)
-    SC --> UC : CleanUnique
-    SC --> I : Evict
-    UC --> I : Evict
-    UC --> UD : Store (dirty)
-    UD --> I : WriteBack
-    UD --> SC : ReadShared\n(from other)
-    SD --> I : WriteBack
-    UD --> UD_T : Timeout
-```
-
-</div>
-</div>
-
-<!-- Speaker Notes:
-CHI uses a MOESI-compatible state machine, but the naming is slightly different from
-what you might be used to. Let me walk through each state.
-
-I — Invalid. The line is not in this cache. Any access triggers a new request.
-
-SC — Shared Clean. The line is present and readable, but multiple caches might have it.
-You cannot write in SC — you need to upgrade to UC or UD first.
-
-UC — Unique Clean. Exclusive ownership, but the data is clean (matches memory or
-the home node has the authoritative copy). You can read and write. After writing,
-you transition to UD.
-
-UD — Unique Dirty. Exclusive ownership with dirty data. You are the sole owner
-and the data in memory is stale. When you evict, you must write back.
-
-SD — Shared Dirty. This is the interesting one. It means you are sharing the line
-with others, but you are the one responsible for writing it back. If someone else
-needs exclusive access, the HN-F will snoop you because you have the authoritative
-data. This is gem5's MOESI — the O state is not explicitly named, but SD serves
-the same role.
-
-UD_T — Unique Dirty with Timeout. The line has been dirty for too long without
-being written back. This triggers automatic writeback.
-
-Transient states: BUSY_INTR means a transaction is in flight but snoops from the
-HN-F can still be processed (the cache entry is in an intermediate state but
-snoop processing won't corrupt it). BUSY_BLKD means snoops are blocked because
-processing them would violate protocol invariants.
-
-The state diagram shows the main transitions. The key path is:
-I → ReadShared → SC → CleanUnique → UC → Store → UD → WriteBack → I
-
-In gem5's CHI-cache.sm, these states are defined as SLICC State declarations.
-Each state has an associated AccessPermission used by Ruby for correctness checks.
+<!--
+========================================================================================
+>>> SLIDE 32
+>>> ReadShared Transaction
+========================================================================================
 -->
-
----
-
-<!-- ================================================================== -->
-<!-- SLIDE 10: ReadShared Transaction -->
-<!-- ================================================================== -->
 
 ## Transaction Flow: ReadShared (Hit in Memory)
 
@@ -4038,9 +4030,12 @@ transition rules.
 
 ---
 
-<!-- ================================================================== -->
-<!-- SLIDE 11: ReadShared with Dirty Forwarding (DCT) -->
-<!-- ================================================================== -->
+<!--
+========================================================================================
+>>> SLIDE 33
+>>> ReadShared with Dirty Forwarding (DCT)
+========================================================================================
+-->
 
 ## Transaction Flow: ReadShared with DCT
 
@@ -4100,9 +4095,12 @@ It defaults to True in the standard configurations.
 
 ---
 
-<!-- ================================================================== -->
-<!-- SLIDE 12: Write Transaction -->
-<!-- ================================================================== -->
+<!--
+========================================================================================
+>>> SLIDE 34
+>>> Write Transaction
+========================================================================================
+-->
 
 ## Write Transaction: WriteUnique Flow
 
@@ -4182,9 +4180,12 @@ based on whether it already has ownership. The logic is in CHI-cache-funcs.sm.
 
 ---
 
-<!-- ================================================================== -->
-<!-- SLIDE 13: Snoop Operations -->
-<!-- ================================================================== -->
+<!--
+========================================================================================
+>>> SLIDE 35
+>>> Snoop Operations
+========================================================================================
+-->
 
 ## Snoop Operations
 
@@ -4270,9 +4271,12 @@ The snoop queues are separate from the request queues to avoid deadlock.
 
 ---
 
-<!-- ================================================================== -->
-<!-- SLIDE 14: DMT - Direct Memory Transfer -->
-<!-- ================================================================== -->
+<!--
+========================================================================================
+>>> SLIDE 36
+>>> DMT - Direct Memory Transfer
+========================================================================================
+-->
 
 ## Direct Memory Transfer (DMT)
 
@@ -4336,97 +4340,12 @@ depending on the placement of the RN-F, HN-F, and SN-F.
 
 ---
 
-<!-- ================================================================== -->
-<!-- SLIDE 15: Retry & Credit Flow Control -->
-<!-- ================================================================== -->
-
-## Retry Mechanism & Protocol Credits
-
-<div class="columns">
-<div>
-
-**Problem**: What if the HN-F is overwhelmed?
-
-**Solution**: CHI uses a credit-based retry mechanism.
-
-```
-RN-F                        HN-F
-  |                           |
-  |--- REQ: ReadShared ----->| (queue full!)
-  |<-- RSP: RetryAck --------|
-  |   (please retry later)    |
-  |                           |
-  |   ... time passes ...     |
-  |                           |
-  |<-- RSP: PCrdGrant -------| (credit granted)
-  |   (you may retry now)     |
-  |                           |
-  |--- REQ: ReadShared ----->| (re-accepted)
-```
-
-</div>
-<div>
-
-**How it works:**
-
-1. Every request has `allowRetry=true` by default
-2. HN-F sends `RetryAck` if it cannot accept
-3. RN-F queues the request for retry
-4. HN-F sends `PCrdGrant` when capacity frees
-5. RN-F replays the exact same request
-
-**In gem5:**
-- `throttle_req_on_retry` blocks new requests to busy HN-Fs
-- `RetryQueueEntry` tracks pending retries
-- Each HN-F has independent retry queues
-
-</div>
-</div>
-
-> **Design trade-off**: Retry adds latency on congestion but avoids deadlock. Without it, the HN-F would need unbounded buffers.
-
-<!-- Speaker Notes:
-Flow control in CHI is critical. Unlike a shared bus where arbitration naturally throttles
-requesters, a packetized NoC can deliver bursts of requests that overwhelm the HN-F.
-
-CHI's solution is elegant: the RetryAck + PCrdGrant mechanism. Let's walk through it.
-
-Every request message has an `allowRetry` flag. When set to true, the HN-F has the option
-to reject the request if it's too busy. The HN-F sends back a RetryAck, which means
-"I cannot handle this right now, please try again later."
-
-The RN-F queues the original request in a retry queue. It does NOT retry immediately —
-that would just re-congest the HN-F.
-
-When the HN-F has capacity, it sends a PCrdGrant (Protocol Credit Grant) to the RN-F.
-This is the green light to retry. The RN-F then re-sends the exact same request.
-
-PCrdGrant includes a credit type that can specify which category of request can be retried.
-This allows the HN-F to prioritize certain request types during recovery.
-
-In gem5, the implementation is in CHI-cache-actions.sm. The key parameters:
-- `throttle_req_on_retry`: When set, the RN-F blocks ALL new requests to the same
-  destination while a retry is pending. This prevents retry starvation.
-- The `RetryQueueEntry` tracks the original request address, type, and destination.
-- Each HN-F maintains independent retry state per requester.
-
-A subtle point: the retried request must be the EXACT same message. The RN-F cannot
-change the request type or data. This ensures the protocol state machine remains
-consistent. The HN-F knows it's a retry, not a new request.
-
-Deadlock prevention: Without retry, the HN-F would need infinite buffers or would
-deadlock when all buffers fill. Retry provides backpressure without deadlock because
-the PCrdGrant breaks the dependency cycle.
-
-In practice, retries are rare in well-provisioned systems but critical for correctness
-under load spikes — exactly when you need the protocol to not crash.
+<!--
+========================================================================================
+>>> SLIDE 37
+>>> Clusivity
+========================================================================================
 -->
-
----
-
-<!-- ================================================================== -->
-<!-- SLIDE 16: Clusivity -->
-<!-- ================================================================== -->
 
 ## Clusivity — Controlling Cache Inclusion
 
@@ -4512,206 +4431,4 @@ a core is actively writing to a line improves performance.
 The clusivity parameters interact with the upstream tracking states we discussed earlier.
 When dealloc_on_unique is true, the HN-F transitions to RU or RSC states instead of
 keeping the line in a local state.
--->
-
----
-
-<!-- ================================================================== -->
-<!-- SLIDE 17: DVM - Distributed Virtual Memory -->
-<!-- ================================================================== -->
-
-## DVM — Distributed Virtual Memory Operations
-
-<div class="columns">
-<div>
-
-```mermaid
-sequenceDiagram
-    participant R1 as RN-F 1<br/>(initiator)
-    participant MN as MN<br/>(Misc Node)
-    participant R2 as RN-F 2
-    participant R3 as RN-F 3
-
-    R1->>MN: REQ: DvmTlbi_Initiate
-    MN->>MN: Allocate DVM TBE
-    MN->>R2: SNP: SnpDvmOpNonSync_P1
-    MN->>R3: SNP: SnpDvmOpNonSync_P1
-    R2-->>MN: RSP: Comp
-    R3-->>MN: RSP: Comp
-    MN->>R2: SNP: SnpDvmOpNonSync_P2
-    MN->>R3: SNP: SnpDvmOpNonSync_P2
-    R2-->>MN: RSP: Comp
-    R3-->>MN: RSP: Comp
-    MN-->>R1: RSP: Comp
-    Note right of R1: TLBI complete
-```
-
-</div>
-<div>
-
-**What is DVM?**
-- TLB Invalidation (TLBI) across all cores
-- Page table changes must invalidate stale TLB entries
-- Requires *ordered* delivery to all RN-Fs
-
-**Two-phase snoop:**
-- **P1** (Phase 1): Prepare — RN-F marks TLB entry for invalidation
-- **P2** (Phase 2): Commit — RN-F applies the invalidation
-
-**DVM Sync**: Barrier ensuring all prior TLBIs are visible before proceeding. Required before re-using freed page tables.
-
-**gem5**: `CHI_MNController` handles this via `CHI-dvm-misc-node*.sm`
-
-</div>
-</div>
-
-<!-- Speaker Notes:
-Distributed Virtual Memory operations are CHI's mechanism for maintaining TLB coherence
-across multiple cores. This is essential when an operating system changes page tables.
-
-Consider this scenario: The OS running on core 1 frees a page frame and maps it to a
-different virtual address. Core 2's TLB still has the old mapping. If core 2 accesses
-the old virtual address, it must NOT use the stale TLB entry. DVM ensures all cores
-see the new mapping.
-
-The Misc Node (MN) is the DVM coordinator. When core 1 (RN-F 1) needs to invalidate
-a TLB entry, it sends a DvmTlbi_Initiate request to the MN.
-
-The MN then broadcasts DVM snoops to all RN-Fs. This is done in two phases:
-
-Phase 1 (P1): The MN sends SnpDvmOpNonSync_P1 to each RN-F. This is the "prepare"
-phase. The RN-F identifies the affected TLB entry and marks it as pending invalidation,
-but doesn't actually invalidate yet. The RN-F responds with Comp.
-
-Phase 2 (P2): The MN sends SnpDvmOpNonSync_P2. This is the "commit" phase. The RN-F
-now actually invalidates the TLB entry. After responding with Comp, the entry is gone.
-
-Why two phases? Because some implementations need to quiesce in-flight translations
-before invalidating. Phase 1 says "stop new translations using this entry." Phase 2
-says "now remove it." This ensures no in-flight memory access uses a stale translation.
-
-DVM Sync is a barrier operation. When the OS does a TLB invalidation and then frees
-a page table, it must ensure all cores have completed the invalidation before reusing
-the physical page. DvmSync guarantees this ordering. The MN sends DvmSync snoops,
-waits for all completions, and then confirms to the initiator.
-
-In gem5, the DVM state machine is in CHI-dvm-misc-node.sm (380 lines). The Misc Node
-has its own TBE structure partitioned for sync and non-sync operations. The
-`early_nonsync_comp` parameter allows the MN to complete non-sync operations before
-all P2 responses arrive, improving DVM throughput.
-
-The MN is a unique node type in CHI — it doesn't handle data, only control messages
-for TLB coherence. It's small but critical for virtualized and multi-process workloads.
--->
-
----
-
-<!-- ================================================================== -->
-<!-- SLIDE 19: Configuring CHI Systems -->
-<!-- ================================================================== -->
-
-## Configuring CHI Systems in gem5
-
-<div class="columns smaller">
-<div>
-
-**Modern stdlib API** (recommended):
-
-```python
-from gem5.components.cachehierarchies.chi import (
-    PrivateL1CacheHierarchy,
-    PrivateL1PrivateL2CacheHierarchy,
-)
-from gem5.components.boards import SimpleBoard
-
-hierarchy = PrivateL1CacheHierarchy()
-board = SimpleBoard(
-    clk_freq="3GHz",
-    processor=processor,
-    memory=memory,
-    cache_hierarchy=hierarchy,
-)
-```
-
-**Legacy Ruby API** (full control):
-
-```python
-from configs.ruby.CHI import create_system
-
-system = create_system(
-    num_rnf=16,          # 16 fully-coherent cores
-    num_hnf=16,          # 16 LLC slices
-    num_snf=2,           # 2 memory controllers
-    topology="CustomMesh",
-    network="garnet",
-    chi_config="rbook_4x4.py",
-)
-```
-
-</div>
-<div>
-
-**Node configuration** (from `CHI_config.py`):
-
-| Node | Key Parameters |
-|------|---------------|
-| **L1 (RN-F)** | MOESI, strict inclusive, 16 TBEs, 4 snoop TBEs |
-| **L2 (RN-F)** | MOESI, strict inclusive, 32 TBEs |
-| **HNF** | `is_HN=True`, DMT+DCT enabled, mostly inclusive |
-| **MN** | 16 DVM TBEs, `early_nonsync_comp` |
-| **SN-F** | Wraps DRAM controller |
-
-**Build & Run:**
-
-```bash
-scons build/RISCV/gem5.opt -j$(nproc)
-./build/RISCV/gem5.opt \
-  configs/example/rbook_mesh_config.py \
-  --num-cpus=16 --topology=CustomMesh
-```
-
-</div>
-</div>
-
-<!-- Speaker Notes:
-Now let's look at how you actually build and run CHI systems in gem5. There are two
-configuration APIs.
-
-The modern stdlib API is the recommended approach. You import cache hierarchy classes
-from gem5.components.cachehierarchies.chi and plug them into a Board. The stdlib handles
-all the wiring — node creation, network setup, address range interleaving. You can be
-running a CHI simulation in about 10 lines of Python.
-
-Two hierarchy types are available: PrivateL1CacheHierarchy gives each core a private
-L1 with a shared directory (HNF). PrivateL1PrivateL2CacheHierarchy adds private L2 caches.
-Both use point-to-point networks by default.
-
-The legacy Ruby API gives you full control over every parameter. You use create_system()
-from configs/ruby/CHI.py and specify the number of each node type, the topology, and
-the network type. This is what the book's 4x4 mesh example uses.
-
-For the 4x4 mesh in the book's final project:
-- 16 RN-Fs (cores with L1 and L2)
-- 16 HN-Fs (LLC slices, each handling 1/16 of the address space)
-- 2 SN-Fs (memory controllers)
-- 1 MN (DVM coordinator)
-- CustomMesh topology with Garnet routers
-
-The key parameters per node type:
-
-L1 controllers use MOESI with strict inclusion. 16 TBEs for in-flight transactions,
-16 replacement TBEs, and 4 snoop TBEs. The low snoop TBE count is fine because
-L1 snoops are rare in a mesh — only the HN-F sends snoops.
-
-L2 controllers have 32 TBEs for their larger transaction window.
-
-HN-F controllers have is_HN=True which enables directory tracking. DMT and DCT
-are enabled by default. Clusivity is "mostly inclusive for shared, exclusive for
-unique."
-
-To build and run: compile for RISC-V, then run the config script. The book's
-rbook_mesh_config.py script sets up the full 16-core mesh.
-
-For testing, there's also tests/gem5/chi_protocol/ which runs CHI across ARM, X86,
-and RISC-V with 1, 2, and 4 cores to validate correctness.
 -->
