@@ -27,89 +27,98 @@ size: 16:9
 <!--
 ========================================================================================
 >>> SLIDE 2
->>> Why CHI? The Scalability Wall
+>>> Coherence and consistency — the two contracts underneath CHI
 ========================================================================================
 -->
 
-## Why CHI? The Scalability Wall
+## Coherence and Consistency
 
 <div class="comparison-grid smaller">
-<div class="card compact accent-red">
-<p class="eyebrow">Shared-bus coherence</p>
-<h3>Simple because the bus serializes everything</h3>
-<ul>
-<li>Every cache sees every transaction, so snooping is easy to reason about.</li>
-<li>That same broadcast model burns bandwidth on agents that are not involved.</li>
-<li>As cores, sockets, and accelerators grow, the bus becomes the bottleneck.</li>
-</ul>
-<span class="pill neutral">Broadcast to all</span>
-<span class="pill neutral">One shared queue</span>
-</div>
 <div class="card compact accent-blue">
-<p class="eyebrow">CHI's shift</p>
-<h3>Route coherence as targeted packets over the fabric</h3>
+<p class="eyebrow">Cache coherence</p>
+<h3>All caches agree on each individual line</h3>
 <ul>
-<li>Point-to-point links replace one global wire.</li>
-<li>The home node directory narrows snoops to likely sharers.</li>
-<li>REQ, SNP, RSP, and DAT progress independently, with direct transfers when useful.</li>
+<li>Tracks ownership and sharing for one cache line at a time.</li>
+<li>Allows many clean readers or one writable owner.</li>
+<li>Prevents a cache from using a stale valid copy after another agent writes the line.</li>
 </ul>
-<span class="pill req">REQ</span>
-<span class="pill snp">SNP</span>
-<span class="pill rsp">RSP</span>
-<span class="pill dat">DAT</span>
+<span class="pill req">ownership</span>
+<span class="pill rsp">per line</span>
+</div>
+<div class="card compact accent-violet">
+<p class="eyebrow">Memory consistency</p>
+<h3>Software gets rules for observing operations</h3>
+<ul>
+<li>Defines which load/store orderings a program can rely on.</li>
+<li>Covers operations to different addresses, not just one line.</li>
+<li>Uses fences, barriers, atomics, and memory types to demand stronger order.</li>
+</ul>
+<span class="pill dat">visibility</span>
+<span class="pill neutral">program order</span>
 </div>
 </div>
 
 <div class="metric-strip">
 <div class="metric">
-<strong>Broadcast</strong>
-<span>Every coherence action wakes the whole system.</span>
+<strong>X</strong>
+<span>coherence asks: who owns this line, and can this cached copy still be used?</span>
 </div>
 <div class="metric">
-<strong>Serialize</strong>
-<span>One shared wire becomes the throughput wall.</span>
+<strong>X,Y</strong>
+<span>consistency asks: can Y be seen before X?</span>
 </div>
 <div class="metric">
-<strong>Directory</strong>
-<span>HN-F targets only the owners and sharers.</span>
+<strong>Fence</strong>
+<span>turns a required software order into hardware work.</span>
 </div>
 <div class="metric">
-<strong>Channels</strong>
-<span>REQ, SNP, RSP, and DAT move independently.</span>
+<strong>Device</strong>
+<span>registers often need endpoint-visible order.</span>
 </div>
 </div>
 
 <div class="takeaway">
-CHI is ARM's answer to the scaling problem: stop using coherence traffic as a global broadcast, and turn it into routed transactions with explicit ownership and ordering.
+Coherence makes each line sensible; consistency makes a program's sequence of operations meaningful. CHI carries mechanisms for both.
 </div>
 
 <!-- Speaker Notes:
-Open with the familiar design point first: a small coherent cluster on a
-shared bus. That world is attractive because the bus gives us two things
-for free. First, everyone sees the same traffic, so snooping is easy to
-reason about. Second, the bus serializes requests, so a lot of ordering
-falls out of the fabric almost accidentally.
+Before introducing CHI node types and message channels, establish the two
+contracts that the protocol is trying to support.
 
-That simplicity is exactly what stops scaling.
+Cache coherence is about one location. Imagine cache line X is present in
+two private caches. If one core wants to write X, the system must first make
+sure the other cached copies are no longer valid writable data. The common
+summary is "single writer or multiple readers." Coherence gives every cache
+line a well-defined ownership story, and it serializes writes to that line.
 
-Once the system grows into a mesh, multi-socket complex, or accelerator-
-heavy SoC, the bus becomes a tax on every transaction. A miss from one
-core wakes up everybody else. Ownership changes consume shared bandwidth
-even when only two nodes care. Latency stretches because the bus is one
-global serialization point. The protocol is still logically correct, but
-the fabric is now doing the wrong kind of work.
+Memory consistency is about a program observing many operations. Consider
+the classic message-passing example: core 0 writes data to X and then writes
+a flag to Y. Core 1 reads Y and, if the flag is set, reads X. Coherence keeps
+X coherent and Y coherent separately, but it does not by itself say whether
+another core is allowed to observe the flag before the data. That question
+belongs to the memory consistency model.
 
-CHI is the answer to that wall. Instead of observing coherence by broad-
-cast, CHI routes coherence as targeted packet traffic. Requests travel over
-point-to-point links. The home node tracks who might have the line, so the
-system snoops the likely sharers instead of broadcasting blindly. Control
-and data stop fighting on one wire because REQ, SNP, RSP, and DAT are sep-
-arate channels. And when the data is already sitting in the right place,
-direct transfers avoid needless intermediate hops.
+The bottom row is the practical checklist.
 
-That is the framing for the rest of the talk. CHI is not just a new set of
-message names. It is the protocol shape you need once broadcast coherence
-is no longer affordable.
+X means a single-address question: which value of this line is valid, and
+who owns it? That is coherence.
+
+X and Y means a cross-address question: can a later store or load become
+visible before an earlier one? That is consistency.
+
+Fence represents the bridge from software intent to hardware behavior. When
+software needs stronger order than the default memory model gives, it uses a
+fence, barrier, or ordered atomic. The implementation then has to stop,
+drain, or order the relevant requests.
+
+Device is the other important case. A peripheral may require writes to two
+different registers to arrive in the order software issued them. That is not
+just cache-line ownership; it is endpoint-visible ordering.
+
+This is the vocabulary for the rest of the deck. CHI is primarily a
+coherent interconnect protocol, but it also has transaction-ordering
+mechanisms because a scalable packet fabric does not give a single global
+order for free.
 -->
 
 ---
