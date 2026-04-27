@@ -22,6 +22,16 @@ size: 16:9
 
 ![bg right:34% 78%](chi_logo.svg)
 
+<!-- Speaker Notes:
+Welcome. Over the next fifty-five minutes we will work through CHI from
+two angles. First as a protocol — what Arm specifies, what it
+deliberately does not, and how its messages and states fit together.
+Then as a gem5 implementation — how Ruby encodes the protocol and how
+Garnet carries it on a cycle-accurate network. By the end you should
+be able to read a CHI trace, follow a transaction across the fabric,
+and find the corresponding code in the gem5 tree.
+-->
+
 ---
 
 <!--
@@ -82,43 +92,32 @@ Coherence makes each line sensible; consistency makes a program's sequence of op
 </div>
 
 <!-- Speaker Notes:
-Before introducing CHI node types and message channels, establish the two
-contracts that the protocol is trying to support.
+CHI sits on top of two contracts that are easy to confuse, so we need
+clean definitions before going further.
 
-Cache coherence is about one location. Imagine cache line X is present in
-two private caches. If one core wants to write X, the system must first make
-sure the other cached copies are no longer valid writable data. The common
-summary is "single writer or multiple readers." Coherence gives every cache
-line a well-defined ownership story, and it serializes writes to that line.
+Coherence is a single-line guarantee. For any one cache line, every
+agent in the system agrees on the current value and on who owns it.
+The classic phrasing is "one writer or many readers" — coherence
+serializes writes to that single line and makes sure no cache keeps
+using a stale copy after another agent has written.
 
-Memory consistency is about a program observing many operations. Consider
-the classic message-passing example: core 0 writes data to X and then writes
-a flag to Y. Core 1 reads Y and, if the flag is set, reads X. Coherence keeps
-X coherent and Y coherent separately, but it does not by itself say whether
-another core is allowed to observe the flag before the data. That question
-belongs to the memory consistency model.
+Consistency is a multi-address guarantee. It governs the order in
+which a program's loads and stores become visible to other agents.
+The textbook message-passing example: core zero writes data, then
+writes a flag; core one reads the flag and, if it is set, reads the
+data. Coherence keeps data and flag coherent in isolation, but only
+the consistency model says whether the flag can be observed before
+the data.
 
-The bottom row is the practical checklist.
+Fences and ordered atomics are how software promotes a required
+order into hardware work. Device registers are the other common
+case where the program insists on a particular order, often without
+caching at all.
 
-X means a single-address question: which value of this line is valid, and
-who owns it? That is coherence.
-
-X and Y means a cross-address question: can a later store or load become
-visible before an earlier one? That is consistency.
-
-Fence represents the bridge from software intent to hardware behavior. When
-software needs stronger order than the default memory model gives, it uses a
-fence, barrier, or ordered atomic. The implementation then has to stop,
-drain, or order the relevant requests.
-
-Device is the other important case. A peripheral may require writes to two
-different registers to arrive in the order software issued them. That is not
-just cache-line ownership; it is endpoint-visible ordering.
-
-This is the vocabulary for the rest of the deck. CHI is primarily a
-coherent interconnect protocol, but it also has transaction-ordering
-mechanisms because a scalable packet fabric does not give a single global
-order for free.
+Hold on to that split. CHI is primarily a coherence protocol, but
+because its channels reorder freely, it also carries explicit
+ordering controls so the consistency model has something concrete
+to anchor to.
 -->
 
 ---
@@ -163,72 +162,47 @@ Left side is <em>why</em> the CHI spec is so large. Right side is <em>why</em> t
 </div>
 
 <!-- Speaker Notes:
-The motivation slide gave the reason CHI exists. This slide gives the bound-
-ary. CHI reaches further than many first-time readers expect, and it also
-stops short in some of the places that matter most for performance. Both
-edges matter, because both show up in gem5 as Ruby or Garnet configuration.
+CHI reaches further than newcomers expect and stops short in places
+that dominate real performance. Both edges matter, because both
+surface in gem5 as Ruby or Garnet configuration.
 
-Four points on the left.
+Start with the reach. CHI is a layered protocol — what a message
+means is separate from how it gets delivered. In gem5 that split is
+literal: Ruby owns meaning, Garnet owns delivery. The four channels
+also carry more than cache-line traffic — uncached I/O, atomic
+operations, TLB maintenance, and cache-maintenance hints all ride
+the same envelope. Atomics in particular can execute inside the
+fabric, at the home node or at memory, which changes how you reason
+about their cost. Ordering is an explicit contract: every
+transaction carries a field saying how strictly it must complete,
+because separated channels reorder freely and the consistency model
+needs concrete hooks. And the spec keeps going — distributed
+virtual-memory sync, producer hints, persistence, security tagging,
+in-band RAS — none of which we will cover, but you should know the
+surface area is large.
 
-First, CHI is a layered protocol. The spec separates "what a message means"
-from "how that message gets delivered over the wire." That sounds academic
-until you debug gem5. Ruby owns the meaning — requests, snoops, responses,
-data. Garnet owns the delivery — flits, routers, link-level credits. If you
-confuse the layers, the spec diagrams stop matching your trace.
+Now the boundary. The home node is named but its shape is left
+open. Three knobs dominate behaviour. Directory size determines how
+often back-invalidations are forced when entries get evicted.
+Tracker depth at the home governs how often the retry mechanism
+fires when the table fills. Address hashing decides which home owns
+which line — a bad hash concentrates traffic on one corner of the
+mesh. All three are out of spec and any one can dominate the
+performance curve.
 
-Second, CHI's channels carry more than coherent loads and stores. Uncached
-I/O, atomic operations, TLB shoot-downs, and cache-maintenance hints all ride
-the same four channels. CHI is the envelope for everything that crosses the
-coherent fabric, not just cache-line traffic.
+The interconnect is also implementation-defined: topology, routing,
+virtual-channel allocation, buffer sizes, credit counts. The one
+rule CHI mandates is per-channel non-blocking at each link, so
+flits on one channel cannot stall flits on another. That guarantee
+does not automatically extend across multi-hop paths — collapse
+channels at a switch or share credit pools carelessly and a Garnet
+configuration can still wedge.
 
-Third, atomic read-modify-writes can execute inside the fabric — at the home
-node or at the memory node — not only in the core. That changes how you model
-atomic performance.
-
-Fourth, ordering is an explicit contract. On a shared snoop bus,
-transactions serialized by accident — whoever grabbed the bus first won.
-CHI's separated channels reorder freely, so each transaction carries an
-explicit field saying how strict its ordering must be. That gives the
-core's memory-consistency model concrete hooks to bind to, instead of
-relying on the bus to serialize implicitly.
-
-Fifth, the list does not stop there. The spec also reaches into distributed
-virtual-memory sync, producer-to-consumer hints, persistence, security
-tagging, and in-band RAS. The deck skips most of these — just know the
-surface area is larger than any one slide can show.
-
-Now the right side — where the spec deliberately stops.
-
-First: home-node internals. CHI names the home node as the entity where
-coherence decisions happen, but does not pick its shape. Three dials
-dominate. The directory tracks who holds each line; undersize it, and
-every entry the directory evicts forces a back-invalidation across every
-cache that still holds that line. Trackers hold in-flight transactions at
-the home node; when the table fills, CHI's retry mechanism kicks in and
-the home node tells the requester to come back later. Address hashing
-decides which home node owns which line; a bad hash concentrates traffic
-on one corner of the mesh, a good hash distributes it. All three are out
-of spec, and any one can dominate the performance curve.
-
-Second: the interconnect itself. Topology, routing, VC allocation, buffer
-sizes, and credit counts are all implementation-defined — none of it is in
-the AMBA document. The one rule CHI mandates is per-channel non-blocking
-at each link: flits on one channel cannot block flits on another between
-transmitter and receiver. That guarantee does not extend across multi-hop
-paths for free — collapse channels at a switch or share a credit pool
-badly and it silently dies. A naive Garnet configuration can still wedge.
-
-Third: not one CHI. The spec has issues — B, D, E, and CHI-C2C — and
-each changes what is on the menu. Direct transfers DMT and DCT, atomic
-coverage, MPAM tags, persistence hints — all vary by issue, and for the
-optional features, by what the implementer turned on. Two CHI systems may
-both be "same spec" and still have different feature sets.
-
-The rest of the deck lives inside this frame. The last slide was the moti-
-vation for leaving bus coherence behind; this slide is the checklist for
-what CHI standardizes and what it leaves to the system designer. Ruby imple-
-ments the left side; Garnet wraps the right side; the single RISC-V CHI
-system that ships with gem5 is where we will see both in action.
+Finally there is not one CHI. The spec has issues B, D, E, and
+CHI-C2C, and the optional features are not always turned on. Two
+"same spec" systems can have different menus. Ruby implements the
+named layer; Garnet stands in for the implementation-defined NoC;
+gem5's RISC-V CHI configuration is where we will see both.
 -->
 
 ---
@@ -245,58 +219,43 @@ system that ships with gem5 is where we will see both in action.
 ![h:513 CHI node types overview — RN-F, RN-I (PCIe and GPU variants), RN-D, MN, HN-F, SN-F around the ICN, with MC and DRAM attached to the SN-F](../resources/chi_node_types.svg)
 
 <!-- Speaker Notes:
-Time budget: 3 minutes.
+A complete CHI system is built from a small fixed cast of node
+types. Everything plugs into a central interconnect that the spec
+explicitly leaves implementation-defined — topology, routing,
+buffering are yours.
 
-This is a typical CHI system, with every node type the spec defines.
+The two requester families split on caching. RN-F, Fully Coherent
+Request Node, is what a CPU core looks like to CHI: it holds
+hardware-coherent caches, generates every transaction type, and
+responds to every snoop type. RN-I, IO Coherent Request Node, is
+the non-caching variant — a PCIe bridge or a driver-managed GPU
+fits here. An RN-I receives no snoops because it has no coherent
+cache to snoop.
 
-In the middle, ICN — the Interconnect Network. CHI is carried over
-it but does not specify it. The spec's own wording is "IMPLEMENTATION
-SPECIFIC": topology, fabric, routing, buffering are all yours. Every
-other node plugs into ICN through the four CHI channels we'll see on
-the next slide.
+RN-D is the third requester type, used when an accelerator's SMMU
+walks the CPU's page tables directly and TLB invalidations must
+reach it in hardware. The spec restricts its snoop channel to DVM
+transactions only — never cache-coherence snoops. So a
+driver-managed GPU stays RN-I; a hardware-SVM GPU becomes RN-D.
 
-Top-left, two RN-Fs: Fully Coherent Request Nodes. CPU cores with
-hardware-coherent caches — drawn as the internal "CPU" and "L1 / L2"
-boxes. An RN-F generates every transaction type and responds to every
-snoop type.
+DVM traffic terminates at MN, the Miscellaneous Node, which fans
+out to every RN-F and RN-D in the system.
 
-Top-right, RN-I with a GPU inside: IO Coherent Request Node. Section
-B13.6.1.3 of the spec literally names this use case, quote: "a GPU or
-IO bridge". An RN-I holds no hardware-coherent cache and receives
-neither snoops nor DVM — the driver manages any on-GPU cache and TLB
-explicitly.
+HN-F is the Fully Coherent Home Node — the Point of Coherence.
+Every cache line maps to exactly one home, usually by address
+hashing. The home serializes conflicting requests, issues snoops,
+grants ownership, and forwards data. Two optional internal pieces
+the spec calls out are the snoop filter or directory and the LLC
+slice. Both are implementation-specific.
 
-Left column, top: a second RN-I with a PCIe bridge inside — same node
-type, different device. Any non-caching I/O requester fits here.
+SN-F is the Subordinate Node — the memory side. The spec uses
+"Subordinate", not "Slave". An SN-F receives ReadNoSnp and
+WriteNoSnp from the homes and returns data. CHI ends at SN-F.
+Whatever the attached memory controller speaks to DRAM is outside
+the spec.
 
-Left column, bottom, RN-D: IO Coherent Request Node with DVM support.
-The "D" is DVM, Distributed Virtual Memory. Put an accelerator here
-when its SMMU walks the CPU's page tables directly, so CPU-side TLB
-invalidations must reach it in hardware. RN-D does receive snoops —
-but the spec restricts them: "use of the SNP channel is limited to
-DVM transactions". DVM snoops only, never cache-coherence snoops. So
-a driver-managed GPU stays RN-I; a hardware-SVM GPU moves to RN-D.
-
-Right side, MN: Miscellaneous Node. Where DVM traffic terminates and
-fans out to every RN-F and every RN-D in the system.
-
-Bottom row, two HN-Fs: Fully Coherent Home Nodes. The Point of
-Coherence. Every cache line maps to exactly one home, usually by
-address hashing. Two optional internal pieces: SF, a snoop filter or
-directory, which the spec explicitly lists as optional; and LLC
-slice, an implementation-specific last-level cache. The home
-serializes conflicting requests, sends snoops, grants ownership, and
-forwards data.
-
-Next to the HN-Fs, SN-F: Subordinate Node. Note the spec uses
-"Subordinate", not "Slave". The memory-side node. It receives
-ReadNoSnp and WriteNoSnp from the homes and returns data. CHI stops
-at SN-F — attached on the side you see MC, the memory controller,
-and behind it DRAM. Whatever MC speaks to DRAM is outside the CHI
-spec.
-
-Color coding we'll reuse throughout the deck: RN-F blue, RN-I teal,
-RN-D gold, HN-F violet, MN slate, SN-F green.
+The colour coding here will reappear throughout the deck: RN-F
+blue, RN-I teal, RN-D gold, HN-F violet, MN slate, SN-F green.
 -->
 
 ---
@@ -313,57 +272,39 @@ RN-D gold, HN-F violet, MN slate, SN-F green.
 ![h:513 Port / Link / Channel hierarchy at the RN&ndash;ICN interface: two ports (RN and ICN) connected by an outbound link carrying REQ, DAT, RSP channels and an inbound link carrying SNP, RSP, DAT channels, with TX/RX pin names on each port](../resources/chi_port_link_channel.svg)
 
 <!-- Speaker Notes:
-Time budget: 3 minutes.
+Three terms have to be crisp before we look at packets or routers:
+channel, link, and port. They form a hierarchy.
 
-Before we look at any packet or router, three terms need to be
-crisp: channel, link, and port. They form a hierarchy, and this
-diagram shows how they fit together at the interface between a
-Request Node and the Interconnect.
+A channel — spec B13.4 — is a defined path for one class of
+traffic. CHI has exactly four. REQ carries requests that start or
+advance a transaction. RSP carries non-data responses like
+acceptance and completion. SNP carries snoop requests sent into
+caches. DAT carries the actual payload — line fills, write data,
+snoop data — and consumes most of the bandwidth. They are not
+labels; each channel has its own dependency, progress, and
+buffering rules so that one class cannot block another.
 
-Start from the bottom — a channel. Section B13.4 of the spec. A
-channel is a defined path over which flits of one traffic class
-move. CHI defines exactly four: REQ, RSP, SNP, DAT. These are not
-labels — they are different kinds of traffic with different
-dependency, progress, and buffering rules. REQ carries requests that
-start or advance a transaction. RSP carries non-data responses like
-completion or acceptance. SNP carries snoop requests sent to caches.
-DAT carries the data payload — cache-line fills, write data, snoop
-data. DAT usually consumes the most bandwidth.
+A link — B13.1 and B13.2 — is a unidirectional connection from one
+transmitter to one receiver, bundling some set of those channels.
+Two-way communication between two nodes takes a pair of links. A
+link has finite bandwidth, nonzero latency, and link-layer credits
+that apply hop by hop.
 
-One level up — a link, sections B13.1 and B13.2. A link is a
-unidirectional connection from one transmitter to one receiver. Each
-link bundles some set of channels. Two-way communication between two
-nodes takes a pair of links. A link has finite bandwidth, nonzero
-latency, and link-layer credits that apply hop by hop. Internally a
-link may cross several routers and wires, but at the CHI
-architectural interface it still exposes exactly this channel
-structure.
+A port — B13.6 — is the full set of links at one node's interface.
 
-Top of the hierarchy — a port, section B13.6. A port is the set of
-all links at one node's interface. The whole interface bundle.
+At a Request Node interface there are two links. The outbound link
+carries REQ, DAT for write data, and RSP. The inbound link carries
+SNP, RSP for completions, and DAT for read data. SNP is conspicuous
+on the inbound side because Request Nodes receive snoops but do not
+send them. Which channels appear on a given link depends on the
+node types at each end — an RN-to-SN inbound link, for example,
+carries no SNP at all because an SN-F never generates snoops.
 
-Now read the diagram. The two outer boxes, Port (RN) on the left and
-Port (ICN) on the right, are the ports. Between them, two link
-boxes. The top one is the outbound link: RN transmits, ICN receives.
-It carries three channels — REQ for requests, DAT for write data,
-and RSP for responses like CompAck. Pin names on the RN side start
-with TX because the RN transmits; on the ICN side they start with RX
-because the ICN receives.
-
-The bottom link is the inbound link: ICN transmits, RN receives.
-Different channel set — SNP for snoops, RSP for completions, DAT for
-read data. Pins are reversed — RX on the RN side, TX on the ICN
-side.
-
-Which channels appear on a link depends on the node types at either
-end. An RN-to-SN inbound link, for example, has no SNP channel —
-SN-Fs do not generate snoops.
-
-One last caveat. Inside the ICN, what the spec calls a "link" may
-be realized by many routers and wires with a different
-microarchitecture — wider channels, virtual channels, whatever the
-implementer chose. The architectural link abstraction is what the
-spec guarantees at the port interface, not what happens inside.
+One subtlety to keep. Inside the interconnect, what the spec calls
+a "link" may be realised by many routers, wider buses, virtual
+channels — whatever the implementer chose. The architectural link
+abstraction is what is guaranteed at the port interface, not what
+happens internally.
 -->
 
 ---
@@ -418,67 +359,47 @@ spec guarantees at the port interface, not what happens inside.
 </div>
 
 <!-- Speaker Notes:
-Time budget: 3 minutes.
+The network layer answers one question — how does a packet know
+where to go — and it has three moving parts.
 
-Chapter B3 of the CHI spec is the thinnest of the four layers, and
-the most often skipped. It answers one question — how does a packet
-know where to go — and the answer has three moving parts. That is
-the whole of the network layer.
+First, names. Every port on the interconnect carries a NodeID,
+configured once for a given implementation. A port may host
+multiple NodeIDs, but a NodeID belongs to exactly one port. How
+those identifiers map to real silicon is implementation-defined.
 
-Part one — names. Every port on the interconnect is assigned a
-NodeID. The field is 7 to 16 bits wide, configured once for a given
-implementation. A port can carry multiple NodeIDs; a NodeID can
-belong to exactly one port. That is all the spec says. How IDs are
-assigned to real silicon nodes is implementation defined.
+Second, the System Address Map. The SAM is a table that turns an
+address into a TgtID, which is then stamped on the packet. Every
+Request Node has a SAM so it knows which Home to talk to, and
+every Home Node has its own SAM so it knows which memory-side
+Subordinate owns a line on a miss — two SAM lookups per request
+in the general case. The spec says nothing about the format. It
+can be range decoders, a hash, an interleave, anything — provided
+it covers the whole address space and routes unmapped addresses
+somewhere that can return an error.
 
-Part two — the System Address Map, SAM. The SAM is the table that
-turns an address into a TgtID, the destination NodeID stamped on the
-packet. Every Request Node has a SAM — that is how it knows which
-Home Node to talk to. Every Home Node has a SAM too — how else
-would the HN know which memory-side SN owns the line it just missed
-on. The spec does not prescribe the SAM format. It can be a handful
-of fixed-range decoders, a programmable interleave, or something
-fancier. What the spec demands is only that the SAM covers the
-entire address space, and that unmapped addresses go somewhere that
-can answer with an error response.
+Third, the interconnect itself may remap TgtID before delivering
+the packet. The fabric is allowed to rewrite the destination of an
+incoming request — and that is a first-class feature, used for
+home-node hot-spare, load-balancing, snoop-filter partitioning,
+and post-reset reconfiguration. The SrcID is preserved; only the
+target moves.
 
-On the diagram: RN0 has a mini SAM showing two rows, address to HN.
-HN-F1 has its own SAM showing address to SN. Pedagogically these
-are tiny. In a real system each SAM is bigger and usually hash- or
-interleave-based.
+Now the load-bearing insight. Responses do not consult a SAM at
+all. Their TgtID is copied from a named field of the message that
+caused them — ReturnNID for data, the original SrcID for
+completion, HomeNID for the requester's CompAck. Because that
+HomeNID is filled in by the actual home, including any remapped
+home, the requester sees a consistent answer without ever needing
+to know the fabric was rerouting its packet.
 
-The `(x,y)` labels on the tiles are there to make mesh routing
-examples concrete. A common mesh choice is deterministic XY routing:
-move in X first, then Y.
+One exception: snoops carry no TgtID. Snoop routing is entirely
+up to the fabric — typically a snoop filter at the home narrows
+snoops to caches that could hold the line. In gem5, Garnet uses a
+NetDest bit-vector for the same job.
 
-Part three — the interconnect may remap TgtID. The fabric is
-allowed to rewrite the TgtID of the incoming request. In the
-diagram, RN0 stamps HN0 but the ICN retargets to HN1. This is not
-an error, not a hack — it is a first-class feature. It is how a
-chip supports HN hot-spare, dynamic HN load-balancing, snoop-filter
-partitioning, or address-range reconfiguration after a reset. The
-SrcID is preserved. Only TgtID moves.
-
-Now flip to the response side — this is the load-bearing insight.
-Responses do not look up a destination. They copy it from a named
-field of the message that caused them. Data comes back to
-ReturnNID. Comp comes back to the request's SrcID. The
-requester's CompAck goes to the HomeNID stored in the data or
-completion message — which is the real home, including the
-remapped one, not the original HN the RN targeted. That is how
-remapping stays transparent to the requester.
-
-One last exception. Snoops have no TgtID at all. The spec does not
-say how snoops are routed — that is entirely up to the fabric. In
-real systems a snoop filter at the HN narrows snoop destinations to
-exactly the caches that could hold the line. In gem5, Garnet uses a
-simple NetDest bit-vector instead.
-
-One implication for gem5. The SAM the book cares about is the HN
-SAM, built from Python parameters in CHI_config.py. The RN-side SAM
-is implicit — Ruby addresses directly by home. Remapping is not
-modeled. Keep that in mind when your trace looks simpler than
-silicon.
+For gem5 specifically, the SAM you actually configure is the HN
+SAM, built from Python parameters in CHI_config.py. The RN-side
+SAM is implicit, and target remapping is not modelled.
 -->
 
 ---
@@ -530,56 +451,44 @@ Transaction (ReadClean, line clean-shared at home)
 </div>
 
 <!-- Speaker Notes:
-Time budget: 3 minutes.
+A CHI trace nests four terms inside each other, and each one means
+something specific.
 
-When you read a CHI trace, you'll see four terms nested inside each
-other: transaction, message, packet, and flit.
+A transaction — spec B1.3 — is one complete coherence operation:
+everything that happens between a Requester, its Completer, and any
+snooped nodes to fulfil a single request. It is identified by TxnID
+at the Requester and DBID at the Completer. The example here is a
+ReadClean fetching one 64-byte line, with ExpCompAck set so the
+home expects a closing acknowledgement.
 
-At the top, a transaction. Section B1.3. One complete coherence
-operation — everything that happens between a Requester, its
-Completer, and any snooped nodes to fulfil a single request. A
-transaction is identified by TxnID at the Requester and DBID at the
-Completer. The example on the left is a ReadClean — REQ opcode 0x02
-per table B13.12 — fetching one 64-byte line. The request asserts
-ExpCompAck=1, so the home will expect a CompAck at the end. We're
-showing the simple non-snooping path where the home serves from its
-LLC or memory; add snoops on top if other RNs hold the line.
+A message is one protocol step on one channel — a request, a snoop,
+a response, or a data transfer. A transaction generates several
+messages. The ReadClean here generates three: the ReadClean request
+itself, the CompData reply, and the closing CompAck.
 
-One level down: a message. One protocol communication step, carried
-on one channel — a request, a snoop, a response, or a data transfer.
-A transaction generates multiple messages. Our ReadClean has three: a
-ReadClean REQ on the outbound link, a CompData DAT on the inbound
-link, and a CompAck RSP on the outbound link.
+A packet — B1.1 and B13.3 — is the granule of transfer across the
+interconnect, carrying the metadata it needs to route independently.
+A message can be one packet or many. The request and the CompAck
+fit in a single packet each. The CompData splits into four packets
+because the link's data width is 128 bits and a 64-byte line takes
+four transfers — each carrying one DataID from zero to three. At
+256-bit width it would be two; at 512-bit, one. Every CompData
+packet carries Resp equal to CompData_SC, telling the Requester the
+line is arriving Shared Clean.
 
-Next: a packet. Sections B1.1 and B13.3. The granule of transfer
-across the interconnect — carries the metadata needed to route
-independently. A message can comprise one packet or many. The REQ
-and RSP messages here are single-packet. The DAT message splits into
-four CompData packets because the link's Data_Width is 128 bits and
-a 64-byte line needs four transfers — each packet carries one
-DataID from 0 to 3. Each of the four CompData packets encodes
-Resp = CompData_SC to tell the Requester the line is arriving in
-Shared-Clean state. At 256-bit Data_Width it would be two packets;
-at 512-bit, one.
+A flit is the link-layer transfer unit. Every protocol packet maps
+to exactly one protocol flit at the architectural interface. That
+1:1 is an architectural guarantee — CHI does not do multi-flit
+wormhole splitting at the port. The spec also defines link flits
+used for credit return during link deactivation, but those do not
+carry protocol packets.
 
-Finally a flit — the Link-layer transfer unit. Every protocol packet
-maps to exactly one protocol flit at the architectural interface.
-That 1:1 is part of the CHI abstraction — unlike generic NoC
-protocols, CHI does not do multi-flit wormhole splitting. The spec
-also defines link flits, non-protocol flits used for credit return
-during link deactivation, but those do not carry protocol packets.
-
-Closing the loop: the CompAck on the RSP channel echoes the DBID
-that the home supplied in CompData, and its TgtID matches the home's
-HomeNID. That is how the home knows which outstanding transaction
-just completed.
-
-The right-side table summarises the three boundaries. The two "N"
-ratios are where variability enters: a transaction can spawn many
-messages, and a message can split into many packets. The single
-"1:1" ratio is an architectural guarantee — at the CHI port
-interface, the spec does not let implementations split a packet into
-multiple flits.
+The closing CompAck echoes the DBID the home supplied in CompData
+and targets the home's HomeNID. That is how the home knows which
+outstanding transaction just completed. Across the boundary table:
+transaction-to-message and message-to-packet are both one-to-many
+ratios where variability enters; packet-to-flit is the single
+guaranteed identity.
 -->
 
 ---
@@ -633,74 +542,49 @@ Field <em>order</em> in Table B13.6 is architectural — implementations may not
 </div>
 
 <!-- Speaker Notes:
-Time budget: 3 minutes.
+Spec Table B13.6 pins down exactly which fields appear in a REQ
+flit, their order, and their widths. Two design-time parameters
+control the variable widths: NodeID_Width defaults to 7 and can
+grow to 16; Req_Addr_Width defaults to 44 and can grow to 52.
 
-A flit is the packetised bundle of control fields that carries one
-protocol message across a CHI link. Spec Table B13.6 pins down
-exactly which fields appear in a REQ flit, their order, and their
-widths. The slide lists them in bit order, QoS first at bit 0,
-ExpCompAck last. Two design-time parameters set the variable widths:
-NodeID_Width, spec B16.1.12, defaults to 7 and can go up to 16;
-Req_Addr_Width, B16.1.11, defaults to 44 and can go up to 52.
+Group the fields into four bundles and most of the table writes
+itself.
 
-Walk the table top-down.
+The routing bundle is what the interconnect actually needs.
+QoS gives fabric arbitration its priority. TgtID and SrcID name
+destination and source. Together with QoS these three let the
+network route and schedule without understanding the protocol.
 
-QoS, 4 bits at bit 0, is the priority that fabric arbitration
-consumes.
-
-TgtID and SrcID, 7 bits each by default, name the destination and
-source nodes. QoS, TgtID, and SrcID together are what the
-interconnect needs to route and schedule the flit without
-understanding the protocol.
-
-TxnID, 12 bits, is unique at the Requester. Every downstream message
-in this transaction is keyed back to this TxnID.
-
-ReturnNID and ReturnTxnID are the DMT pair — Direct Memory Transfer.
-When the HN forwards a read to an SN and wants the SN to reply
-directly to the Requester, it fills ReturnNID with the Requester's
-NodeID and ReturnTxnID with the Requester's TxnID. The SN's
-CompData then targets ReturnNID carrying ReturnTxnID. Both are zero
+The identity bundle is the transaction key. TxnID is unique at the
+Requester, and every later message in this transaction echoes it
+back. ReturnNID and ReturnTxnID enable Direct Memory Transfer —
+when the home forwards a read to a Subordinate and wants the
+Subordinate to reply directly to the Requester, it stamps the
+Requester's NodeID and TxnID into these two fields. They are zero
 when DMT is not used.
 
-Opcode, 7 bits. The What: ReadClean, ReadUnique, WriteUnique,
-WriteBackFull, CleanInvalid, and dozens more. Spec Table B13.12 is
-the opcode dictionary.
+The "what to do" bundle is Opcode, Size, and Addr. Opcode picks
+from the dictionary in Table B13.12 — ReadClean, ReadUnique,
+WriteBackFull, CleanInvalid, and the rest. Size is a power-of-two
+byte count from 1 to 64; a cache-line read encodes 0b110. Addr is
+the physical address.
 
-Size, 3 bits. Bytes moved encoded as a power of two: bytes equals
-2 to the Size, so 1, 2, 4, 8, 16, 32, or 64. A 64-byte cache-line
-read encodes 0b110.
+The attribute bundle modifies behaviour. PAS selects the
+Physical Address Space for Realm Management. LikelyShared is a
+placement hint. AllowRetry plus PCrdType drive the retry handshake
+we will see in detail later. Order asks the home for a stricter
+ordering contract, typically for device traffic. MemAttr is the
+AXI-style cacheability and bufferability set. SnpAttr is a snoop
+hint. LPID and Excl support exclusive-monitor pairs and are
+optional. ExpCompAck tells the home a closing CompAck will arrive.
 
-Addr, 44 bits by default, is the physical address.
-
-Then the attribute group. PAS, 3 bits, is the Physical Address Space
-— Secure / Non-secure / Realm / Root per RME. LikelyShared, 1 bit,
-is a hint telling the home this line is probably shared, biasing
-allocation and directory policy. AllowRetry, 1 bit, tells the target
-whether it may issue a RetryAck; when AllowRetry = 0, the Requester
-must already own a PCrdType it can consume. Order, 2 bits, asks the
-home for an ordering contract, typically for device accesses.
-PCrdType, 4 bits, pairs with AllowRetry on the retry mechanism.
-MemAttr, 4 bits, selects cacheable/non-cacheable, bufferable,
-early-write-acknowledge — same concept as AXI's AxCACHE. SnpAttr,
-1 bit, is the snoop hint.
-
-Three control bits at the end. LPID, 5 bits, names a logical
-processor within a multi-threaded node — paired with SrcID and Excl
-it uniquely identifies an exclusive-monitor reservation; optional.
-Excl marks the request as part of an exclusive-monitor pair — the
-CHI equivalent of LR/SC; also optional. ExpCompAck — already relied
-on for ReadClean — tells the home the Requester will close the
-transaction with a CompAck; always present.
-
-Three structural points to close. One, the field order in Table
-B13.6 is architectural — implementations may not reshuffle bit
-positions. Two, what the implementer controls is widths — only
-NodeID_Width, Req_Addr_Width, and for DAT flits Data_Width are
-parameterised. Three, which optional fields appear depends on
-enabled features — stashing, DMT, tagging, trace, MPAM, RME,
-exclusives — each contributes extra fields the spec lists in the
-same table but that only materialise when the feature is on.
+Three structural rules wrap this up. Field order is architectural —
+implementations cannot reshuffle bit positions. The implementer
+controls widths only — NodeID_Width, Req_Addr_Width, and for DAT
+flits Data_Width. Which optional fields actually appear depends on
+which features are enabled: stashing, DMT, tagging, trace, MPAM,
+RME, exclusives all contribute fields that materialise only when
+their feature is turned on.
 -->
 
 ---
@@ -752,54 +636,46 @@ IHI0050H §B4.1 defines seven cache line states along two familiar axes — Uniq
 </div>
 
 <!-- Speaker Notes:
-Time budget: 3 minutes.
+Section B4.1 of the spec defines the cache-line state vocabulary
+every compliant CHI cache must speak at its boundary, regardless of
+how the controller is built internally.
 
-Before we dive into the gem5 HN-F controller, let's anchor on what the
-CHI specification itself prescribes. Section B4.1 of IHI0050H defines
-the cache line state vocabulary that every compliant CHI cache must
-speak at its boundary, regardless of how the controller is built
-internally.
+Seven states, organised on two familiar axes plus one extra concept.
+The first axis is Unique versus Shared — does this cache hold the
+only copy, or could peers also have it. The second axis is Clean
+versus Dirty — is this cache responsible for writing the data back
+on eviction, or may it drop the line silently. Combining the two
+gives the four full states UC, UD, SC, and SD, where "full" means
+all bytes of the line are valid. These are the familiar MOESI core:
+Unique Clean maps to Exclusive, Unique Dirty to Modified, Shared
+Clean to Shared, Shared Dirty to Owned.
 
-There are seven states, organized along two familiar axes plus one
-extra concept. The first axis is Unique versus Shared — does this
-cache hold the only copy of the line, or could peers also have it.
-The second axis is Clean versus Dirty — is this cache responsible for
-writing the data back to memory on eviction, or can it be dropped.
-Combine those two axes and you get the four "Full" states: UC, UD,
-SC, SD. A full state means all bytes of the line are valid. These
-four are the MOESI-like core: Unique Clean is Exclusive, Unique Dirty
-is Modified, Shared Clean is Shared, Shared Dirty is Owned.
+The extra concept is partial ownership. CHI lets a requester obtain
+store permission without pulling valid data from memory — useful
+before a full-line write because it skips the read entirely. That
+adds two more states. UCE, Unique Clean Empty, is ownership with
+zero valid bytes; a CleanUnique from Invalid lands here. UDP, Unique
+Dirty Partial, is ownership after some but not all bytes have been
+written. Both are intermediate; UDP in particular has to merge with
+memory on eviction to produce a complete line.
 
-The extra concept is empty or partial ownership. CHI lets a requester
-obtain store permission *without* pulling valid data from memory —
-useful before a full-line write, because it saves a read. That gives
-two additional unique states. UCE, Unique Clean Empty, is unique
-ownership with zero valid bytes; a CleanUnique from Invalid lands
-here. UDP, Unique Dirty Partial, is unique ownership after some but
-not all bytes have been written — reached silently from UCE when a
-store writes only part of the line. On eviction, UDP must merge with
-memory to form a complete line.
+Plus Invalid — the line is not present in the cache. That gives the
+seven: I, UC, UCE, UD, UDP, SC, SD.
 
-And of course, Invalid — the line is not present in the cache.
+The transitions sketched here are not the whole transaction system,
+but they show why each state exists. Reads fill into SC, UC, SD, or
+UD depending on sharing and dirty-responsibility. CleanUnique from
+Invalid parks in UCE. A partial store moves UCE into UDP, while a
+full or completing store finishes in UD. Snoops downgrade unique to
+shared, with or without passing dirty responsibility. Evictions
+writeback if dirty and return to Invalid.
 
-That's all seven: I, UC, UCE, UD, UDP, SC, SD.
-
-The arrows on this diagram are not the whole transaction system — B4.7
-and B4.8 of the spec describe those in full — but they illustrate why
-each state exists. Reads fill into SC, UC, SD, or UD depending on
-whether the line is shared and whether dirty responsibility is being
-passed. CleanUnique from Invalid parks in UCE. A partial store on UCE
-drops the line into UDP; a full store or a follow-up store that
-completes the line moves it to UD. Snoops downgrade unique to shared,
-with or without passing dirty responsibility. Evictions writeback-
-if-dirty and return to Invalid.
-
-Key sentence from the spec: "A cache is permitted to implement a subset
-of these states." That is the opening we need for the next slide. A
-real implementation — like gem5's HN-F — layers extra internal states
-on top of this vocabulary to track in-flight transactions, upstream
-sharers, and transient bookkeeping. The B4.1 seven are what appears
-on the wire; what follows is what the controller carries internally.
+The spec adds one important sentence: "A cache is permitted to
+implement a subset of these states." That is the opening for the
+next slide. A real implementation — gem5's HN-F included — layers
+internal states on top of this vocabulary to track in-flight
+transactions, upstream sharers, and transient bookkeeping. The
+B4.1 seven are what appears on the wire.
 -->
 
 ---
@@ -844,70 +720,43 @@ Directory = what the home <em>knows</em>. LLC = what the home <em>holds</em>. Sa
 </div>
 
 <!-- Speaker Notes:
-Time budget: 3 minutes.
+The directory lives inside the home node, and only HN-F has one.
+HN-I and MN do not participate in coherence, so they have nothing to
+track.
 
-Up to here we have talked about channels and flit fields — what travels
-on the wire. Now we open one of the nodes and look at what it has to
-remember.
+CHI is directory-based, not snoop-broadcast. When a read arrives at
+the home, the HN-F has to answer two questions before it can
+respond. Does any cache upstream own a dirty copy? And who, if
+anyone, is sharing it? The directory is the book that answers both.
 
-The directory lives inside the home node. In CHI that is the HN-F — the
-Fully coherent Home Node. Only HN-F owns a directory. The other home
-nodes you saw on the node-types slide, HN-I for I/O and MN for
-miscellaneous, do not participate in coherence, so they have no sharer
-tracking to do.
+The fields are straightforward. `state` is the coherence state from
+the home's point of view — I, SC, SD, UC, or UD. This is the home's
+view, not any individual RN's view; a line can be SC at the home
+while each sharer independently thinks of its own copy as SC.
+`sharers` is a bit-vector — Ruby calls the type NetDest — across
+every upstream RN, with one bit per requester that might still hold
+the line. Real silicon would use a compressed encoding like
+coarse-vector or pointer-plus-overflow; gem5 keeps the bit-vector
+because exactness is cheaper to reason about. `owner`, `ownerExists`
+and `ownerIsExcl` together identify who, if anyone, holds the line
+in a state that can supply data, and they are what the HN consults
+when picking a snoop opcode.
 
-Why does the HN-F need a directory at all? Because CHI is
-directory-based, not snoop-broadcast. When a read arrives for line
-0x40, the HN-F has to answer two questions before it can respond. Does
-any cache upstream own a dirty copy of this line? And who, if anyone,
-is sharing it? The directory is the book that answers those two
-questions.
+Two gem5 specifics tend to surprise people. First, there is no
+separate dir.sm file. The directory is folded into CHI-cache.sm and
+gated by the is_HN flag; the same source serves as an L1 when
+is_HN is false and as an HN-F when it is true. Second, the
+directory is a PerfectCacheMemory — an unbounded hash map. No
+capacity, no evictions, no conflict misses. That keeps the model
+simple, but it also removes one of the biggest real-world cost
+sources: directory overflow forcing back-invalidations. If you
+care about that effect you have to add it yourself.
 
-Now the fields in the diagram.
-
-`state` is the coherence state from the home node's point of view — I,
-SC, SD, UC, UD. Important: this is the HN's state, not the state at
-any particular RN. A line can be SC at the home while each sharer
-independently thinks of its own copy as SC.
-
-`sharers` is a bit-vector — Ruby calls the type NetDest — over all
-upstream RN IDs in the system. Every RN that might have a valid copy
-has its bit set. Bit-vectors are exact but expensive; real silicon
-typically uses a compressed representation like coarse-vector or
-pointer-plus-overflow. gem5 prefers exactness over realism here.
-
-`owner` plus `ownerExists` and `ownerIsExcl` pin down who, if anyone,
-holds the line in a state that can supply data. `ownerIsExcl`
-distinguishes an exclusive UD or UC owner from a shared-dirty SD
-owner. Those are the flags the HN uses to pick a snoop opcode and to
-decide whether it still needs to go to memory.
-
-Now two things about gem5 that usually surprise people.
-
-First, there is no `*-dir.sm` file. Most textbook descriptions of Ruby
-show cache and directory as separate controllers with separate state
-machines. CHI in gem5 does not do that. The directory is folded into
-`CHI-cache.sm`, gated by the `is_HN` configuration flag. The same
-source file runs as a private L1 with `is_HN` false, and as an HN-F
-with `is_HN` true. You will not find a standalone directory controller
-anywhere in the CHI protocol tree.
-
-Second, the directory is a `PerfectCacheMemory` — an unbounded hash
-map from line address to DirEntry. No capacity. No eviction. No
-conflict misses. That matters both ways. It simplifies modeling — the
-HN never forgets who has a line, so you never debug a bug that was
-really a directory overflow. But it is also a deliberate
-simplification. In silicon, directory overflow forces
-back-invalidations, and that is one of the largest performance effects
-in real CHI systems. gem5 does not give you that cost out of the box —
-if you want it, you have to add it.
-
-The LLC slice next to the directory is a conventional `CacheMemory` —
-finite rows and ways, NUMA-interleaved across HN-F slices using the
-address bits set up in `CHI_config.py`. Directory and LLC share the
-line address but not the storage. A line can be tracked by the
-directory without being present in the LLC — and a line can be in the
-LLC without any RN currently sharing it.
+The LLC slice alongside is a conventional CacheMemory, finite in
+rows and ways, NUMA-interleaved across HN-F slices using the
+address bits set in CHI_config.py. Directory and LLC share the
+line address but not the storage — a line can be tracked without
+being cached, and cached without any sharer.
 -->
 
 ---
@@ -972,76 +821,50 @@ LLC without any RN currently sharing it.
 </div>
 
 <!-- Speaker Notes:
-Time budget: 3 minutes.
+Twenty-one states, but no need to memorise them. The names are
+compositional, so once you know the decoding rule any state on this
+slide makes sense.
 
-This is the full non-DVM vocabulary the HN-F can be in. Twenty-one
-states, grouped into four families. Do not try to memorize the table —
-just learn how to *decode* a name, and then any name on the slide
-makes sense.
+The decoding rule. The first part of a name is the controller's
+local cache state, drawn from I, SC, UC, SD, UD, UD_T. An R-prefixed
+suffix records what the directory remembers about the upstream
+subtree. A name that starts with R alone means there is no usable
+local copy and the only knowledge is the remembered upstream state.
 
-Decoding rule, left to right. The left side names the controller's
-local cache state — exactly the I/SC/UC/SD/UD/UD_T from the previous
-slide. An `_R...` suffix adds what the directory remembers about the
-upstream subtree. A leading `R` means there is no usable local copy at
-all and the only knowledge is the remembered upstream state.
+Local-only states need no surprises. UD_T is the one new face: plain
+UD with a "use timeout" set by Callback_Miss after a store miss. The
+timer prevents LL/SC livelocks by stalling coherence snoops on the
+line until it expires. An eviction does not stall — it cancels the
+timer and falls through to normal eviction handling.
 
-Family one — local only — needs no surprises. The one new state is
-`UD_T`. It is just `UD` plus a "use timeout" set by `Callback_Miss`
-after a store miss. The point of the timer is to prevent LL/SC
-livelocks: while it is active, coherence snoops on the line are
-stalled (`StallSnoop_NoTBE`). An eviction request does not stall — it
-cancels the timer and transitions to plain `UD`, and then normal
-eviction handling runs. The natural exit is the `UseTimeout` event,
-which fires `UD_T -> UD`.
+The remembered-upstream-only states are where the HN-F earns its
+keep as a directory node. RU collapses upstream UC and UD owners
+into a single stable state, with the clean-versus-dirty distinction
+parked in a TBE flag rather than in the state name. RSC and RSD are
+the shared analogues. RUSC and RUSD have a subtle leading U: it does
+not mean the upstream copies are unique — it means the directory
+records that no peer outside this subtree has the line, so a later
+upstream upgrade can be granted without further snooping. These are
+permission-preserving directory states.
 
-Family two — remembered upstream only — is where the HN-F earns its
-keep as a directory node. `RU` collapses both clean-unique and
-dirty-unique upstream owners into one stable state; the source comment
-literally says "Upstream requester has line in UD/UC". The clean
-versus dirty distinction lives in the TBE flag
-`dataMaybeDirtyUpstream`, not in the state name. `RSC` and `RSD` are
-the analogous shared cases.
+The combined "local plus remembered" states are what makes
+mostly-inclusive HN-F policies work. SC_RSC, SD_RSC, UC_RSC, UD_RSC
+are the routine cases — local data plus upstream readers. UC_RU and
+UD_RU are the unusual ones: their AccessPermission is Invalid
+because the protocol-visible owner has moved upstream, and the local
+LLC line is residue. Treat them as bookkeeping for replacement and
+writeback, not as ordinary hits. UD_RSD and SD_RSD are transient
+overlap states where dirty data exists both locally and in an
+upstream owner.
 
-The interesting pair is `RUSC` and `RUSD`. Read the leading `U` very
-carefully. It does *not* mean the upstream copies are unique. It means
-the source comment in `CHI-cache.sm`: "RSC + this node still has
-exclusive access" — that is, the HN-F's directory records that no
-peer outside this subtree has the line, so a later upstream upgrade to
-`UC` or `UD` can be granted without further peer snooping. They are
-permission-preserving directory states, not "exclusive" upstream
-copies.
-
-Family three — local plus remembered upstream — is what makes the
-mostly-inclusive HN-F policies work. The straightforward ones are
-`SC_RSC`, `SD_RSC`, `UC_RSC`, `UD_RSC`: local data of one kind plus
-upstream readers. The two unusual ones are `UC_RU` and `UD_RU`. Their
-`AccessPermission` is `Invalid` — the local copy is *not* the
-authoritative owner anymore. The HN-F may still physically retain
-data in the LLC slice, but the protocol-visible owner has moved
-upstream. Treat these as bookkeeping states for replacement and
-writeback handling, not as ordinary cache hits. `UD_RSD` and `SD_RSD`
-are transient overlap states where dirty data exists both locally and
-in an upstream owner; the controller has to respect both during
-finalization.
-
-Family four — transient — is gem5's choice to use exactly two generic
-in-flight states instead of one per outcome. `BUSY_INTR` lets snoops
-proceed because the TBE carries enough information to answer them
-correctly. `BUSY_BLKD` is the fragile point of a sequence where a
-servicing snoop would violate ordering or state assumptions. Both
-states resolve via the `Final` event: the actions and the next stable
-state are computed from `makeFinalState` in `CHI-cache-funcs.sm`,
-which assembles the cache half (`UD/UC/SD/SC/UD_T`) and the directory
-half (`RU/RSC/RSD/RUSC/RUSD`) and then calls `makeFinalStateHelper`
-to combine them into one of the names on this slide.
-
-The complete written derivation, with both RN-F and HN-F perspective
-columns, is in `ruby-book/slides/CHIStates.md`. The source anchors
-are `src/mem/ruby/protocol/chi/CHI-cache.sm` for the state
-declarations, `CHI-cache-funcs.sm` for `makeFinalState`,
-`CHI-cache-actions.sm` for action callbacks (including the
-`Callback_Miss` that produces `UD_T`), and `CHI-cache-transitions.sm`
-for the actual `transition(...)` rules.
+Finally, the two transient states. gem5 deliberately uses just two
+generic in-flight states instead of one per outcome. BUSY_INTR lets
+snoops proceed because the TBE carries enough information to answer
+them safely. BUSY_BLKD is the fragile interval where a servicing
+snoop would violate ordering. Both resolve through the Final event:
+makeFinalState in CHI-cache-funcs.sm assembles a cache half and a
+directory half and combines them into one of the named stable
+states above.
 -->
 
 ---
@@ -1060,78 +883,50 @@ for the actual `transition(...)` rules.
 </div>
 
 <!-- Speaker Notes:
-Time budget: 4 minutes.
+Coherence stays at the home, but data does not have to. The
+straightforward implementation routes every transfer through the
+home, which doubles latency and bandwidth and turns the home's data
+buffers into the system bottleneck. CHI's answer is to keep
+coherence decisions central while letting data skip the home on
+three common paths.
 
-We now have a home node with a directory and an LLC. Every read and
-every write is logically a conversation with the home — it knows who
-shares what, it decides who to snoop, and it decides whether data has
-to come from a peer cache or from memory. The straightforward way to
-build this is: every data transfer passes through the home. The
-requester asks the home, the home either supplies data from its LLC,
-or it fetches data from a peer or from memory, and then the home
-forwards that data back to the requester. Correct, but expensive. Two
-hops on the data path, twice the latency, twice the bandwidth booked
-at the home, and the home's data buffers become the bottleneck of the
-whole interconnect.
+Direct Cache Transfer handles data that already lives in a peer
+cache. The home consults its directory, sees a peer holds the line,
+and instead of pulling the data back, issues a forwarding snoop —
+SnpSharedFwd, SnpUniqueFwd, and the rest of the family. That snoop
+carries FwdNID and FwdTxnID pointing at the original requester. The
+snoopee sends CompData straight to the requester and tells the home
+what happened through a SnpRespFwded or SnpRespDataFwded, so the
+directory can still be updated.
 
-CHI's answer is not to move coherence out of the home — coherence
-still lives there — but to let *data* skip the home on the common
-paths. The spec calls out three such fast paths, and this diagram
-shows all three at once. Direct Cache Transfer, DCT, for data that
-lives in a peer cache. Direct Memory Transfer, DMT, for reads that
-miss to memory. And Direct Write-data Transfer, DWT, for writes whose
-data is ultimately going to memory anyway.
-
-Start with DCT, the red arrow across the top. A requester issues a
-read. The home looks in its directory, sees a peer RN-F has the line,
-and instead of asking the peer to send the data back to the home, it
-sends a *forwarding-type* snoop — SnpSharedFwd, SnpUniqueFwd, and
-friends. That snoop carries two extra fields, FwdNID and FwdTxnID,
-pointing at the original requester. The snoopee sends its CompData
-directly to the requester and tells the home what it did with a
-SnpRespFwded or SnpRespDataFwded, so the home can still retire the
-transaction and update its directory. One data hop instead of two, and
-the home's buffers never touch the line.
-
-DMT is the violet arrow from the subordinate up to the requester. When
-the home decides the data has to come from memory — either there is
-no snoop, or the snoops came back empty — it forwards the read to the
-SN-F as a ReadNoSnp, and it stamps the original requester's ID and
-TxnID into the ReturnNID and ReturnTxnID fields. The subordinate sends
-CompData straight to the requester. The home does not route the data
-at all; it only needs a ReadReceipt or a CompAck to know the
+Direct Memory Transfer handles reads that miss to memory. The home
+forwards the read to the Subordinate as a ReadNoSnp, stamping the
+requester's NodeID and TxnID into ReturnNID and ReturnTxnID. The
+Subordinate replies with CompData directly to the requester. The
+home only needs a ReadReceipt or the closing CompAck to know the
 transaction is done.
 
-DWT is the mirror image, the green arrow going the other way. The
-home takes a downstream write and sets DoDWT equal to one in the
-request to the subordinate, again stamping the requester's ID into
-ReturnNID and ReturnTxnID. The subordinate allocates a buffer and
-sends DBIDResp straight to the requester, which then streams
-NonCopyBackWriteData straight to the subordinate. The home sees the
-Comp from the subordinate, sends its own Comp to the requester, and is
-done — without the write data ever passing through it.
+Direct Write-data Transfer is the mirror of DMT. The home delegates
+the write to the Subordinate by setting DoDWT in the downstream
+request and stamping the requester's identity in the same return
+fields. The Subordinate allocates a buffer, sends DBIDResp straight
+to the requester, and the requester streams NonCopyBackWriteData
+straight to the Subordinate. The home receives only completion
+bookkeeping; the write payload never touches its buffers.
 
-Notice what has changed and what has not. What has changed is the
-data plane: DAT flits bypass the home on every one of these three
-paths. What has *not* changed is the control plane. Every transaction
-still starts at the home. The home still reads its directory, still
-issues snoops, still owns the coherence decision, still decides when
-the transaction is complete. The only reason this works is that CHI
-carries the forwarding identity inside the control messages — FwdNID,
-FwdTxnID for DCT, ReturnNID, ReturnTxnID for DMT and DWT — so the
-peer or the subordinate knows where to send data without going through
-the home again.
+Notice what has changed and what has not. The data plane skips the
+home on all three paths. The control plane does not. Every
+transaction still starts at the home; the home still consults its
+directory, still issues snoops, and still decides when the
+transaction is complete. These paths work only because the control
+messages carry the forwarding identity inside them.
 
-Two practical notes. First, these are capabilities, not defaults.
-Each component advertises Direct_Cache_Transfer, Direct_Memory_Transfer,
-and DoDWT support in its configuration, and the home only uses a fast
-path when every party on the path supports it. Atomics, partial reads,
-passing-exclusive reads, and error paths all fall back to the classic
-home-in-the-middle flow. Second, DCT and DMT are recommended but not
-mandatory — the same request can be served the slow way if the home
-chooses. You will see both in the two practice transactions later: a
-plain ReadShared that goes through the home, and the DCT variant
-where the peer shortcuts to the requester.
+Two practical notes. These are capabilities, not defaults — each
+component advertises support in its configuration, and the home
+takes the fast path only when every party on it supports the
+feature. Atomics, partial reads, exclusive monitors, and error
+paths all fall back to the classic home-in-the-middle flow. We will
+see both styles in the practice transactions next.
 -->
 
 ---
@@ -1185,90 +980,54 @@ Home forwards to memory; Subordinate sends `CompData` straight to the Requester,
 </div>
 
 <!-- Speaker Notes:
-This is the first of three practice transactions. Allocating Read is the bread-and-butter
-coherent read: the Requester intends to put the line into a coherent cache state (SC, UC, UD,
-or SD) and must therefore close the loop with CompAck. Spec section B2.3.1.1, Figure B2.1.
+First of three practice transactions. Allocating Read is the
+bread-and-butter coherent read: the Requester intends to fill its
+cache in a coherent state and therefore must close the loop with
+CompAck. The full spec figure encodes six alternatives between four
+actors; we show the two most common and summarise the rest.
 
-The full Figure B2.1 encodes six alternatives (1, 2, 3, 4, 5a–d, 6) between four lifelines
-(Requester, Home, Subordinate, Snoopee). On this slide we show only the two that come up
-most often in practice — Alt 1 and Alt 3 — and summarize the rest verbally. For the full
-decision tree, see the spec figure or the companion note SequenceHowTo.md.
+In-scope opcodes are ReadClean, ReadNotSharedDirty, ReadShared,
+ReadUnique, and ReadPreferUnique. MakeReadUnique is excluded because
+it uses a dedicated alternative that returns a bare Comp instead of
+CompData. CompAck is always required from an RN-F here, so
+ExpCompAck is effectively pinned to one — the choice among
+alternatives is a home-local decision based on where the line lives.
 
-Actors in the full figure. Requester is always an RN-F for these opcodes (Allocating Reads
-can only come from a fully coherent Request Node). Home is HN-F acting as Point of Coherence
-and Point of Serialization. Subordinate is SN-F (memory side). Snoopee is a peer RN-F that
-holds or might hold the line.
+Alternative 1 is the simplest path. The home already has a usable
+copy, typically because a mostly-inclusive cache inside the
+interconnect holds it or because the directory confirms there is no
+dirty peer. The home returns a single CompData flit carrying both
+the cache-state response and the 64-byte payload, the requester
+fills its cache, and CompAck closes the loop. Three flits
+end-to-end, no Subordinate involvement.
 
-In-scope opcodes (listed on both arrows). The spec lists six: ReadClean, ReadNotSharedDirty,
-ReadShared, ReadUnique, ReadPreferUnique, and MakeReadUnique. The slide shows five — we
-omit MakeReadUnique from the label because MakeReadUnique uses its own dedicated
-Alternative 6 (Comp instead of CompData) and does not belong to either of the two paths
-shown here.
+Alternative 3 is the memory-side path. The home does not have the
+line and the directory says no peer does either, so the home has to
+fetch from memory. With Direct Memory Transfer, the home issues a
+downstream ReadNoSnp to the Subordinate, which sends CompData
+straight to the Requester. CompAck still goes to the home, not to
+the Subordinate — the home remains the Point of Serialization even
+under DMT. We are showing the unordered case; ordered reads add a
+ReadReceipt back to the home that we have omitted for clarity.
 
-Fields that affect the flow. For Allocating Reads, CompAck is always required from an RN-F
-(per B2.7.3), so ExpCompAck is effectively pinned to 1 and is not a selector the way it is
-for Non-allocating Reads. The choice among Alt 1–5 is a Home-local decision based on where
-the line lives.
+Why these two. Every real coherent load miss follows one shape or
+the other: the home served it from its own cache, or it had to go
+to DRAM.
 
-Left column — Alt 1 "Combined response from Home". The Home already has a usable copy of the
-line (typically because an inclusive or mostly-inclusive cache inside the interconnect holds
-it, or because the directory confirms there is no dirty peer and Home can construct the line
-itself). Home returns a single CompData flit on RDAT, carrying both the response (cache state:
-SC, UC, UD, SD — possibly with the _PD "PassDirty" bit) and the 64-byte payload in one flit
-sequence. The Requester fills its cache in the returned state and sends CompAck on SRSP to
-close the loop. This is the shortest possible Allocating Read — three flits end-to-end and
-no Subordinate involvement.
+The other alternatives in one line each. Alternative 2 is a
+latency-optimised version of Alt 1 — the home splits the response
+into separate permissions and data so CompAck can be issued earlier.
+Alternative 4 is the same optimisation applied to Alt 3, with the
+home sending permissions while the Subordinate fetches data in
+parallel. Alternative 5 is the DCT path we already discussed,
+where a peer RN-F forwards data directly; we will look at it on
+the next slide. Alternative 6 is reserved for MakeReadUnique, which
+takes ownership without pulling data.
 
-Right column — Alt 3 "Combined response from Subordinate (DMT)". The Home does not have the
-line and the directory says no peer RN-F does either, so Home must fetch from memory. Under
-Direct Memory Transfer, Home issues a downstream ReadNoSnp to the Subordinate, and the
-Subordinate sends CompData straight to the Requester, bypassing Home on the return leg. This
-saves one NoC hop and one buffer allocation at Home. The Requester still sends CompAck to
-Home (not to Subordinate) — Home remains the Point of Serialization even under DMT. We are
-showing the unordered sub-case (Order = 00); for ordered reads (Order = 10 or 11) the
-Subordinate also returns a ReadReceipt to Home to confirm the downstream request will not
-be retried, but that message is optional from the figure's perspective and we have elided
-it here.
-
-Why these two. Every real coherent load miss follows either "Home served it from its own
-cache" (Alt 1) or "Home had to go to DRAM" (Alt 3). Alt 2 and Alt 4 are latency-optimized
-variants of Alt 1 and Alt 3 respectively — they split the single CompData into separate
-RespSepData (permissions) and DataSepResp (payload) so the Requester can send CompAck as
-soon as permissions arrive, freeing Home to snoop the same line for the next request sooner.
-Whether Alt 2/4 or Alt 1/3 is used depends on implementation choice.
-
-The other four alternatives, in one line each.
-
-• Alt 2 — RespSepData + DataSepResp from Home. Latency-optimized Alt 1. Home has the line
-but splits the response to let the Requester send CompAck earlier.
-
-• Alt 4 — RespSepData from Home, DataSepResp from Subordinate (DMT). Latency-optimized
-Alt 3. Home sends permissions immediately (because the directory already knows them) while
-the data is fetched from memory in parallel.
-
-• Alt 5 — DCT via Snp*Fwd forwarding snoop. The directory indicates a peer RN-F holds the
-line in a forwardable state. Home issues SnpSharedFwd, SnpUniqueFwd, SnpNotSharedDirtyFwd,
-SnpCleanFwd, or SnpOnceFwd to the Snoopee, which responds in one of four ways: 5a forward
-CompData to Requester + SnpRespFwded to Home; 5b same + SnpRespDataFwded with a data copy
-to Home; 5c or 5d refuse the forward (SnpResp or SnpRespData/Ptl to Home), forcing Home to
-fall back to Alt 1–4. DCT is opportunistic, not guaranteed.
-
-• Alt 6 — MakeReadUnique only. The Requester is about to overwrite the full line, so it
-asks for unique permission without data. Home returns a bare Comp instead of CompData.
-Illegal for the other five opcodes.
-
-Closing the loop. A single CompAck from Requester to Home terminates the transaction in
-every alternative. It is legal to send CompAck as soon as CompData (Alts 1, 3, 5a, 5b),
-Comp (Alt 6), or RespSepData (Alts 2, 4) arrives — the Requester does not have to wait for
-DataSepResp. CompAck release lets Home forward a queued snoop for the same line to this
-Requester.
-
-Common misreadings. (1) The Subordinate and Snoopee lifelines only exist on certain
-alternatives — don't assume all four actors are always active. (2) Under DMT (Alt 3/4),
-CompAck still goes to Home, never to Subordinate. (3) Alt 5c/5d are legitimate outcomes,
-not error cases — DCT is opportunistic. (4) For ordered requests on Alt 3, a ReadReceipt
-from Sub to Home appears in the original figure as an opt block — we have elided it in the
-slide because the typical RN-F load miss uses Order = 00.
+Two things often get misread. CompAck terminates the transaction in
+every alternative and always goes to the home. And Subordinate and
+peer lifelines are only active on certain alternatives — do not
+assume all four actors participate in every flow.
 -->
 
 ---
@@ -1329,118 +1088,55 @@ Snoopee returns `SnpResp` on RSP with no data (e.g. it had silently evicted). Ho
 </div>
 
 <!-- Speaker Notes:
-Second practice transaction — same transaction class as slide 14 (Allocating Read,
-B2.3.1.1) but this time we focus on Alternative 5: the DCT path where the data comes from
-a peer RN-F, not from Home's cache or from DRAM. Two actors become three: Requester, Home,
-Snoopee. The Subordinate is dormant here.
+Second practice transaction — same Allocating Read class, but now
+focused on Alternative 5, the DCT path where data comes from a peer
+RN-F. Three actors instead of two: Requester, Home, and Snoopee.
 
-What triggers this path. Home's directory shows that a peer RN-F holds the line in a state
-that can serve it. Instead of snooping, pulling the data back, and then forwarding to the
-Requester, Home issues a forwarding snoop (the Snp*Fwd family) that instructs the Snoopee
-to send the data directly. This saves one NoC hop and the Home's data buffer.
+The trigger. The home's directory shows that a peer holds the line
+in a forwardable state. Rather than pulling the data back through
+itself, the home issues a forwarding snoop and the peer ships the
+line directly to the requester. The Snp*Fwd opcode the home picks
+mirrors the original request — ReadShared maps to SnpSharedFwd,
+ReadUnique to SnpUniqueFwd, and so on. ReadShared with SnpSharedFwd
+is the concrete example we use here.
 
-The Snp*Fwd family. Which forwarding snoop Home picks depends on the original request; the
-mapping is defined in B4.4 "Request transactions and corresponding Snoop requests":
+Alternative 5a is the happy path. The peer holds the line clean —
+SC or UC — and the requester asked for a share. The home sends
+SnpSharedFwd with FwdNID set to the home itself and FwdTxnID set to
+the requester's TxnID, so the peer knows who to forward to. The
+peer sends CompData straight to the requester, with HomeNID in the
+data flit telling the requester where to send CompAck. The peer
+also sends a small SnpRespFwded message on RSP back to the home,
+reporting which peer state changed and what state the requester
+will land in. Typical transitions: peer SC stays SC or UC drops to
+SC; the requester goes from I to SC.
 
-• ReadShared          → SnpSharedFwd
-• ReadUnique          → SnpUniqueFwd
-• ReadClean           → SnpCleanFwd
-• ReadNotSharedDirty  → SnpNotSharedDirtyFwd
-• ReadPreferUnique    → SnpPreferUniqueFwd
-• ReadOnce*           → SnpOnceFwd (IO-coherent variant)
+Alternative 5c is the refusal. The home tried DCT, but between the
+directory lookup and the snoop arriving, the peer silently evicted
+the line — there is nothing to forward. The peer responds with
+SnpResp on RSP, no data, declaring it now holds Invalid. The spec
+is explicit about what happens next: the home must pick another
+alternative to complete the transaction. We show DMT as the
+fallback because that is the common case when nobody has the data —
+the home issues ReadNoSnp downstream, the Subordinate sends
+CompData to the requester, and CompAck closes the loop.
 
-We use ReadShared → SnpSharedFwd on both slides as a concrete, familiar example.
+The 5c case is the canonical example of a single read transaction
+touching all four CHI actors. The Subordinate leg is not an
+independent transaction; the spec defines it as part of the same
+transaction flow because the fallback branches re-enter Alt 1
+through 4.
 
-Left column — Alt 5a "With response to Home" (SnpRespFwded).
+A few things to keep clear. CompAck always goes to the home, never
+to the Subordinate, even under DMT. SnpResp from the peer in 5c is
+a legitimate refusal, not an error response. And the saving from
+DCT is one data hop and the home's data buffer — when DCT fails,
+the snoop round-trip to the peer is pure overhead.
 
-Setup. The Snoopee holds the line in a Clean state — SC (Shared Clean) or UC (Unique
-Clean). The Requester asked for a shared copy.
-
-Flow.
-• R → H: REQ ReadShared.
-• H → N: SNP SnpSharedFwd. Home provides its own NID in FwdNID and the Requester's TxnID
-  in FwdTxnID so the Snoopee knows who to forward to.
-• N → R: DAT CompData. The Snoopee sends the cache line directly to the Requester with a
-  Resp field that says SC. HomeNID in the data flit tells the Requester where to send
-  CompAck (it goes to Home, not the Snoopee).
-• N → H: RSP SnpRespFwded. A response-channel message only — no data. It tells Home the
-  snoop succeeded, which peer state changed, and what state the Requester will end up in.
-• R → H: SRSP CompAck. Closes the transaction.
-
-Typical state transitions.
-• Snoopee: SC → SC (clean sharer stays), or UC → SC (gives up uniqueness).
-• Requester: I → SC.
-
-When 5a is used. Snoopee had a clean copy, and Home either already has the line or does not
-need a refresh. The line has no dirty responsibility to re-home.
-
-Right column — Alt 5c "Failed through RSP channel, must use alternative."
-
-Setup. Home tried DCT based on its directory, but the Snoopee cannot honour the forward —
-most commonly because the peer silently evicted the line between Home's directory lookup
-and the snoop's arrival, so it no longer holds anything to send. Stale directory entries,
-transient states at the peer, and certain MSHR/TBE conflicts are the usual culprits.
-
-Flow (as drawn on the slide — Alt 5c refusal, followed by Alt 3 DMT as the fallback).
-
-• R → H: REQ ReadShared.
-• H → N: SNP SnpSharedFwd. Home optimistically asks for a forward.
-• N → H: RSP SnpResp. Response-channel only, no data. The Resp field carries the
-  Snoopee's final state (typically I — the peer confirms it has nothing). Crucially, no
-  data reaches the Requester on this leg.
-• Fallback. The spec text for 5c says explicitly: "The Home must use another alternative
-  described in this section to complete the transaction to the Requester." Home picks one
-  of Alts 1, 2, 3, or 4. We illustrate Alt 3 (combined response from Subordinate via DMT),
-  which is the typical fallback when the peer has nothing and Home also has nothing cached.
-• H → S: REQ ReadNoSnp. Home issues a downstream read.
-• S → R: DAT CompData. Subordinate sends the line straight to the Requester (DMT).
-• R → H: SRSP CompAck. Closes the transaction.
-
-Why this is an important scenario to see. It is the canonical example of a single Read
-transaction touching all four actors — Requester, Home, Snoopee, and Subordinate — within
-one logical transaction. The CHI spec's figure semantics allow this because Alt 5 sits at
-the top level and its failure branches explicitly re-enter Alt 1–4; the Snoopee interaction
-is not an "independent transaction" in the 5c/5d case but part of the same transaction flow.
-
-Alternatives Home could pick as the fallback.
-• Alt 1 — if Home can now satisfy the read from an internal cache state that changed while
-  the snoop was in flight.
-• Alt 2 — the RespSepData / DataSepResp variant of Alt 1.
-• Alt 3 (shown) — DMT, the common case when nobody has the data.
-• Alt 4 — Home returns RespSepData immediately, Subordinate returns DataSepResp.
-
-Alt 5d in one line. Sibling of 5c where the refusal carries a data payload up to Home
-(SnpRespData or SnpRespDataPtl on the DAT channel). Home still cannot treat this as a
-forward — it must execute a follow-up alternative to deliver the data to the Requester.
-Useful when the peer has a partially valid copy and Home wants to absorb it for a later
-use, but the immediate transaction still needs a Home-issued completion.
-
-5a vs 5c in one sentence. 5a is the happy path — Snoopee forwards `CompData` to the
-Requester and the transaction ends quickly; 5c is the refusal path — Home spent a snoop
-round-trip in vain and must still go to Home's own cache or to memory to serve the
-Requester.
-
-Common misreadings.
-
-(1) The Subordinate lifeline in 5c is not an "independent transaction" in the same sense
-as snoops Home fires during Alt 1–4. It is part of the same transaction flow because 5c's
-fallback is explicitly specified as "use another alternative described in this section."
-
-(2) CompAck goes to Home, not to the Subordinate (even under DMT). Home is still the
-Point of Serialization.
-
-(3) "DCT saves two hops" — no, it saves one. Without DCT it would be R → H → N → H → R
-(4 hops); with DCT (5a) it is R → H, H → N, N → R plus N → H for the response — still 4
-hops but one is a cheap RSP message instead of a full data payload, and Home's data buffer
-is skipped. When DCT fails (5c), the round-trip to the Snoopee is pure overhead.
-
-(4) `SnpResp` in 5c is not an error response — it is a legitimate "I don't have the line
-in a forwardable state" reply. Home is required to handle it.
-
-In gem5 — DCT is gated by the `enable_DCT` parameter on the HN-F controller. It is enabled
-by default in the standard CHI configurations. When the SLICC protocol observes a 5c-style
-refusal (for example because the directory was optimistic), it executes the fallback by
-issuing the downstream `ReadNoSnp`, matching the diagram shown here.
+In gem5, DCT is gated by the enable_DCT parameter on the HN-F
+controller and is on by default. The SLICC protocol implements the
+fallback exactly as drawn — when a forwarding snoop comes back
+without data, the home reissues as a downstream ReadNoSnp.
 -->
 
 ---
@@ -1502,132 +1198,59 @@ Same DWT skeleton; the combined opcode carries **write + CMO** together. Sub ret
 </div>
 
 <!-- Speaker Notes:
-Third practice transaction. The theme is "data flowing down to memory": we show the DWT
-(Direct Write-data Transfer) path for two different write families. Left column is the
-plain Immediate Write from B2.3.2.1 Alt 1; right column is the Combined Immediate Write
-and CMO from B2.3.2.4 Alt 1. Three actors in each — Requester, Home, Subordinate. No
-Snoopee lifeline: any snoops Home fires to enforce coherence are independent transactions
-from the Home (see B2.3.9) and deliberately not drawn.
+Third practice transaction — the write side, on the DWT path we
+introduced earlier. Two flavours: a plain Immediate Write, and a
+Combined Write plus Cache Maintenance Operation. Three actors in
+each — Requester, Home, Subordinate. Any snoops the home fires for
+coherence are independent transactions and not drawn here.
 
-What DWT is. Direct Write-data Transfer lets the Requester's write data bypass Home on
-the WDAT channel. Home delegates the write to the Subordinate by setting the DoDWT bit on
-the downstream request. The Subordinate, not Home, issues DBIDResp to the Requester, and
-the Requester sends NonCopyBackWriteData directly to the Subordinate. Home stays in the
-loop for completion bookkeeping but never touches the payload. That is the whole
-bandwidth argument for DWT.
+DWT is the fast path for writes. The home delegates by setting
+DoDWT in the downstream request; the Subordinate, not the home,
+issues the DBIDResp buffer grant; and the requester streams write
+data straight to the Subordinate. The home stays in the loop only
+for completion bookkeeping.
 
-Why these two columns. The left column is the foundational DWT shape — the simplest
-concrete demonstration of "data flows straight to Subordinate." The right column shows
-that the same skeleton scales naturally to combined Write+CMO transactions, with one new
-element: the CompCMO response that acknowledges the CMO half of the combined operation.
+The plain Immediate Write covers seven opcodes — WriteNoSnpPtl /
+Full / Def, plus the WriteUnique family with optional stash hints.
+The home strips the snoop aspect of WriteUnique before sending
+downstream; the Subordinate always sees one of WriteNoSnpPtl, Full,
+or Def with DoDWT set. The flow is: request goes to home, home
+forwards to Subordinate, Subordinate sends DBIDResp to the
+requester, requester sends NonCopyBackWriteData to the Subordinate
+(or WriteDataCancel if it aborts), Subordinate returns Comp to the
+home, home mirrors Comp to the requester. Both the Subordinate and
+the home are permitted to send Comp before the write data lands —
+the spec gives implementations latitude here.
 
-Left column — Immediate Write via DWT (B2.3.2.1 Alt 1).
+The Combined Write plus CMO bundles a write payload and a cache
+maintenance operation into a single transaction. WriteNoSnpFullCleanInv
+is the typical example: write these 64 bytes, then run CleanInvalid
+across any downstream caches. The slide lists ten in-scope opcodes
+covering CleanInv, CleanSh, CleanInvPoPA, and CleanInvStrg variants.
+The flow has the same skeleton, with two differences. First, the
+home forwards the full combined opcode downstream — it does not
+strip the CMO. Second, the Subordinate now returns two completions:
+Comp acknowledges the write half, CompCMO acknowledges the CMO half.
+They are semantically different responses, not a retry, and they
+arrive separately because the CMO may have to propagate further
+through downstream observers before it is truly done. The home
+mirrors both back to the requester, with one ordering constraint —
+if there is a deeper downstream observer, the home must wait for
+CompCMO from the Subordinate before forwarding CompCMO upward.
 
-In-scope opcodes. The spec lists seven for B2.3.2.1: WriteNoSnpPtl, WriteNoSnpFull,
-WriteNoSnpDef, WriteUniquePtl, WriteUniqueFull, WriteUniquePtlStash, WriteUniqueFullStash.
-Home strips the snoop aspect of WriteUnique* before sending downstream; the opcode that
-actually lands at Sub is always WriteNoSnpPtl, WriteNoSnpFull, or WriteNoSnpDef — with
-DoDWT = 1.
+A few easy mistakes. Under DWT the buffer grant comes from the
+Subordinate, not the home — readers who internalised the
+home-centric write flow often expect DBIDResp from the home.
+WriteDataCancel is a legal substitute for the data, used when the
+requester aborts after receiving DBIDResp. And ExpCompAck does not
+fire under DWT in either flavour; Comp and CompCMO close the
+transaction.
 
-Flow (on the slide, step by step).
-• R → H: REQ carrying the original write opcode.
-• H → S: REQ with DoDWT = 1. Home forwards downstream.
-• S → R: CRSP DBIDResp. Critical — the buffer grant comes from Sub, not Home. DBIDResp
-  carries the DBID that the Requester must echo back as TxnID in the data flit.
-• R → S: WDAT NonCopyBackWriteData (or WriteDataCancel if the Requester aborts). Only
-  legal after DBIDResp arrives.
-• S → H: CRSP Comp. Sub signals that the write has been accepted. Sub is permitted, but
-  not required, to wait for the write data (or WriteDataCancel) from the Requester before
-  sending Comp.
-• H → R: CRSP Comp. Home mirrors the completion. Home is permitted, but not required,
-  to wait for the S→H Comp before returning Comp to the Requester.
-
-What we have elided. The spec figure also shows an opt [TagOp == Match] branch with a
-TagMatch response from Sub to R for memory-tagged writes. For TagOp != Match — the
-common case — that arrow is not sent and is not drawn on this slide.
-
-Right column — Combined Immediate Write and CMO via DWT (B2.3.2.4 Alt 1).
-
-What a "Combined Write and CMO" is. One transaction carries both a write payload and a
-Cache Maintenance Operation. Example: WriteNoSnpFullCleanInv — write these 64 bytes, then
-run a CleanInvalid across any downstream caches. The opcode packages the write and the
-CMO into a single atomically-scheduled operation.
-
-In-scope opcodes (10 total in B2.3.2.4):
-• WriteNoSnpPtlCleanInv / WriteNoSnpFullCleanInv
-• WriteNoSnpPtlCleanSh / WriteNoSnpFullCleanSh
-• WriteUniquePtlCleanSh / WriteUniqueFullCleanSh
-• WriteNoSnpPtlCleanInvPoPA / WriteNoSnpFullCleanInvPoPA
-• WriteUniqueFullCleanInvStrg / WriteNoSnpFullCleanInvStrg
-
-TagOp constraint. For Combined Write + CMO, TagOp = Match is not permitted (spec note in
-B2.3.2.4). So no TagMatch response ever appears in this figure — TagOp does not affect
-the flow.
-
-Flow (on the slide, step by step).
-• R → H: REQ carrying the combined Write+CMO opcode.
-• H → S: REQ with DoDWT = 1. Unlike plain Immediate Write, the downstream opcode is the
-  full combined opcode (WriteNoSnpFullCleanInv, etc.), not a stripped-down WriteNoSnp.
-  Sub therefore sees both the write and the CMO intent.
-• S → R: CRSP DBIDResp.
-• R → S: WDAT NonCopyBackWriteData (or WriteDataCancel).
-• S → H: CRSP Comp. Acknowledges the write half. Sub may send this before or after the
-  write data arrives.
-• H → R: CRSP Comp. Home mirrors the write completion.
-• S → H: CRSP CompCMO. Acknowledges the CMO half. Sub may send CompCMO before or after
-  write data.
-• H → R: CRSP CompCMO. Home mirrors the CMO completion. One subtle ordering constraint:
-  if there is an observer downstream of Home (a deeper subordinate, or a persistence
-  point), Home must wait for CompCMO from Sub before returning CompCMO to the Requester.
-  Otherwise Home is free to forward it earlier.
-
-Why two completions. Comp means "the write is accepted and observable at this level."
-CompCMO means "the CMO has been completed — any caches below this point that needed a
-Clean or Invalidate have done so." They are independent acknowledgements and arrive
-separately because they complete at different times: the CMO may have to propagate
-through additional downstream observers before it is truly done.
-
-The other B2.3.2.4 alternatives, in one line each (not drawn on the slide).
-
-• Alt 2 — Non-combined Write to Subordinate with DWT. Home splits the combined opcode
-  into a plain WriteNoSnp (DoDWT = 1) down to Sub, and handles the CMO half itself. Sub
-  returns only Comp; Home returns Comp + CompCMO to the Requester. Used when the
-  Subordinate does not support the combined opcode variant.
-
-• Alt 3 — Without DWT. Home handles everything locally: the Requester sends
-  NonCopyBackWriteData to Home, not to Sub. Sub-alternatives 3a1/3a2, 3b1/3b2/3b2a/3b2b
-  cover DBIDResp/Comp packaging and optional CompAck handling for OWO ordering.
-
-Common misreadings.
-
-(1) The downstream opcode differs between the two columns. Left — always one of
-WriteNoSnpPtl / WriteNoSnpFull / WriteNoSnpDef. Right — the full combined opcode
-(WriteNoSnpFullCleanInv etc.). Readers often assume Home always strips to a plain
-WriteNoSnp; that is only true for B2.3.2.1 Alt 1.
-
-(2) DBIDResp under DWT comes from Subordinate, not Home. Readers who internalized the
-Home-centric view of non-DWT writes (Alt 3 in either section) often expect Home to issue
-DBIDResp. Under DWT, Home is out of the data path AND out of the buffer-grant path.
-
-(3) WriteDataCancel is a legal substitute for NonCopyBackWriteData. The Requester can
-abort after receiving DBIDResp — both Comp and CompCMO still arrive and the transaction
-completes cleanly, just without the write landing.
-
-(4) ExpCompAck and DWT. Under DWT (both columns), no CompAck message is shown even if
-ExpCompAck was set in the original request. Sub closes the write half of the transaction
-loop at Home, and Home closes the loop at the Requester via Comp (and CompCMO for the
-combined case). CompAck appears only in the No-DWT Alt 3 sub-trees of B2.3.2.4.
-
-(5) The CompCMO arrow pair is NOT a second retry of Comp. Comp and CompCMO are
-semantically different responses that both ride CRSP; students who miss this sometimes
-read the right column as "the same Comp sent twice for reliability." It is not — Comp
-acknowledges the write, CompCMO acknowledges the CMO.
-
-In gem5. The CHI-cache and HN-F controllers implement the DWT decision as a bit on the
-downstream request generated from the original write. For combined Write + CMO, the CHI
-SLICC file threads both Comp and CompCMO responses through the HN-F transition table
-before releasing the Requester. Search for "CompCMO" under src/mem/ruby/protocol/chi/
-for the SLICC machinery.
+In gem5, both controllers implement DWT as a bit on the downstream
+request, and the combined Write plus CMO threads Comp and CompCMO
+through the HN-F transition table before releasing the requester.
+The CompCMO machinery is straightforward to find under
+src/mem/ruby/protocol/chi/.
 -->
 
 ---
@@ -1703,77 +1326,56 @@ Retry is a three-step handshake on REQ + RSP: <code>RetryAck</code> tells the Re
 </div>
 
 <!-- Speaker Notes:
-Time budget: 4 minutes.
+Request Retry is CHI's flow-control valve. REQ has no ready/valid
+back-pressure beyond link-level credits, and those credits guard
+channels, not the protocol resources behind them. When a home node's
+tracker fills, retry is how it says "I heard you, I cannot serve you
+yet, here is how to wait."
 
-The Request Retry flow is CHI's flow-control valve. Without it, a
-Home Node with a full tracker has nowhere to put a back-pressure
-signal — REQ has no ready/valid back-pressure semantics beyond
-link-level credits, and link credits guard the channel, not the
-protocol resources behind it. Retry is how the Completer says
-"I heard you, I cannot serve you yet, here is how to wait."
+The handshake is three steps. First the requester sends its original
+transaction with AllowRetry equal to one and PCrdType all zeros — a
+hard rule from the spec. The completer evaluates its resources and,
+if it cannot accept, returns a RetryAck on RSP stamped with a
+PCrdType value, call it K. K is the completer's choice and
+identifies which credit pool the requester must wait on.
 
-Walk the diagram top to bottom.
+Some time later, when a transaction of class K completes at the
+completer, it frees a slot. The completer sends PCrdGrant on RSP,
+also tagged with K. That is the moment the credit transfers; the
+requester now owns one P-credit of class K.
 
-Step 1. The Requester sends its original transaction — say a
-ReadShared. AllowRetry is 1, meaning "I have no credit, please
-serve me if you can, otherwise tell me to retry." PCrdType must be
-all zeros on this first attempt; that is a hard rule from B2.10.2.2.
-The Completer looks at its resources — pCAM slot, snoop filter
-entry, response buffer, QoS quota — and decides it cannot accept.
-It returns RetryAck on the RSP channel and stamps a PCrdType value
-on it, call it K. K is the Completer's choice; it identifies which
-credit pool the Requester must wait on.
+The requester then reissues the original request, with two fields
+changed: AllowRetry flips to zero and PCrdType is set to K. That
+combination tells the completer the request is credit-backed and
+must be accepted. From here the transaction proceeds normally
+through whatever Comp, DBIDResp, data, and CompAck the opcode
+requires.
 
-Step 2. Time passes. Eventually a transaction of class K completes
-at the Completer and frees its resource. The Completer then sends
-PCrdGrant on RSP, also tagged with PCrdType = K. This is the
-moment the credit transfers — the Requester now owns one P-Credit
-of class K.
+There is one escape hatch. If the requester ends up not needing the
+credit — the request was killed, coalesced, or otherwise dropped —
+it returns the credit using the PCrdReturn opcode on REQ. That
+prevents credit leakage across the fabric and requires the
+implementation to track outstanding granted credits per type.
 
-Step 3. The Requester reissues the original request on REQ. Two
-fields change from the first attempt: AllowRetry flips to 0, and
-PCrdType is set to K. That combination tells the Completer
-"this is credit-backed — you promised to accept it." The Completer
-is obliged. From here the transaction proceeds normally — Comp,
-DBIDResp, data, CompAck, whatever the opcode requires.
+Two design points anchor the rest. The PCrdType field is four bits,
+giving up to sixteen independent credit classes. The intent is to
+partition the completer's resource pool — separate trackers for
+reads versus writes, separate buffers per QoS band, separate
+snoop-filter entries versus data buffers — so a flood of one class
+cannot starve another. The mapping of K values to resource classes
+is implementation-specific; single-class designs use the all-zeros
+encoding for everything.
 
-One escape hatch worth knowing: PCrdReturn. If the Requester ends
-up not needing the credit — say the request was killed by software,
-or coalesced with another transaction — it returns the credit using
-the PCrdReturn opcode on REQ, also stamped with PCrdType = K. This
-prevents credit leakage across the fabric. A real implementation
-must track outstanding granted credits per type to know whether a
-return is owed.
+The second point is more fundamental: this handshake is the only
+forward-progress guarantee CHI gives you. Once PCrdGrant has been
+sent, the matching retry must be accepted. Verification engineers
+spend real effort on credit accounting because lost grants hang the
+system, double grants violate the spec, and slow PCrdReturn leaks
+exhaust the pool. When a CHI system wedges, the retry ledger is the
+first place to look.
 
-Two design points to anchor.
-
-First, why per-type credits. The PCrdType field is 4 bits, so up
-to 16 independent credit classes. The intent is to partition the
-Completer's resource pool — separate trackers for reads vs writes,
-separate buffers per QoS band, separate snoop-filter entries vs
-data-buffer entries. Without classification, a flood of writes
-could starve reads even after the Completer freed a read slot,
-because the Requester would have no way to know which class of
-credit it was holding. Classification gives the Completer fine-
-grained back-pressure that does not break ordering or fairness
-between request types. The actual mapping of K values to resource
-classes is implementation-specific — the spec only mandates the
-handshake, not the semantics of K. Single-class implementations
-are encouraged to use 0b0000 for everything.
-
-Second, this is the only forward-progress guarantee in CHI.
-Once a PCrdGrant is sent, the Completer must accept the matching
-retry. That obligation is what lets the Requester treat the retry
-as a guaranteed-success transaction. Verification engineers spend
-real effort on credit accounting bugs: lost grants cause hangs,
-double-grants cause spec violations, and PCrdReturn leaks slowly
-exhaust the Completer's pool. When a CHI system wedges, the retry
-ledger is the first place to look — it sits at the intersection of
-REQ and RSP and touches every flow that can ever back-pressure.
-
-In gem5's CHI model the handshake is present (PCrdGrant appears as
-an RSP opcode in CHI-msg.sm) but the multi-class typing is
-simplified — most paths use the single-class convention.
+In gem5's CHI model the handshake is present, but the multi-class
+typing is simplified — most paths use the single-class convention.
 -->
 
 ---
@@ -1800,146 +1402,73 @@ section h2 { margin: 0 0 6px 0; font-size: 26px; }
 </div>
 
 <!-- Speaker Notes:
-Time budget: 5–6 minutes.
+gem5 offers three modeling stacks for the same logical hardware —
+two cores, their L1 caches, an interconnect, a home and memory tier.
+What changes across the three is fidelity. Read this as a ladder.
 
-Before we walk into the gem5 implementation of CHI, step back and look
-at the modeling menu gem5 actually offers and where CHI fits.
+The Classic stack lives in src/mem/cache and coherent_xbar.cc. The
+key fact, and the one new readers most often get wrong, is that
+MOESI state lives in the cache itself, not the crossbar. Each cache
+block carries three flag bits — valid, writable, dirty — and the
+five MOESI states fall out of those flags. The state machine that
+mutates them is spread across Cache::access, Cache::handleSnoop,
+and the MSHR; there is no DSL declaring transitions. The protocol's
+"alphabet" is the MemCmd enum on packets, plus the cache's choice
+of which command to send. That is what makes Classic rigid: the
+protocol is implicit in C++ across multiple methods, with no
+extension point. The crossbar itself is a broadcast fabric that
+delivers snoops, aggregates responses, and optionally hosts a
+SnoopFilter that tracks presence — never state — to narrow the
+broadcast set. Reach for Classic when the pipeline is the research
+subject and the protocol on the wire is not the question.
 
-The diagram has three columns, each modeling the same logical hardware
-— two cores, their L1 caches, an interconnect, and a home / memory
-tier. The rows line up across all three columns deliberately: cores at
-the top, caches just below, then the INTERCONNECT band, then the home
-and memory tier. What changes from left to right is precision. Read it
-as a fidelity ladder.
+The Ruby plus SimpleNetwork stack replaces each cache with a SLICC
+controller — a state machine in a domain-specific language with
+explicit states, events, and actions. You pick the protocol at
+build time. The interconnect is opened up to show its actual queue
+structure: four horizontal vnets — REQ, SNP, RSP, DAT — each
+holding MessageBuffer slots gated by a per-link Throttle. Every
+Switch allocates one MessageBuffer per output port per vnet, and
+the Throttle dequeues at the link's bandwidth budget. No flits, no
+VC allocators; messages move atomically per vnet. Contention
+appears in three places: switch arbitration between input ports for
+the same output, Throttle bandwidth saturation, and buffer-full
+backpressure when you size buffers finitely. By default all four
+vnets share one bandwidth pool — set physical_vnets_channels and
+physical_vnets_bandwidth to give each its own budget so you can
+tell which network is bottlenecked. This stack is right when the
+protocol is the research subject and the NoC microarchitecture is
+not.
 
-Start on the **left, Classic** stack — `src/mem/cache/` and
-`coherent_xbar.cc`. Notice the colour cue: it is the *L1 cache* boxes
-that are red, not the crossbar. That is deliberate, and it is where
-new readers usually get the picture wrong. **MOESI state lives in the
-cache**, encoded as three flag bits per block — `valid`, `writable`,
-`dirty` — on `CacheBlk`. The five MOESI states fall out of those
-flags: M = `1·1·1`, O = `0·1·1`, E = `1·0·1`, S = `0·0·1`,
-I = `0·0·0`. The state machine that *transitions* those flags is
-distributed across `Cache::access`, `Cache::handleSnoop`, and `MSHR`
-— there is no DSL declaring "in state O on event SnpInvalidate go to
-state I", just C++ control flow that mutates the bits. The "alphabet"
-of the protocol is the `MemCmd` enum on packets — `ReadReq`,
-`ReadExReq`, `UpgradeReq`, `InvalidateReq`, the writeback variants —
-and the cache's choice of `MemCmd` plus its block flags is the entire
-state machine. *That* is what makes Classic rigid: the protocol is
-implicit in the C++ of multiple methods plus an enum, with no
-extension point.
+The Ruby plus Garnet stack uses the same SLICC controllers but
+replaces SimpleNetwork with a cycle-accurate NoC. A NetworkInterface
+sits between each controller and the routers, packetising messages
+into flits. Each router runs a per-cycle pipeline — route compute,
+VC allocation, switch allocation, crossbar — with credit-based flow
+control between routers. Flits walk the pipeline cycle by cycle.
+This is the slowest stack to simulate, but it is the only one where
+"what is my NoC latency under contention" or "does this routing
+algorithm deadlock" yields an architecturally faithful answer. CHI
+in gem5 lives here, and the rest of the deck runs in this stack.
 
-The grey box below — `CoherentXBar` — is the broadcast fabric. It
-takes a request from a CPU-side port, calls `forwardTiming()` to
-deliver snoops to peer caches, aggregates snoop responses, and routes
-the final reply. It does *not* own coherence state. Optionally it
-hosts a `SnoopFilter` SimObject — a hash-map keyed by line address
-holding two 256-bit bitmasks per entry: `requested` (in-flight) and
-`holder` (currently caching). With a filter wired in, the crossbar
-snoops only the ports that might hold the line; without it, it
-broadcasts to everyone. The filter tracks **presence**, never state —
-it cannot tell M from S — and it is exact except for one wrinkle:
-silent clean evictions are not always notified, so the filter is
-mildly pessimistic. The caption summarises this: the crossbar is a
-fabric plus an optional presence-tracking filter; no FSM, no virtual
-channels, no flits. Pick this stack when the CPU pipeline is the
-research subject — branch-predictor studies, ISA experiments —
-because Classic is the fastest to simulate and the protocol on the
-wire is not the question being asked.
+A fourth stack exists with no caches and no protocol — Garnet
+standalone — used purely to inject synthetic traffic for NoC
+microbenchmarking. Routing studies, mesh topology comparisons, and
+deadlock work happen here without any real protocol on top.
 
-Move to the **middle, Ruby + SimpleNetwork**. Cores and L1 boxes are
-the same logical hardware, but their interior has changed: the L1 is
-now a SLICC controller — a state machine written in a domain-specific
-language with explicit states, events, and actions. You pick which
-protocol — MI, MESI, MOESI, CHI — at SCons build time, and SLICC
-generates the C++. That flexibility costs nothing visually; the L1
-box just gets a new label. Now look at the interconnect. The
-SimpleNetwork box has been opened up to show its actual queue
-structure: four horizontal lanes, one per virtual network — REQ, SNP,
-RSP, DAT. Inside each lane is a row of `MessageBuffer` slots, and at
-the right end a small Throttle gate. That is the gem5 reality: every
-`Switch` allocates **one `MessageBuffer` per output-port × per-vnet**
-(`Switch.cc:115` calls them "intermediary queues"), and a per-link
-Throttle gates dequeue rate by the link's bandwidth budget. There are
-no flits, no VC allocators — messages move atomically per vnet.
-Contention shows up in three places: (1) **PerfectSwitch arbitration**
-between input ports for the same output-port-and-vnet, with priority
-groups, (2) **Throttle bandwidth saturation** per link, and (3)
-**buffer-full backpressure** if you set `buffer_size > 0`. Crucially,
-by default all four vnets share one bandwidth pool. Setting
-`physical_vnets_channels` and `physical_vnets_bandwidth` partitions
-the link so REQ / SNP / RSP / DAT each get their own bandwidth budget
-and saturate independently — useful when you want to know whether
-your data network or your request network is the bottleneck. This is
-the right stack when the *protocol* is the research subject and the
-NoC microarchitecture is not.
+Three things trip people up. Classic and Ruby are mutually
+exclusive at the cache level — they do not share abstractions, and
+you commit when you wire the system in Python. Garnet is not an
+alternative to Ruby; it is one of two network back-ends Ruby can
+use, alongside SimpleNetwork. And CHI lives in Ruby because the
+controller alone is around two hundred transition blocks across
+ten thousand lines of SLICC with four virtual channels and dozens
+of states. The Classic tree has no controller object to subclass,
+no DSL, no multi-VC buffer system; SLICC supplies all of it.
 
-Now the **right, Ruby + Garnet**. Same cores. Same L1 SLICC
-controllers — except now the controller exposes that it has four VNets
-out, one per CHI channel. Then look down: there is a `NI`
-(NetworkInterface) row that did not exist in the middle column, and
-below it the interconnect is no longer one box — it is two routers,
-`R0` and `R1`, each opened up to show the per-cycle pipeline:
-`RC` route compute, `VA` virtual-channel allocator, `SA` switch
-allocator, `XB` crossbar — and below those an `OutBuf` per-VC flit
-queue. Flits are the unit of transfer here, and they walk through that
-pipeline cycle by cycle. Between the routers you see two arrows: the
-solid violet one carries flit data forward, and the dashed green one
-carries credits back. That is credit-based flow control, the
-fundamental backpressure mechanism of any real NoC. This is the
-slowest stack to simulate, because every byte of every cache line is
-chopped into flits and walked through routers. It is also the *only*
-stack where you can ask "what is my NoC latency under contention" or
-"does this routing algorithm deadlock" and get an architecturally
-faithful answer. **CHI in gem5 lives here**, and the rest of this deck
-runs in this column.
-
-A **fourth stack** exists but has no column on this slide because it
-has no caches and no protocol: Garnet standalone. The
-`Garnet_standalone-cache.sm` and `-dir.sm` files are intentionally
-trivial — their only job is to inject synthetic traffic patterns into
-Garnet routers for NoC microbenchmarking. Routing algorithms, mesh
-topologies, deadlock studies — that work happens without a real
-protocol on top.
-
-Three things worth saying out loud, because they trip people up.
-
-First, Classic and Ruby are *mutually exclusive at the cache level*.
-They do not share abstractions: Classic moves whole `Packet` objects
-across `Port` pairs; Ruby moves typed `Message` objects through
-`MessageBuffer`s. There is no incremental upgrade path. You commit
-when you wire the system in Python.
-
-Second, Garnet is not an alternative to Ruby. Ruby is the protocol
-framework; Garnet is one of two network back-ends Ruby can use. The
-other is SimpleNetwork. You cannot run "just Garnet" against classic
-caches — there is no NetworkInterface, no MessageBuffer on the
-classic side. The pragmatic mixed pattern — classic L1/L2 above a
-RubyPort, with Ruby+Garnet below — is supported and is what you reach
-for when you want NoC realism without rebuilding your core
-configuration.
-
-Third, why CHI is in Ruby and not in Classic. The CHI cache controller
-is 228 transition blocks across roughly ten thousand lines of SLICC,
-with four virtual channels and dozens of states. Recall the Classic
-side encodes its protocol as a `MemCmd` enum plus block-flag
-mutations spread across `Cache::access` and `handleSnoop` — there is
-no controller object to subclass, no DSL to extend, no
-multi-virtual-channel buffer system. To bring CHI into the Classic
-tree you would invent all of that from scratch: a controller class,
-typed messages, four virtual networks, atomic transitions with
-rollback on backpressure, dispatch tables. SLICC already provides all
-of that — it generates the dispatch, the wakeup, the message-buffer
-scheduling, and it enforces atomicity. So CHI's home is the rightmost
-column not by accident — it is the only column with the machinery
-the protocol needs.
-
-The next slide opens the implementation half of the deck: how a CPU
-instruction crosses from the Classic side into Ruby, becomes a
-RubyRequest on `mandatoryQueue`, and gets picked up by a SLICC
-controller. From there we dissect the Ruby controller, then the Garnet
-router. Everything that follows assumes the third column.
+The next slide opens the implementation half of the deck — how a
+CPU instruction crosses into Ruby and becomes a RubyRequest on the
+mandatoryQueue. Everything that follows assumes the Garnet stack.
 -->
 
 ---
@@ -2040,87 +1569,60 @@ can execute arrives at the CHI cache controller as exactly one of
 </div>
 
 <!-- Speaker Notes:
-Time budget: 3 to 4 minutes.
-
-Up to this slide, the deck has been all CHI, all the time. Channels,
-opcodes, transactions, retry. From here on the question shifts. Which CPU
-instruction becomes which CHI transaction? And it turns out every RISC-V
-program you ever run on a gem5 CHI system funnels through one narrow
-pipe on its way to the protocol — that pipe is the mandatoryQueue. This
+Up to this slide the deck has been about CHI itself. From here the
+question shifts: which CPU instruction becomes which CHI
+transaction? Every RISC-V program running on a gem5 CHI system
+funnels through one narrow pipe — the mandatoryQueue — and this
 slide is the map of that pipe.
 
-Walk the diagram left to right.
+When the CPU retires a memory instruction, the core builds a gem5
+Packet with a Request object carrying flags like isRead, isWrite,
+isLLSC, isAtomicOp, isFlush, isInstFetch, isTlbiCmd. That packet
+goes to the Sequencer's makeRequest, which classifies it into two
+types. The primary type is the Sequencer's own bookkeeping —
+profiling, LL/SC tracking, locked-RMW blocking. The secondary type
+is what actually gets written into the RubyRequest on the queue,
+and from the CHI controller's perspective it is the only thing that
+exists. No information about LR versus plain LD, no LOCK prefixes,
+no exclusivity attribute — just a line address, a size, and a small
+enum value.
 
-The CPU retires a memory instruction — a load, a store, an atomic, an
-LR or SC, a CBO line maintenance op, or an SFENCE.VMA. The core builds a
-gem5 Packet with a Request object carrying flags like isRead, isWrite,
-isLLSC, isAtomicOp, isFlush, isInstFetch, isTlbiCmd. That packet is
-handed to the Sequencer's makeRequest method. This is where the
-classification happens. The Sequencer picks two things: a primary_type,
-which it keeps for its own bookkeeping — profiling, LL/SC tracking,
-locked-RMW blocking — and a secondary_type, which is the thing that
-actually gets written into the RubyRequest on the queue.
+Plain loads and stores pass through as LD and ST. Instruction
+fetches carry their own IFETCH tag so the controller can pick a
+clean-only fill policy.
 
-From the CHI cache controller's perspective, that secondary type is all
-it will ever see. It does not know whether the CPU issued an LR or a
-plain LD. It does not see LOCK prefixes. It does not know about
-exclusivity. It gets a line address, an access size, and a small enum
-value — that is it.
+LR and SC are the first surprise. They are tagged as Load_Linked
+and Store_Conditional internally so the LL/SC blocking logic works,
+but the secondary type the CHI controller sees is just plain LD and
+plain ST. The CHI ProtocolInfo returns false for the
+useSecondaryLoadLinked and useSecondaryStoreConditional flags, so
+the demotion happens every time. If you were expecting a CHI
+ReadClean with an Excl attribute on the wire, it does not happen —
+RISC-V LL/SC is enforced entirely above the protocol, using the
+same Locked_RMW block list x86 uses for its LOCK-prefixed loop.
 
-Now look at the table. Left column is every relevant RISC-V instruction.
-Right column is the secondary_type value that lands on the queue.
+AMOs split on the return-value question. If the destination
+register is non-zero the AMO wants its old value back and gets
+tagged ATOMIC_RETURN; otherwise it is ATOMIC_NO_RETURN. Both pass
+straight through. Together with LD, IFETCH, and ST, those five are
+the entire accept list.
 
-Plain loads and stores pass through as LD and ST — no surprise.
-Instruction fetches get their own tag, IFETCH, because the CHI
-controller can use it later to pick a clean-only fill policy.
-
-LR and SC — Load Reserved and Store Conditional — are the first
-surprise. The Sequencer tags them internally as Load_Linked and
-Store_Conditional for the primary type, so the LL/SC blocking logic
-works. But the secondary type, what the CHI controller actually sees,
-is just plain LD and plain ST. The CHI ProtocolInfo returns false for
-the useSecondaryLoadLinked and useSecondaryStoreConditional flags, so
-the demotion happens every time. If you were hoping to see a CHI
-ReadClean with the Excl attribute fire off the wire — sorry, it never
-happens. RISC-V LL/SC is enforced entirely above the protocol, using
-the same Locked_RMW block list x86 uses for its LOCK-prefixed loop.
-
-AMOs split on the return-value question. If rd is non-zero, the AMO
-wants its old value back, and the Sequencer tags it ATOMIC_RETURN. If
-rd is x0, nothing comes back, so it is ATOMIC_NO_RETURN. Both pass
-straight through to the queue. These two, plus LD, IFETCH, and ST, are
-the only secondary types CHI accepts. Five values. That is the entire
-accept list.
-
-Now the two rows that do NOT work, and they are a bit embarrassing.
-
-CBO.inval, CBO.clean, and CBO.flush from the RISC-V Zicbom extension
-all set the isFlush flag on the request. The Sequencer dutifully
-translates this to RubyRequestType FLUSH. The packet reaches the CHI
-mandatoryQueue. And then — boom — AllocateTBE_SeqRequest looks at the
-type, does not find a handler, and fatals with "Invalid
-RubyRequestType". So if your RISC-V binary does a CBO.flush on a
-CHI-coherent system today, you will not get a wire CMO — you will get
-a simulation crash. That is a genuine gap.
-
-SFENCE.VMA is the opposite story. It does not reach the queue at all
-because the RISC-V tlb.cc handles it entirely locally — no packet is
-ever emitted. So CHI's DVM transport stays dormant for RISC-V workloads
+Two rows do not work, and they are worth flagging. The Zicbom CBO
+instructions — CBO.inval, CBO.clean, CBO.flush — all set the
+isFlush flag and translate to RubyRequestType FLUSH. The packet
+reaches the queue, the controller looks for a handler, finds none,
+and fatals with "Invalid RubyRequestType". A RISC-V binary that
+issues a CBO.flush on a CHI-coherent system crashes the
+simulation — a genuine gap. SFENCE.VMA is the opposite story: it
+never reaches the queue because the RISC-V TLB handles it entirely
+locally, so CHI's DVM transport stays dormant for RISC-V workloads
 even though the protocol wires are in place.
 
-The three cards on the right summarise the three rules you should walk
-away with. One, the accept list is narrow. Two, exclusivity is erased
-on the way down. Three, anything that feels ARM-specific — DVM, HTM —
-is not reachable from a RISC-V CPU, and CBO is a known crash today.
-
-The takeaway at the bottom is the one-line version. Five accepted
-types. That is the whole interface between the CPU and CHI.
-
-References. Sequencer dispatch is in src/mem/ruby/system/Sequencer.cc
-around line 966. The RubyRequestType enum is in
-src/mem/ruby/protocol/RubySlicc_Exports.sm line 171. The CHI accept
-list is in src/mem/ruby/protocol/chi/CHI-cache-actions.sm line 163.
-Zicbom decode is in src/arch/riscv/isa/decoder.isa around line 1348.
+Three rules to walk away with. The accept list is narrow.
+Exclusivity is erased on the way down. And anything that feels
+ARM-specific — DVM, HTM — is not reachable from a RISC-V CPU, with
+CBO being a known crash today. Five accepted types is the entire
+interface between the CPU and CHI.
 -->
 
 ---
@@ -2137,165 +1639,74 @@ Zicbom decode is in src/arch/riscv/isa/decoder.isa around line 1348.
 <img src="../resources/ruby_chi_controller.svg" alt="CHI RN-F cache controller architecture: left column shows local ingress (Sequencer → mandatoryQueue / seqInPort, Prefetcher → prefetchQueue / pfInPort) and cache line storage (CacheMemory, PerfectCacheMemory directory for HN). The center SLICC FSM block lists in_port handlers, the internal scheduling MessageBuffers (reqRdy rank 3, snpRdy rank 8, triggerQueue rank 5, retryTriggerQueue rank 6, replTriggerQueue rank 4, useTimerTable rank 11), and the transitions(state, event) core generated from CHI-cache-transitions.sm. Below the FSM is the TBE storage box with storTBEs, storSnpTBEs, storReplTBEs, storDvmTBEs, and storDvmSnpTBEs. The right column shows the eight boundary MessageBuffers — four inbound (reqIn vnet 0, snpIn vnet 1, rspIn vnet 2, datIn vnet 3) and four outbound (reqOut, snpOut, rspOut, datOut) — color-coded blue/gold/green/violet for REQ/SNP/RSP/DAT. Arrows connect sources into the FSM, the FSM out to network buffers, and bidirectional edges link FSM to TBE storage and to the cache/directory structures." class="tall">
 
 <!-- Speaker Notes:
-Time budget: 5 minutes.
+The Ruby CHI cache controller is a single SLICC machine —
+machine(MachineType:Cache) in CHI-cache.sm — that plays three
+roles. Set is_HN and enable_DMT and it is a home node; clear them
+and it is an RN-F L1; in between it is the L2. One shape, knob
+settings choose the role.
 
-This slide is the one-picture map of a Ruby CHI cache controller. Everything in
-the previous slides — channels, messages, transactions, state machines — lands
-somewhere on this diagram. The example I will narrate is an RN-F, the coherent
-request node that sits in front of a CPU and holds private caches. The same
-machine definition — `machine(MachineType:Cache)` in `CHI-cache.sm` — is also
-instantiated as the L2 in an RN-F and as the HN-F at the system level cache.
-The controller has one set of knobs, and the knob settings tell it which role
-to play. `is_HN=true` and `enable_DMT=true` make it a home node; the opposite
-makes it an RN-F L1.
+Local ingress has two queues. The mandatoryQueue carries
+RubyRequests from the Sequencer, and seqInPort peeks it every
+cycle, allocates a TBE, and moves the request into an internal
+reqRdy queue. The Sequencer is a separate SimObject that maps line
+addresses back to the original gem5 Packet; the controller never
+carries the Packet itself, only the distilled RubyRequest fields.
+The prefetchQueue is the parallel entry for hardware prefetches,
+drained by pfInPort at the lowest rank so demand traffic and
+inbound network ports always wake up first.
 
-Start on the far left. A CPU issues a load or a store, and the corresponding
-`RubyRequest` lands in the controller's **mandatoryQueue**. This is a plain
-MessageBuffer allocated by the configuration code in `CHI_config.py` and
-attached to the controller. The SLICC `in_port` named **seqInPort** (rank=1)
-peeks this queue every cycle. For a normal sequencer request seqInPort fires
-`AllocSeqRequest`, which allocates a slot in the main TBE table and copies the
-request into the internal `reqRdy` queue. The Sequencer itself is a separate
-SimObject — it owns the in-flight request table that maps line addresses back
-to the original gem5 `Packet`. The controller never carries the Packet; it
-carries only the distilled `RubyRequest` fields.
+The network boundary is eight per-VNet MessageBuffers — one per
+CHI channel per direction, colour-coded by channel. From the
+controller's point of view these buffers are the network — the
+fabric itself is a black box that drains one side and fills the
+other.
 
-Directly below is the **prefetchQueue**, a second user-visible entry point.
-Whatever prefetcher object you bolt onto the controller (`prefetch::Base`)
-pushes its predictions here, and **pfInPort** (rank=0) drains them with
-`AllocPfRequest`. Prefetches are second-class citizens — they get the lowest
-rank so demand requests and every inbound network port wake up first.
+The in_port ranks on inbound buffers form a priority list. rspIn
+and datIn sit at the top because responses and data must never
+stall — if they did, a TBE somewhere would be waiting on a message
+the network is trying to deliver, and the system would deadlock.
+Their stall handlers are hard-wired to error.
 
-Move to the right column. This is the **network boundary** — the eight
-per-VNet MessageBuffers that every CHI controller exposes, declared at the top
-of `CHI-cache.sm`: `reqIn/Out`, `snpIn/Out`, `rspIn/Out`, `datIn/Out`. One
-MessageBuffer per CHI channel per direction. Four inbound, four outbound,
-color-coded by channel: REQ blue, SNP gold, RSP green, DAT violet. The
-`virtual_network=` attribute on each declaration is what Ruby hands to the
-network at wire-up time via `setToNetQueue` / `setFromNetQueue`. From the
-controller's point of view, these buffers *are* the network interface — the
-network is a black box that drains one side and fills the other.
+Snoops use a two-stage ingress. snpInPort allocates a slot in
+storSnpTBEs and pushes the snoop onto an internal snpRdy queue;
+snpRdyPort then drives the FSM. The split exists because CHI
+requires independent progress for snoops, so allocation must be
+non-blocking. Requests follow the same allocate-then-execute
+pattern. When TBEs are exhausted, the network-facing port pops
+the request and returns RetryAck rather than leaving it stuck.
 
-Now look at the `in_port` ranks stamped on each inbound boundary buffer.
-They are not cosmetic. The SLICC code generator emits them as a priority list:
-each cycle, ports are checked from highest rank to lowest, and the first ready
-port fires. So `rspInPort` at rank 10 and `datInPort` at rank 9 drain
-ahead of every other port. Responses and data can never stall — they are
-always consumed. If they could stall, a TBE somewhere would hold a line
-waiting for a response that the network is trying to deliver, and you would
-deadlock. That is why `CHI-cache-ports.sm` hard-wires `rspInPort_rsc_stall_handler`
-and `datInPort_rsc_stall_handler` to `error(...)`.
+The SLICC FSM is a generated C++ switch on state and event. Each
+transition runs an ordered list of actions — allocate a TBE, look
+up the cache, send a message on an outbound VNet, schedule a
+trigger, deallocate. Five internal scheduling buffers sit alongside
+it. reqRdy and snpRdy we already met. triggerQueue schedules the
+next step of a multi-step transaction. retryTriggerQueue carries
+the retry events when TBEs are exhausted. replTriggerQueue wakes
+the FSM when a fill has to walk a victim through writeback before
+the new line can settle.
 
-Next rank down is `snpRdyPort` at rank 8, then `snpInPort` at rank 7. Notice
-that snoops have two stages. When a fresh snoop arrives from the network, it
-lands in `snpIn`. `snpInPort` allocates a slot in the **storSnpTBEs** table
-and moves the snoop into the internal `snpRdy` queue. Only then does the
-real work happen — `snpRdyPort` dequeues from `snpRdy` and drives the state
-machine. Two stages because CHI requires independent progress for snoops, and
-the allocation step is cheap and non-blocking. If the snoop TBE table is full,
-`snpInPort` stalls the snoop channel. Snoops cannot be retried at the
-protocol level, so this is the one ingress channel where real backpressure can
-propagate upstream.
+A TBE — Transaction Buffer Entry — is the per-address record for
+one in-flight transaction. It holds the original requestor, the
+request type, the expected-response map, the data block being
+assembled, the action list, and the final stable state. CHI splits
+TBEs across pools so traffic classes cannot starve each other:
+storTBEs for requests, storSnpTBEs for snoops, storReplTBEs for
+victim writebacks, plus DVM analogues. Pool exhaustion is the one
+place real backpressure becomes visible to the rest of the system,
+turning into a RetryAck at the network face.
 
-Same pattern for requests. `reqInPort` at rank 2 is the network-facing side;
-it allocates a main-pool TBE and moves the request to `reqRdy`. `reqRdyPort`
-at rank 3 drains `reqRdy` and fires the actual request event into the FSM.
-The pattern — allocate on inbound, execute on internal ready queue — gives
-the FSM clean, one-shot transitions and lets allocation failure generate
-`RetryAck` immediately without touching the request's real semantics.
-`reqInPort` also has a `must-never-stall` handler: if a home node runs out
-of TBEs, it pops the request and returns `RetryAck` rather than leaving the
-message in `reqIn`.
+Line storage hangs off the controller as external SimObjects: a
+conventional CacheMemory and, for the home role, the unbounded
+PerfectCacheMemory we discussed earlier. useTimerTable is the last
+wrinkle — when a store misses and fills in UD, the timer locks the
+line briefly so the pending store cannot be beaten by an incoming
+snoop. It runs at the highest rank so timeouts fire first.
 
-Between the two columns sits the **SLICC FSM**. This is a large C++ file that
-SLICC generates from `CHI-cache.sm`, `CHI-cache-transitions.sm`, and
-`CHI-cache-actions.sm`. Logically it is a big switch on (state, event). The
-states are the CHI coherence states — I, UC, UD, SC, SD, UD_T, plus two
-transient BUSY states and a long list of DVM states. The events come from the
-in_port handlers. Each transition runs an ordered list of *actions*: allocate
-a TBE, look up the cache, send a message on one of the outbound VNets, schedule
-a trigger, deallocate. Inside the FSM box, you can see the five internal
-**scheduling MessageBuffers**. `reqRdy` and `snpRdy` are the TBE-backed ready
-queues we already met. `triggerQueue` is how the FSM schedules the *next step*
-of a multi-step transaction — when a request is waiting for data, the FSM
-posts a trigger to re-enter the transition after the data message arrives.
-`retryTriggerQueue` holds the three retry-related events — SendRetryAck,
-SendPCrdGrant, DoRetry — that CHI's transaction-credit machinery uses when
-TBEs are exhausted downstream. `replTriggerQueue` wakes the FSM when a
-replacement needs to happen: a new fill displaces a victim, and the FSM has
-to walk the victim through writeback before the new line can settle.
-
-Below the FSM are the **TBE tables**. A TBE — Transaction Buffer Entry — is
-the per-address state record for one in-flight transaction. It holds the
-original requestor, the request type, the expected-response map, the data
-block being assembled, the list of actions still to execute, and the final
-stable state the line will settle into. One TBE is allocated when a
-transaction starts; it is freed when the last response is consumed and the
-cache or directory is updated. The structure is declared in `CHI-cache.sm`
-around line 644 and has on the order of 50 fields.
-
-CHI splits TBEs into separate pools so that classes of traffic cannot
-starve each other. **storTBEs** is the main pool for incoming requests —
-typically 16 at an L1, 32 at an L2 or HN-F, sized by `number_of_TBEs`.
-**storSnpTBEs** is a smaller separate pool for incoming snoops — typically 4
-to 16 — so a burst of requests can never block snoops from progressing.
-**storReplTBEs** handles victim writebacks triggered by new fills; it can be
-unified with the request pool with `unify_repl_TBEs=true`. **storDvmTBEs**
-and **storDvmSnpTBEs** are the DVM analogues for TLBI and sync traffic. Each
-pool is a `TBEStorage` object, a thin counter wrapper around a `TBETable`.
-The SLICC helper `check_allocate(storTBEs)` is what enforces the cap: if no
-slot is free, the transition returns `TransitionResult_ResourceStall` and
-either recycles the port or, at the network-facing entry, pops the request
-and emits a `RetryAck`. TBE exhaustion is the one place in the whole
-controller where real backpressure becomes visible to the rest of the
-system.
-
-On the bottom left is the **line storage** — external SimObject pointers the
-controller holds on its own. `cache : CacheMemory` is the tag array plus data
-array for the lines this controller caches locally. The `CacheEntry`
-structure carries the stable SLICC state, the DataBlock, a requestor ID for
-the first filler, and a hardware-prefetch hint. `CacheMemory` is a normal
-gem5 SimObject with its own tag and data access latencies, banking, and
-replacement policy. The L1 in an RN-F might be 32 KiB four-way; an HN-F's
-SLC might be megabytes. `directory : PerfectCacheMemory` is the snoop filter
-/ coherence directory. It is only used when `is_HN=true`; at RN-F
-controllers, it sits unused. It is modeled as perfect — unbounded, no
-evictions — so that any home-node directory pressure you want to model has
-to come from somewhere else, typically from tracker-table caps in Garnet or
-from directly controlling the HN's TBE pool.
-
-Finally, the little tile near the FSM core labeled **useTimerTable** at
-rank 11 is the last wrinkle. When a store misses and the line fills in UD,
-CHI locks the line for a short window so the pending store commit cannot be
-beaten by an incoming snoop. `useTimerTable` tracks those timeouts. It wakes
-up at the highest rank so timeouts fire before anything else.
-
-Three things to remember from this slide.
-
-First: every box here is addressable configuration. Each MessageBuffer is a
-SimObject whose `buffer_size`, `ordered`, and `randomization` you can tune.
-Each TBE pool is an integer parameter on the controller. The cache and the
-directory are SimObjects in their own right. That is why CHI is usable as
-L1, L2, and HN-F — the shape is identical; the knobs differ.
-
-Second: the ingress side splits into *allocate* and *execute*. New requests
-and snoops are moved through an internal ready queue once a TBE has been
-reserved. The FSM never executes a transition without a TBE backing it.
-
-Third: the four outbound MessageBuffers are the *only* thing the controller
-writes to the network. Everything else — state, actions, triggers, retries —
-is internal. When you read a `ruby.debug` trace, every outbound line
-corresponds to a single enqueue onto one of those four buffers, and every
-inbound line corresponds to a single dequeue from one of the four inbound
-buffers.
-
-References. The machine definition, TBE structures, and queue declarations
-are in `src/mem/ruby/protocol/chi/CHI-cache.sm`. The in_port handlers and
-their ranks are in `src/mem/ruby/protocol/chi/CHI-cache-ports.sm`. Transitions
-and actions live in `CHI-cache-transitions.sm` and `CHI-cache-actions.sm`.
-The CHI-flavored RN-F wire-up with TBE sizes is in `configs/ruby/CHI_config.py`.
-Deeper treatment of buffering and backpressure is in
-`ruby-book/extra/RubyBuffersModeling.md`.
+Two things to remember. The ingress side splits cleanly into
+allocate and execute, and the FSM never runs a transition without
+a TBE backing it. And the four outbound MessageBuffers are the
+only place the controller touches the network; everything else —
+state, actions, triggers, retries — is internal bookkeeping.
 -->
 
 ---
@@ -2312,177 +1723,90 @@ Deeper treatment of buffering and backpressure is in
 <img src="../resources/ruby_garnet_router.svg" alt="Garnet NoC architecture: leftmost column shows a CHI RN-F controller with its eight per-VNet MessageBuffers (reqOut/snpOut/rspOut/datOut outbound, reqIn/snpIn/rspIn/datIn inbound), colored blue/gold/green/violet for REQ/SNP/RSP/DAT. The middle NetworkInterface column shows the ingress pipeline (inNode_ptr[vnet] → flitisizeMessage → calculateVC → niOutVcs[vc] → OutputPort) above a dashed divider, and the egress pipeline (InputPort → accumulate by packet_id → outNode_ptr[vnet]) below. The outVcState[vc] credit mirror sits on the ingress side. The large Router column on the right details the per-cycle pipeline: a full InputUnit[Local] with per-vnet virtualChannels (REQ/SNP/RSP/DAT pills) and its creditQueue, plus four compact IU[N]/IU[E]/IU[S]/IU[W] tiles; below them the RoutingUnit stripe, then the SwitchAllocator box split into SA-I and SA-II rows, then CrossbarSwitch, then a full OutputUnit[Local] with outBuffer and outVcState[num_vcs] (REQ/SNP/RSP/DAT pills) plus four compact OU[N]/OU[E]/OU[S]/OU[W] tiles. Green dashed arrows show CreditLink flow from IU[Local] back to NI.outVcState; orange arrows show the intra-router IU→RU→SA→XB→OU data path. A 3×3 mini-mesh inset on the far right places R4 (dashed violet outline) as the zoomed router, surrounded by RN-F/HN-F/SN-F neighbours, with an IntLink arrow pair connecting one mesh edge to OU[E]/IU[E]. A legend under the mini-mesh lists node types (RN-F, HN-F, SN-F), channel colors, and link types (ExtLink, IntLink, NetworkLink, CreditLink)." class="tall">
 
 <!-- Speaker Notes:
-Time budget: 5 minutes.
+The Garnet NoC node is where CHI messages turn into flits. The
+RN-F from the previous slide hands its outbound MessageBuffers to
+a NetworkInterface, which packetises into flits and feeds a
+router; the router then forwards toward neighbours through a
+cycle-accurate pipeline.
 
-This slide is the one-picture map of a Garnet NoC node. It continues the RN-F
-example from the previous slide and shows where each CHI message physically
-lands once the SLICC controller has handed it off. The four columns read
-left-to-right: the protocol controller, the NetworkInterface, the Router, and
-a mini-mesh that anchors the zoomed router in its neighborhood. Everything
-lives under `src/mem/ruby/network/garnet/`, with the top-level SimObject being
-`GarnetNetwork` (`GarnetNetwork.hh/cc`).
+The NetworkInterface is one SimObject per controller, talking to
+the controller through plain MessageBuffer pointers exactly as any
+two SLICC machines would. It is the last place in Garnet that
+understands SLICC Message objects — downstream of it, everything
+is flits.
 
-Start at the far left. The **RN-F controller** is the same box we dissected on
-slide 19, collapsed here to just its eight per-VNet MessageBuffers:
-`reqOut/snpOut/rspOut/datOut` going out, `reqIn/snpIn/rspIn/datIn` coming
-back. These are the only things the controller writes to and reads from the
-network — everything else is internal. Each MessageBuffer is bound to one
-virtual network: REQ=0, SNP=1, RSP=2, DAT=3. That binding is what the
-`virtual_network=` keyword on the SLICC declaration records, and it survives
-all the way to the flit on the wire.
+Outbound, the NI peeks each ready outbound MessageBuffer.
+flitisizeMessage sizes the message and chops it into head, body,
+and tail flits — single-flit packets are head_tail; default flit
+size is sixteen bytes. calculateVC then picks one VC from the
+vnet's range, round-robin, but only among VCs currently idle on
+the downstream router. The pick happens once at head time and
+every body and tail flit inherits the same VC so the message
+stays together. If every VC in the vnet is busy the flit waits
+until a credit returns. scheduleOutputLink then moves one flit
+per cycle onto the ExtLink toward the router.
 
-Move right into the **NetworkInterface**, the SimObject declared in
-`NetworkInterface.hh/cc` and `GarnetNetwork.py` as `GarnetNetworkInterface`.
-One NI per controller — the two objects talk through plain MessageBuffer
-pointers, exactly as they would talk to any other SLICC machine. The NI is
-the last place in Garnet that understands SLICC `Message` objects; downstream
-of it, everything is flits.
+Inbound flits arrive on the NI's input port, are accumulated by
+packet_id, and on tail arrival the NI unwraps the shared MsgPtr
+that has ridden every flit and enqueues it onto the controller's
+matching inbound MessageBuffer. Zero copy throughout.
 
-The NI column is split into an ingress half — protocol to network — and an
-egress half — network back to protocol — separated by a dashed line. On
-ingress, the NI peeks `inNode_ptr[vnet]`, one pointer per outbound
-MessageBuffer. When it finds a ready message, `flitisizeMessage(msg, vnet)`
-sizes the message in bytes (CHI requests are small, CHI data responses carry
-a full cache line) and chops it into `ceil(bytes / m_ni_flit_size)` flits —
-the first HEAD, the last TAIL, middles BODY; a single-flit packet is
-HEAD_TAIL. `m_ni_flit_size` defaults to sixteen bytes, set at the
-`GarnetNetwork` level.
+The outVcState structure is a credit mirror — the NI's local copy
+of the downstream router's VC state. When the router consumes a
+flit, it returns a credit on the reverse CreditLink, the NI
+applies it, and the VC eventually flips back to idle. That is the
+back-pressure that keeps the NI from overrunning the wire.
 
-Then `calculateVC(vnet)` picks one VC from the vnet's VC range, round-robin.
-Two important things about that pick. First, it happens once per packet, at
-HEAD time, and every BODY/TAIL inherits the same VC so flits of one message
-stay together. Second, it only returns a VC that is currently `IDLE_` on the
-downstream router — the NI reads its local `outVcState[vc]` mirror to decide.
-If every VC in that vnet is busy, `calculateVC` returns −1 and the flit sits
-in `niOutVcs[vc]` until a credit comes back.
+The router itself is the cycle-accurate switch. A mesh node has
+five physical ports — one Local port facing the NI plus one each
+for North, East, South, West — with a default two-cycle latency
+covering switch allocation and switch traversal.
 
-The chosen flit lands in `niOutVcs[vc]` — one `flitBuffer` per VC. From
-there `scheduleOutputLink()` moves one flit per cycle into the `OutputPort`'s
-outFlitQueue, which *is* the upstream end of the ExtLink. That is the
-boundary between NI and Router.
+There is one InputUnit per inport, owning the incoming NetworkLink
+and the outgoing CreditLink back upstream. Each IU holds a VC pool
+partitioned per vnet — with four vnets and two VCs each, eight
+VCs total. A VC is a flit buffer plus a small state machine plus
+fields for the chosen outport and out-VC. When a head flit
+arrives, the IU calls into the RoutingUnit — exactly one per
+router — which picks an outport via routing table, dimension-order
+XY, or a custom algorithm. XY is the default for CHI meshes
+because it is deadlock-free. Body and tail flits inherit the
+route.
 
-The egress side is the mirror. Flits arrive on the `InputPort` one per cycle,
-the NI accumulates them by `packet_id`, and on TAIL arrival it unwraps the
-shared `MsgPtr` carried by every flit and enqueues it onto the protocol
-controller's matching inbound MessageBuffer via `outNode_ptr[vnet]`. Zero
-copy — the `MsgPtr` has ridden along on every flit as a shared pointer since
-the source NI minted it.
+The SwitchAllocator is the linchpin of cycle accuracy. Every
+router cycle it does two rounds of arbitration. First, each inport
+picks one ready VC round-robin — ready meaning the flit is at the
+SA stage and the downstream VC has a credit. Second, each outport
+picks one inport among those that asked. Head flits also allocate
+a downstream out-VC and return a credit upstream so the upstream
+VC can be reused. The router grants at most min(inports, outports)
+flits per cycle — five in a mesh node.
 
-`outVcState[vc]` deserves a moment. It is the NI's *mirror* of the downstream
-router's VC state — how many credits each downstream VC has left, and whether
-it is IDLE / VC_AB / ACTIVE. When the router consumes a flit out of a VC, it
-sends a Credit back on the reverse CreditLink; the NI applies it via
-`increment_credit(vc)`, and on `is_free_signal` flips the VC back to IDLE.
-This is the back-pressure that keeps the NI honest about what the wire can
-actually take.
+The CrossbarSwitch does no arbitration; it just moves each winning
+flit into the chosen OutputUnit's buffer. The OutputUnit holds the
+flit on its way to the outgoing NetworkLink and tracks the
+downstream VC state through its own credit mirror.
 
-Now the main event — the **Router** itself, `Router.hh/cc`, extends
-`BasicRouter + Consumer`. This is the cycle-accurate switch. For a mesh node,
-it has five physical ports: one Local port facing the NI plus one each for
-North, East, South, West. `m_latency=2` by default — two cycles per hop, one
-for Switch Allocation, one for Switch Traversal.
+Two things about credits trip people up. Inside one router,
+credits do not cross between IU and OU — an IU sends credits
+upstream, an OU receives them from downstream. And there are two
+separate mirrors: the NI's outVcState mirrors the router it sends
+into, while the OU Local's outVcState mirrors the NI's input VC
+state.
 
-The top strip shows the InputUnits. There is one `InputUnit` per physical
-inport, each owning the incoming `NetworkLink` and the outgoing `CreditLink`
-back to the upstream router. The Local IU is shown in full — you can see
-its `virtualChannels[num_vcs]` pool, partitioned per vnet. For CHI with
-four vnets and say two VCs per vnet, the Local IU has eight VCs total: two
-in the REQ range, two SNP, two RSP, two DAT. Each VC is a `flitBuffer` plus a
-small state machine (IDLE / VC_AB / ACTIVE) plus the `m_output_port` and
-`m_output_vc` the RoutingUnit and SwitchAllocator will fill in. The
-`creditQueue` on the IU drains credits back to the upstream router once flits
-leave a VC.
+The mini-mesh anchors the zoomed router in a 3-by-3 CHI fabric.
+Every solid line is an IntLink — internally NetworkLink forward
+and CreditLink back. The ExtLink connects each router to its NI.
 
-The four small IU[N]/E/S/W tiles to the right are structurally identical.
-Each has its own VC pool, its own credit path back upstream, its own
-wakeup. They are drawn small because per-cycle behavior is the same as IU
-Local; only the upstream endpoint differs.
-
-When a HEAD flit arrives at any InputUnit, the IU calls
-`m_router->route_compute(...)` which delegates to the **RoutingUnit** — the
-red stripe across the middle. There is exactly one RoutingUnit per Router,
-no per-cycle state. `outportCompute(route, inport, dirn)` takes the flit's
-destination and returns the outport id via one of three algorithms:
-`TABLE_`, `XY_`, or `CUSTOM_`. For the classic CHI mesh, `XY_` is the
-default — dimension-order routing, which is the canonical deadlock-free
-choice. The result is stored back in the VC, and every BODY/TAIL flit of
-the same packet inherits it.
-
-Below that is the **SwitchAllocator** — the linchpin of Garnet's cycle
-accuracy. It runs every router cycle and does two rounds of arbitration.
-In **SA-I**, each inport picks one ready VC round-robin, where 'ready'
-means the flit is at stage SA_ and the downstream VC has a credit to spend.
-HEAD flits additionally require a free downstream VC in the target vnet.
-In **SA-II**, each outport picks one inport round-robin among those that
-asked for it in SA-I. For HEAD flits SA-II also allocates the downstream
-outvc via `select_free_vc(vnet)`, decrements the credit on the outvc, and
-enqueues a Credit back to the upstream InputUnit so the upstream VC can be
-reused. Per cycle the router can grant at most min(num_inports, num_outports)
-flits through — five in our mesh node.
-
-The **CrossbarSwitch** is the thin stripe below. It has one small flitBuffer
-per inport and does no arbitration — all contention was resolved in
-SwitchAllocator. Its only job is to move each winning flit from
-`switchBuffers[inport]` into the chosen OutputUnit's `outBuffer`, which
-advances the flit's stage from SA_ to ST_.
-
-The bottom strip shows the **OutputUnits**. One per outport. OU Local is
-drawn in full — `outBuffer` holding flits on their way to the outgoing
-NetworkLink, plus `outVcState[num_vcs]` tracking the *downstream* VC state.
-Every VC on the downstream neighbor has a credit count here, updated when a
-Credit arrives on the reverse CreditLink. The four OU[N]/E/S/W tiles behave
-identically — each owns the outgoing NetworkLink to one mesh neighbor and
-the incoming CreditLink from that neighbor.
-
-Two things about credits. First: credits never cross between IU and OU
-*inside the same router*. An IU sends its credits *upstream* to the router
-on the other side of its inbound link, not to the OU next to it. An OU
-receives credits *from downstream*, not from the IU next to it. The green
-dashed arrow on the diagram from IU[Local] back to the NI's outVcState is
-exactly that flow — credits returning to the upstream endpoint, which
-happens to be the NI in this case. Second: the `outVcState[vc]` on OU[Local]
-is the Router's mirror of the *NI's* input VC state, where outgoing flits
-are headed. The NI's own `outVcState[vc]` mirrors the downstream Router.
-Both mirrors keep their respective senders from over-flowing their
-receivers' buffers.
-
-The mini-mesh on the far right places R4, our zoomed router, in a 3×3 CHI
-mesh alongside three other RN-Fs, three HN-Fs, and an SN-F. The dashed
-violet outline on R4 marks 'you are here'. Every solid line in the mini-mesh
-is a GarnetIntLink, which is internally a pair: a NetworkLink carrying flits
-and a CreditLink carrying credits back. R4's four mesh ports connect to
-R1 (North), R5 (East), R7 (South), R3 (West), and the ExtLink on the left
-side of R4 goes to R4's NI and to the RN-F controller we just dissected. The
-two arrows between OU[E]/IU[E] and R4's mesh cell highlight that: IntLinks
-come in pairs, one per direction, and physically each one is a NetworkLink
-plus a CreditLink.
-
-Three takeaways.
-
-First: the Router has *five* ports, not four. The Local port is how the NI
-attaches. A mesh corner router has three mesh ports; a mesh edge router has
-four; every router has exactly one Local port.
-
-Second: the virtual channel pool is striped across vnets. A flit on vnet 0
-can only land in a VC whose index is in `[0, m_vc_per_vnet)`. That is what
-makes CHI's REQ / SNP / RSP / DAT flows deadlock-independent — they never
-share a buffer, not even inside one Router.
-
-Third: every credit the network handles exists to close *one* buffer-write /
-buffer-read pair. Every NetworkLink has a matching CreditLink. Every
-`flitisizeMessage` on the NI has a matching accumulate-by-packet_id on the
-receiving NI. If you can keep that paired mental model, the rest is just
-parameters: `m_latency`, `m_vc_per_vnet`, `m_buffers_per_ctrl_vc`,
-`m_buffers_per_data_vc`, `m_ni_flit_size`, routing_algorithm, bit_width.
-
-References. `GarnetNetwork.hh/cc`, `NetworkInterface.hh/cc`, `Router.hh/cc`,
-`InputUnit.hh/cc`, `VirtualChannel.hh/cc`, `RoutingUnit.hh/cc`,
-`SwitchAllocator.hh/cc`, `CrossbarSwitch.hh/cc`, `OutputUnit.hh/cc`,
-`NetworkLink.hh/cc`, and `NetworkBridge.hh/cc`, all under
-`src/mem/ruby/network/garnet/`. The Python parameters are in
-`GarnetNetwork.py`. A chapter-length treatment is in
-`ruby-book/extra/GarnetArch.md`; the NI's flit packetization and VC
-round-robin are in `ruby-book/extra/RequestToFlit.md`.
+Three takeaways. Every router has five ports, not four — a corner
+router has three mesh ports, an edge four, but exactly one Local.
+The VC pool is striped across vnets, so a flit on vnet zero can
+only occupy a VC in the vnet-zero range — that is what keeps CHI's
+four flows deadlock-independent even inside one router. And every
+credit closes exactly one buffer-write and buffer-read pair: every
+NetworkLink has a matching CreditLink, every flitisize on the
+sending NI has a matching accumulate on the receiving NI. Hold
+that paired model and the rest of Garnet is parameters.
 -->
 
 ---
