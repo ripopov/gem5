@@ -952,7 +952,7 @@ sequenceDiagram
     participant H as Home
 
     R->>H: ReadShared / ReadUnique /<br/>ReadClean / ReadNotSharedDirty /<br/>ReadPreferUnique
-    H-->>R: CompData
+    H->>R: CompData
     R->>H: CompAck
 ```
 
@@ -971,7 +971,7 @@ sequenceDiagram
 
     R->>H: ReadShared / ReadUnique /<br/>ReadClean / ReadNotSharedDirty /<br/>ReadPreferUnique
     H->>S: ReadNoSnp
-    S-->>R: CompData
+    S->>R: CompData
     R->>H: CompAck
 ```
 
@@ -1055,8 +1055,8 @@ sequenceDiagram
 
     R->>H: ReadShared
     H->>N: SnpSharedFwd
-    N-->>R: CompData
-    N-->>H: SnpRespFwded
+    N->>R: CompData
+    N->>H: SnpRespFwded
     R->>H: CompAck
 ```
 
@@ -1076,10 +1076,10 @@ sequenceDiagram
 
     R->>H: ReadShared
     H->>N: SnpSharedFwd
-    N-->>H: SnpResp
+    N->>H: SnpResp
     Note over H: DCT failed — use another alternative
     H->>S: ReadNoSnp
-    S-->>R: CompData
+    S->>R: CompData
     R->>H: CompAck
 ```
 
@@ -1164,10 +1164,10 @@ sequenceDiagram
 
     R->>H: WriteNoSnpFull / WriteUniqueFull /<br/>WriteNoSnpPtl / WriteUniquePtl
     H->>S: WriteNoSnpFull / WriteNoSnpPtl /<br/>WriteNoSnpDef (DoDWT = 1)
-    S-->>R: DBIDResp
-    R-->>S: NonCopyBackWriteData
-    S-->>H: Comp
-    H-->>R: Comp
+    S->>R: DBIDResp
+    R->>S: NonCopyBackWriteData
+    S->>H: Comp
+    H->>R: Comp
 ```
 
 Home delegates to Subordinate. Data flows straight R → S; Home never buffers the payload. Sub issues `DBIDResp`, receives data, returns `Comp` to Home. Home mirrors `Comp` to Requester.
@@ -1185,12 +1185,12 @@ sequenceDiagram
 
     R->>H: WriteNoSnpFullCleanInv / WriteUniqueFullCleanSh /<br/>WriteNoSnpFullCleanSh / WriteNoSnpFullCleanInvPoPA
     H->>S: Combined Write+CMO opcode (DoDWT = 1)
-    S-->>R: DBIDResp
-    R-->>S: NonCopyBackWriteData
-    S-->>H: Comp
-    H-->>R: Comp
-    S-->>H: CompCMO
-    H-->>R: CompCMO
+    S->>R: DBIDResp
+    R->>S: NonCopyBackWriteData
+    S->>H: Comp
+    H->>R: Comp
+    S->>H: CompCMO
+    H->>R: CompCMO
 ```
 
 Same DWT skeleton; the combined opcode carries **write + CMO** together. Sub returns two completions — `Comp` for the write half, `CompCMO` for the CMO half. Home mirrors both to the Requester.
