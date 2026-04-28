@@ -557,6 +557,46 @@ blockquote p,
   margin-top: 14px;
 }
 
+.litmus {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-top: 12px;
+}
+
+.litmus-core {
+  padding: 10px 14px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--chi-border);
+  background: white;
+  box-shadow: var(--chi-shadow);
+}
+
+.litmus-core .eyebrow {
+  margin-bottom: 4px;
+}
+
+.litmus-core pre {
+  margin: 0;
+  padding: 10px 12px;
+  font-size: 16px;
+  line-height: 1.35;
+}
+
+.litmus-verdict {
+  grid-column: 1 / -1;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--chi-surface-2);
+  border-left: 5px solid var(--chi-violet);
+  font-size: 17px;
+  line-height: 1.35;
+}
+
+.litmus-verdict code {
+  font-size: 0.95em;
+}
+
 .metric {
   padding: 12px 14px;
   border-radius: 14px;
