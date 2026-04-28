@@ -818,6 +818,20 @@ suffix records what the directory remembers about the upstream
 subtree. A name that starts with R alone means there is no usable
 local copy and the only knowledge is the remembered upstream state.
 
+How the two halves are stored. The state name is logical — one
+composed value the FSM reasons about. Physically, the HN-F has two
+backings: the LLC cache entry (CacheMemory) and the DirEntry
+(PerfectCacheMemory). getState in CHI-cache-funcs.sm:91-104 reads
+from whichever is present (TBE → cache entry → DirEntry → I) and
+setState writes to all that are valid. For a pure-local state like
+SC or UC the DirEntry is deallocated and the cache entry alone
+holds the state. For a pure-remote state like RU or RSC the cache
+entry is deallocated and the DirEntry alone holds the state. For a
+combined state like SC_RSC or UD_RU both backings are allocated and
+both store the same composed name. So the FSM treats the state as a
+single value, but the storage cost is paid only on the side that
+actually exists.
+
 Local-only states need no surprises. UD_T is the one new face: plain
 UD with a "use timeout" set by Callback_Miss after a store miss. The
 timer prevents LL/SC livelocks by stalling coherence snoops on the
