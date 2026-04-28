@@ -428,7 +428,7 @@ Transaction (ReadClean, line clean-shared at home)
 | Message → Packet        | Protocol → Network  | 1 : N |
 | Packet → Flit           | Network → Link      | 1 : 1 |
 
-- **Transaction** (B1.3) — one coherence op; `TxnID` at RN, `DBID` at home.
+- **Transaction** (B1.3) — one coherence op; `TxnID` at RN, `DBID` at the Completer (Home, or Subordinate under DWT/DMT).
 - **Message** — one protocol step on one channel.
 - **Packet** (B1.1, B13.3) — routing granule with independent metadata.
 - **Flit** (B13.3) — link-layer unit; architecturally 1:1 with a protocol packet.
@@ -695,7 +695,7 @@ B4.1 seven are what appears on the wire.
 - `CHI-cache.sm` with `is_HN = true`; **no separate `*-dir.sm`**
 - DirEntry fields above are declared at `CHI-cache.sm:590`
 - `PerfectCacheMemory` is **unbounded**: no capacity, evictions, or back-invalidations
-- `sharers` is an exact **full bit-vector** of RN IDs, not pointer+overflow
+- `sharers` is a `NetDest` **bit-vector** across upstream RNs (one bit per agent)
 - One HN-F per slice; NUMA interleave bits in `CHI_config.py` route the line
 
 </div>
@@ -721,12 +721,13 @@ view, not any individual RN's view; a line can be SC at the home
 while each sharer independently thinks of its own copy as SC.
 `sharers` is a bit-vector — Ruby calls the type NetDest — across
 every upstream RN, with one bit per requester that might still hold
-the line. Real silicon would use a compressed encoding like
-coarse-vector or pointer-plus-overflow; gem5 keeps the bit-vector
-because exactness is cheaper to reason about. `owner`, `ownerExists`
-and `ownerIsExcl` together identify who, if anyone, holds the line
-in a state that can supply data, and they are what the HN consults
-when picking a snoop opcode.
+the line. This is the same encoding production CHI interconnects
+use at typical SoC scale; compressed schemes (coarse-vector,
+limited-pointer + overflow) only start paying off at very large
+agent counts. `owner`, `ownerExists` and `ownerIsExcl` together
+identify who, if anyone, holds the line in a state that can supply
+data, and they are what the HN consults when picking a snoop
+opcode.
 
 Two gem5 specifics tend to surprise people. First, there is no
 separate dir.sm file. The directory is folded into CHI-cache.sm and
@@ -2236,10 +2237,11 @@ section code { font-size: 10px; padding: 0 1px; background: transparent; }
 
 | Opcode | Purpose |
 |---|---|
-| `WriteBackFull` / `WriteBackPtl` | Dirty writeback (UD→I or SD→I) |
-| `WriteCleanFull` | Flush Dirty but keep a Clean copy in cache |
-| `WriteEvictFull` | UC eviction carrying data; stays in Snoop domain |
-| `WriteEvictOrEvict` | Eviction — Home chooses whether to accept data |
+| `WriteBackFull` | Dirty full-line writeback (UD/SD → I); ownership passes to Home |
+| `WriteBackPtl` | Dirty partial-line writeback (UDP → I); `BE` bits mark valid bytes |
+| `WriteCleanFull` | Dirty writeback that retains a Clean copy (UD → UC, SD → SC) |
+| `WriteEvictFull` | Optional clean eviction (UC → I); seeds the next-level cache so a later peer read need not go to memory |
+| `WriteEvictOrEvict` | Clean eviction (UC/SC → I); Home picks at runtime: accept data, or treat as dataless `Evict` |
 
 ### Combined Write + CMO — B4.2.4 (examples)
 
@@ -2324,11 +2326,19 @@ I when sending any of these. WriteNoSnp* are for Non-snoopable regions; WriteUni
 coherent and cause Home to fire invalidating snoops. The …Stash variants add a Stash
 injection hint alongside the write.
 
-(6) CopyBack Writes. Writebacks and evictions. These move cached lines down the hierarchy.
-WriteBackFull / WriteBackPtl push Dirty data; WriteCleanFull pushes Dirty but keeps a
-Clean copy; WriteEvictFull pushes a UC line that must stay within the Snoop domain;
-WriteEvictOrEvict lets Home decide whether data is actually needed (this is the Alt 1a /
-Alt 1b branch we covered in our earlier practice slides).
+(6) CopyBack Writes. Writebacks and evictions of cached lines. Two are mandatory
+data-preservation paths: WriteBackFull moves a full Dirty line (UD or SD) to the Home;
+WriteBackPtl is the UDP variant that carries a per-byte BE mask so Home can merge only
+the bytes the requester actually dirtied. WriteCleanFull is also a Dirty writeback, but
+the requester keeps a Clean copy of the line (UD → UC, SD → SC) — useful when the line
+is expected to be read again. The two WriteEvict* opcodes are clean-line evictions and
+exist purely for performance: WriteEvictFull hands a UC line to the next-level cache so
+a later peer read can hit there instead of going to memory; the receiver must not
+forward the line outside the snoop domain, since memory is already up-to-date and a
+copy escaping the snooped fabric would create a coherence hole. WriteEvictOrEvict lets
+the Home decide at runtime whether to accept the data or just treat the request as a
+dataless Evict (this is the Alt 1a / Alt 1b branch we covered in our earlier practice
+slides).
 
 (7) Combined Write + CMO. The Write+CMO fusion family from B4.2.4 with ten concrete
 opcodes. The table shows representative examples: each opcode packages a write and a CMO
