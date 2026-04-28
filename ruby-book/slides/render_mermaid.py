@@ -96,9 +96,7 @@ def mermaid_to_svg(code, out_path, width=None):
         tmp.write(themed_mermaid(code))
         tmp.close()
         cmd = [
-            "npx",
-            "--yes",
-            "@mermaid-js/mermaid-cli",
+            "mmdc",
             "-i",
             tmp.name,
             "-o",
@@ -164,8 +162,7 @@ def main():
 
     subprocess.run(
         [
-            "npx",
-            "@marp-team/marp-cli",
+            "marp",
             "--allow-local-files",
             "--html",
             "--theme",

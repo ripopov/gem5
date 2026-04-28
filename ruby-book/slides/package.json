@@ -5,11 +5,7 @@
         "build": "python3 render_mermaid.py",
         "pdf": "python3 render_mermaid.py",
         "html":
-            "python3 render_mermaid.py && npx @marp-team/marp-cli --allow-local-files --html --theme gem5-chi.css CHI_Protocol_Deck_rendered.md -o CHI_Protocol_Deck.html"
-    },
-    "devDependencies": {
-        "@marp-team/marp-cli": "latest",
-        "@mermaid-js/mermaid-cli": "latest"
+            "python3 render_mermaid.py && marp --allow-local-files --html --theme gem5-chi.css CHI_Protocol_Deck_rendered.md -o CHI_Protocol_Deck.html"
     },
     "engines": {
         "node": ">=18"

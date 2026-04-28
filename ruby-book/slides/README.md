@@ -2,8 +2,10 @@
 
 ## Install
 
+Install Marp CLI and Mermaid CLI globally (one-time, system-wide):
+
 ```sh
-npm install
+npm install -g @marp-team/marp-cli @mermaid-js/mermaid-cli
 ```
 
 ## Build PDF
