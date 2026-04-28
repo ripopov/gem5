@@ -46,44 +46,39 @@ and find the corresponding code in the gem5 tree.
 <div class="comparison-grid smaller">
 <div class="card compact accent-blue">
 <p class="eyebrow">Cache coherence</p>
-<h3>All caches agree on each individual line</h3>
+<h3>All caches agree on each line</h3>
 <ul>
-<li>Tracks ownership and sharing for one cache line at a time.</li>
-<li>Allows many clean readers or one writable owner.</li>
-<li>Prevents a cache from using a stale valid copy after another agent writes the line.</li>
+<li>Serializes writes to a single line; many clean readers <em>or</em> one writable owner.</li>
+<li>No agent keeps using a stale copy after another agent has written.</li>
 </ul>
-<span class="pill req">ownership</span>
-<span class="pill rsp">per line</span>
+<span class="pill req">scope: one line</span>
+<span class="pill rsp">decides: who owns it</span>
 </div>
 <div class="card compact accent-violet">
 <p class="eyebrow">Memory consistency</p>
-<h3>Software gets rules for observing operations</h3>
+<h3>Software gets rules across addresses</h3>
 <ul>
-<li>Defines which load/store orderings a program can rely on.</li>
-<li>Covers operations to different addresses, not just one line.</li>
-<li>Uses fences, barriers, atomics, and memory types to demand stronger order.</li>
+<li>Defines which load/store orderings — across <em>different</em> lines — a program may rely on.</li>
+<li>Fences, atomics, and memory types promote required order into hardware work.</li>
 </ul>
-<span class="pill dat">visibility</span>
-<span class="pill neutral">program order</span>
+<span class="pill dat">scope: many addresses</span>
+<span class="pill neutral">decides: what order is observable</span>
 </div>
 </div>
 
-<div class="metric-strip">
-<div class="metric">
-<strong>X</strong>
-<span>coherence asks: who owns this line, and can this cached copy still be used?</span>
+<div class="litmus">
+<div class="litmus-core">
+<p class="eyebrow">Core 0 — producer</p>
+<pre><code>store data = 42
+store flag = 1</code></pre>
 </div>
-<div class="metric">
-<strong>X,Y</strong>
-<span>consistency asks: can Y be seen before X?</span>
+<div class="litmus-core">
+<p class="eyebrow">Core 1 — consumer</p>
+<pre><code>r1 = load flag   // sees 1
+r2 = load data   // can it be 0?</code></pre>
 </div>
-<div class="metric">
-<strong>Fence</strong>
-<span>turns a required software order into hardware work.</span>
-</div>
-<div class="metric">
-<strong>Device</strong>
-<span>registers often need endpoint-visible order.</span>
+<div class="litmus-verdict">
+<strong>Coherence</strong> keeps <code>data</code> and <code>flag</code> each current. <strong>Consistency</strong> answers whether <code>r1==1</code> implies <code>r2==42</code>.
 </div>
 </div>
 
@@ -92,32 +87,23 @@ Coherence makes each line sensible; consistency makes a program's sequence of op
 </div>
 
 <!-- Speaker Notes:
-CHI sits on top of two contracts that are easy to confuse, so we need
-clean definitions before going further.
+CHI sits on two contracts that are easy to confuse.
 
-Coherence is a single-line guarantee. For any one cache line, every
-agent in the system agrees on the current value and on who owns it.
-The classic phrasing is "one writer or many readers" — coherence
-serializes writes to that single line and makes sure no cache keeps
-using a stale copy after another agent has written.
+Coherence is a single-line guarantee — one writer or many readers,
+no stale copies after a write. Consistency is a multi-address
+guarantee — which load/store orderings a program may rely on across
+different lines.
 
-Consistency is a multi-address guarantee. It governs the order in
-which a program's loads and stores become visible to other agents.
-The textbook message-passing example: core zero writes data, then
-writes a flag; core one reads the flag and, if it is set, reads the
-data. Coherence keeps data and flag coherent in isolation, but only
-the consistency model says whether the flag can be observed before
-the data.
+The litmus on screen is the textbook message-passing test. Core 0
+writes data then flag. Core 1 reads flag, sees 1, then reads data.
+Coherence alone allows r2 to come back 0: each line is internally
+consistent, but flag may have become visible before data. Only the
+consistency model decides whether that reordering is permitted, and
+fences or release/acquire atomics are how software forbids it.
 
-Fences and ordered atomics are how software promotes a required
-order into hardware work. Device registers are the other common
-case where the program insists on a particular order, often without
-caching at all.
-
-Hold on to that split. CHI is primarily a coherence protocol, but
-because its channels reorder freely, it also carries explicit
-ordering controls so the consistency model has something concrete
-to anchor to.
+CHI is primarily a coherence protocol, but because its channels
+reorder freely it carries explicit ordering controls so the
+consistency model has something concrete to anchor to.
 -->
 
 ---
