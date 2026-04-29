@@ -2225,6 +2225,97 @@ back. SNP by itself is always data-less.
 
 <!--
 ========================================================================================
+>>> SLIDE 24b (BACKUP)
+>>> HN-F Port, Link, and Channel — both faces of Home
+========================================================================================
+-->
+
+## HN-F port: both faces of Home
+
+![h:513 HN-F port and channel structure across both interconnect faces. Three vertical port bars: RN-F (left), HN-F (centre, split into upstream and downstream faces), SN-F (right). Upstream link between RN-F and HN-F carries six channels — outbound from RN-F: REQ (Read/Write/CMO/CopyBack/PCrdReturn), DAT (write data, snoop data), RSP (CompAck, SnpResp); inbound to RN-F: SNP (snoops to caches), RSP (Comp/RetryAck/DBIDResp/PCrdGrant), DAT (CompData, snoop forward data). Downstream link between HN-F and SN-F carries four channels — outbound from HN-F: REQ (ReadNoSnp/WriteNoSnp*/Atomic/CMO), DAT (NCBWrData); inbound to HN-F: RSP (Comp/CompDBIDResp/DBIDResp/RetryAck), DAT (CompData). Two ghost slots labelled "no SNP" mark the SN side because SN-F is never snooped and never snoops. LCredit dashed arrows on every channel run opposite the data direction. TX/RX pin names labelled on each port edge.](../resources/chi_hnf_port_link_channel.svg)
+
+<!-- Speaker Notes:
+Slide 5 showed Port, Link, Channel at one Request Node interface.
+The HN-F sits inside the interconnect with two such interfaces —
+one upstream toward each RN-F it serves, one downstream toward each
+SN-F it owns memory at. Both faces use the same channel vocabulary
+the spec defines in section B13.4 — REQ, RSP, SNP, DAT — but the
+mix of channels on each face is different, and that difference is
+the architectural fingerprint of a Home Node.
+
+Start with the upstream face — the RN-F-facing side. Topologically
+it is the mirror of the RN-F port in slide 5. Where the RN-F port
+has TXREQ, the HN-F has RXREQ; where the RN-F has RXSNP, the HN-F
+has TXSNP. All six channels are present. Outbound from the RN-F
+into the HN-F flows the REQ stream — Reads, Writes, CMOs,
+CopyBacks, PCrdReturn; the DAT stream — write data and snoop data
+the RN-F is shipping back; and the RSP stream — CompAck closing a
+transaction at Home, and snoop responses without data. Inbound to
+the RN-F from the HN-F flows the SNP stream — snoops the Home
+issues to keep coherence, no TgtID because the snoop target is
+whichever RN-F receives the flit; the RSP stream — Comp, RetryAck,
+DBIDResp, PCrdGrant; and the DAT stream — CompData fills and
+snoop-forwarded data on DCT paths. SNP exists only on this upstream
+face because only RN-Fs (and DVM RN-Ds) own caches that the Home
+can snoop.
+
+Pivot to the downstream face — the SN-F-facing side. This face
+mirrors the SN-F port in spec figure B13.8: a request channel into
+the Subordinate, a response channel out of it, and DAT in both
+directions. Outbound from the HN-F into the SN-F goes REQ — but a
+restricted REQ: only the Non-snoopable opcodes the spec lists in
+table B4.2 for HN-F-to-SN-F traffic, namely ReadNoSnp,
+ReadNoSnpSep, WriteNoSnp variants, Atomics, and CMOs forwarded by
+the Home. Outbound DAT carries the write payload — NCBWrData for
+WriteNoSnp and the writeback datapath when the Home is evicting a
+dirty line on behalf of an upstream RN-F. Inbound RSP carries
+Comp, CompDBIDResp, DBIDResp, and RetryAck back from the
+Subordinate. Inbound DAT carries CompData from a memory read —
+unless the transaction is using DMT, in which case the SN-F sends
+its CompData directly to the Requester and the HN-F never sees the
+data flit at all.
+
+Two empty slots on the downstream side make the asymmetry
+explicit. There is no SNP outbound to the SN-F — Subordinates do
+not own coherent caches, so the protocol never snoops them. There
+is no SNP inbound either — Subordinates never originate snoops.
+The downstream face is strictly four channels, not six.
+
+LCredit, the dashed back-arrows, behaves the same on every channel
+the spec allows: a receiver hands its transmitter one credit per
+flit-buffer slot it has free, and the transmitter may not send
+without one. The point of drawing them on every channel is to
+remind us that backpressure is per-channel and per-direction —
+nothing about Home is special there.
+
+A few things this picture quietly tells you about HN-F. First,
+HN-F is the Point of Coherence and Point of Serialization for its
+slice of the address space — both responsibilities sit on the
+upstream face: PoC because that is where the snoop conversation
+happens, PoS because that is where REQ arrives and gets ordered
+before any forwarding happens. Second, the downstream face is
+strictly subordinate-shaped — the HN-F talks to the SN-F using the
+same flit formats and the same channel set as any other client of
+that Subordinate would. Third, on a DMT read the data path skips
+the HN-F entirely — REQ goes HN to SN, but CompData goes SN
+straight back to the original RN; the HN-F sees the closing
+CompAck on its upstream RSP channel and deallocates.
+
+In gem5, both faces collapse onto a single CHI-cache.sm controller
+configured with is_HN=true. The eight MessageBuffers — reqIn,
+snpIn, rspIn, datIn and the four matching outbound — handle both
+the RN-facing and the SN-facing traffic; the network layer plus the
+controller's is_HN logic decides which physical neighbour each
+message is bound for. The Home's directory and LLC slice live next
+to that single controller, so what the spec presents as two
+distinct port faces is implemented as one Ruby controller with two
+groups of routed neighbours.
+-->
+
+---
+
+<!--
+========================================================================================
 >>> SLIDE 25 (BACKUP)
 >>> CHI Transaction Encyclopedia
 ========================================================================================

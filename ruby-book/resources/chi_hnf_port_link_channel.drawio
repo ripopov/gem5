@@ -1,0 +1,273 @@
+<mxfile host="Electron" modified="2026-04-29T00:00:00.000Z" agent="draw.io" version="24.0.0">
+  <diagram name="CHI HN-F Port Link Channel" id="chi-hnf-port-link-channel">
+    <mxGraphModel dx="1500" dy="900" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1520" pageHeight="700" math="0" shadow="0" background="#ffffff">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <!-- ============================================================ -->
+        <!-- Port (RN-F) — far left, the upstream peer                     -->
+        <!-- ============================================================ -->
+        <mxCell id="port_rn" value="&lt;b style=&quot;font-size:24px&quot;&gt;Port (RN-F)&lt;/b&gt;&lt;div style=&quot;font-size:13px;color:#475569;font-weight:normal;margin-top:4px&quot;&gt;Upstream peer&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DBEAFE;strokeColor=#1d4ed8;strokeWidth=2.5;verticalAlign=top;fontSize=14;fontColor=#1e3a8a;arcSize=4;" vertex="1" parent="1">
+          <mxGeometry x="20" y="40" width="200" height="640" as="geometry"/>
+        </mxCell>
+
+        <!-- ============================================================ -->
+        <!-- Port (HN-F) — middle, the home node                           -->
+        <!-- ============================================================ -->
+        <mxCell id="port_hnf" value="&lt;b style=&quot;font-size:24px&quot;&gt;Port (HN-F)&lt;/b&gt;&lt;div style=&quot;font-size:13px;color:#475569;font-weight:normal;margin-top:4px&quot;&gt;Home Node — PoC + PoS, inside ICN&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE9FE;strokeColor=#6d28d9;strokeWidth=2.5;verticalAlign=top;fontSize=14;fontColor=#5b21b6;arcSize=4;" vertex="1" parent="1">
+          <mxGeometry x="620" y="40" width="280" height="640" as="geometry"/>
+        </mxCell>
+
+        <!-- HN-F upstream-face / downstream-face dividers -->
+        <mxCell id="hnf_face_up" value="&lt;b&gt;upstream face&lt;/b&gt;&lt;br/&gt;(RN-F side)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;fontSize=10;fontColor=#6d28d9;fontStyle=2;" vertex="1" parent="1">
+          <mxGeometry x="625" y="92" width="120" height="32" as="geometry"/>
+        </mxCell>
+        <mxCell id="hnf_face_dn" value="&lt;b&gt;downstream face&lt;/b&gt;&lt;br/&gt;(SN-F side)" style="text;html=1;strokeColor=none;fillColor=none;align=right;verticalAlign=top;fontSize=10;fontColor=#6d28d9;fontStyle=2;" vertex="1" parent="1">
+          <mxGeometry x="775" y="92" width="120" height="32" as="geometry"/>
+        </mxCell>
+        <!-- vertical separator inside HN-F port to suggest two faces -->
+        <mxCell id="hnf_split" value="" style="endArrow=none;html=1;strokeColor=#94a3b8;strokeWidth=1;dashed=1;dashPattern=2 4;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="760" y="135" as="sourcePoint"/>
+            <mxPoint x="760" y="670" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ============================================================ -->
+        <!-- Port (SN-F) — far right, the downstream subordinate            -->
+        <!-- ============================================================ -->
+        <mxCell id="port_sn" value="&lt;b style=&quot;font-size:24px&quot;&gt;Port (SN-F)&lt;/b&gt;&lt;div style=&quot;font-size:13px;color:#475569;font-weight:normal;margin-top:4px&quot;&gt;Downstream subordinate&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DCFCE7;strokeColor=#166534;strokeWidth=2.5;verticalAlign=top;fontSize=14;fontColor=#14532d;arcSize=4;" vertex="1" parent="1">
+          <mxGeometry x="1300" y="40" width="200" height="640" as="geometry"/>
+        </mxCell>
+
+        <!-- ============================================================ -->
+        <!-- Upstream OUT link group (RN-F transmits, HN-F receives)        -->
+        <!-- ============================================================ -->
+        <mxCell id="link_up_out" value="&lt;b style=&quot;font-size:14px&quot;&gt;Upstream link&lt;/b&gt; — RN-F transmits, HN-F receives" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#64748b;strokeWidth=1.5;verticalAlign=top;fontSize=13;fontColor=#334155;arcSize=4;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="240" y="80" width="360" height="280" as="geometry"/>
+        </mxCell>
+
+        <!-- Upstream out: REQ (RN→HN) -->
+        <mxCell id="ch_req_up" value="&lt;b&gt;REQ&lt;/b&gt; — Read/Write/CMO/CopyBack/PCrdReturn" style="shape=singleArrow;html=1;fillColor=#DBEAFE;strokeColor=#2563eb;strokeWidth=2;arrowWidth=0.7;arrowSize=0.06;verticalAlign=middle;align=center;fontSize=13;fontColor=#1d4ed8;" vertex="1" parent="1">
+          <mxGeometry x="250" y="120" width="340" height="40" as="geometry"/>
+        </mxCell>
+        <!-- Upstream out: DAT write-data (RN→HN) -->
+        <mxCell id="ch_dat_up_out" value="&lt;b&gt;DAT&lt;/b&gt; — write data, snoop data" style="shape=singleArrow;html=1;fillColor=#EDE9FE;strokeColor=#7c3aed;strokeWidth=2;arrowWidth=0.7;arrowSize=0.06;verticalAlign=middle;align=center;fontSize=13;fontColor=#6d28d9;" vertex="1" parent="1">
+          <mxGeometry x="250" y="200" width="340" height="40" as="geometry"/>
+        </mxCell>
+        <!-- Upstream out: RSP CompAck/SnpResp (RN→HN) -->
+        <mxCell id="ch_rsp_up_out" value="&lt;b&gt;RSP&lt;/b&gt; — CompAck, SnpResp" style="shape=singleArrow;html=1;fillColor=#DCFCE7;strokeColor=#15803d;strokeWidth=2;arrowWidth=0.7;arrowSize=0.06;verticalAlign=middle;align=center;fontSize=13;fontColor=#166534;" vertex="1" parent="1">
+          <mxGeometry x="250" y="280" width="340" height="40" as="geometry"/>
+        </mxCell>
+
+        <!-- LCredit dashed arrows for upstream out -->
+        <mxCell id="lc_up_out_req" value="&lt;i&gt;LCredit&lt;/i&gt;" style="endArrow=classic;html=1;strokeColor=#475569;strokeWidth=1.5;dashed=1;dashPattern=5 3;fontSize=10;fontColor=#334155;fontStyle=2;labelBackgroundColor=#ffffff;verticalAlign=bottom;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="565" y="180" as="sourcePoint"/>
+            <mxPoint x="290" y="180" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="lc_up_out_dat" value="&lt;i&gt;LCredit&lt;/i&gt;" style="endArrow=classic;html=1;strokeColor=#475569;strokeWidth=1.5;dashed=1;dashPattern=5 3;fontSize=10;fontColor=#334155;fontStyle=2;labelBackgroundColor=#ffffff;verticalAlign=bottom;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="565" y="260" as="sourcePoint"/>
+            <mxPoint x="290" y="260" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="lc_up_out_rsp" value="&lt;i&gt;LCredit&lt;/i&gt;" style="endArrow=classic;html=1;strokeColor=#475569;strokeWidth=1.5;dashed=1;dashPattern=5 3;fontSize=10;fontColor=#334155;fontStyle=2;labelBackgroundColor=#ffffff;verticalAlign=bottom;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="565" y="340" as="sourcePoint"/>
+            <mxPoint x="290" y="340" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ============================================================ -->
+        <!-- Upstream IN link group (HN-F transmits, RN-F receives)         -->
+        <!-- ============================================================ -->
+        <mxCell id="link_up_in" value="&lt;b style=&quot;font-size:14px&quot;&gt;Upstream link&lt;/b&gt; — HN-F transmits, RN-F receives" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#64748b;strokeWidth=1.5;verticalAlign=top;fontSize=13;fontColor=#334155;arcSize=4;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="240" y="380" width="360" height="280" as="geometry"/>
+        </mxCell>
+
+        <!-- Upstream in: SNP (HN→RN) -->
+        <mxCell id="ch_snp_up_in" value="&lt;b&gt;SNP&lt;/b&gt; — snoops to RN-F caches" style="shape=singleArrow;direction=west;html=1;fillColor=#FEF3C7;strokeColor=#c58b1b;strokeWidth=2;arrowWidth=0.7;arrowSize=0.06;verticalAlign=middle;align=center;fontSize=13;fontColor=#a16207;" vertex="1" parent="1">
+          <mxGeometry x="250" y="420" width="340" height="40" as="geometry"/>
+        </mxCell>
+        <!-- Upstream in: RSP completions (HN→RN) -->
+        <mxCell id="ch_rsp_up_in" value="&lt;b&gt;RSP&lt;/b&gt; — Comp / RetryAck / DBIDResp / PCrdGrant" style="shape=singleArrow;direction=west;html=1;fillColor=#DCFCE7;strokeColor=#15803d;strokeWidth=2;arrowWidth=0.7;arrowSize=0.06;verticalAlign=middle;align=center;fontSize=13;fontColor=#166534;" vertex="1" parent="1">
+          <mxGeometry x="250" y="500" width="340" height="40" as="geometry"/>
+        </mxCell>
+        <!-- Upstream in: DAT read data (HN→RN) -->
+        <mxCell id="ch_dat_up_in" value="&lt;b&gt;DAT&lt;/b&gt; — CompData, snoop forward data" style="shape=singleArrow;direction=west;html=1;fillColor=#EDE9FE;strokeColor=#7c3aed;strokeWidth=2;arrowWidth=0.7;arrowSize=0.06;verticalAlign=middle;align=center;fontSize=13;fontColor=#6d28d9;" vertex="1" parent="1">
+          <mxGeometry x="250" y="580" width="340" height="40" as="geometry"/>
+        </mxCell>
+
+        <!-- LCredit dashed arrows for upstream in (RN→HN credit) -->
+        <mxCell id="lc_up_in_snp" value="&lt;i&gt;LCredit&lt;/i&gt;" style="endArrow=classic;html=1;strokeColor=#475569;strokeWidth=1.5;dashed=1;dashPattern=5 3;fontSize=10;fontColor=#334155;fontStyle=2;labelBackgroundColor=#ffffff;verticalAlign=bottom;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="290" y="480" as="sourcePoint"/>
+            <mxPoint x="565" y="480" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="lc_up_in_rsp" value="&lt;i&gt;LCredit&lt;/i&gt;" style="endArrow=classic;html=1;strokeColor=#475569;strokeWidth=1.5;dashed=1;dashPattern=5 3;fontSize=10;fontColor=#334155;fontStyle=2;labelBackgroundColor=#ffffff;verticalAlign=bottom;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="290" y="560" as="sourcePoint"/>
+            <mxPoint x="565" y="560" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="lc_up_in_dat" value="&lt;i&gt;LCredit&lt;/i&gt;" style="endArrow=classic;html=1;strokeColor=#475569;strokeWidth=1.5;dashed=1;dashPattern=5 3;fontSize=10;fontColor=#334155;fontStyle=2;labelBackgroundColor=#ffffff;verticalAlign=bottom;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="290" y="640" as="sourcePoint"/>
+            <mxPoint x="565" y="640" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ============================================================ -->
+        <!-- Downstream OUT link group (HN-F transmits, SN-F receives)      -->
+        <!-- ============================================================ -->
+        <mxCell id="link_dn_out" value="&lt;b style=&quot;font-size:14px&quot;&gt;Downstream link&lt;/b&gt; — HN-F transmits, SN-F receives" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#64748b;strokeWidth=1.5;verticalAlign=top;fontSize=13;fontColor=#334155;arcSize=4;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="920" y="80" width="360" height="280" as="geometry"/>
+        </mxCell>
+
+        <!-- Downstream out: REQ (HN→SN) -->
+        <mxCell id="ch_req_dn" value="&lt;b&gt;REQ&lt;/b&gt; — ReadNoSnp / WriteNoSnp* / Atomic / CMO" style="shape=singleArrow;html=1;fillColor=#DBEAFE;strokeColor=#2563eb;strokeWidth=2;arrowWidth=0.7;arrowSize=0.06;verticalAlign=middle;align=center;fontSize=13;fontColor=#1d4ed8;" vertex="1" parent="1">
+          <mxGeometry x="930" y="120" width="340" height="40" as="geometry"/>
+        </mxCell>
+        <!-- Downstream out: DAT write data (HN→SN) -->
+        <mxCell id="ch_dat_dn_out" value="&lt;b&gt;DAT&lt;/b&gt; — NCBWrData (writeback / WriteNoSnp data)" style="shape=singleArrow;html=1;fillColor=#EDE9FE;strokeColor=#7c3aed;strokeWidth=2;arrowWidth=0.7;arrowSize=0.06;verticalAlign=middle;align=center;fontSize=13;fontColor=#6d28d9;" vertex="1" parent="1">
+          <mxGeometry x="930" y="200" width="340" height="40" as="geometry"/>
+        </mxCell>
+        <!-- No SNP / no upstream-style RSP on the downstream side: callout -->
+        <mxCell id="ch_no_snp_dn" value="&lt;b style=&quot;color:#94a3b8&quot;&gt;no SNP&lt;/b&gt; — SN-F is never snooped" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F1F5F9;strokeColor=#94a3b8;strokeWidth=1;dashed=1;verticalAlign=middle;align=center;fontSize=12;fontColor=#64748b;fontStyle=2;" vertex="1" parent="1">
+          <mxGeometry x="930" y="280" width="340" height="40" as="geometry"/>
+        </mxCell>
+
+        <!-- LCredit dashed arrows for downstream out -->
+        <mxCell id="lc_dn_out_req" value="&lt;i&gt;LCredit&lt;/i&gt;" style="endArrow=classic;html=1;strokeColor=#475569;strokeWidth=1.5;dashed=1;dashPattern=5 3;fontSize=10;fontColor=#334155;fontStyle=2;labelBackgroundColor=#ffffff;verticalAlign=bottom;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1245" y="180" as="sourcePoint"/>
+            <mxPoint x="970" y="180" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="lc_dn_out_dat" value="&lt;i&gt;LCredit&lt;/i&gt;" style="endArrow=classic;html=1;strokeColor=#475569;strokeWidth=1.5;dashed=1;dashPattern=5 3;fontSize=10;fontColor=#334155;fontStyle=2;labelBackgroundColor=#ffffff;verticalAlign=bottom;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1245" y="260" as="sourcePoint"/>
+            <mxPoint x="970" y="260" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ============================================================ -->
+        <!-- Downstream IN link group (SN-F transmits, HN-F receives)       -->
+        <!-- ============================================================ -->
+        <mxCell id="link_dn_in" value="&lt;b style=&quot;font-size:14px&quot;&gt;Downstream link&lt;/b&gt; — SN-F transmits, HN-F receives" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#64748b;strokeWidth=1.5;verticalAlign=top;fontSize=13;fontColor=#334155;arcSize=4;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="920" y="380" width="360" height="280" as="geometry"/>
+        </mxCell>
+
+        <!-- Downstream in: marker for absent SNP slot -->
+        <mxCell id="ch_no_snp_dn_in" value="&lt;b style=&quot;color:#94a3b8&quot;&gt;no SNP&lt;/b&gt; — SN-F never sends snoops" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F1F5F9;strokeColor=#94a3b8;strokeWidth=1;dashed=1;verticalAlign=middle;align=center;fontSize=12;fontColor=#64748b;fontStyle=2;" vertex="1" parent="1">
+          <mxGeometry x="930" y="420" width="340" height="40" as="geometry"/>
+        </mxCell>
+
+        <!-- Downstream in: RSP from SN -->
+        <mxCell id="ch_rsp_dn_in" value="&lt;b&gt;RSP&lt;/b&gt; — Comp / CompDBIDResp / DBIDResp / RetryAck" style="shape=singleArrow;direction=west;html=1;fillColor=#DCFCE7;strokeColor=#15803d;strokeWidth=2;arrowWidth=0.7;arrowSize=0.06;verticalAlign=middle;align=center;fontSize=13;fontColor=#166534;" vertex="1" parent="1">
+          <mxGeometry x="930" y="500" width="340" height="40" as="geometry"/>
+        </mxCell>
+
+        <!-- Downstream in: DAT read data CompData from SN -->
+        <mxCell id="ch_dat_dn_in" value="&lt;b&gt;DAT&lt;/b&gt; — CompData (memory read fill, DMT goes RN-direct)" style="shape=singleArrow;direction=west;html=1;fillColor=#EDE9FE;strokeColor=#7c3aed;strokeWidth=2;arrowWidth=0.7;arrowSize=0.06;verticalAlign=middle;align=center;fontSize=13;fontColor=#6d28d9;" vertex="1" parent="1">
+          <mxGeometry x="930" y="580" width="340" height="40" as="geometry"/>
+        </mxCell>
+
+        <!-- LCredit dashed arrows for downstream in -->
+        <mxCell id="lc_dn_in_rsp" value="&lt;i&gt;LCredit&lt;/i&gt;" style="endArrow=classic;html=1;strokeColor=#475569;strokeWidth=1.5;dashed=1;dashPattern=5 3;fontSize=10;fontColor=#334155;fontStyle=2;labelBackgroundColor=#ffffff;verticalAlign=bottom;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="970" y="560" as="sourcePoint"/>
+            <mxPoint x="1245" y="560" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="lc_dn_in_dat" value="&lt;i&gt;LCredit&lt;/i&gt;" style="endArrow=classic;html=1;strokeColor=#475569;strokeWidth=1.5;dashed=1;dashPattern=5 3;fontSize=10;fontColor=#334155;fontStyle=2;labelBackgroundColor=#ffffff;verticalAlign=bottom;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="970" y="640" as="sourcePoint"/>
+            <mxPoint x="1245" y="640" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ============================================================ -->
+        <!-- Pin labels — RN-F port (right edge)                            -->
+        <!-- ============================================================ -->
+        <mxCell id="pin_rn_txreq" value="&lt;b&gt;TXREQ&lt;/b&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=right;verticalAlign=middle;fontSize=14;fontColor=#1d4ed8;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="125" y="126" width="90" height="28" as="geometry"/>
+        </mxCell>
+        <mxCell id="pin_rn_txdat" value="&lt;b&gt;TXDAT&lt;/b&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=right;verticalAlign=middle;fontSize=14;fontColor=#6d28d9;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="125" y="206" width="90" height="28" as="geometry"/>
+        </mxCell>
+        <mxCell id="pin_rn_txrsp" value="&lt;b&gt;TXRSP&lt;/b&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=right;verticalAlign=middle;fontSize=14;fontColor=#166534;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="125" y="286" width="90" height="28" as="geometry"/>
+        </mxCell>
+        <mxCell id="pin_rn_rxsnp" value="&lt;b&gt;RXSNP&lt;/b&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=right;verticalAlign=middle;fontSize=14;fontColor=#a16207;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="125" y="426" width="90" height="28" as="geometry"/>
+        </mxCell>
+        <mxCell id="pin_rn_rxrsp" value="&lt;b&gt;RXRSP&lt;/b&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=right;verticalAlign=middle;fontSize=14;fontColor=#166534;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="125" y="506" width="90" height="28" as="geometry"/>
+        </mxCell>
+        <mxCell id="pin_rn_rxdat" value="&lt;b&gt;RXDAT&lt;/b&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=right;verticalAlign=middle;fontSize=14;fontColor=#6d28d9;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="125" y="586" width="90" height="28" as="geometry"/>
+        </mxCell>
+
+        <!-- ============================================================ -->
+        <!-- Pin labels — HN-F port, upstream face (left edge)              -->
+        <!-- ============================================================ -->
+        <mxCell id="pin_hnf_rxreq_up" value="&lt;b&gt;RXREQ&lt;/b&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=14;fontColor=#1d4ed8;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="625" y="126" width="90" height="28" as="geometry"/>
+        </mxCell>
+        <mxCell id="pin_hnf_rxdat_up" value="&lt;b&gt;RXDAT&lt;/b&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=14;fontColor=#6d28d9;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="625" y="206" width="90" height="28" as="geometry"/>
+        </mxCell>
+        <mxCell id="pin_hnf_rxrsp_up" value="&lt;b&gt;RXRSP&lt;/b&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=14;fontColor=#166534;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="625" y="286" width="90" height="28" as="geometry"/>
+        </mxCell>
+        <mxCell id="pin_hnf_txsnp_up" value="&lt;b&gt;TXSNP&lt;/b&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=14;fontColor=#a16207;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="625" y="426" width="90" height="28" as="geometry"/>
+        </mxCell>
+        <mxCell id="pin_hnf_txrsp_up" value="&lt;b&gt;TXRSP&lt;/b&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=14;fontColor=#166534;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="625" y="506" width="90" height="28" as="geometry"/>
+        </mxCell>
+        <mxCell id="pin_hnf_txdat_up" value="&lt;b&gt;TXDAT&lt;/b&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=14;fontColor=#6d28d9;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="625" y="586" width="90" height="28" as="geometry"/>
+        </mxCell>
+
+        <!-- ============================================================ -->
+        <!-- Pin labels — HN-F port, downstream face (right edge)           -->
+        <!-- ============================================================ -->
+        <mxCell id="pin_hnf_txreq_dn" value="&lt;b&gt;TXREQ&lt;/b&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=right;verticalAlign=middle;fontSize=14;fontColor=#1d4ed8;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="805" y="126" width="90" height="28" as="geometry"/>
+        </mxCell>
+        <mxCell id="pin_hnf_txdat_dn" value="&lt;b&gt;TXDAT&lt;/b&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=right;verticalAlign=middle;fontSize=14;fontColor=#6d28d9;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="805" y="206" width="90" height="28" as="geometry"/>
+        </mxCell>
+        <mxCell id="pin_hnf_rxrsp_dn" value="&lt;b&gt;RXRSP&lt;/b&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=right;verticalAlign=middle;fontSize=14;fontColor=#166534;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="805" y="506" width="90" height="28" as="geometry"/>
+        </mxCell>
+        <mxCell id="pin_hnf_rxdat_dn" value="&lt;b&gt;RXDAT&lt;/b&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=right;verticalAlign=middle;fontSize=14;fontColor=#6d28d9;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="805" y="586" width="90" height="28" as="geometry"/>
+        </mxCell>
+
+        <!-- ============================================================ -->
+        <!-- Pin labels — SN-F port (left edge)                             -->
+        <!-- ============================================================ -->
+        <mxCell id="pin_sn_rxreq" value="&lt;b&gt;RXREQ&lt;/b&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=14;fontColor=#1d4ed8;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1305" y="126" width="90" height="28" as="geometry"/>
+        </mxCell>
+        <mxCell id="pin_sn_rxdat" value="&lt;b&gt;RXDAT&lt;/b&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=14;fontColor=#6d28d9;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1305" y="206" width="90" height="28" as="geometry"/>
+        </mxCell>
+        <mxCell id="pin_sn_txrsp" value="&lt;b&gt;TXRSP&lt;/b&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=14;fontColor=#166534;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1305" y="506" width="90" height="28" as="geometry"/>
+        </mxCell>
+        <mxCell id="pin_sn_txdat" value="&lt;b&gt;TXDAT&lt;/b&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=14;fontColor=#6d28d9;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1305" y="586" width="90" height="28" as="geometry"/>
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
