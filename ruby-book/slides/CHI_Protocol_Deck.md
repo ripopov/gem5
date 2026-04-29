@@ -202,7 +202,7 @@ gem5's RISC-V CHI configuration is where we will see both.
 
 ## CHI Node Types — a typical system
 
-![h:513 CHI node types overview — RN-F, RN-I (PCIe and GPU variants), RN-D, MN, HN-F, SN-F around the ICN, with MC and DRAM attached to the SN-F](../resources/chi_node_types.svg)
+![h:513 CHI node types overview — top row: two RN-F (CPU + L1/L2) and an RN-I (GPU); left: PCIe Root Complex with paired RN-I (DMA upstream) and SN-I (MMIO target) CHI ports, and an RN-D (SMMU); right: MN; bottom: HN-F (SF + LLC), HN-I (PoS + Addr Decode), SN-F connecting to MC and DRAM](../resources/chi_node_types.svg)
 
 <!-- Speaker Notes:
 A complete CHI system is built from a small fixed cast of node
@@ -212,11 +212,30 @@ buffering are yours.
 
 The two requester families split on caching. RN-F, Fully Coherent
 Request Node, is what a CPU core looks like to CHI: it holds
-hardware-coherent caches, generates every transaction type, and
-responds to every snoop type. RN-I, IO Coherent Request Node, is
+hardware-coherent caches, generates every request type defined by
+the protocol (the only carve-out is `ReadNoSnpSep`, which is
+issued by Home Nodes, not RNs), and supports every snoop type. RN-I, IO Coherent Request Node, is
 the non-caching variant — a PCIe bridge or a driver-managed GPU
 fits here. An RN-I receives no snoops because it has no coherent
 cache to snoop.
+
+The PCIe Root Complex on the left is drawn as a dashed group to
+show a subtlety that matters in practice. ARM's *PCIe AMBA
+Integration Guide* (DEN 0114, §2.3) states it directly: "A PCIe
+Interface will have both AMBA Manager (M) and Subordinate (S)
+ports." On a CHI fabric the Manager port appears as an RN-I (or
+RN-D when SMMU/ATS is wired in) and the Subordinate port as an
+SN-I, and the two ports serve opposite traffic directions. The
+RN-I carries device-initiated DMA upstream into system memory:
+when an endpoint issues a memory TLP, the bridge translates it
+into a CHI request — `ReadOnce*` / `WriteUnique*` targeting
+HN-F if the access is IO-coherent so HN-F snoops the CPU caches,
+or `ReadNoSnp` / `WriteNoSnp*` targeting HN-F or HN-I if not.
+The SN-I handles the reverse direction — CPU MMIO into BARs and
+config space: CPU(RN-F) → HN-I → SN-I, where the bridge consumes
+the CHI request and emits a downstream PCIe TLP to the device.
+The two ports share PCIe-side hardware but appear as independent
+CHI agents to the fabric, and they can carry distinct Node IDs.
 
 RN-D is the third requester type, used when an accelerator's SMMU
 walks the CPU's page tables directly and TLB invalidations must
@@ -234,14 +253,41 @@ grants ownership, and forwards data. Two optional internal pieces
 the spec calls out are the snoop filter or directory and the LLC
 slice. Both are implementation-specific.
 
+HN-I is the Non-coherent Home Node (spec §B1.6 Component
+naming). It is the home for memory-mapped IO and other
+Non-snoopable address regions, and typically fronts an SN-I
+subordinate (peripherals or non-cacheable memory). The spec is
+explicit about three things. First, HN-I does not include a
+Point of Coherence and is not capable of processing a Snoopable
+request — if a Snoopable request arrives (e.g. an OS programming
+error tagging an MMIO region as Cacheable+Snoopable), the HN-I
+must still respond in a protocol-compliant way, but coherency is
+not guaranteed (§B3.3.1, §B4.2). Second, HN-I processes only a
+limited subset of request types: from RNs it expects Non-snoopable
+traffic — `ReadNoSnp`, `WriteNoSnp*`, `ReadOnce*`, Atomics,
+CMOs, `PCrdReturn` — and forwards `ReadNoSnp` / `WriteNoSnp*` /
+Atomics / CMOs onward to its SN-I (Tables B4.3, B4.10, B4.17,
+B4.25). Third, HN-I is the Point of Serialization for IO: it
+enforces ordering between IO requests targeting the IO subsystem,
+and the spec defines the strongest CHI ordering, Endpoint Order,
+explicitly for the HN-I → SN-I leg so request issue order can be
+preserved end-to-end when a peripheral demands it (§B2.7
+Ordering). Practically: no snoop filter, no LLC slice, just an
+ordering point and address decode that forwards to one or more
+SN-I subordinates.
+
 SN-F is the Subordinate Node — the memory side. The spec uses
 "Subordinate", not "Slave". An SN-F receives ReadNoSnp and
 WriteNoSnp from the homes and returns data. CHI ends at SN-F.
 Whatever the attached memory controller speaks to DRAM is outside
-the spec.
+the spec. SN-I is the IO counterpart: same Subordinate role for
+non-cacheable / peripheral regions. Where SN-F terminates HN-F →
+memory traffic, SN-I terminates HN-I → peripheral traffic — and
+in this diagram the SN-I sits inside the PCIe Root Complex.
 
 The colour coding here will reappear throughout the deck: RN-F
-blue, RN-I teal, RN-D gold, HN-F violet, MN slate, SN-F green.
+blue, RN-I teal, RN-D gold, HN-F violet, HN-I indigo, MN slate,
+SN-F green, SN-I olive.
 -->
 
 ---
@@ -1549,9 +1595,10 @@ flowchart LR
 </div>
 
 <div class="channel-card snp">
-<strong>Exclusivity is erased.</strong> LL/SC, x86 locked-RMW, and generic RMW
-all collapse to plain <code>LD/ST</code>. CHI never sees an <code>Excl</code> attribute &mdash;
-the Sequencer serialises via a block list instead.
+<strong>Exclusivity is erased.</strong> LR/SC and generic RMW collapse to plain
+<code>LD/ST</code>. CHI never sees an <code>Excl</code> attribute &mdash; LR/SC is policed above the
+protocol by a per-line <strong>lock monitor</strong> on the L1 cache entry
+(<code>setLocked</code> / <code>isLocked</code>).
 </div>
 
 <div class="channel-card dat">
@@ -1593,14 +1640,21 @@ fetches carry their own IFETCH tag so the controller can pick a
 clean-only fill policy.
 
 LR and SC are the first surprise. They are tagged as Load_Linked
-and Store_Conditional internally so the LL/SC blocking logic works,
-but the secondary type the CHI controller sees is just plain LD and
-plain ST. The CHI ProtocolInfo returns false for the
+and Store_Conditional internally so the LL/SC bookkeeping logic
+works, but the secondary type the CHI controller sees is just
+plain LD and plain ST. The CHI ProtocolInfo returns false for the
 useSecondaryLoadLinked and useSecondaryStoreConditional flags, so
 the demotion happens every time. If you were expecting a CHI
-ReadClean with an Excl attribute on the wire, it does not happen —
-RISC-V LL/SC is enforced entirely above the protocol, using the
-same Locked_RMW block list x86 uses for its LOCK-prefixed loop.
+ReadClean with an Excl attribute on the wire, it does not happen.
+
+RISC-V LR/SC is enforced above the protocol by a per-line lock
+monitor. On the LR's hit callback the Sequencer flips a lock bit
+on the L1 cache entry — setLocked / isLocked on
+AbstractCacheEntry. Any store to that line, any incoming snoop,
+and any cache eviction clears the bit; the matching SC commits
+only if the bit is still set, otherwise it reports failure to the
+core and the store is discarded. Serialisation lives entirely
+above CHI; nothing on the wire carries Excl.
 
 AMOs split on the return-value question. If the destination
 register is non-zero the AMO wants its old value back and gets

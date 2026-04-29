@@ -46,20 +46,23 @@
         </mxCell>
 
         <!-- ============================================================ -->
-        <!-- Left column: RN-I (PCIe inside), RN-D (SMMU inside)           -->
+        <!-- Left column: PCIe Root Complex (RN-I + SN-I), RN-D (SMMU)     -->
         <!-- ============================================================ -->
-        <mxCell id="rni" value="&lt;b style=&quot;font-size:22px&quot;&gt;RN-I&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#CCFBF1;strokeColor=#0f766e;strokeWidth=2.5;verticalAlign=top;fontSize=16;fontColor=#0f766e;arcSize=6;" vertex="1" parent="1">
-          <mxGeometry x="40" y="215" width="170" height="90" as="geometry"/>
+        <mxCell id="pcie" value="&lt;b&gt;PCIe Root Complex&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#475569;strokeWidth=1.5;dashed=1;verticalAlign=top;fontSize=12;fontColor=#334155;arcSize=6;spacingTop=4;" vertex="1" parent="1">
+          <mxGeometry x="10" y="180" width="210" height="140" as="geometry"/>
         </mxCell>
-        <mxCell id="rni_dev" value="&lt;b&gt;PCIe&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#5eead4;strokeWidth=1.5;fontSize=13;fontColor=#0f766e;arcSize=10;" vertex="1" parent="rni">
-          <mxGeometry x="30" y="42" width="110" height="38" as="geometry"/>
+        <mxCell id="rni" value="&lt;b style=&quot;font-size:20px&quot;&gt;RN-I&lt;/b&gt;&lt;div style=&quot;font-size:10px;font-weight:normal&quot;&gt;DMA upstream&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#CCFBF1;strokeColor=#0f766e;strokeWidth=2.5;verticalAlign=middle;fontSize=14;fontColor=#0f766e;arcSize=6;" vertex="1" parent="pcie">
+          <mxGeometry x="15" y="27" width="180" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="sni" value="&lt;b style=&quot;font-size:20px&quot;&gt;SN-I&lt;/b&gt;&lt;div style=&quot;font-size:10px;font-weight:normal&quot;&gt;MMIO target&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ECFCCB;strokeColor=#65a30d;strokeWidth=2.5;verticalAlign=middle;fontSize=14;fontColor=#3f6212;arcSize=6;" vertex="1" parent="pcie">
+          <mxGeometry x="15" y="83" width="180" height="50" as="geometry"/>
         </mxCell>
 
         <mxCell id="rnd" value="&lt;b style=&quot;font-size:22px&quot;&gt;RN-D&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEF3C7;strokeColor=#c58b1b;strokeWidth=2.5;verticalAlign=top;fontSize=16;fontColor=#a16207;arcSize=6;" vertex="1" parent="1">
-          <mxGeometry x="40" y="335" width="170" height="90" as="geometry"/>
+          <mxGeometry x="40" y="340" width="170" height="80" as="geometry"/>
         </mxCell>
         <mxCell id="rnd_dev" value="&lt;b&gt;SMMU&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#fcd34d;strokeWidth=1.5;fontSize=13;fontColor=#a16207;arcSize=10;" vertex="1" parent="rnd">
-          <mxGeometry x="30" y="42" width="110" height="38" as="geometry"/>
+          <mxGeometry x="30" y="36" width="110" height="34" as="geometry"/>
         </mxCell>
 
         <!-- ============================================================ -->
@@ -82,13 +85,13 @@
           <mxGeometry x="120" y="55" width="90" height="65" as="geometry"/>
         </mxCell>
 
-        <mxCell id="hnf1" value="&lt;b style=&quot;font-size:24px&quot;&gt;HN-F&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE9FE;strokeColor=#7c3aed;strokeWidth=2.5;verticalAlign=top;fontSize=16;fontColor=#6d28d9;arcSize=6;" vertex="1" parent="1">
+        <mxCell id="hni0" value="&lt;b style=&quot;font-size:24px&quot;&gt;HN-I&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E0E7FF;strokeColor=#4338ca;strokeWidth=2.5;verticalAlign=top;fontSize=16;fontColor=#3730a3;arcSize=6;" vertex="1" parent="1">
           <mxGeometry x="505" y="475" width="230" height="140" as="geometry"/>
         </mxCell>
-        <mxCell id="hnf1_sf" value="&lt;b&gt;SF&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#c4b5fd;strokeWidth=1.5;fontSize=13;fontColor=#6d28d9;arcSize=10;" vertex="1" parent="hnf1">
+        <mxCell id="hni0_pos" value="&lt;b&gt;PoS&lt;/b&gt;&lt;div style=&quot;font-size:10px;font-weight:normal&quot;&gt;IO order&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#a5b4fc;strokeWidth=1.5;fontSize=13;fontColor=#3730a3;arcSize=10;" vertex="1" parent="hni0">
           <mxGeometry x="20" y="55" width="90" height="65" as="geometry"/>
         </mxCell>
-        <mxCell id="hnf1_llc" value="&lt;b&gt;LLC slice&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#c4b5fd;strokeWidth=1.5;fontSize=13;fontColor=#6d28d9;arcSize=10;" vertex="1" parent="hnf1">
+        <mxCell id="hni0_dec" value="&lt;b&gt;Addr Decode&lt;/b&gt;&lt;div style=&quot;font-size:10px;font-weight:normal&quot;&gt;&amp;rarr; SN-I&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#a5b4fc;strokeWidth=1.5;fontSize=13;fontColor=#3730a3;arcSize=10;" vertex="1" parent="hni0">
           <mxGeometry x="120" y="55" width="90" height="65" as="geometry"/>
         </mxCell>
 
@@ -121,8 +124,11 @@
           <mxGeometry relative="1" as="geometry"/>
         </mxCell>
 
-        <!-- Left: RN-I/RN-D rights → ICN left at y=260, y=380 -->
-        <mxCell id="e_rni" style="edgeStyle=none;rounded=0;html=1;strokeColor=#64748b;strokeWidth=2.5;endArrow=none;startArrow=none;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.2273;entryDx=0;entryDy=0;" edge="1" parent="1" source="rni" target="icn">
+        <!-- Left: PCIe(RN-I, SN-I), RN-D rights → ICN left at y=232, 288, 380 -->
+        <mxCell id="e_rni" style="edgeStyle=none;rounded=0;html=1;strokeColor=#64748b;strokeWidth=2.5;endArrow=none;startArrow=none;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.1;entryDx=0;entryDy=0;" edge="1" parent="1" source="rni" target="icn">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_sni" style="edgeStyle=none;rounded=0;html=1;strokeColor=#64748b;strokeWidth=2.5;endArrow=none;startArrow=none;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.3545;entryDx=0;entryDy=0;" edge="1" parent="1" source="sni" target="icn">
           <mxGeometry relative="1" as="geometry"/>
         </mxCell>
         <mxCell id="e_rnd" style="edgeStyle=none;rounded=0;html=1;strokeColor=#64748b;strokeWidth=2.5;endArrow=none;startArrow=none;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.7727;entryDx=0;entryDy=0;" edge="1" parent="1" source="rnd" target="icn">
@@ -138,7 +144,7 @@
         <mxCell id="e_hnf0" style="edgeStyle=none;rounded=0;html=1;strokeColor=#64748b;strokeWidth=2.5;endArrow=none;startArrow=none;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.15;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" source="hnf0" target="icn">
           <mxGeometry relative="1" as="geometry"/>
         </mxCell>
-        <mxCell id="e_hnf1" style="edgeStyle=none;rounded=0;html=1;strokeColor=#64748b;strokeWidth=2.5;endArrow=none;startArrow=none;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" source="hnf1" target="icn">
+        <mxCell id="e_hni0" style="edgeStyle=none;rounded=0;html=1;strokeColor=#64748b;strokeWidth=2.5;endArrow=none;startArrow=none;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" source="hni0" target="icn">
           <mxGeometry relative="1" as="geometry"/>
         </mxCell>
         <mxCell id="e_snf" style="edgeStyle=none;rounded=0;html=1;strokeColor=#64748b;strokeWidth=2.5;endArrow=none;startArrow=none;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.85;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" source="snf" target="icn">
