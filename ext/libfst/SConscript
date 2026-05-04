@@ -43,6 +43,11 @@ fst_env.Append(CCFLAGS=[
     '-D_GNU_SOURCE',
 ])
 
+# Apple Clang treats `const int N = ...; T arr[N];` as a VLA folded to a
+# constant and (with -Werror) refuses to build. Vendor source is fine.
+# GCC silently ignores unknown -Wno-* flags, so this is safe everywhere.
+fst_env.Append(CCFLAGS=['-Wno-gnu-folding-constant'])
+
 fst_sources = [
     fst_env.SharedObject('fastlz.c'),
     fst_env.SharedObject('fstapi.c'),
