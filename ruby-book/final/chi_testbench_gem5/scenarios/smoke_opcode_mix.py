@@ -11,6 +11,7 @@ signal_finish() on the shared barrier terminates the sim.
 from m5.objects import (
     ChiGem5Barrier,
     ChiSeqDriver,
+    SmokeOpcodeMixSequence,
 )
 
 
@@ -26,14 +27,15 @@ def build(args, planner):
         )
         drivers.append(
             ChiSeqDriver(
-                sequence="smoke_opcode_mix",
                 tile_id=tile,
-                addresses=addresses,
-                access_size=8,
-                iterations=args.scenario_iterations,
-                percent_reads=65,
-                seed=0x1000 + tile,
                 finish_barrier=barrier,
+                sequence=SmokeOpcodeMixSequence(
+                    addresses=addresses,
+                    access_size=8,
+                    iterations=args.scenario_iterations,
+                    percent_reads=65,
+                    seed=0x1000 + tile,
+                ),
             )
         )
     return drivers

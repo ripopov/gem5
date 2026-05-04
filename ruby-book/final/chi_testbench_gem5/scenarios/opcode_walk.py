@@ -9,6 +9,7 @@ import m5
 from m5.objects import (
     ChiGem5Barrier,
     ChiSeqDriver,
+    OpcodeWalkSequence,
 )
 
 
@@ -25,14 +26,15 @@ def build(args, planner):
 
     drivers = [None] * args.num_cpus
     drivers[3] = ChiSeqDriver(
-        sequence="opcode_walk",
         tile_id=3,
-        target_addr=target_addr,
-        filler_base=filler_base,
-        filler_lines=2048,
         finish_barrier=barrier,
+        sequence=OpcodeWalkSequence(
+            target_addr=target_addr,
+            filler_base=filler_base,
+            filler_lines=2048,
+        ),
     )
     for tile in range(args.num_cpus):
         if drivers[tile] is None:
-            drivers[tile] = ChiSeqDriver(sequence="idle", tile_id=tile)
+            drivers[tile] = ChiSeqDriver(tile_id=tile)
     return drivers

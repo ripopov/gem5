@@ -3,29 +3,25 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
+#include "chi_testbench_gem5/sequences/smoke_write.hh"
+
 #include <vector>
 
 #include "base/trace.hh"
 #include "chi_testbench_gem5/driver.hh"
-#include "chi_testbench_gem5/sequence_context.hh"
-#include "chi_testbench_gem5/sequences/registry.hh"
 #include "debug/ChiTestbenchGem5.hh"
 
 namespace gem5
 {
 namespace chi_gem5tb
 {
-namespace
-{
 
 void
-smoke_write_seq(SequenceContext &ctx)
+SmokeWriteSequence::run(ChiSeqDriver &drv)
 {
-    auto &drv = ctx.drv;
-    const auto &p = drv.params();
-    const auto &addresses = p.addresses;
-    const uint32_t len = p.access_size;
-    const uint32_t iters = p.iterations;
+    const auto &addresses = _p.addresses;
+    const uint32_t len = _p.access_size;
+    const uint32_t iters = _p.iterations;
 
     if (addresses.empty()) {
         return;
@@ -49,8 +45,5 @@ smoke_write_seq(SequenceContext &ctx)
             (unsigned long long)(curTick() - t_start));
 }
 
-[[maybe_unused]] Registrar _r("smoke_write", &smoke_write_seq);
-
-} // namespace
 } // namespace chi_gem5tb
 } // namespace gem5

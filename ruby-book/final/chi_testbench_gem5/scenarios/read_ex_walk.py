@@ -20,6 +20,7 @@ from m5.objects import (
     ChiGem5Barrier,
     ChiGem5EventBus,
     ChiSeqDriver,
+    ReadExWalkSequence,
 )
 
 
@@ -39,13 +40,14 @@ def build(args, planner):
 
     def _role(tile, role_name):
         return ChiSeqDriver(
-            sequence="read_ex_walk",
             tile_id=tile,
-            target_addr=target_addr,
-            access_size=64,
-            role=role_name,
             finish_barrier=barrier,
             event_bus=bus,
+            sequence=ReadExWalkSequence(
+                target_addr=target_addr,
+                access_size=64,
+                role=role_name,
+            ),
         )
 
     drivers[0] = _role(0, "A")
@@ -54,5 +56,5 @@ def build(args, planner):
 
     for tile in range(args.num_cpus):
         if drivers[tile] is None:
-            drivers[tile] = ChiSeqDriver(sequence="idle", tile_id=tile)
+            drivers[tile] = ChiSeqDriver(tile_id=tile)
     return drivers

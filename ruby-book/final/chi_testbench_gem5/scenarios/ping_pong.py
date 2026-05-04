@@ -10,6 +10,7 @@ from m5.objects import (
     ChiGem5Barrier,
     ChiGem5EventBus,
     ChiSeqDriver,
+    PingPongSequence,
 )
 
 
@@ -21,30 +22,32 @@ def build(args, planner):
 
     drivers = [None] * args.num_cpus
     drivers[0] = ChiSeqDriver(
-        sequence="ping_pong",
         tile_id=0,
-        line_addr=line_addr,
-        access_size=8,
-        iterations=iterations,
-        initiator=True,
-        wait_event_name="turn_a",
-        post_event_name="turn_b",
         finish_barrier=barrier,
         event_bus=bus,
+        sequence=PingPongSequence(
+            line_addr=line_addr,
+            access_size=8,
+            iterations=iterations,
+            initiator=True,
+            wait_event_name="turn_a",
+            post_event_name="turn_b",
+        ),
     )
     drivers[15] = ChiSeqDriver(
-        sequence="ping_pong",
         tile_id=15,
-        line_addr=line_addr,
-        access_size=8,
-        iterations=iterations,
-        initiator=False,
-        wait_event_name="turn_b",
-        post_event_name="turn_a",
         finish_barrier=barrier,
         event_bus=bus,
+        sequence=PingPongSequence(
+            line_addr=line_addr,
+            access_size=8,
+            iterations=iterations,
+            initiator=False,
+            wait_event_name="turn_b",
+            post_event_name="turn_a",
+        ),
     )
     for tile in range(args.num_cpus):
         if drivers[tile] is None:
-            drivers[tile] = ChiSeqDriver(sequence="idle", tile_id=tile)
+            drivers[tile] = ChiSeqDriver(tile_id=tile)
     return drivers

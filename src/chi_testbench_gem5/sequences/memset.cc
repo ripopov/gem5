@@ -3,30 +3,26 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
+#include "chi_testbench_gem5/sequences/memset.hh"
+
 #include <vector>
 
 #include "base/trace.hh"
 #include "chi_testbench_gem5/driver.hh"
-#include "chi_testbench_gem5/sequence_context.hh"
-#include "chi_testbench_gem5/sequences/registry.hh"
 #include "debug/ChiTestbenchGem5.hh"
 
 namespace gem5
 {
 namespace chi_gem5tb
 {
-namespace
-{
 
 void
-memset_seq(SequenceContext &ctx)
+MemsetSequence::run(ChiSeqDriver &drv)
 {
-    auto &drv = ctx.drv;
-    const auto &p = drv.params();
-    const uint32_t num_lines = p.num_lines;
-    const uint32_t line_size = p.line_size;
-    const uint32_t depth = p.pipeline_depth ? p.pipeline_depth : 1;
-    const uint64_t dst_base = p.dst_base;
+    const uint32_t num_lines = _p.num_lines;
+    const uint32_t line_size = _p.line_size;
+    const uint32_t depth = _p.pipeline_depth ? _p.pipeline_depth : 1;
+    const uint64_t dst_base = _p.dst_base;
 
     if (num_lines == 0) {
         return;
@@ -34,7 +30,7 @@ memset_seq(SequenceContext &ctx)
 
     std::vector<std::vector<uint8_t>> buffers(
         depth,
-        std::vector<uint8_t>(line_size, static_cast<uint8_t>(p.fill_byte)));
+        std::vector<uint8_t>(line_size, static_cast<uint8_t>(_p.fill_byte)));
 
     struct Slot
     {
@@ -84,8 +80,5 @@ memset_seq(SequenceContext &ctx)
             (unsigned long long)elapsed, depth);
 }
 
-[[maybe_unused]] Registrar _r("memset", &memset_seq);
-
-} // namespace
 } // namespace chi_gem5tb
 } // namespace gem5

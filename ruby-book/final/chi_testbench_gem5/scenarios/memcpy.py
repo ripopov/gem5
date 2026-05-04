@@ -7,6 +7,7 @@ memcpy — Tile 7 pipelined copy from an HNF-0 range to an HNF-15 range.
 from m5.objects import (
     ChiGem5Barrier,
     ChiSeqDriver,
+    MemcpySequence,
 )
 
 
@@ -18,16 +19,17 @@ def build(args, planner):
 
     drivers = [None] * args.num_cpus
     drivers[7] = ChiSeqDriver(
-        sequence="memcpy",
         tile_id=7,
-        src_base=src_base,
-        dst_base=dst_base,
-        num_lines=num_lines,
-        line_size=64,
-        pipeline_depth=4,
         finish_barrier=barrier,
+        sequence=MemcpySequence(
+            src_base=src_base,
+            dst_base=dst_base,
+            num_lines=num_lines,
+            line_size=64,
+            pipeline_depth=4,
+        ),
     )
     for tile in range(args.num_cpus):
         if drivers[tile] is None:
-            drivers[tile] = ChiSeqDriver(sequence="idle", tile_id=tile)
+            drivers[tile] = ChiSeqDriver(tile_id=tile)
     return drivers

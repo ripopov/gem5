@@ -3,34 +3,30 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
+#include "chi_testbench_gem5/sequences/memcpy.hh"
+
 #include <vector>
 
 #include "base/logging.hh"
 #include "base/trace.hh"
 #include "chi_testbench_gem5/driver.hh"
-#include "chi_testbench_gem5/sequence_context.hh"
-#include "chi_testbench_gem5/sequences/registry.hh"
 #include "debug/ChiTestbenchGem5.hh"
 
 namespace gem5
 {
 namespace chi_gem5tb
 {
-namespace
-{
 
 // Pipelined memcpy — K slots, each cycling READING→WRITING→free.
 // Up to pipeline_depth LD+ST pairs in flight at any moment.
 void
-memcpy_seq(SequenceContext &ctx)
+MemcpySequence::run(ChiSeqDriver &drv)
 {
-    auto &drv = ctx.drv;
-    const auto &p = drv.params();
-    const uint32_t num_lines = p.num_lines;
-    const uint32_t line_size = p.line_size;
-    const uint32_t depth = p.pipeline_depth ? p.pipeline_depth : 1;
-    const uint64_t src_base = p.src_base;
-    const uint64_t dst_base = p.dst_base;
+    const uint32_t num_lines = _p.num_lines;
+    const uint32_t line_size = _p.line_size;
+    const uint32_t depth = _p.pipeline_depth ? _p.pipeline_depth : 1;
+    const uint64_t src_base = _p.src_base;
+    const uint64_t dst_base = _p.dst_base;
 
     if (num_lines == 0) {
         return;
@@ -104,8 +100,5 @@ memcpy_seq(SequenceContext &ctx)
             (unsigned long long)elapsed, depth);
 }
 
-[[maybe_unused]] Registrar _r("memcpy", &memcpy_seq);
-
-} // namespace
 } // namespace chi_gem5tb
 } // namespace gem5

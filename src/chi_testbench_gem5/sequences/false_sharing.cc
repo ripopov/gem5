@@ -3,26 +3,22 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
+#include "chi_testbench_gem5/sequences/false_sharing.hh"
+
 #include "base/trace.hh"
 #include "chi_testbench_gem5/driver.hh"
-#include "chi_testbench_gem5/sequence_context.hh"
-#include "chi_testbench_gem5/sequences/registry.hh"
 #include "debug/ChiTestbenchGem5.hh"
 
 namespace gem5
 {
 namespace chi_gem5tb
 {
-namespace
-{
 
 void
-false_sharing_seq(SequenceContext &ctx)
+FalseSharingSequence::run(ChiSeqDriver &drv)
 {
-    auto &drv = ctx.drv;
-    const auto &p = drv.params();
-    const uint64_t addr = p.line_addr + p.byte_offset;
-    const uint32_t iters = p.iterations;
+    const uint64_t addr = _p.line_addr + _p.byte_offset;
+    const uint32_t iters = _p.iterations;
 
     DPRINTF(ChiTestbenchGem5, "%s false_sharing: addr=%#llx iters=%u\n",
             drv.name(), (unsigned long long)addr, iters);
@@ -37,8 +33,5 @@ false_sharing_seq(SequenceContext &ctx)
             drv.name(), iters, (unsigned long long)(curTick() - t_start));
 }
 
-[[maybe_unused]] Registrar _r("false_sharing", &false_sharing_seq);
-
-} // namespace
 } // namespace chi_gem5tb
 } // namespace gem5

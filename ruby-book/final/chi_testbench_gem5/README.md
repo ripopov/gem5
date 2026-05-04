@@ -115,9 +115,9 @@ Output directories are keyed by mode so both can coexist:
 
 | Component | Kind | Role |
 |-----------|------|------|
-| `ChiSeqDriver`        | `ClockedObject` (single C++ class)  | **The only driver class.** `sequence` param picks one of the registered sequences (`smoke_read`, `ping_pong`, `opcode_walk`, `read_ex_walk`, ...). Owns one `SeqThread` and one `RequestPort`. |
-| `SeqThread`           | `Fiber` subclass                    | Stack-switching thread that runs the registered sequence. Each blocking call yields to gem5's main event loop; response callbacks resume the fiber. |
-| `SequenceRegistry`    | C++ singleton                       | Name → `SequenceFn` table. Each `sequences/<name>.cc` registers itself at static-init time via `Registrar`. Adding a scenario means dropping one `.cc` and (optionally) one scenario Python module. |
+| `ChiSeqDriver`        | `ClockedObject` (single C++ class)  | **The only driver class.** Generic — its `sequence` param is a polymorphic `ChiSequence` (Strategy pattern); each concrete sequence subclass owns its own typed Params. Owns one `SeqThread` and one `RequestPort`. |
+| `SeqThread`           | `Fiber` subclass                    | Stack-switching thread that runs `sequence->run(driver)`. Each blocking call yields to gem5's main event loop; response callbacks resume the fiber. |
+| `ChiSequence` + concrete subclasses | Abstract `SimObject` + one subclass per scenario (`MemcpySequence`, `PingPongSequence`, …) | Strategy interface. Each subclass declares only the parameters its body actually uses; adding a scenario means dropping one `<name>.{hh,cc}` plus one Python class in `ChiSequence.py` — no edit to `ChiSeqDriver`. Mirrors gem5's `BaseReplacementPolicy` / `LRURP` pattern. |
 | `Latch`               | C++ class                           | 1-to-1 notify/wait with pending-notify semantics (notify-before-wait is consumed on the next wait). |
 | `Barrier` (`ChiGem5Barrier`) | C++ class + `SimObject` wrapper | Counter-based completion barrier. Last `signal_finish()` calls `exitSimLoop()` to terminate. Pass by pointer via Python param. |
 | `ChiEventBus` (`ChiGem5EventBus`) | `SimObject`                | Named-`Latch` registry shared between drivers. Drivers call `drv.wait_on(name)` / `drv.notify(name)`; lookups are by string and lazy. |
@@ -240,7 +240,7 @@ stack underneath them differs at several layers.
 | | SystemC | gem5-native |
 |---|---|---|
 | Per-tile wiring objects | `TileSlot` + `TlmToGem5Bridge64` + `SC_MODULE` driver | one `ChiSeqDriver` |
-| Per-scenario C++ | Header + `.cc` + Python SimObject class | single `.cc` with a `Registrar` |
+| Per-scenario C++ | Header + `.cc` + Python SimObject class | Header + `.cc` + Python SimObject class (`ChiSequence` subclass) |
 | Scenario Python | Scenario module builds the `SimObject` subclass per scenario | Scenario module instantiates one `ChiSeqDriver` class per tile |
 | Sync primitives shipped | `sc_event`, `sc_semaphore`, `sc_fifo` (bundled with SystemC) | Hand-rolled `Latch`, `Barrier`, `Semaphore`, `Mailbox<T>` in `src/chi_testbench_gem5/sync/` |
 | Stat namespace parent | `ChiTileSlot` adapter needed (SC_MODULE isn't a SimObject) | `ClockedObject` parents directly |

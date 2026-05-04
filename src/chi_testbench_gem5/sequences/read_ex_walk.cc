@@ -3,21 +3,19 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
+#include "chi_testbench_gem5/sequences/read_ex_walk.hh"
+
 #include <cstring>
 #include <vector>
 
 #include "base/logging.hh"
 #include "base/trace.hh"
 #include "chi_testbench_gem5/driver.hh"
-#include "chi_testbench_gem5/sequence_context.hh"
-#include "chi_testbench_gem5/sequences/registry.hh"
 #include "debug/ChiTestbenchGem5.hh"
 
 namespace gem5
 {
 namespace chi_gem5tb
-{
-namespace
 {
 
 /*
@@ -38,33 +36,14 @@ namespace
  *                          invalidates A and B via SnpCleanInvalid.
  * Role A: re-read        → fresh miss (A was invalidated).
  * Role C: write again    → L1 hit, no additional interconnect traffic.
- *
- * Rendezvous events on the shared ChiEventBus:
- *   after_a       — A signals after its initial read
- *   after_b       — B signals after its read
- *   after_c_read  — C signals after its read_exclusive
- *   after_c_write — C signals after its CleanUnique-triggering write
- *   after_a_reread — A signals after its post-invalidation re-read
- *
- * Expected stats (cpu0 = A, cpu8 = B, cpu15 = C):
- *   cpu0.l1d  hits=0  misses=2   (step 1 cold miss, step 6 post-invalidation
- *                                  miss)
- *   cpu0.l1d.SnpCleanInvalid=1   (invalidation from C's CleanUnique)
- *   cpu8.l1d  hits=0  misses=1   (step 2 cold miss; no re-read)
- *   cpu8.l1d.SnpCleanInvalid=1   (invalidation from C's CleanUnique)
- *   cpu15.l1d hits=1  misses=2   (step 3 ReadShared, step 5 upgrade,
- *                                  step 5b local hit after upgrade)
- *   cpu15.l1d.SendReadShared=1   (step 3)
- *   cpu15.l1d.SendCleanUnique=1  (step 5 upgrade — demonstrates the
- *                                  Shared→Unique transition that is the
- *                                  point of this scenario)
  */
 
-void
-role_a(SequenceContext &ctx)
+namespace
 {
-    auto &drv = ctx.drv;
-    const auto &p = drv.params();
+
+void
+role_a(ChiSeqDriver &drv, const ReadExWalkSequenceParams &p)
+{
     std::vector<uint8_t> buf(p.access_size, 0);
 
     DPRINTF(ChiTestbenchGem5, "%s A: step 1 plain read\n", drv.name());
@@ -84,10 +63,8 @@ role_a(SequenceContext &ctx)
 }
 
 void
-role_b(SequenceContext &ctx)
+role_b(ChiSeqDriver &drv, const ReadExWalkSequenceParams &p)
 {
-    auto &drv = ctx.drv;
-    const auto &p = drv.params();
     std::vector<uint8_t> buf(p.access_size, 0);
 
     drv.wait_on("after_a");
@@ -98,10 +75,8 @@ role_b(SequenceContext &ctx)
 }
 
 void
-role_c(SequenceContext &ctx)
+role_c(ChiSeqDriver &drv, const ReadExWalkSequenceParams &p)
 {
-    auto &drv = ctx.drv;
-    const auto &p = drv.params();
     std::vector<uint8_t> buf(p.access_size, 0xC0);
 
     drv.wait_on("after_b");
@@ -136,28 +111,26 @@ role_c(SequenceContext &ctx)
     drv.wait_on("after_a_reread");
 }
 
+} // namespace
+
 void
-read_ex_walk_seq(SequenceContext &ctx)
+ReadExWalkSequence::run(ChiSeqDriver &drv)
 {
-    auto &drv = ctx.drv;
     if (!drv.event_bus()) {
         panic("%s read_ex_walk: event_bus param is required", drv.name());
     }
-    const std::string &role = drv.params().role;
+    const std::string &role = _p.role;
     if (role == "A") {
-        role_a(ctx);
+        role_a(drv, _p);
     } else if (role == "B") {
-        role_b(ctx);
+        role_b(drv, _p);
     } else if (role == "C") {
-        role_c(ctx);
+        role_c(drv, _p);
     } else {
         panic("%s read_ex_walk: role must be one of A/B/C (got '%s')",
               drv.name(), role.c_str());
     }
 }
 
-[[maybe_unused]] Registrar _r("read_ex_walk", &read_ex_walk_seq);
-
-} // namespace
 } // namespace chi_gem5tb
 } // namespace gem5

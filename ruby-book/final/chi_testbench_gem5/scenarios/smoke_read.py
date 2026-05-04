@@ -9,6 +9,7 @@ sequence.
 from m5.objects import (
     ChiGem5Barrier,
     ChiSeqDriver,
+    SmokeReadSequence,
 )
 
 
@@ -21,14 +22,15 @@ def build(args, planner):
         if tile == 0:
             drivers.append(
                 ChiSeqDriver(
-                    sequence="smoke_read",
                     tile_id=tile,
-                    addresses=addresses,
-                    access_size=8,
-                    iterations=args.scenario_iterations,
                     finish_barrier=barrier,
+                    sequence=SmokeReadSequence(
+                        addresses=addresses,
+                        access_size=8,
+                        iterations=args.scenario_iterations,
+                    ),
                 )
             )
         else:
-            drivers.append(ChiSeqDriver(sequence="idle", tile_id=tile))
+            drivers.append(ChiSeqDriver(tile_id=tile))
     return drivers

@@ -9,6 +9,7 @@ by one tile invalidates the other's copy.
 from m5.objects import (
     ChiGem5Barrier,
     ChiSeqDriver,
+    FalseSharingSequence,
 )
 
 
@@ -19,22 +20,24 @@ def build(args, planner):
 
     drivers = [None] * args.num_cpus
     drivers[0] = ChiSeqDriver(
-        sequence="false_sharing",
         tile_id=0,
-        line_addr=line_addr,
-        byte_offset=0,
-        iterations=iterations,
         finish_barrier=barrier,
+        sequence=FalseSharingSequence(
+            line_addr=line_addr,
+            byte_offset=0,
+            iterations=iterations,
+        ),
     )
     drivers[15] = ChiSeqDriver(
-        sequence="false_sharing",
         tile_id=15,
-        line_addr=line_addr,
-        byte_offset=32,
-        iterations=iterations,
         finish_barrier=barrier,
+        sequence=FalseSharingSequence(
+            line_addr=line_addr,
+            byte_offset=32,
+            iterations=iterations,
+        ),
     )
     for tile in range(args.num_cpus):
         if drivers[tile] is None:
-            drivers[tile] = ChiSeqDriver(sequence="idle", tile_id=tile)
+            drivers[tile] = ChiSeqDriver(tile_id=tile)
     return drivers

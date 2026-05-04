@@ -9,8 +9,7 @@
 
 #include "base/logging.hh"
 #include "base/trace.hh"
-#include "chi_testbench_gem5/sequence_context.hh"
-#include "chi_testbench_gem5/sequences/registry.hh"
+#include "chi_testbench_gem5/sequences/base.hh"
 #include "chi_testbench_gem5/sync/barrier.hh"
 #include "chi_testbench_gem5/sync/latch.hh"
 #include "debug/ChiTestbenchGem5.hh"
@@ -72,7 +71,7 @@ void
 ChiSeqDriver::kickoff()
 {
     DPRINTF(ChiTestbenchGem5, "%s: kicking off sequence '%s'\n", name(),
-            _p.sequence.c_str());
+            _p.sequence ? _p.sequence->name().c_str() : "<null>");
     seq_thread.run();
 }
 
@@ -365,13 +364,9 @@ void
 SeqThread::main()
 {
     ChiSeqDriver &d = drv();
-    const auto *fn = SequenceRegistry::instance().find(d.sequence_name());
-    if (!fn) {
-        panic("ChiSeqDriver %s: no sequence registered for '%s'",
-              d.name().c_str(), d.sequence_name().c_str());
-    }
-    SequenceContext ctx{d};
-    (*fn)(ctx);
+    ChiSequence *seq = d.sequence();
+    panic_if(!seq, "ChiSeqDriver %s: sequence param is null", d.name());
+    seq->run(d);
 
     if (ChiBarrier *b = d.finish_barrier()) {
         b->signal_finish();

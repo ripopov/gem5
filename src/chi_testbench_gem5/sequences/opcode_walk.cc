@@ -3,32 +3,28 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
+#include "chi_testbench_gem5/sequences/opcode_walk.hh"
+
 #include <cstring>
 #include <vector>
 
 #include "base/logging.hh"
 #include "base/trace.hh"
 #include "chi_testbench_gem5/driver.hh"
-#include "chi_testbench_gem5/sequence_context.hh"
-#include "chi_testbench_gem5/sequences/registry.hh"
 #include "debug/ChiTestbenchGem5.hh"
 
 namespace gem5
 {
 namespace chi_gem5tb
 {
-namespace
-{
 
 // Scripted LD/ST walk with data-dependent assertions.
 void
-opcode_walk_seq(SequenceContext &ctx)
+OpcodeWalkSequence::run(ChiSeqDriver &drv)
 {
-    auto &drv = ctx.drv;
-    const auto &p = drv.params();
-    const uint64_t target = p.target_addr;
-    const uint64_t filler_base = p.filler_base;
-    const uint32_t filler_lines = p.filler_lines;
+    const uint64_t target = _p.target_addr;
+    const uint64_t filler_base = _p.filler_base;
+    const uint32_t filler_lines = _p.filler_lines;
     constexpr uint32_t LINE = 64;
 
     std::vector<uint8_t> buf(LINE, 0);
@@ -89,8 +85,5 @@ opcode_walk_seq(SequenceContext &ctx)
             drv.name(), passed);
 }
 
-[[maybe_unused]] Registrar _r("opcode_walk", &opcode_walk_seq);
-
-} // namespace
 } // namespace chi_gem5tb
 } // namespace gem5

@@ -26,10 +26,14 @@ namespace chi_gem5tb
 
 class ChiBarrier;
 class ChiEventBus;
+class ChiSequence;
 
 /**
- * Single parameterized driver. `sequence` (Python param) selects
- * which registered sequence function its SeqThread runs.
+ * Generic per-tile driver. `sequence` (Python param) is a polymorphic
+ * `ChiSequence` SimObject; SeqThread invokes `sequence->run(*this)`
+ * once per fiber kickoff. Each concrete subclass owns its own typed
+ * Params (see ChiSequence.py and the per-sequence headers under
+ * sequences/).
  *
  * Architecture:
  *   - ChiSeqDriver is the ClockedObject at system.cpu[i]. Because it
@@ -91,8 +95,8 @@ class ChiSeqDriver : public ClockedObject
     {
         return _p.event_bus;
     }
-    const std::string &
-    sequence_name() const
+    ChiSequence *
+    sequence() const
     {
         return _p.sequence;
     }

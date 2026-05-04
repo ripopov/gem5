@@ -8,6 +8,7 @@ interleaves across all 16 HNFs.
 from m5.objects import (
     ChiGem5Barrier,
     ChiSeqDriver,
+    MemsetSequence,
 )
 
 
@@ -18,16 +19,17 @@ def build(args, planner):
 
     drivers = [None] * args.num_cpus
     drivers[7] = ChiSeqDriver(
-        sequence="memset",
         tile_id=7,
-        dst_base=dst_base,
-        num_lines=num_lines,
-        line_size=64,
-        pipeline_depth=4,
-        fill_byte=0xCC,
         finish_barrier=barrier,
+        sequence=MemsetSequence(
+            dst_base=dst_base,
+            num_lines=num_lines,
+            line_size=64,
+            pipeline_depth=4,
+            fill_byte=0xCC,
+        ),
     )
     for tile in range(args.num_cpus):
         if drivers[tile] is None:
-            drivers[tile] = ChiSeqDriver(sequence="idle", tile_id=tile)
+            drivers[tile] = ChiSeqDriver(tile_id=tile)
     return drivers

@@ -9,10 +9,23 @@ SimObject('ChiTestbenchGem5.py', sim_objects=[
     'ChiGem5EventBus',
 ])
 
+SimObject('ChiSequence.py', sim_objects=[
+    'ChiSequence',
+    'IdleSequence',
+    'SmokeReadSequence',
+    'SmokeWriteSequence',
+    'SmokeOpcodeMixSequence',
+    'PingPongSequence',
+    'FalseSharingSequence',
+    'MemcpySequence',
+    'MemsetSequence',
+    'OpcodeWalkSequence',
+    'ReadExWalkSequence',
+])
+
 Source('driver.cc')  # driver.cc also defines SeqThread::main()
 Source('sync/barrier.cc')
 Source('sync/latch.cc')
-Source('sequences/registry.cc')
 Source('sequences/idle.cc')
 Source('sequences/smoke_read.cc')
 Source('sequences/smoke_write.cc')

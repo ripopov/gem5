@@ -3,30 +3,26 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
+#include "chi_testbench_gem5/sequences/smoke_opcode_mix.hh"
+
 #include <vector>
 
 #include "base/trace.hh"
 #include "chi_testbench_gem5/driver.hh"
-#include "chi_testbench_gem5/sequence_context.hh"
-#include "chi_testbench_gem5/sequences/registry.hh"
 #include "debug/ChiTestbenchGem5.hh"
 
 namespace gem5
 {
 namespace chi_gem5tb
 {
-namespace
-{
 
 void
-smoke_opcode_mix_seq(SequenceContext &ctx)
+SmokeOpcodeMixSequence::run(ChiSeqDriver &drv)
 {
-    auto &drv = ctx.drv;
-    const auto &p = drv.params();
-    const auto &addresses = p.addresses;
-    const uint32_t len = p.access_size;
-    const uint32_t iters = p.iterations;
-    const uint32_t percent_reads = p.percent_reads;
+    const auto &addresses = _p.addresses;
+    const uint32_t len = _p.access_size;
+    const uint32_t iters = _p.iterations;
+    const uint32_t percent_reads = _p.percent_reads;
 
     if (addresses.empty() || iters == 0) {
         return;
@@ -35,7 +31,7 @@ smoke_opcode_mix_seq(SequenceContext &ctx)
     std::vector<uint8_t> buf(len, 0);
 
     // Deterministic LCG so runs are reproducible under a given seed.
-    uint32_t rng = p.seed ? p.seed : 0x12345678u;
+    uint32_t rng = _p.seed ? _p.seed : 0x12345678u;
     auto next_rand = [&rng]() {
         rng = rng * 1664525u + 1013904223u;
         return rng;
@@ -58,8 +54,5 @@ smoke_opcode_mix_seq(SequenceContext &ctx)
             drv.name(), reads, writes);
 }
 
-[[maybe_unused]] Registrar _r("smoke_opcode_mix", &smoke_opcode_mix_seq);
-
-} // namespace
 } // namespace chi_gem5tb
 } // namespace gem5
