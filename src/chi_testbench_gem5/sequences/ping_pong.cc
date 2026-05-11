@@ -5,8 +5,9 @@
 
 #include "chi_testbench_gem5/sequences/ping_pong.hh"
 
-#include <vector>
+#include <cstdint>
 
+#include "base/cprintf.hh"
 #include "base/logging.hh"
 #include "base/trace.hh"
 #include "chi_testbench_gem5/driver.hh"
@@ -17,59 +18,72 @@ namespace gem5
 namespace chi_gem5tb
 {
 
+namespace
+{
+
+constexpr uint8_t PingerTurn = 0;
+constexpr uint8_t PongerTurn = 1;
+constexpr uint32_t WarmupRounds = 1;
+
+void
+write_turn(ChiSeqDriver &drv, uint64_t addr, uint8_t turn)
+{
+    drv.write(addr, &turn, sizeof(turn));
+}
+
+void
+wait_for_turn(ChiSeqDriver &drv, uint64_t addr, uint8_t turn)
+{
+    uint8_t seen = 0;
+    do {
+        drv.read(addr, &seen, sizeof(seen));
+    } while (seen != turn);
+}
+
+} // namespace
+
 void
 PingPongSequence::run(ChiSeqDriver &drv)
 {
-    if (!drv.event_bus()) {
-        panic("%s ping_pong: event_bus param is required", drv.name());
-    }
-    const uint32_t len = _p.access_size;
     const uint32_t iters = _p.iterations;
-    const bool initiator = _p.initiator;
-    const std::string &wait_ev = _p.wait_event_name;
-    const std::string &post_ev = _p.post_event_name;
-
-    std::vector<uint8_t> buf(len, 0);
-
-    Tick accumulated = 0;
-    uint32_t measured = 0;
+    panic_if(iters == 0, "%s ping_pong: iterations must be non-zero",
+             drv.name());
+    panic_if(_p.l3_clock == 0, "%s ping_pong: l3_clock must be non-zero",
+             drv.name());
 
     DPRINTF(ChiTestbenchGem5,
-            "%s ping_pong: initiator=%s iters=%u wait='%s' post='%s'\n",
-            drv.name(), initiator ? "yes" : "no", iters, wait_ev.c_str(),
-            post_ev.c_str());
+            "%s ping_pong: role=%s line=%#llx iters=%u l3_clock=%llu\n",
+            drv.name(), _p.initiator ? "pinger" : "ponger",
+            (unsigned long long)_p.line_addr, iters,
+            (unsigned long long)_p.l3_clock);
 
-    for (uint32_t i = 0; i < iters; i++) {
-        if (!initiator) {
-            drv.wait_on(wait_ev);
+    const uint32_t rounds = iters + WarmupRounds;
+
+    if (_p.initiator) {
+        write_turn(drv, _p.line_addr, PingerTurn);
+
+        Tick start = 0;
+        for (uint32_t i = 0; i < rounds; i++) {
+            if (i == WarmupRounds) {
+                start = curTick();
+            }
+            write_turn(drv, _p.line_addr, PongerTurn);
+            wait_for_turn(drv, _p.line_addr, PingerTurn);
         }
 
-        // Pattern-unique byte so each write carries real data.
-        buf[0] = static_cast<uint8_t>((initiator ? 0xA0u : 0xB0u) + i);
+        const Tick elapsed = curTick() - start;
+        const double avg_ticks = double(elapsed) / double(iters);
+        const double avg_l3 = avg_ticks / double(_p.l3_clock);
 
-        const Tick t0 = curTick();
-        drv.write(_p.line_addr, buf.data(), len);
-        const Tick dt = curTick() - t0;
-
-        // Skip iteration 0 for the initiator — the cold transfer is
-        // a first-touch miss, not a cache-to-cache round trip.
-        if (!(initiator && i == 0)) {
-            accumulated += dt;
-            measured++;
+        cprintf("ping_pong: tile %u line %#llx iterations %u "
+                "avg_iteration %.2f ticks %.2f L3 clocks\n",
+                drv.tile_id(), (unsigned long long)_p.line_addr, iters,
+                avg_ticks, avg_l3);
+    } else {
+        for (uint32_t i = 0; i < rounds; i++) {
+            wait_for_turn(drv, _p.line_addr, PongerTurn);
+            write_turn(drv, _p.line_addr, PingerTurn);
         }
-
-        drv.notify(post_ev);
-
-        if (initiator) {
-            drv.wait_on(wait_ev);
-        }
-    }
-
-    if (measured > 0) {
-        const uint64_t avg = accumulated / measured;
-        DPRINTF(ChiTestbenchGem5,
-                "%s ping_pong: measured=%u avg_round=%llu ticks\n", drv.name(),
-                measured, (unsigned long long)avg);
     }
 }
 

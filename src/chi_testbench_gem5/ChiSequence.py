@@ -67,11 +67,9 @@ class PingPongSequence(ChiSequence):
     cxx_header = "chi_testbench_gem5/sequences/ping_pong.hh"
 
     line_addr = Param.Addr(0, "Cache-line address being ping-ponged")
-    access_size = Param.UInt32(8, "Bytes per access")
     iterations = Param.UInt32(1, "Iteration count")
     initiator = Param.Bool(False, "True for the tile that writes first")
-    wait_event_name = Param.String("", "Event name to wait on each turn")
-    post_event_name = Param.String("", "Event name to notify after each write")
+    l3_clock = Param.Clock("1GHz", "L3/Ruby clock period")
 
 
 class FalseSharingSequence(ChiSequence):
