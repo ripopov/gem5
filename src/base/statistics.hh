@@ -956,9 +956,9 @@ class VectorBase : public DataWrapVec<Derived, VectorInfoProxy>
         fatal_if(s <= 0, "Storage size must be positive");
         fatal_if(check(), "Stat has already been initialized");
 
-        storage.reserve(s);
-        for (size_type i = 0; i < s; ++i)
-            storage.push_back(new Storage(this->info()->getStorageParams()));
+        storage.resize(s);
+        for (auto &stor : storage)
+            stor = new Storage(this->info()->getStorageParams());
 
         this->setInit();
     }
@@ -1185,9 +1185,9 @@ class Vector2dBase : public DataWrapVec2d<Derived, Vector2dInfoProxy>
         info->x = _x;
         info->y = _y;
 
-        storage.reserve(x * y);
-        for (size_type i = 0; i < x * y; ++i)
-            storage.push_back(new Storage(this->info()->getStorageParams()));
+        storage.resize(x * y);
+        for (auto &stor : storage)
+            stor = new Storage(this->info()->getStorageParams());
 
         this->setInit();
 
@@ -1406,9 +1406,9 @@ class VectorDistBase : public DataWrapVec<Derived, VectorDistInfoProxy>
         fatal_if(s <= 0, "Storage size must be positive");
         fatal_if(check(), "Stat has already been initialized");
 
-        storage.reserve(s);
-        for (size_type i = 0; i < s; ++i)
-            storage.push_back(new Storage(this->info()->getStorageParams()));
+        storage.resize(s);
+        for (auto &stor : storage)
+            stor = new Storage(this->info()->getStorageParams());
 
         this->setInit();
     }
