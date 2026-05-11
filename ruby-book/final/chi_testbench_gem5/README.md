@@ -6,10 +6,6 @@ runs on a `Fiber` and issues `Packet`s directly into a tile-local
 Ruby sequencer. A single parameterized driver class plays any
 registered sequence — no per-scenario C++ classes, no adapters.
 
-A SystemC counterpart lives at `ruby-book/final/chi_testbench`; the
-[SystemC ↔ gem5-native](#systemc--gem5-native-comparison) section
-compares the two stacks.
-
 ## Layout
 
 | Path | Role |
@@ -208,80 +204,6 @@ Mode-dependent differences worth noting:
   `SnpCleanInvalid` counters visible in `stats.txt`). Under `rni`
   the per-tile cache doesn't hold a line between accesses, so the
   scenario's premise doesn't apply and a guard exits fast.
-
-## SystemC ↔ gem5-native comparison
-
-Both testbenches hit the same 4×4 CHI/Garnet mesh with the same 8
-shared scenarios (`read_ex_walk` is gem5-native only; SystemC has no
-direct analog yet). The scenario bodies look near-identical — loops,
-blocking reads/writes, rendezvous on a named event — but the driver
-stack underneath them differs at several layers.
-
-### Build
-
-| | SystemC testbench | gem5-native testbench |
-|---|---|---|
-| Required build flag | `USE_SYSTEMC=true` | none |
-| Extra gem5 dependencies | SystemC integration (`src/systemc/`), TLM bridge (`src/systemc/tlm_bridge/`) | `gem5::Fiber` only (already in-tree at `src/base/fiber.hh`) |
-| Binary size delta (.opt) | +SystemC kernel, +TLM wrappers | none beyond the testbench sources |
-
-### Runtime
-
-| | SystemC | gem5-native |
-|---|---|---|
-| Event loops | Two (gem5 EventQueue + SystemC kernel) with quantum-based sync | One (gem5 EventQueue) |
-| Fiber scheduling | Hidden inside `SC_THREAD` | Explicit `yield_to_primary()` + scheduled `xfer_wake` for cross-fiber wakes |
-| Cross-fiber wake workaround | Not needed (SystemC kernel mediates) | One ~20-line scheduled-event indirection (`Latch::notify` → `schedule_xfer_wake`) |
-| Packet path layers | `SC_THREAD → b_transport → TlmToGem5Bridge64 → gem5::Packet → sequencer.in_ports` (4) | `SeqThread → gem5::Packet → sequencer.in_ports` (1) |
-| Stack trace shape on a bad Packet | Crosses kernel boundary | Stays inside gem5 call frames |
-
-### Ergonomics / authoring cost
-
-| | SystemC | gem5-native |
-|---|---|---|
-| Per-tile wiring objects | `TileSlot` + `TlmToGem5Bridge64` + `SC_MODULE` driver | one `ChiSeqDriver` |
-| Per-scenario C++ | Header + `.cc` + Python SimObject class | Header + `.cc` + Python SimObject class (`ChiSequence` subclass) |
-| Scenario Python | Scenario module builds the `SimObject` subclass per scenario | Scenario module instantiates one `ChiSeqDriver` class per tile |
-| Sync primitives shipped | `sc_event`, `sc_semaphore`, `sc_fifo` (bundled with SystemC) | Hand-rolled `Latch`, `Barrier`, `Semaphore`, `Mailbox<T>` in `src/chi_testbench_gem5/sync/` |
-| Stat namespace parent | `ChiTileSlot` adapter needed (SC_MODULE isn't a SimObject) | `ClockedObject` parents directly |
-| External IP reuse | Accepts vendor SystemC/TLM IP through the TLM bridge | No cross-integration path |
-| Reader vocabulary | UVM / SystemC idioms (familiar to hardware-verification backgrounds) | gem5 idioms (familiar to gem5 contributors) |
-
-### Sizes
-
-As-committed line counts (both testbenches, framework + per-scenario + Python config):
-
-| | SystemC | gem5-native |
-|---|---:|---:|
-| C++ source | 1 835 | 1 921 |
-| Python | 591 | 666 |
-
-Lines-per-scenario is roughly comparable; the gem5-native version
-saves per-scenario boilerplate (one C++ file instead of two + SimObject
-class) but spends it back on the configurable cache controller
-(`cfg_rn.py`, ~200 lines) and one additional scenario (`read_ex_walk`).
-
-### CHI topology (implementation choice, not mechanism)
-
-| | SystemC | gem5-native |
-|---|---|---|
-| Per-tile RN | `CHI_RNF` (L1I + L1D + L2 + side router) | `CHI_Tile` (one cache controller, direct to mesh router) |
-| Side router | Yes, from `CustomMesh`'s `CHI_RNF` branch | No — `CHI_Tile` is classified as a non-RNF node |
-
-Either testbench can drop its chosen topology in for the other's
-without touching sequence code — both `CHI_RNF.generate` and
-`CHI_Tile.make_generator` are callables that get plugged into Ruby's
-`_rnf_gen` hook. The topology split reflects what each testbench
-chose to illustrate, not a constraint of the driver mechanism.
-
-### Summary
-
-For this class of CPU-less stimulus testbench the two approaches
-deliver the same observable CHI behavior; the choice is driven by
-host-project constraints — existing SystemC dependencies, plans to
-integrate vendor SystemC IP, team vocabulary, and how much the
-extra kernel / TLM bridge overhead matters. Neither is strictly
-"simpler" in the abstract — they shift different costs around.
 
 ## Reading stats.txt
 
