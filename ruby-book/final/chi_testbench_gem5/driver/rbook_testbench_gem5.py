@@ -199,6 +199,13 @@ system._mn_gen = _mn_gen_no_l1d
 Ruby.create_system(args, False, system)
 assert args.num_cpus == len(system.ruby._cpu_ports)
 
+if args.scenario == "ping_pong_no_snf":
+    # Keep HNF data resident when ownership moves to an RNF. With the default
+    # CHI_HNF setting, dirty home data is deallocated on unique ownership
+    # transfer, which writes through to the SNF on every ping-pong handoff.
+    for hnf in system.ruby.hnf:
+        hnf.cntrl.dealloc_on_unique = False
+
 system.ruby.clk_domain = SrcClockDomain(
     clock=args.ruby_clock, voltage_domain=system.voltage_domain
 )

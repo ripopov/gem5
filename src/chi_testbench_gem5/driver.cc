@@ -122,6 +122,9 @@ ChiSeqDriver::build_write_pkt(uint64_t addr, const uint8_t *src, uint32_t len,
 void
 ChiSeqDriver::submit(PacketPtr pkt)
 {
+    DPRINTF(ChiTestbenchGem5, "%s: send %s addr=%#llx size=%u\n",
+            name(), pkt->cmdString().c_str(),
+            (unsigned long long)pkt->getAddr(), pkt->getSize());
     if (!data_port.sendTimingReq(pkt)) {
         // The sequencer rejected the request (BufferFull). Stash and
         // wait for recvReqRetry(). The fiber stays suspended; retry
@@ -144,6 +147,9 @@ ChiSeqDriver::handle_retry()
     panic_if(!retry_pkt, "%s: recvReqRetry with no pending packet", name());
     PacketPtr pkt = retry_pkt;
     retry_pkt = nullptr;
+    DPRINTF(ChiTestbenchGem5, "%s: retry %s addr=%#llx size=%u\n",
+            name(), pkt->cmdString().c_str(),
+            (unsigned long long)pkt->getAddr(), pkt->getSize());
     if (!data_port.sendTimingReq(pkt)) {
         // Rejected again: put it back. The sequencer will call us
         // again once it has space.
@@ -305,6 +311,9 @@ ChiSeqDriver::handle_resp(PacketPtr pkt)
     uint8_t *dst = ss->read_dst;
     const uint32_t len = ss->len;
     const bool is_read = pkt->isRead();
+    DPRINTF(ChiTestbenchGem5, "%s: recv %s addr=%#llx size=%u\n",
+            name(), pkt->cmdString().c_str(),
+            (unsigned long long)pkt->getAddr(), pkt->getSize());
     delete ss;
 
     if (pkt->isError()) {

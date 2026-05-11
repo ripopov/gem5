@@ -1,9 +1,10 @@
 # Copyright (c) 2026 ripopov
 # SPDX-License-Identifier: BSD-3-Clause
 """
-ping_pong — Tiles 0 and 15 take turns writing one shared cache line
-homed at HNF 7. The turn hand-off lives in byte 0 of that line, matching
-a CPU-style spin-on-shared-memory ping-pong test.
+ping_pong_no_snf — Tiles 0 and 15 ping-pong ownership with full-line
+turn writes. The driver config keeps HNF unique lines resident for this
+scenario so the measured post-warmup hand-offs avoid HNF write-through
+traffic to the SNF.
 """
 
 from m5.objects import (
@@ -29,6 +30,8 @@ def build(args, planner):
             l3_clock=args.ruby_clock,
             roi_iteration=0,
             dump_roi_stats=True,
+            full_line_writes=True,
+            line_size=64,
         ),
     )
     drivers[15] = ChiSeqDriver(
@@ -41,6 +44,8 @@ def build(args, planner):
             l3_clock=args.ruby_clock,
             roi_iteration=0,
             dump_roi_stats=True,
+            full_line_writes=True,
+            line_size=64,
         ),
     )
     for tile in range(args.num_cpus):

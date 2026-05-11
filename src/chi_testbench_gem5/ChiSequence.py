@@ -70,6 +70,12 @@ class PingPongSequence(ChiSequence):
     iterations = Param.UInt32(1, "Iteration count")
     initiator = Param.Bool(False, "True for the tile that writes first")
     l3_clock = Param.Clock("1GHz", "L3/Ruby clock period")
+    roi_iteration = Param.UInt32(0, "Measured iteration to mark as ROI")
+    dump_roi_stats = Param.Bool(False, "Dump stats for the marked ROI")
+    full_line_writes = Param.Bool(
+        False, "Write the full cache line when handing off the turn"
+    )
+    line_size = Param.UInt32(64, "Cache line size for full-line writes")
 
 
 class FalseSharingSequence(ChiSequence):

@@ -14,7 +14,7 @@ TIMESTAMP  = $(shell date +%Y%m%d-%H%M%S)
 RN_MODE ?= rnf_l2
 
 SCENARIOS := smoke_read smoke_write smoke_opcode_mix \
-             ping_pong false_sharing \
+             ping_pong ping_pong_no_snf false_sharing \
              memcpy memset opcode_walk read_ex_walk
 
 .PHONY: all help run-all clean
