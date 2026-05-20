@@ -38,3 +38,6 @@ configs/dram/lowp_sweep.cfg
 .vscode
 typings
 .DS_Store
+
+# gem5 QEMU-CPU mode: generated RISC-V Linux image + build trees
+/images/
