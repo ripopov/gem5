@@ -41,3 +41,4 @@ typings
 
 # gem5 QEMU-CPU mode: generated RISC-V Linux image + build trees
 /images/
+/snapshots/
