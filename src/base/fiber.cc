@@ -36,7 +36,9 @@
 // _POSIX_C_SOURCE is already defined by including <ucontext.h> in
 // base/fiber.hh
 #if defined(__APPLE__) && defined(__MACH__)
+#ifndef _DARWIN_C_SOURCE
 #define _DARWIN_C_SOURCE
+#endif
 #endif
 
 #include <sys/mman.h>

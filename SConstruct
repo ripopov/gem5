@@ -756,6 +756,16 @@ for variant_path in variant_paths:
         # cygwin has some header file issues...
         env.Append(CCFLAGS=["-Wno-uninitialized"])
 
+    if sys.platform == "darwin":
+        # On macOS, struct __darwin_ucontext only contains the embedded
+        # __mcontext_data member when _XOPEN_SOURCE is defined *before*
+        # <sys/_types/_ucontext.h> is first included. Define it (with
+        # _DARWIN_C_SOURCE to keep the BSD extensions visible) build-wide
+        # so every translation unit agrees on sizeof(ucontext_t);
+        # otherwise gem5::Fiber suffers an ODR violation. See
+        # src/base/fiber.hh.
+        env.Append(CCFLAGS=["-D_XOPEN_SOURCE=600", "-D_DARWIN_C_SOURCE"])
+
 
     if not GetOption('no_compress_debug'):
         with gem5_scons.Configure(env) as conf:

@@ -31,10 +31,19 @@
 // ucontext functions (like getcontext, setcontext etc) have been marked
 // as deprecated and are hence hidden in latest macOS releases.
 // By defining _XOPEN_SOURCE we make them available at compilation time.
+//
+// _XOPEN_SOURCE must be defined *before* any system header pulls in
+// <sys/_types/_ucontext.h>, since that header only includes the
+// embedded __mcontext_data member of struct __darwin_ucontext when
+// _XOPEN_SOURCE is set. The macOS build therefore defines it build-wide
+// (see SConstruct); do not #undef it here, or translation units that
+// include this header would disagree with the rest of gem5 on
+// sizeof(ucontext_t), corrupting every object that embeds a Fiber.
 #if defined(__APPLE__) && defined(__MACH__)
+#ifndef _XOPEN_SOURCE
 #define _XOPEN_SOURCE 600
+#endif
 #include <ucontext.h>
-#undef _XOPEN_SOURCE
 #else
 #include <ucontext.h>
 #endif
