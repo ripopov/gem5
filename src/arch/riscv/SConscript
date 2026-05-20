@@ -70,6 +70,7 @@ Source('linux/se_workload.cc', tags=['riscv isa'])
 Source('linux/fs_workload.cc', tags=['riscv isa'])
 
 Source('bare_metal/fs_workload.cc', tags=['riscv isa'])
+Source('qemu/qemu_snapshot.cc', tags=['riscv isa'])
 
 SimObject(
     'PMAChecker.py',
@@ -85,7 +86,8 @@ SimObject(
 SimObject(
     'RiscvFsWorkload.py',
     sim_objects=['RiscvBareMetal', 'RiscvLinux',
-                 'RiscvBootloaderKernelWorkload'],
+                 'RiscvBootloaderKernelWorkload',
+                 'RiscvQemuSnapshotWorkload'],
     tags=['riscv isa']
 )
 SimObject(

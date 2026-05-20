@@ -96,6 +96,11 @@ log "Assembling initramfs"
 ROOTFS="$SRC/rootfs"
 mkdir -p "$ROOTFS"/{proc,sys,dev,tmp,root,etc}
 
+# The benchmark that runs under gem5 after a snapshot restore.
+log "Building benchmark (/bin/bench)"
+$MUSLCC -O2 -static -o "$ROOTFS/bin/bench" \
+    "$REPO_ROOT/util/qemu-cpu/bench/bench.c"
+
 cat > "$ROOTFS/init" <<'INIT'
 #!/bin/sh
 # Minimal init for gem5 QEMU-CPU mode bring-up.
@@ -104,9 +109,12 @@ mount -t proc     proc     /proc
 mount -t sysfs    sysfs    /sys
 mount -t devtmpfs devtmpfs /dev 2>/dev/null
 export PS1='qemucpu# '
-# Marker the snapshot driver waits for, then drop to an idle shell.
 echo
 echo "QEMU-CPU-MODE-SHELL-READY"
+# Run the benchmark.  qemu-snapshot.py snapshots the VM the instant bench
+# prints its readiness marker, so the matrix-multiply runs under gem5.
+/bin/bench
+# If execution reaches here (e.g. an interactive QEMU boot) drop to a shell.
 exec /bin/sh
 INIT
 chmod +x "$ROOTFS/init"

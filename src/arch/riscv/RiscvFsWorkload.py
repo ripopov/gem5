@@ -144,3 +144,27 @@ class RiscvBootloaderKernelWorkload(Workload):
         NULL,
         "Enable support for RISC-V semihosting by settings this parameter",
     )
+
+
+class RiscvQemuSnapshotWorkload(Workload):
+    """QEMU-CPU mode: restore a machine snapshot captured under QEMU.
+
+    Instead of booting a kernel, this workload injects a full machine state
+    (guest RAM image + CPU/CSR register dump + CLINT timer state) produced by
+    util/qemu-cpu/scripts/qemu-snapshot.py, so gem5's detailed CPU models can
+    continue execution from where fast QEMU emulation left off.
+    """
+
+    type = "RiscvQemuSnapshotWorkload"
+    cxx_class = "gem5::RiscvISA::QemuSnapshot"
+    cxx_header = "arch/riscv/qemu/qemu_snapshot.hh"
+
+    ram_file = Param.String("Raw guest RAM image captured from QEMU (ram.bin)")
+    ram_addr = Param.Addr(0x80000000, "Physical base address of guest RAM")
+    regs_file = Param.String("CPU register / CSR dump captured from QEMU")
+    clint_addr = Param.Addr(0x02000000, "CLINT MMIO base address")
+    clint_mtime = Param.UInt64(0, "CLINT mtime value to restore")
+    clint_mtimecmp = Param.UInt64(
+        0xFFFFFFFFFFFFFFFF, "CLINT mtimecmp[hart0] value to restore"
+    )
+    verbose = Param.Bool(True, "Log every step of the snapshot restore")

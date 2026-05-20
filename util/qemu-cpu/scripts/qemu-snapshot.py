@@ -172,8 +172,13 @@ def main():
     ap.add_argument("--cpu", default=DEFAULT_CPU)
     ap.add_argument("--gdb-port", type=int, default=11234)
     ap.add_argument("--boot-timeout", type=float, default=120.0)
-    ap.add_argument("--settle", type=float, default=3.0,
-                    help="seconds to let the VM idle after the shell appears")
+    ap.add_argument("--marker", default="QEMU-CPU-MODE-BENCH-READY",
+                    help="serial-console string to snapshot on. The default "
+                         "is printed by /bin/bench right before its CPU-bound "
+                         "region; use QEMU-CPU-MODE-SHELL-READY to snapshot "
+                         "the idle shell instead.")
+    ap.add_argument("--settle", type=float, default=0.0,
+                    help="seconds to wait after the marker before snapshotting")
     ap.add_argument("--qemu", default="qemu-system-riscv64")
     args = ap.parse_args()
 
@@ -225,14 +230,17 @@ def main():
     qemu = subprocess.Popen(qemu_cmd, stdout=subprocess.DEVNULL,
                             stderr=subprocess.PIPE)
     try:
-        ser = connect_unix(ser_sock)
-        log("waiting for shell marker on the serial console ...")
-        read_until(ser, SHELL_MARKER, args.boot_timeout, serial_log)
-        log("shell reached; letting the VM idle for %.1fs" % args.settle)
-        time.sleep(args.settle)
-
+        # Connect QMP up front so that, the instant the marker appears, the
+        # only thing between us and a paused VM is a single 'stop' command -
+        # the benchmark barely advances during the capture window.
         qmp = QMP(qmp_sock)
-        log("pausing the VM")
+        ser = connect_unix(ser_sock)
+        marker = args.marker.encode()
+        log("waiting for marker %r on the serial console ..." % args.marker)
+        read_until(ser, marker, args.boot_timeout, serial_log)
+        if args.settle > 0:
+            time.sleep(args.settle)
+        log("marker seen; pausing the VM")
         qmp.execute("stop")
 
         log("dumping guest RAM (%d MB) -> ram.bin" % args.mem_mb)
