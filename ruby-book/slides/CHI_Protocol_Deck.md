@@ -803,7 +803,16 @@ being cached, and cached without any sharer.
 
 ## gem5 HN-F FSM (CHI-cache.sm) — full state vocabulary
 
-<div class="columns" style="font-size: 14px; line-height: 1.25;">
+<div style="font-size: 11px; color: #475569; margin: -6px 0 4px 0;">
+<span style="color:#94a3b8">Greyed rows</span>: reachable at non-HN cache levels (RN-F leaf or intermediate L2) but <em>not</em> at HN-F under the default <code>CHI_HNFController</code> config (<code>is_HN=true</code>, no sequencer, PoC ⇒ <code>dataUnique</code> always true).
+</div>
+
+<style scoped>
+section table { font-size: 13px; line-height: 1.2; }
+section th, section td { padding: 2px 6px; }
+</style>
+
+<div class="columns" style="font-size: 13px; line-height: 1.2;">
 <div>
 
 **Local only** — what this controller physically holds
@@ -811,21 +820,21 @@ being cached, and cached without any sharer.
 | State | Meaning |
 |---|---|
 | `I` | No local copy; no upstream tracking |
-| `SC` | Local Shared Clean; reads only |
+| <span style="color:#94a3b8">`SC`</span> | <span style="color:#94a3b8">Local Shared Clean — needs a peer holder; HN-F is PoC ⇒ unreachable</span> |
 | `UC` | Local Unique Clean; may write (→ `UD`) |
-| `SD` | Local Shared Dirty; the Owned-like state |
+| <span style="color:#94a3b8">`SD`</span> | <span style="color:#94a3b8">Local Shared Dirty — same PoC argument as `SC`</span> |
 | `UD` | Local Unique Dirty; only writable copy in system |
-| `UD_T` | `UD` locked under "use timeout" (LL/SC livelock guard) |
+| <span style="color:#94a3b8">`UD_T`</span> | <span style="color:#94a3b8">`UD` + LL/SC use-timeout — set by `sequencer.writeCallback`; HN-F has no sequencer</span> |
 
 **Remembered upstream only** — local copy gone, directory tracks RNs
 
 | State | Meaning |
 |---|---|
 | `RU` | One upstream unique owner (in `UC` or `UD`) |
-| `RSC` | Upstream shared-clean sharers |
-| `RSD` | Upstream dirty owner (+ maybe `SC` sharers) |
-| `RUSC` | `RSC` + this node still holds system-wide exclusive access |
-| `RUSD` | `RSD` + this node still holds system-wide exclusive access |
+| `RSC` | Upstream shared-clean sharers (typical at L2; at HN-F collapses to `RUSC`) |
+| `RSD` | Upstream dirty owner + maybe `SC` sharers (at HN-F collapses to `RUSD`) |
+| `RUSC` | `RSC` + no peer outside this subtree holds the line — HN-F's normal shared-readers state |
+| `RUSD` | `RSD` + same uniqueness flag — HN-F's normal dirty-owner-upstream state |
 
 </div>
 <div>
@@ -834,9 +843,9 @@ being cached, and cached without any sharer.
 
 | State | Meaning |
 |---|---|
-| `SC_RSC` | Local `SC` + upstream `SC` sharers |
-| `SD_RSC` | Local dirty owner + upstream readers |
-| `SD_RSD` | Local `SD` + upstream dirty owner; split responsibility |
+| <span style="color:#94a3b8">`SC_RSC`</span> | <span style="color:#94a3b8">Local `SC` + upstream sharers — local `SC` impossible at HN-F</span> |
+| <span style="color:#94a3b8">`SD_RSC`</span> | <span style="color:#94a3b8">Local `SD` + upstream readers — local `SD` impossible at HN-F</span> |
+| <span style="color:#94a3b8">`SD_RSD`</span> | <span style="color:#94a3b8">Local `SD` + upstream dirty owner — same `SD` argument</span> |
 | `UC_RSC` | Local `UC` + upstream `SC` sharers |
 | `UC_RU` | Upstream is the unique owner; local copy is residue (`Invalid` perm) |
 | `UD_RU` | Same as `UC_RU` but local residue is dirty |
@@ -854,9 +863,12 @@ being cached, and cached without any sharer.
 </div>
 
 <!-- Speaker Notes:
-Twenty-one states, but no need to memorise them. The names are
-compositional, so once you know the decoding rule any state on this
-slide makes sense.
+The full vocabulary is twenty-one states, but only fifteen are
+reachable at an HN-F under the default CHI_HNFController config. The
+greyed six exist in the controller because the same CHI-cache.sm
+plays multiple roles — RN-F leaf, intermediate L2 directory, HN-F —
+each gated by parameters. The slide colour-codes them so the HN-F
+state space stands out.
 
 The decoding rule. The first part of a name is the controller's
 local cache state, drawn from I, SC, UC, SD, UD, UD_T. An R-prefixed
@@ -870,48 +882,65 @@ backings: the LLC cache entry (CacheMemory) and the DirEntry
 (PerfectCacheMemory). getState in CHI-cache-funcs.sm:91-104 reads
 from whichever is present (TBE → cache entry → DirEntry → I) and
 setState writes to all that are valid. For a pure-local state like
-SC or UC the DirEntry is deallocated and the cache entry alone
-holds the state. For a pure-remote state like RU or RSC the cache
-entry is deallocated and the DirEntry alone holds the state. For a
-combined state like SC_RSC or UD_RU both backings are allocated and
-both store the same composed name. So the FSM treats the state as a
-single value, but the storage cost is paid only on the side that
-actually exists.
+UC the DirEntry is deallocated and the cache entry alone holds the
+state. For a pure-remote state like RU or RUSC the cache entry is
+deallocated and the DirEntry alone holds the state. For a combined
+state like UC_RSC or UD_RU both backings are allocated and both
+store the same composed name. The FSM treats the state as a single
+value, but the storage cost is paid only on the side that actually
+exists.
 
-Local-only states need no surprises. UD_T is the one new face: plain
-UD with a "use timeout" set by Callback_Miss after a store miss. The
-timer prevents LL/SC livelocks by stalling coherence snoops on the
-line until it expires. An eviction does not stall — it cancels the
-timer and falls through to normal eviction handling.
+Why the six are greyed. Two independent reasons. UD_T is
+sequencer-driven — set inside sequencer.writeCallback in
+CHI-cache-actions.sm:3710-3734 to stall coherence snoops while a
+local store completes, preventing LL/SC livelocks. The HN-F config
+sets sequencer = NULL (CHI_config.py:332), so UD_T cannot be
+entered. SC and SD are local "shared" states, and "shared"
+presupposes a peer outside this controller also holds the line. The
+HN-F is the Point of Coherence for its address slice — by
+construction no peer at the same level holds the line — so its
+local copy is always Unique, never Shared. SC_RSC, SD_RSC and
+SD_RSD inherit the same impossibility because their local half is
+SC or SD.
 
-The remembered-upstream-only states are where the HN-F earns its
-keep as a directory node. RU collapses upstream UC and UD owners
-into a single stable state, with the clean-versus-dirty distinction
-parked in a TBE flag rather than in the state name. RSC and RSD are
-the shared analogues. RUSC and RUSD have a subtle leading U: it does
-not mean the upstream copies are unique — it means the directory
-records that no peer outside this subtree has the line, so a later
-upstream upgrade can be granted without further snooping. These are
+Local-only states at HN-F. I, UC, UD are the routine cases — line
+absent, present and clean, present and dirty.
+
+The remembered-upstream-only group is where the HN-F earns its
+directory keep. RU collapses upstream UC and UD owners into one
+stable state, with the clean-versus-dirty distinction parked in a
+TBE flag rather than in the state name. RSC and RSD exist for
+non-HN levels — for example an L2 acting as a small directory for
+its L1s, where the L2 is not the PoC and dataUnique can be false.
+At the HN-F these collapse to RUSC and RUSD because makeFinalState
+in CHI-cache-funcs.sm:1098-1127 picks the U-prefixed variant
+whenever dataUnique holds, and the HN-F's PoC role makes that
+always the case. The leading U in RUSC and RUSD does not mean the
+upstream copies are unique — it means the directory records that no
+peer outside this subtree has the line, so a later upstream upgrade
+can be granted without further snooping. These are
 permission-preserving directory states.
 
-The combined "local plus remembered" states are what makes
-mostly-inclusive HN-F policies work. SC_RSC, SD_RSC, UC_RSC, UD_RSC
-are the routine cases — local data plus upstream readers. UC_RU and
-UD_RU are the unusual ones: their AccessPermission is Invalid
-because the protocol-visible owner has moved upstream, and the local
-LLC line is residue. Treat them as bookkeeping for replacement and
-writeback, not as ordinary hits. UD_RSD and SD_RSD are transient
-overlap states where dirty data exists both locally and in an
-upstream owner.
+Combined local-plus-remembered states at HN-F are UC_RSC, UD_RSC,
+UD_RSD, UC_RU and UD_RU. UC_RSC and UD_RSC are the routine
+mostly-inclusive case — local data plus upstream readers, HN-F
+still source of truth. UD_RSD is the transient overlap state where
+dirty data exists both locally and in an upstream owner. UC_RU and
+UD_RU are config-dependent: the default HN-F has dealloc_on_unique
+= True (CHI_config.py:350), so granting Unique upstream drops the
+local copy and the controller goes to plain RU. UC_RU and UD_RU
+stay reachable as transients or in non-default configurations where
+the LLC residue is kept; treat them as bookkeeping for replacement
+and writeback, not as ordinary hits.
 
-Finally, the two transient states. gem5 deliberately uses just two
-generic in-flight states instead of one per outcome. BUSY_INTR lets
-snoops proceed because the TBE carries enough information to answer
-them safely. BUSY_BLKD is the fragile interval where a servicing
-snoop would violate ordering. Both resolve through the Final event:
-makeFinalState in CHI-cache-funcs.sm assembles a cache half and a
-directory half and combines them into one of the named stable
-states above.
+The two transient states. gem5 uses just two generic in-flight
+states instead of one per outcome. BUSY_INTR lets snoops proceed
+because the TBE carries enough information to answer them safely.
+BUSY_BLKD is the fragile interval where a servicing snoop would
+violate ordering. Both resolve through the Final event: getNextState
+calls makeFinalState in CHI-cache-funcs.sm:1098-1147, which
+assembles a cache half and a directory half and combines them into
+one of the named stable states above.
 -->
 
 ---
@@ -1245,59 +1274,61 @@ Same DWT skeleton; the combined opcode carries **write + CMO** together. Sub ret
 </div>
 
 <!-- Speaker Notes:
-Third practice transaction — the write side, on the DWT path we
-introduced earlier. Two flavours: a plain Immediate Write, and a
-Combined Write plus Cache Maintenance Operation. Three actors in
-each — Requester, Home, Subordinate. Any snoops the home fires for
-coherence are independent transactions and not drawn here.
+Third practice transaction — the write side. Two flavours, both on
+the DWT path: a plain Immediate Write and a Combined Write plus
+Cache Maintenance Operation. The point of the slide is not the
+arrows — it is *why* CHI bothers to define this shape of flow at
+all, and *what the diagrams quietly leave out*.
 
-DWT is the fast path for writes. The home delegates by setting
-DoDWT in the downstream request; the Subordinate, not the home,
-issues the DBIDResp buffer grant; and the requester streams write
-data straight to the Subordinate. The home stays in the loop only
-for completion bookkeeping.
+Why DWT exists. The Home is a serialisation point, not a data
+warehouse. Asking it to receive every write payload, hold it, and
+then push it onward burns Home buffers and adds a hop. DWT keeps
+the Home as orchestrator while the data flows requester → sub
+directly, and lets the Sub issue the buffer grant since it owns
+the buffer. The pricing of the optimisation is a richer
+peer-relationship between requester and sub, not just a tree under
+Home — that is the structural shift to internalise.
 
-The plain Immediate Write covers seven opcodes — WriteNoSnpPtl /
-Full / Def, plus the WriteUnique family with optional stash hints.
-The home strips the snoop aspect of WriteUnique before sending
-downstream; the Subordinate always sees one of WriteNoSnpPtl, Full,
-or Def with DoDWT set. The flow is: request goes to home, home
-forwards to Subordinate, Subordinate sends DBIDResp to the
-requester, requester sends NonCopyBackWriteData to the Subordinate
-(or WriteDataCancel if it aborts), Subordinate returns Comp to the
-home, home mirrors Comp to the requester. Both the Subordinate and
-the home are permitted to send Comp before the write data lands —
-the spec gives implementations latitude here.
+What this slide is *not* showing. Two omissions matter.
+First, snoops. WriteUnique-family writes can require peer RN-Fs to
+be invalidated; those snoops are issued by Home in parallel and
+deliberately drawn elsewhere — they are not part of the DWT
+skeleton. They *are* mandatory for Home to retire its TBE; they
+are *not* mandatory to gate Home's Comp to the requester. Home is
+allowed early Comp.
+Second, CompAck. This slide is Alt 1 of B2.3.2.1 — DWT without
+CompAck. CHI also defines Alt 3, no DWT with CompAck, and OWO /
+Streaming Ordered Writes in B2.7.5.3 that requires CompAck.
+Cross-address producer-consumer ordering — the canonical "data
+then flag" race — lives in *that* world, not this one. Visibility
+is gated by CompAck, not by Comp. Which is why this Alt 1 flow is
+fine for write traffic that does not need cross-address ordering,
+and why anyone needing PCIe-style ordered streaming reaches for a
+different alternative.
 
-The Combined Write plus CMO bundles a write payload and a cache
-maintenance operation into a single transaction. WriteNoSnpFullCleanInv
-is the typical example: write these 64 bytes, then run CleanInvalid
-across any downstream caches. The slide lists ten in-scope opcodes
-covering CleanInv, CleanSh, CleanInvPoPA, and CleanInvStrg variants.
-The flow has the same skeleton, with two differences. First, the
-home forwards the full combined opcode downstream — it does not
-strip the CMO. Second, the Subordinate now returns two completions:
-Comp acknowledges the write half, CompCMO acknowledges the CMO half.
-They are semantically different responses, not a retry, and they
-arrive separately because the CMO may have to propagate further
-through downstream observers before it is truly done. The home
-mirrors both back to the requester, with one ordering constraint —
-if there is a deeper downstream observer, the home must wait for
-CompCMO from the Subordinate before forwarding CompCMO upward.
+Who drives this traffic. DWT is request-type-scoped, not
+requester-type-scoped — RN-F can issue WriteUnique and trigger
+DWT. But an RN-F's bread-and-butter writes are CopyBacks
+(WriteBackFull etc.) which have no DWT alternative at all because
+Home may need to merge with snoop responses. So in practice the
+DWT path is dominated by RN-I / RN-D — DMA, MMIO, PCIe — the
+sources of streaming, address-disjoint write traffic.
 
-A few easy mistakes. Under DWT the buffer grant comes from the
-Subordinate, not the home — readers who internalised the
-home-centric write flow often expect DBIDResp from the home.
-WriteDataCancel is a legal substitute for the data, used when the
-requester aborts after receiving DBIDResp. And ExpCompAck does not
-fire under DWT in either flavour; Comp and CompCMO close the
-transaction.
+What the Subordinate represents. "SN-F" on the diagram is a
+placeholder. For a plain WriteNoSnpFull it is the memory
+controller. For a CleanShared variant it is whatever owns a write
+buffer that needs to drain. For CleanInvalidPoPA it is the
+persistence boundary. For CleanInvalidStorage it is the gateway
+all the way to non-volatile storage. The reason there are two
+completions in the right diagram — Comp and CompCMO — is precisely
+that those two acknowledgements describe different observability
+surfaces at different depths, with very different latencies.
 
-In gem5, both controllers implement DWT as a bit on the downstream
-request, and the combined Write plus CMO threads Comp and CompCMO
-through the HN-F transition table before releasing the requester.
-The CompCMO machinery is straightforward to find under
-src/mem/ruby/protocol/chi/.
+Takeaway. DWT is the cheap, fire-and-forget path. The slide
+captures its skeleton; the protocol's strong ordering and global
+visibility guarantees live in adjacent flows that this slide
+deliberately doesn't draw. When in doubt about whether DWT is
+"enough", ask: do my writes need cross-address ordering?
 -->
 
 ---
