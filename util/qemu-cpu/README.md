@@ -10,6 +10,9 @@ It is the gem5 analogue of the SystemC "QEMU QBox" idea, implemented as a
 `qemu-system-riscv64` does the booting, and a new gem5 workload
 (`RiscvQemuSnapshotWorkload`) injects the captured state.
 
+**See [`DOCUMENTATION.md`](DOCUMENTATION.md)** for the full architecture, the
+engineering problems solved, limitations, and a detailed usage guide.
+
 ```
   build-image.sh        qemu-snapshot.py            restore.py
  ┌──────────────┐  ┌────────────────────┐  ┌────────────────────────┐
