@@ -96,10 +96,14 @@ log "Assembling initramfs"
 ROOTFS="$SRC/rootfs"
 mkdir -p "$ROOTFS"/{proc,sys,dev,tmp,root,etc}
 
-# The benchmark that runs under gem5 after a snapshot restore.
-log "Building benchmark (/bin/bench)"
+# The benchmarks that run under gem5 after a snapshot restore.
+#   /bin/bench - single-core, CPU-bound matrix multiply
+#   /bin/philo - multicore dining philosophers (pthreads, SMP)
+log "Building benchmarks (/bin/bench, /bin/philo)"
 $MUSLCC -O2 -static -o "$ROOTFS/bin/bench" \
     "$REPO_ROOT/util/qemu-cpu/bench/bench.c"
+$MUSLCC -O2 -static -pthread -o "$ROOTFS/bin/philo" \
+    "$REPO_ROOT/util/qemu-cpu/bench/philo.c"
 
 cat > "$ROOTFS/init" <<'INIT'
 #!/bin/sh
@@ -111,14 +115,21 @@ mount -t devtmpfs devtmpfs /dev 2>/dev/null
 export PS1='qemucpu# '
 echo
 echo "QEMU-CPU-MODE-SHELL-READY"
-# qemucpu.mode=shell : drop straight to an interactive shell, which
-#   qemu-snapshot.py --mode shell snapshots idle (to test interactive
-#   restore).  Otherwise run the benchmark, which qemu-snapshot.py
-#   --mode bench snapshots at its snapshot_barrier() breakpoint.
-if grep -q qemucpu.mode=shell /proc/cmdline; then
-    exec /bin/sh
-fi
-/bin/bench
+# Select what to run from the kernel command line (qemu-snapshot.py sets it):
+#   qemucpu.mode=shell : drop straight to an interactive shell, snapshotted
+#                        idle to test interactive restore.
+#   qemucpu.mode=philo : run the multicore dining-philosophers benchmark.
+#   (default / bench)  : run the single-core matrix benchmark.
+# Both benchmarks are snapshotted at their snapshot_barrier() breakpoint.
+mode=bench
+for tok in $(cat /proc/cmdline); do
+    case "$tok" in qemucpu.mode=*) mode="${tok#qemucpu.mode=}" ;; esac
+done
+case "$mode" in
+    shell) exec /bin/sh ;;
+    philo) /bin/philo  ;;
+    *)     /bin/bench  ;;
+esac
 exec /bin/sh
 INIT
 chmod +x "$ROOTFS/init"

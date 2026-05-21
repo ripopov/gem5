@@ -12,7 +12,7 @@ set -euo pipefail
 exec "$QEMU_BIN" \
     -machine virt \
     -cpu "$QEMU_CPU" \
-    -smp 1 -m "${QEMU_MEM_MB}M" \
+    -smp "${QEMU_SMP:-1}" -m "${QEMU_MEM_MB}M" \
     -bios "$BIOS" \
     -kernel "$KERNEL" \
     -initrd "$INITRD" \

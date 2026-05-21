@@ -69,7 +69,7 @@ Produces, in `<repo>/images/`:
 |----------|-------------|
 | `Image` | Raw RISC-V Linux kernel (Linux 6.12, `defconfig`). |
 | `vmlinux` | Kernel ELF with symbols. |
-| `initramfs.cpio.gz` | musl + busybox root filesystem, plus `/bin/bench`. |
+| `initramfs.cpio.gz` | musl + busybox root filesystem, plus `/bin/bench` and `/bin/philo`. |
 | `fw_jump.bin` | OpenSBI M-mode firmware (from the host package). |
 
 Design choices:
@@ -79,9 +79,17 @@ Design choices:
 * **`rv64gc` userspace** — see §3.1.
 * **OpenSBI lives in guest RAM** — so its M-mode trap handlers (timer, SBI
   calls) are captured by the snapshot and keep working after restore.
-* **`/init` is mode-aware** — with `qemucpu.mode=shell` on the kernel command
-  line it drops straight to an interactive shell; otherwise it runs
-  `/bin/bench`.
+* **`/init` is mode-aware** — it reads `qemucpu.mode=` from the kernel command
+  line: `shell` drops straight to an interactive shell, `philo` runs the
+  multicore dining-philosophers benchmark, anything else runs the single-core
+  matrix benchmark `/bin/bench`.
+
+Two benchmarks are built into the image:
+
+| Binary | Workload |
+|--------|----------|
+| `/bin/bench` | single-core, CPU-bound matrix multiply (deterministic checksum). |
+| `/bin/philo` | multicore dining philosophers — 5 pthreads contending for shared fork mutexes; used to validate SMP snapshots (§3.12). |
 
 ### 2.3 Stage 2 — snapshot capture (`qemu-snapshot.py`)
 
@@ -89,11 +97,14 @@ QEMU is driven through three control planes: a UNIX-socket **serial
 console**, the **QMP** monitor (pause + dump physical memory) and the
 **gdbstub** (the capture barrier + architectural register/CSR read).
 
-Two capture barriers are supported:
+Three capture modes are supported:
 
-* **`--mode bench`** — a *gdb breakpoint* on the benchmark's
+* **`--mode bench`** — a *gdb breakpoint* on the matrix benchmark's
   `snapshot_barrier()` function. QEMU halts at exactly that instruction;
   there is no capture-window timing race (§3.7).
+* **`--mode philo`** — the same race-free breakpoint barrier, on the
+  multicore dining-philosophers benchmark; use with `--smp N>1` to capture a
+  genuine SMP snapshot (§3.12).
 * **`--mode shell`** — wait for a marker on the serial console, then QMP
   `stop`. Used to snapshot the idle interactive shell.
 
@@ -264,19 +275,76 @@ benchmark calls `tcdrain()` to wait for the console to flush before
 `m5_exit`. (`m5_exit` is now only a clean end-of-run signal, not a
 console-output workaround.)
 
+### 3.11 MinorCPU speculative wrong-path accesses fatal the crossbar
+
+Restoring onto **MinorCPU** aborted almost immediately with
+`fatal: Unable to find destination for [0x8:0x10] on system.membus`.
+
+MinorCPU's load/store queue issues load requests *eagerly*, before the load
+is known to be on the committed path. A load fetched down a mispredicted
+branch can therefore be translated and sent to memory with a not-yet-valid
+base register. In M-mode (OpenSBI's trap handlers — entered constantly for
+SBI calls and IPIs) translation is the identity map, so a garbage base is
+*not* filtered out by a page fault: the request reaches the crossbar with a
+nonsense physical address. A bare `SystemXBar` has no port for unmapped
+addresses and `fatal()`s — taking down the whole simulation for what is
+really a wrong-path access the CPU was about to squash anyway.
+AtomicSimpleCPU and TimingSimpleCPU do not speculate; O3CPU squashes such
+loads before they reach memory, so only Minor exposed this.
+
+**Fix:** `restore.py` attaches a `BadAddr` responder to the crossbar's
+`default` port (`system.membus.default`). Unclaimed addresses now get an
+ordinary bad-address *response* instead of aborting the run — the CPU
+squashes the wrong-path instruction and the response is discarded, while a
+genuine unmapped access still becomes a proper access fault. This mirrors
+gem5's standard NoCache hierarchy (`no_cache.py`), which wires up exactly
+this responder; `restore.py` builds its memory system by hand and had simply
+omitted it.
+
+### 3.12 Validating multicore snapshots — the dining-philosophers benchmark
+
+A single-core CPU-bound benchmark exercises one hart; the other harts, even
+in an `--smp N` snapshot, only sit idle. To actually validate SMP restore a
+genuinely concurrent workload is needed.
+
+`/bin/philo` is the classic **dining philosophers**: `NPHIL = 5` pthreads
+contend for 5 shared fork mutexes for `ROUNDS = 64` meals each, deadlock-free
+via the asymmetric fork-ordering solution. Restored onto gem5 it exercises
+the parts of an SMP system a single-threaded benchmark never touches:
+
+* **several harts restored at once**, each mid-execution — at capture time
+  the snapshot catches the main thread at the barrier, philosopher threads
+  running on other harts, and a hart inside the kernel;
+* **cross-hart wakeups** — a philosopher blocked on a fork is woken by
+  another hart's `futex` wake, which becomes an IPI delivered over the CLINT
+  software-interrupt line (`msip`);
+* **the SMP scheduler** migrating threads between harts.
+
+The result is **deterministic regardless of interleaving**: every
+philosopher eats exactly `ROUNDS` times, and the checksum (sum of the eater's
+id over every meal) is fixed. The benchmark validates both and prints
+`PHILO-DONE ok meals=320 checksum=640` on the console. The test harness
+additionally checks `stats.txt` to confirm *every* hart advanced its cycle
+counter — proof the workload ran on all cores, not just hart 0.
+
+This surfaced and fixed §3.11; with that fix the dining-philosophers
+scenario passes on all four CPU models (§5.5).
+
 ---
 
 ## 4. What works, and limitations
 
 **Working and tested** (see §5.5):
 
-* restore onto AtomicSimpleCPU, TimingSimpleCPU and O3CPU;
+* restore onto AtomicSimpleCPU, TimingSimpleCPU, O3CPU and MinorCPU;
 * a CPU-bound benchmark restored mid-run, reporting its result on the
   (interrupt-driven) console;
 * a restored idle shell that is fully interactive — it wakes on the UART
   interrupt, echoes input and executes typed commands;
-* multi-hart snapshots (verified with `--smp 2`): every hart's state is
-  captured and restored.
+* **multicore** snapshots: a 4-hart SMP dining-philosophers workload captured
+  mid-run and restored, with cross-hart `futex`/IPI wakeups and the SMP
+  scheduler running threads on every hart — verified on all four CPU models
+  (§3.12).
 
 **Limitations:**
 
@@ -321,33 +389,33 @@ reads the architectural state.
 util/qemu-cpu/scripts/build-image.sh
 ```
 
-Builds Linux, musl, busybox and the benchmark into `images/`. The kernel
+Builds Linux, musl, busybox and both benchmarks into `images/`. The kernel
 build is the slow step; it is skipped on reruns if `images/Image` exists.
 `util/qemu-cpu/scripts/qemu-boot.sh` boots the image interactively for a
-sanity check.
+sanity check (`QEMU_SMP=4 qemu-boot.sh` for a multicore boot).
 
 ### 5.3 Capture a snapshot
 
 ```bash
-# benchmark snapshot - race-free gdb-breakpoint barrier
-util/qemu-cpu/scripts/qemu-snapshot.py --mode bench  --out snapshots/bench
+# matrix-benchmark snapshot - race-free gdb-breakpoint barrier
+util/qemu-cpu/scripts/qemu-snapshot.py --mode bench --out snapshots/bench
+
+# multicore dining-philosophers snapshot - 4-hart SMP
+util/qemu-cpu/scripts/qemu-snapshot.py --mode philo --smp 4 --out snapshots/philo
 
 # idle-shell snapshot - for interactive restore
-util/qemu-cpu/scripts/qemu-snapshot.py --mode shell  --out snapshots/shell
-
-# multi-hart snapshot
-util/qemu-cpu/scripts/qemu-snapshot.py --mode shell --smp 2 --out snapshots/shell2
+util/qemu-cpu/scripts/qemu-snapshot.py --mode shell --out snapshots/shell
 ```
 
 Key options:
 
 | Option | Default | Meaning |
 |--------|---------|---------|
-| `--mode` | `bench` | `bench` (breakpoint barrier) or `shell` (marker barrier) |
+| `--mode` | `bench` | `bench`/`philo` (breakpoint barrier) or `shell` (marker barrier) |
 | `--out DIR` | `snapshots/snap` | output snapshot directory |
-| `--smp N` | `1` | number of harts |
+| `--smp N` | `1` | number of harts (use `N>1` with `--mode philo`) |
 | `--mem-mb N` | `256` | guest RAM size |
-| `--break-symbol S` | `snapshot_barrier` | (bench mode) breakpoint symbol |
+| `--break-symbol S` | `snapshot_barrier` | (bench/philo mode) breakpoint symbol |
 | `--marker STR` | `QEMU-CPU-MODE-SHELL-READY` | (shell mode) console marker |
 
 ### 5.4 Restore into gem5
@@ -367,8 +435,12 @@ build/RISCV/gem5.opt configs/example/qemu_cpu/restore.py \
 | `--timer-gap N` | `0` | clamp each restored timer to fire ≤ N mtime ticks after mtime (0 = exact); avoids a long idle fast-forward for shell snapshots |
 
 A benchmark run ends with `exit @ tick N : m5_exit instruction encountered`
-and prints `BENCH-DONE ok sum=...` to gem5's terminal
-(`m5out/.../system.platform.terminal`).
+and prints its result to gem5's terminal
+(`m5out/.../system.platform.terminal`) — `BENCH-DONE ok sum=...` for the
+matrix benchmark, `PHILO-DONE ok meals=320 checksum=640` for the multicore
+dining-philosophers snapshot. The `--cpu` choice (`atomic`/`timing`/`o3`/
+`minor`) applies to every hart; `restore.py` reads the hart count from the
+snapshot's `meta.json` and builds one CPU per hart automatically.
 
 For an **interactive** restore of a shell snapshot, run gem5 with
 `--listener-mode=on` and connect to the terminal port it prints:
@@ -382,31 +454,35 @@ m5term localhost 3456     # or: telnet localhost 3456
 
 ### 5.5 The test harness
 
-`qemu-cpu-test.py` runs both end-to-end tests and reports PASS/FAIL:
+`qemu-cpu-test.py` runs the three end-to-end tests and reports PASS/FAIL:
 
 ```bash
-util/qemu-cpu/scripts/qemu-cpu-test.py --test all --cpu atomic,timing,o3
+util/qemu-cpu/scripts/qemu-cpu-test.py --test all --cpu atomic,timing,o3,minor
 ```
 
 * **bench test** — restores `snapshots/bench`, runs the matmul on the
   detailed CPU, and checks `BENCH-DONE ok` appears on the console.
+* **philo test** — restores the multicore `snapshots/philo`, runs the dining
+  philosophers, checks `PHILO-DONE ok` on the console *and* parses
+  `stats.txt` to confirm every hart advanced its cycle counter (proof the
+  workload ran on all cores).
 * **interactive test** — restores `snapshots/shell`, connects to gem5's
   terminal, types `echo OUT$((7*9))END`, and checks the restored shell
   wakes, executes it and prints `OUT63END` (output ≠ input, so this proves
   *execution*, not just tty echo).
 
-`--bench-snap` / `--shell-snap` select other snapshot directories (e.g. the
-multi-hart `snapshots/shell2`).
+`--bench-snap` / `--philo-snap` / `--shell-snap` select other snapshot
+directories. `--test {bench,philo,interactive,all}` selects a single test.
 
-Verified results:
+Verified results — all four CPU models, multicore `snapshots/philo` captured
+with `--smp 4`:
 
-| CPU | bench (console output) | interactive (idle shell) |
-|-----|------------------------|--------------------------|
-| AtomicSimpleCPU | PASS | PASS |
-| TimingSimpleCPU | PASS | PASS |
-| O3CPU | PASS | PASS |
-
-Multi-hart (`--smp 2`): bench and interactive both PASS.
+| CPU | bench | philo (4-hart SMP) | interactive |
+|-----|-------|--------------------|-------------|
+| AtomicSimpleCPU | PASS | PASS | PASS |
+| TimingSimpleCPU | PASS | PASS | PASS |
+| O3CPU | PASS | PASS | PASS |
+| MinorCPU | PASS | PASS | PASS |
 
 ### 5.6 Troubleshooting
 
@@ -417,6 +493,7 @@ Multi-hart (`--smp 2`): bench and interactive both PASS.
 | `m5_fail` instead of `m5_exit` | the detailed run computed the wrong checksum — a state-restore fidelity bug |
 | restored shell ignores input | PLIC/UART state or interrupt CSRs not restored — check the `QemuSnapshot:` log lines |
 | gem5 terminal not listening | pass `--listener-mode=on` to `gem5.opt` |
+| `Unable to find destination ... on system.membus` | the crossbar's `BadAddr` default responder is missing — see §3.11 |
 
 ---
 
@@ -430,7 +507,8 @@ Multi-hart (`--smp 2`): bench and interactive both PASS.
 | `util/qemu-cpu/scripts/qemu-snapshot.py` | capture a snapshot (barrier + DTB + dumps) |
 | `util/qemu-cpu/scripts/gdb-dump-regs.py` | gdb helper: dump all harts' registers |
 | `util/qemu-cpu/scripts/qemu-cpu-test.py` | end-to-end test harness |
-| `util/qemu-cpu/bench/bench.c` | the benchmark restored into gem5 |
+| `util/qemu-cpu/bench/bench.c` | single-core matrix benchmark |
+| `util/qemu-cpu/bench/philo.c` | multicore dining-philosophers benchmark |
 | `src/arch/riscv/qemu/qemu_snapshot.{hh,cc}` | `RiscvQemuSnapshotWorkload` |
 | `src/arch/riscv/RiscvFsWorkload.py` | the workload SimObject |
 | `configs/example/qemu_cpu/restore.py` | gem5 restore configuration |

@@ -120,6 +120,17 @@ system.membus = SystemXBar()
 system.iobus = IOXBar()
 system.system_port = system.membus.cpu_side_ports
 
+# Catch-all for unmapped physical addresses.  A detailed CPU (notably
+# MinorCPU) speculatively issues load requests down mispredicted paths;
+# with no caches such a stray access reaches the crossbar directly, and a
+# bare SystemXBar fatals on any address no port claims.  A BadAddr
+# responder turns those into ordinary bad-address responses -- the CPU
+# squashes the wrong-path instruction, so the response is harmless, and a
+# genuine unmapped access still becomes a proper access fault.  This mirrors
+# gem5's standard NoCache hierarchy (no_cache.py).
+system.membus.badaddr_responder = BadAddr()
+system.membus.default = system.membus.badaddr_responder.pio
+
 system.mem_ctrl = SimpleMemory(range=system.mem_ranges[0], latency="30ns")
 system.mem_ctrl.port = system.membus.mem_side_ports
 

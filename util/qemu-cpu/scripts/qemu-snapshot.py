@@ -2,11 +2,13 @@
 """qemu-snapshot.py - boot the minimal RISC-V image under QEMU and capture a
 full machine snapshot for gem5 QEMU-CPU mode (pipeline stage 2 of 3).
 
-Two capture barriers are supported:
+Three capture modes are supported:
 
-  * --mode bench  : a gdb breakpoint on the benchmark's snapshot_barrier()
-                    function -- QEMU halts at *exactly* that instruction, so
-                    there is no capture-window timing race.
+  * --mode bench  : a gdb breakpoint on the matrix benchmark's
+                    snapshot_barrier() function -- QEMU halts at *exactly*
+                    that instruction, so there is no capture-window race.
+  * --mode philo  : the same race-free breakpoint barrier, on the multicore
+                    dining-philosophers benchmark (use with --smp N>1).
   * --mode shell  : wait for a marker on the serial console, then QMP-stop --
                     used to snapshot the idle interactive shell.
 
@@ -302,16 +304,18 @@ def main():
     ap.add_argument("--out",
                     default=os.path.join(REPO_ROOT, "snapshots", "snap"),
                     help="output snapshot directory")
-    ap.add_argument("--mode", choices=["bench", "shell"], default="bench",
-                    help="bench: breakpoint barrier on snapshot_barrier(); "
-                         "shell: marker barrier on the idle shell")
+    ap.add_argument("--mode", choices=["bench", "philo", "shell"],
+                    default="bench",
+                    help="bench/philo: breakpoint barrier on the benchmark's "
+                         "snapshot_barrier(); shell: marker barrier on the "
+                         "idle shell")
     ap.add_argument("--mem-mb", type=int, default=256)
     ap.add_argument("--smp", type=int, default=1, help="number of harts")
     ap.add_argument("--cpu", default=DEFAULT_CPU)
     ap.add_argument("--gdb-port", type=int, default=11234)
     ap.add_argument("--boot-timeout", type=float, default=120.0)
     ap.add_argument("--break-symbol", default="snapshot_barrier",
-                    help="(bench mode) function to breakpoint on")
+                    help="(bench/philo mode) function to breakpoint on")
     ap.add_argument("--marker", default="QEMU-CPU-MODE-SHELL-READY",
                     help="(shell mode) serial-console string to snapshot on")
     ap.add_argument("--settle", type=float, default=2.0,
@@ -323,7 +327,9 @@ def main():
     kernel = os.path.join(img, "Image")
     initrd = os.path.join(img, "initramfs.cpio.gz")
     bios = os.path.join(img, "fw_jump.bin")
-    bench_elf = os.path.join(img, "src", "rootfs", "bin", "bench")
+    # bench/philo capture breakpoints on a symbol inside the benchmark ELF;
+    # the ELF basename matches the capture mode (/bin/bench, /bin/philo).
+    bench_elf = os.path.join(img, "src", "rootfs", "bin", args.mode)
     for p in (kernel, initrd, bios):
         if not os.path.exists(p):
             sys.exit("missing image artifact: %s (run build-image.sh)" % p)
@@ -350,9 +356,8 @@ def main():
                          plat["plic_base"], plat["uart_base"],
                          plat["num_harts"], plat["timebase"]))
 
-    kcmd = "console=ttyS0 earlycon=sbi"
-    if args.mode == "shell":
-        kcmd += " qemucpu.mode=shell"
+    # /init in the initramfs picks what to run from qemucpu.mode=.
+    kcmd = "console=ttyS0 earlycon=sbi qemucpu.mode=" + args.mode
 
     qemu_cmd = [
         args.qemu, "-machine", "virt", "-cpu", args.cpu,
@@ -376,7 +381,7 @@ def main():
         ser = connect_unix(ser_sock)
         serial_log = os.path.join(out, "serial.log")
 
-        if args.mode == "bench":
+        if args.mode in ("bench", "philo"):
             # Race-free barrier: drain the console in the background while
             # gdb runs the guest to the breakpoint on snapshot_barrier().
             threading.Thread(target=serial_drainer,

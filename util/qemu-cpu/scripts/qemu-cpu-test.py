@@ -1,18 +1,23 @@
 #!/usr/bin/env python3
 """qemu-cpu-test.py - end-to-end tests for gem5 QEMU-CPU mode.
 
-  bench test       : restore the benchmark snapshot, run it on a detailed
-                     CPU, and check it prints the correct checksum on the
-                     (interrupt-driven) console.
+  bench test       : restore the matrix-benchmark snapshot, run it on a
+                     detailed CPU, and check it prints the correct checksum
+                     on the (interrupt-driven) console.
+  philo test       : restore the multicore dining-philosophers snapshot, run
+                     it, check the deterministic result on the console and
+                     confirm from stats.txt that every hart executed.
   interactive test : restore the idle-shell snapshot, connect to gem5's
                      terminal, type a command, and check the restored shell
                      wakes on the UART interrupt and runs it.
 
-Both snapshots must already exist (run qemu-snapshot.py first):
+The snapshots must already exist (run qemu-snapshot.py first):
     snapshots/bench   (qemu-snapshot.py --mode bench)
+    snapshots/philo   (qemu-snapshot.py --mode philo --smp 4)
     snapshots/shell   (qemu-snapshot.py --mode shell)
 """
 import argparse
+import json
 import os
 import re
 import socket
@@ -58,7 +63,70 @@ def test_bench(cpu, timeout, snap):
 
 
 # --------------------------------------------------------------------------
-# Test 2: idle-shell restore -> interactive
+# Test 2: multicore dining-philosophers restore -> console + per-hart stats
+# --------------------------------------------------------------------------
+def parse_stats(path):
+    """Parse a gem5 stats.txt into {name: float} (first stat dump)."""
+    stats = {}
+    if not os.path.exists(path):
+        return stats
+    with open(path) as f:
+        for line in f:
+            if line.startswith("---"):        # end of the first dump
+                if stats:
+                    break
+                continue
+            line = line.split("#", 1)[0].split()
+            if len(line) >= 2:
+                try:
+                    stats[line[0]] = float(line[1])
+                except ValueError:
+                    pass
+    return stats
+
+
+def test_philo(cpu, timeout, snap):
+    outdir = os.path.join(REPO_ROOT, "m5out",
+                          "test_philo_%s_%s" % (os.path.basename(snap), cpu))
+    try:
+        with open(os.path.join(snap, "meta.json")) as f:
+            num_harts = json.load(f)["num_harts"]
+    except OSError:
+        log("philo/%s: missing snapshot %s" % (cpu, snap))
+        return False
+    log("philo/%s: restoring %s (%d harts)" % (cpu, snap, num_harts))
+    res = subprocess.run(
+        [GEM5, "--outdir=" + outdir, RESTORE,
+         "--snapshot-dir", snap, "--cpu", cpu, "--timer-gap", "100000"],
+        capture_output=True, text=True, timeout=timeout)
+
+    term = ""
+    tf = os.path.join(outdir, "system.platform.terminal")
+    if os.path.exists(tf):
+        term = open(tf).read()
+    cause = ""
+    m = re.search(r"exit @ tick \d+ : (.*)", res.stdout)
+    if m:
+        cause = m.group(1)
+
+    # Per-hart evidence: every CPU must have advanced its cycle counter,
+    # which proves the SMP scheduler actually ran threads on every hart.
+    stats = parse_stats(os.path.join(outdir, "stats.txt"))
+    cycles = [stats.get("system.cpu%d.numCycles" % i, 0.0)
+              for i in range(num_harts)]
+    all_ran = all(c > 0 for c in cycles)
+
+    result_ok = "PHILO-DONE ok" in term
+    ok = result_ok and "m5_exit" in cause and all_ran
+    summary = re.search(r"PHILO-DONE [^\n]*", term)
+    log("philo/%s: %s | cycles/hart=%s | exit=%r -> %s"
+        % (cpu, summary.group(0) if summary else "(no PHILO-DONE line)",
+           [int(c) for c in cycles], cause, "PASS" if ok else "FAIL"))
+    return ok
+
+
+# --------------------------------------------------------------------------
+# Test 3: idle-shell restore -> interactive
 # --------------------------------------------------------------------------
 def test_interactive(cpu, timeout, snap):
     outdir = os.path.join(REPO_ROOT, "m5out",
@@ -143,13 +211,17 @@ def test_interactive(cpu, timeout, snap):
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--test", choices=["bench", "interactive", "all"],
+    ap.add_argument("--test",
+                    choices=["bench", "philo", "interactive", "all"],
                     default="all")
     ap.add_argument("--cpu", default="atomic",
                     help="CPU model(s), comma-separated")
     ap.add_argument("--bench-snap",
                     default=os.path.join(REPO_ROOT, "snapshots", "bench"),
-                    help="benchmark snapshot directory")
+                    help="matrix-benchmark snapshot directory")
+    ap.add_argument("--philo-snap",
+                    default=os.path.join(REPO_ROOT, "snapshots", "philo"),
+                    help="multicore dining-philosophers snapshot directory")
     ap.add_argument("--shell-snap",
                     default=os.path.join(REPO_ROOT, "snapshots", "shell"),
                     help="idle-shell snapshot directory")
@@ -165,6 +237,9 @@ def main():
         if args.test in ("bench", "all"):
             results.append(("bench/%s" % cpu,
                              test_bench(cpu, args.timeout, args.bench_snap)))
+        if args.test in ("philo", "all"):
+            results.append(("philo/%s" % cpu,
+                             test_philo(cpu, args.timeout, args.philo_snap)))
         if args.test in ("interactive", "all"):
             results.append(("interactive/%s" % cpu,
                              test_interactive(cpu, args.timeout,

@@ -17,10 +17,10 @@ engineering problems solved, limitations, and a detailed usage guide.
   build-image.sh          qemu-snapshot.py             restore.py + gem5
  ┌────────────────┐  ┌──────────────────────┐  ┌────────────────────────────┐
  │ kernel +       │  │ QEMU -M virt boots   │  │ gem5 HiFive board, built   │
- │ musl/busybox   │─▶│ Linux, halts at a    │─▶│ from the QEMU device tree; │
- │ initramfs +    │  │ barrier, dumps RAM / │  │ injects RAM + per-hart     │
- │ OpenSBI +      │  │ regs / CLINT / PLIC /│  │ regs + CLINT/PLIC/UART;    │
- │ /bin/bench     │  │ UART / DTB           │  │ O3/Timing/Atomic continues │
+ │ musl/busybox   │─▶│ Linux (SMP), halts   │─▶│ from the QEMU device tree; │
+ │ initramfs +    │  │ at a barrier, dumps  │  │ injects RAM + per-hart     │
+ │ OpenSBI +      │  │ RAM / regs / CLINT / │  │ regs + CLINT/PLIC/UART;    │
+ │ bench + philo  │  │ PLIC / UART / DTB    │  │ O3/Timing/Atomic/Minor run │
  └────────────────┘  └──────────────────────┘  └────────────────────────────┘
 ```
 
@@ -34,7 +34,9 @@ engineering problems solved, limitations, and a detailed usage guide.
 * **Interrupt-driven I/O works** — after restore the UART→PLIC→CPU interrupt
   path is live: a restored idle shell is fully interactive and userspace
   console output works normally.
-* **Multi-hart** — `--smp N` snapshots and restores every hart.
+* **Multicore** — `--smp N` snapshots and restores every hart; a 4-hart SMP
+  dining-philosophers benchmark restores and runs to completion (cross-hart
+  `futex`/IPI wakeups, SMP scheduling) on all four CPU models.
 * **Self-configuring** — the gem5 HiFive board (device addresses, hart count,
   timebase) is derived from the QEMU `virt` device tree.
 
@@ -47,8 +49,9 @@ engineering problems solved, limitations, and a detailed usage guide.
 | `scripts/qemu-boot.sh` | Boot the image interactively under QEMU. |
 | `scripts/qemu-snapshot.py` | Boot under QEMU, halt at a barrier, capture a snapshot. |
 | `scripts/gdb-dump-regs.py` | gdb helper: dump every hart's registers/CSRs. |
-| `scripts/qemu-cpu-test.py` | End-to-end test harness (bench + interactive). |
-| `bench/bench.c` | The benchmark restored into gem5. |
+| `scripts/qemu-cpu-test.py` | End-to-end test harness (bench + philo + interactive). |
+| `bench/bench.c` | Single-core matrix benchmark restored into gem5. |
+| `bench/philo.c` | Multicore dining-philosophers benchmark (SMP validation). |
 | `src/arch/riscv/qemu/qemu_snapshot.{hh,cc}` | gem5 `RiscvQemuSnapshotWorkload`. |
 | `configs/example/qemu_cpu/restore.py` | gem5 config: HiFive board + restore. |
 
@@ -66,33 +69,39 @@ kernel's boot-time "alternatives" patching stays inside it.
 # 1. Build the minimal RISC-V Linux image (needs the RISC-V cross toolchain)
 util/qemu-cpu/scripts/build-image.sh
 
-# 2a. Capture a benchmark snapshot (race-free gdb-breakpoint barrier)
+# 2a. Capture a matrix-benchmark snapshot (race-free gdb-breakpoint barrier)
 util/qemu-cpu/scripts/qemu-snapshot.py --mode bench --out snapshots/bench
 
-# 2b. Capture an idle-shell snapshot (for interactive restore)
+# 2b. Capture a multicore dining-philosophers snapshot (4-hart SMP)
+util/qemu-cpu/scripts/qemu-snapshot.py --mode philo --smp 4 --out snapshots/philo
+
+# 2c. Capture an idle-shell snapshot (for interactive restore)
 util/qemu-cpu/scripts/qemu-snapshot.py --mode shell --out snapshots/shell
 
 # 3. Restore into gem5 and run on a detailed CPU
 build/RISCV/gem5.opt configs/example/qemu_cpu/restore.py \
-    --snapshot-dir snapshots/bench --cpu o3
+    --snapshot-dir snapshots/philo --cpu o3
 ```
 
 A benchmark run ends with `exit @ tick N : m5_exit instruction encountered`
-and prints `BENCH-DONE ok sum=...` to gem5's terminal. For an interactive
-restore, run gem5 with `--listener-mode=on` and connect to the terminal port
-it prints (`m5term localhost <port>`). `--cpu` accepts `atomic`, `timing`,
-`o3`, `minor`.
+and prints its result to gem5's terminal — `BENCH-DONE ok sum=...` for the
+matrix benchmark, `PHILO-DONE ok meals=...` for dining philosophers. For an
+interactive restore, run gem5 with `--listener-mode=on` and connect to the
+terminal port it prints (`m5term localhost <port>`). `--cpu` accepts
+`atomic`, `timing`, `o3`, `minor`; `restore.py` builds one CPU per hart.
 
 ## Tests
 
 ```bash
-util/qemu-cpu/scripts/qemu-cpu-test.py --test all --cpu atomic,timing,o3
+util/qemu-cpu/scripts/qemu-cpu-test.py --test all --cpu atomic,timing,o3,minor
 ```
 
-Restores the benchmark snapshot (checks the checksum reaches the console) and
-the idle-shell snapshot (types a command, checks the restored shell wakes on
-the UART interrupt and executes it). All combinations pass; multi-hart
-(`--smp 2`) passes too.
+Three end-to-end tests: the matrix benchmark (checks the checksum reaches the
+console), the multicore dining philosophers (checks the deterministic result
+*and* that every hart advanced its cycle counter in `stats.txt`), and the
+idle shell (types a command, checks the restored shell wakes on the UART
+interrupt and executes it). All three pass on all four CPU models, with the
+dining-philosophers snapshot captured `--smp 4`.
 
 ## Snapshot format (`snapshots/<name>/`)
 
