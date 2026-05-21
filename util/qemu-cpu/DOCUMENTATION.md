@@ -627,7 +627,123 @@ Ruby CHI restore — multicore `snapshots/philo` on an O3 CPU, CustomMesh NoC:
 
 ---
 
-## 6. File reference
+## 6. Runtime profile
+
+This section gives the end-to-end wall-clock cost of the three-stage
+pipeline, measured on a **clean rebuild** — all collaterals (kernel, musl,
+busybox, benchmarks, snapshots) deleted, then everything rebuilt from source
+and rerun. The profiled stage-3 target is the headline configuration: an
+**O3 CPU + Ruby/CHI + Garnet** restore of the 4-hart dining-philosophers
+snapshot.
+
+**Measurement host:** Intel Core Ultra 7 265K (20 hardware threads),
+91 GiB RAM, Linux; `build/RISCV/gem5.opt` (the multi-protocol RISCV build).
+Build times scale with core count (`-j20` here); simulation times are
+single-process. Absolute numbers will differ on other hosts — the *ratios*
+are the point.
+
+### 6.1 Stage 1 — build the guest image (`build-image.sh`)
+
+| Phase | Wall time |
+|-------|-----------|
+| Extract sources + build musl libc (`rv64gc`) | ~12 s |
+| Build busybox (static, against musl) | ~14 s |
+| Assemble initramfs + compile both benchmarks | ~3 s |
+| Build Linux kernel 6.12 (`defconfig`, `Image` + `vmlinux`, `-j20`) | ~57 s |
+| Copy OpenSBI firmware | <1 s |
+| **Total** | **~87 s** |
+
+* The source tarballs (~150 MiB: Linux 6.12, busybox, musl) were already
+  present. A cold first run also downloads them — network-bound, not a build
+  cost; `build-image.sh` keeps them so reruns skip the download.
+* The **kernel is the long pole** — about two-thirds of the build. It is
+  skipped entirely on reruns if `images/Image` already exists.
+
+### 6.2 Stage 1 detail — building the benchmark app
+
+The `/bin/philo` dining-philosophers app (181 lines of C) compiles in
+**~0.05 s** with `musl-gcc -O2 -static -pthread`; `/bin/bench` is the same.
+Both are a negligible part of the ~3 s initramfs/benchmark phase above — the
+cost of stage 1 is entirely the kernel and the C library, not the workloads.
+
+### 6.3 Stage 2 — boot under QEMU + capture the snapshot
+
+`qemu-snapshot.py --mode philo --smp 4` boots Linux on 4 harts under stock
+`qemu-system-riscv64`, runs `/bin/philo` to its `snapshot_barrier()`
+breakpoint, and dumps guest RAM + every hart's registers + CLINT/PLIC/UART
+state:
+
+> **~1.25 s wall** for the whole capture (boot + barrier + dumps).
+
+**Instructions executed in QEMU:** a deterministic `-icount` boot to the same
+barrier retires **~296.5 million instructions** — the complete 4-hart SMP
+Linux boot plus the philo setup. (With `-icount` QEMU's `minstret` CSR is an
+exact retired-instruction counter and reads ~296.5 M on every hart, since it
+exposes the global count.) `-icount` is used *only* for this measurement; the
+real capture run does not enable it.
+
+This 296.5 M-instruction boot is exactly the work the snapshot lets gem5
+**skip**.
+
+### 6.4 Stage 3 — restore into gem5 (O3 + Ruby/CHI + Garnet)
+
+`restore.py --cpu o3 --ruby --network garnet --timer-gap 100000` on
+`snapshots/philo`:
+
+| Phase | Wall time |
+|-------|-----------|
+| gem5 **startup** (before any instruction is simulated) | ~17.5 s |
+| **Simulation** (philo region, barrier → `m5_exit`) | ~5.3 s |
+| **Total gem5 process** | **~22.9 s** |
+
+**Startup** spans process launch through `m5.instantiate()`: loading the
+~1.1 GiB multi-protocol `gem5.opt`, importing every SimObject, building the
+CHI + Garnet CustomMesh configuration, and injecting the 256 MiB snapshot
+(RAM + device state) in the workload's `initState()`. It was measured
+directly by rerunning with `--max-ticks 1` (build everything, simulate
+almost nothing): **17.5 s**. This is a *fixed* cost — it does not grow with
+the length of the region of interest.
+
+**Simulation** runs the dining-philosophers benchmark from the barrier to
+`m5_exit`:
+
+* 690,711,000 ticks simulated = **0.691 ms** of guest time;
+* **1,066,219 instructions** committed (1,076,075 ops) across the 4 O3 cores;
+* per-core cycles — cpu0 517,684 / cpu1 298,460 / cpu2 402,834 /
+  cpu3 511,209 (every hart advanced — a genuine multicore run);
+* ~2.0×10⁵ simulated instructions per host-second;
+* result on the console: `PHILO-DONE ok meals=320 checksum=640`.
+
+The exact instruction/cache/DRAM counts vary slightly between snapshot
+captures — SMP boot interleaving is not bit-deterministic, so each capture
+freezes the harts in a marginally different state.
+
+### 6.5 Total experiment time
+
+| Step | Wall time |
+|------|-----------|
+| 1. Build the guest image (kernel + musl/busybox + benchmarks) | ~87 s |
+| 2. QEMU boot + snapshot capture | ~1.25 s |
+| 3a. gem5 startup (config build + snapshot injection) | ~17.5 s |
+| 3b. gem5 simulation (O3 + Ruby/CHI + Garnet) | ~5.3 s |
+| **End-to-end total** | **~111 s (~1 min 50 s)** |
+
+The image build (step 1) is a **one-time** cost. Once `images/` exists,
+iterating on a detailed run costs only steps 2–3 — about **24 s** per
+restore, of which ~17.5 s is the fixed gem5 startup and only ~5.3 s is
+detailed simulation.
+
+**Why the snapshot bridge pays off.** QEMU retires the ~296.5 M-instruction
+Linux boot in ~1.25 s. gem5's detailed O3 + Ruby/CHI + Garnet model runs at
+~2×10⁵ inst/s, so simulating that *same* boot inside gem5 would take roughly
+296.5×10⁶ / 2×10⁵ ≈ **25 minutes** — before the benchmark even starts.
+QEMU-CPU mode replaces that with a ~1 s QEMU boot plus a ~17.5 s fixed
+restore cost, and spends detailed simulation only on the ~1.07 M-instruction
+region of interest.
+
+---
+
+## 7. File reference
 
 | Path | Role |
 |------|------|
