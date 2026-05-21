@@ -55,7 +55,7 @@ No QEMU modifications, no new QEMU build — only standard interfaces.
  │ + musl/busybox │─▶│  -M virt boots Linux, │─▶│  RiscvQemuSnapshotWorkload │
  │   initramfs    │  │  halts at a barrier,  │  │  injects RAM + per-hart    │
  │ + OpenSBI      │  │  dumps RAM/regs/CSRs/ │  │  regs + CLINT/PLIC/UART;   │
- │ + /bin/bench   │  │  CLINT/PLIC/UART/DTB  │  │  O3/Timing/Atomic CPU(s)   │
+ │ + testcases    │  │  CLINT/PLIC/UART/DTB  │  │  O3/Timing/Atomic CPU(s)   │
  │                │  │  -> snapshot/         │  │  continue execution       │
  └────────────────┘  └──────────────────────┘  └────────────────────────────┘
        stage 1                 stage 2                     stage 3
@@ -69,7 +69,7 @@ Produces, in `<repo>/images/`:
 |----------|-------------|
 | `Image` | Raw RISC-V Linux kernel (Linux 6.12, `defconfig`). |
 | `vmlinux` | Kernel ELF with symbols. |
-| `initramfs.cpio.gz` | musl + busybox root filesystem, plus `/bin/bench` and `/bin/philo`. |
+| `initramfs.cpio.gz` | musl + busybox root filesystem, plus one `/bin/<name>` per registered testcase. |
 | `fw_jump.bin` | OpenSBI M-mode firmware (from the host package). |
 
 Design choices:
@@ -79,17 +79,22 @@ Design choices:
 * **`rv64gc` userspace** — see §3.1.
 * **OpenSBI lives in guest RAM** — so its M-mode trap handlers (timer, SBI
   calls) are captured by the snapshot and keep working after restore.
-* **`/init` is mode-aware** — it reads `qemucpu.mode=` from the kernel command
-  line: `shell` drops straight to an interactive shell, `philo` runs the
-  multicore dining-philosophers benchmark, anything else runs the single-core
-  matrix benchmark `/bin/bench`.
+* **`/init` is generic** — it reads `qemucpu.test=<name>` from the kernel
+  command line and simply runs `/bin/<name>` (or drops to an interactive
+  shell for `qemucpu.test=shell`). It contains no per-testcase logic, so a
+  new testcase needs no `/init` change.
 
-Two benchmarks are built into the image:
+The set of testcases compiled into the image is *not* hard-coded in
+`build-image.sh`. It is driven by the **testcase registry**,
+`scripts/testcases.py` (§3.15): the build script asks `testcases.py` for the
+list of testcase C sources and compiles each into the initramfs as
+`/bin/<name>`. The registered testcases are:
 
 | Binary | Workload |
 |--------|----------|
 | `/bin/bench` | single-core, CPU-bound matrix multiply (deterministic checksum). |
 | `/bin/philo` | multicore dining philosophers — 5 pthreads contending for shared fork mutexes; used to validate SMP snapshots (§3.12). |
+| `/bin/syscall` | Linux syscall / kernel exerciser — drives file I/O, `mmap`, `fork`, `nanosleep`, signals, pipes and `poll` to validate kernel and full-system plumbing on a restored snapshot (§3.15). |
 
 ### 2.3 Stage 2 — snapshot capture (`qemu-snapshot.py`)
 
@@ -97,16 +102,18 @@ QEMU is driven through three control planes: a UNIX-socket **serial
 console**, the **QMP** monitor (pause + dump physical memory) and the
 **gdbstub** (the capture barrier + architectural register/CSR read).
 
-Three capture modes are supported:
+`qemu-snapshot.py` is testcase-agnostic: `--test <name>` selects a testcase
+from the registry (§3.15) and the registry supplies every testcase-specific
+detail (hart count, capture mechanism, barrier symbol, …). There are exactly
+two capture mechanisms, and each testcase declares which one it uses:
 
-* **`--mode bench`** — a *gdb breakpoint* on the matrix benchmark's
+* **breakpoint capture** — a *gdb breakpoint* on the testcase's
   `snapshot_barrier()` function. QEMU halts at exactly that instruction;
-  there is no capture-window timing race (§3.7).
-* **`--mode philo`** — the same race-free breakpoint barrier, on the
-  multicore dining-philosophers benchmark; use with `--smp N>1` to capture a
-  genuine SMP snapshot (§3.12).
-* **`--mode shell`** — wait for a marker on the serial console, then QMP
-  `stop`. Used to snapshot the idle interactive shell.
+  there is no capture-window timing race (§3.7). Used by every benchmark
+  testcase (`bench`, `philo`, `syscall`). The hart count comes from the
+  registry — `philo` captures `--smp 4` for a genuine SMP snapshot (§3.12).
+* **marker capture** — wait for a string on the serial console, then QMP
+  `stop`. Used to snapshot the idle interactive `shell`.
 
 Up front, `qemu-snapshot.py` also dumps the QEMU `virt` **device tree**
 (`-machine virt,dumpdtb=`) and parses it (`dtc`) to learn the platform
@@ -415,6 +422,71 @@ and reasonable — L1/L2/L3 demand accesses *and* misses, the L3 home nodes
 receiving requests over the NoC, and the DRAM controller serving both reads
 and writes. Both configurations pass (§5.5).
 
+### 3.15 Decoupling testcases from infrastructure and from gem5 mode
+
+The first cut of the tooling mixed three concerns that should be independent:
+
+* the **infrastructure** — building the image, capturing a snapshot, driving
+  gem5 — had individual testcases hard-coded into it. `qemu-snapshot.py` had a
+  `--mode {bench,philo,shell}` choice baked into its argument parser and a
+  branch per mode; `build-image.sh` named each benchmark source explicitly and
+  generated a per-testcase `/init` dispatch.
+* the **gem5 mode** — CPU model and memory system — was tangled into the test
+  harness: `qemu-cpu-test.py` had a separate `test_bench` / `test_philo` /
+  `test_ruby` / `test_interactive` function, and the Ruby path was hard-wired
+  to *one* testcase (the dining philosophers) on *one* CPU (O3). There was no
+  way to run, say, a single-core benchmark against the CHI memory subsystem.
+
+Adding a testcase therefore meant editing three files plus an `/init`
+heredoc, and a testcase could only ever run in the one gem5 mode someone had
+wired up for it.
+
+**The fix is a single declarative registry, `scripts/testcases.py`.** A
+`TestCase` entry names the workload's C source, its compiler flags, its
+default hart count, how to capture it (breakpoint vs. marker barrier) and how
+to validate a restored run (a console pass-marker, or interactive). The
+registry is the *only* place a testcase is named:
+
+* `build-image.sh` asks `testcases.py sources` which C files to compile and
+  builds each as `/bin/<name>`; `/init` became a generic `exec /bin/<name>`.
+* `qemu-snapshot.py --test <name>` looks the testcase up and drives the
+  capture from its registry entry — no per-testcase branches remain.
+* `qemu-cpu-test.py` became one generic runner over the cross product of
+  three orthogonal axes — testcase (`--test`), CPU model (`--cpu`) and memory
+  system (`--mem`: `classic`, `ruby-simple`, `ruby-garnet`). It selects a
+  validation strategy from the testcase's `check` field and never names a
+  testcase itself. **Any testcase can now be restored in any gem5 mode** —
+  the matrix benchmark under Ruby/CHI, the syscall exerciser on Minor, and so
+  on are all just points in that cross product.
+
+Adding a testcase is now: drop a self-contained C file in `bench/`, add one
+`TestCase(...)` line to `testcases.py`. The infrastructure picks it up with no
+further edits.
+
+### 3.16 The syscall testcase — validating the kernel and full-system path
+
+`bench` stresses the CPU pipeline and `philo` stresses SMP; neither exercises
+the *kernel* much — both are almost pure compute after their barrier.
+`/bin/syscall` (`bench/syscall.c`) fills that gap. After its
+`snapshot_barrier()` it drives a battery of system calls and checks each
+result:
+
+* file I/O on tmpfs (`open`/`write`/`lseek`/`read`/`fstat`/`unlink`),
+* directories (`mkdir`/`chdir`/`getcwd`/`rmdir`),
+* anonymous `mmap` — faults in and touches fresh pages, then `munmap`s,
+* `pipe` + `poll`,
+* `fork` + `waitpid` — process creation and the scheduler,
+* `clock_gettime` + `nanosleep` — blocks until a timer interrupt wakes it,
+* signal delivery — a `SIGUSR1` handler must run,
+* `uname` and the identity syscalls.
+
+Each check has a deterministic pass/fail outcome; the testcase prints one
+`  <name> .. ok` line per check and finally `SYSCALL-DONE ok pass=8 total=8`.
+It validates the parts of a restored system a pure compute loop never touches:
+S-mode trap/return on every `ecall`, demand paging, process creation, the
+timer-interrupt path and signal delivery. It passes on every CPU model and in
+both classic and Ruby/CHI memory (§5.5).
+
 ---
 
 ## 4. What works, and limitations
@@ -424,6 +496,9 @@ and writes. Both configurations pass (§5.5).
 * restore onto AtomicSimpleCPU, TimingSimpleCPU, O3CPU and MinorCPU;
 * a CPU-bound benchmark restored mid-run, reporting its result on the
   (interrupt-driven) console;
+* a syscall / kernel exerciser restored mid-run — file I/O, `mmap`, `fork`,
+  `nanosleep`, signals, pipes and `poll` all behave correctly after restore
+  (§3.16);
 * a restored idle shell that is fully interactive — it wakes on the UART
   interrupt, echoes input and executes typed commands;
 * **multicore** snapshots: a 4-hart SMP dining-philosophers workload captured
@@ -483,34 +558,34 @@ reads the architectural state.
 util/qemu-cpu/scripts/build-image.sh
 ```
 
-Builds Linux, musl, busybox and both benchmarks into `images/`. The kernel
-build is the slow step; it is skipped on reruns if `images/Image` exists.
-`util/qemu-cpu/scripts/qemu-boot.sh` boots the image interactively for a
-sanity check (`QEMU_SMP=4 qemu-boot.sh` for a multicore boot).
+Builds Linux, musl, busybox and every registered testcase into `images/`.
+The kernel build is the slow step; it is skipped on reruns if `images/Image`
+exists. `util/qemu-cpu/scripts/qemu-boot.sh` boots the image interactively for
+a sanity check (`QEMU_SMP=4 qemu-boot.sh` for a multicore boot).
+`scripts/testcases.py list` prints the registered testcases.
 
 ### 5.3 Capture a snapshot
 
+`qemu-snapshot.py --test <name>` captures any registered testcase; the hart
+count, capture mechanism and barrier all come from `testcases.py`.
+
 ```bash
-# matrix-benchmark snapshot - race-free gdb-breakpoint barrier
-util/qemu-cpu/scripts/qemu-snapshot.py --mode bench --out snapshots/bench
-
-# multicore dining-philosophers snapshot - 4-hart SMP
-util/qemu-cpu/scripts/qemu-snapshot.py --mode philo --smp 4 --out snapshots/philo
-
-# idle-shell snapshot - for interactive restore
-util/qemu-cpu/scripts/qemu-snapshot.py --mode shell --out snapshots/shell
+util/qemu-cpu/scripts/qemu-snapshot.py --test bench   --out snapshots/bench
+util/qemu-cpu/scripts/qemu-snapshot.py --test philo   --out snapshots/philo
+util/qemu-cpu/scripts/qemu-snapshot.py --test syscall --out snapshots/syscall
+util/qemu-cpu/scripts/qemu-snapshot.py --test shell   --out snapshots/shell
 ```
 
 Key options:
 
 | Option | Default | Meaning |
 |--------|---------|---------|
-| `--mode` | `bench` | `bench`/`philo` (breakpoint barrier) or `shell` (marker barrier) |
+| `--test` | `bench` | testcase to capture (any name from `testcases.py`) |
 | `--out DIR` | `snapshots/snap` | output snapshot directory |
-| `--smp N` | `1` | number of harts (use `N>1` with `--mode philo`) |
+| `--smp N` | `0` | number of harts (`0` = the testcase's registry default) |
 | `--mem-mb N` | `256` | guest RAM size |
-| `--break-symbol S` | `snapshot_barrier` | (bench/philo mode) breakpoint symbol |
-| `--marker STR` | `QEMU-CPU-MODE-SHELL-READY` | (shell mode) console marker |
+| `--break-symbol S` | (registry) | (breakpoint capture) breakpoint symbol |
+| `--marker STR` | (registry) | (marker capture) console marker |
 
 ### 5.4 Restore into gem5
 
@@ -548,13 +623,15 @@ build/RISCV/gem5.opt configs/example/qemu_cpu/restore.py \
     --ruby --network garnet --timer-gap 100000
 ```
 
-A benchmark run ends with `exit @ tick N : m5_exit instruction encountered`
-and prints its result to gem5's terminal
-(`m5out/.../system.platform.terminal`) — `BENCH-DONE ok sum=...` for the
-matrix benchmark, `PHILO-DONE ok meals=320 checksum=640` for the multicore
-dining-philosophers snapshot. The `--cpu` choice (`atomic`/`timing`/`o3`/
-`minor`) applies to every hart; `restore.py` reads the hart count from the
-snapshot's `meta.json` and builds one CPU per hart automatically.
+`restore.py` is testcase-agnostic — it injects whatever snapshot it is given
+into whatever CPU/memory mode is requested. A benchmark run ends with
+`exit @ tick N : m5_exit instruction encountered` and prints its result to
+gem5's terminal (`m5out/.../system.platform.terminal`) — `BENCH-DONE ok
+sum=...` for the matrix benchmark, `PHILO-DONE ok meals=320 checksum=640` for
+the dining philosophers, `SYSCALL-DONE ok pass=8 total=8` for the syscall
+exerciser. The `--cpu` choice (`atomic`/`timing`/`o3`/`minor`) applies to
+every hart; `restore.py` reads the hart count from the snapshot's `meta.json`
+and builds one CPU per hart automatically.
 
 For an **interactive** restore of a shell snapshot, run gem5 with
 `--listener-mode=on` and connect to the terminal port it prints:
@@ -568,49 +645,58 @@ m5term localhost 3456     # or: telnet localhost 3456
 
 ### 5.5 The test harness
 
-`qemu-cpu-test.py` runs the four end-to-end tests and reports PASS/FAIL:
+`qemu-cpu-test.py` is generic: it runs the cross product of three independent
+axes and reports PASS/FAIL for each combination.
 
 ```bash
-util/qemu-cpu/scripts/qemu-cpu-test.py --test all --cpu atomic,timing,o3,minor
+# default: every testcase, timing CPU, classic memory
+util/qemu-cpu/scripts/qemu-cpu-test.py
+
+# full sweep, capturing any missing snapshot first
+util/qemu-cpu/scripts/qemu-cpu-test.py \
+    --test all --cpu atomic,timing,o3,minor --mem all --capture
 ```
 
-* **bench test** — restores `snapshots/bench`, runs the matmul on the
-  detailed CPU, and checks `BENCH-DONE ok` appears on the console.
-* **philo test** — restores the multicore `snapshots/philo`, runs the dining
-  philosophers, checks `PHILO-DONE ok` on the console *and* parses
-  `stats.txt` to confirm every hart advanced its cycle counter (proof the
-  workload ran on all cores).
-* **ruby test** — restores the multicore `snapshots/philo` into an O3 CPU +
-  the Ruby CHI memory subsystem on the CustomMesh NoC, once with the simple
-  network and once with **Garnet**. It checks `PHILO-DONE ok`, that every
-  hart advanced, and that the CHI/DRAM statistics are populated and
-  reasonable (L1/L2/L3 cache accesses and misses, L3 home-node request
-  traffic, DRAM reads and writes).
-* **interactive test** — restores `snapshots/shell`, connects to gem5's
-  terminal, types `echo OUT$((7*9))END`, and checks the restored shell
-  wakes, executes it and prints `OUT63END` (output ≠ input, so this proves
-  *execution*, not just tty echo).
+| Option | Default | Meaning |
+|--------|---------|---------|
+| `--test` | `all` | comma-separated testcase names, or `all` |
+| `--cpu` | `timing` | comma-separated CPU models |
+| `--mem` | `classic` | comma-separated of `classic` / `ruby-simple` / `ruby-garnet`, or `all` |
+| `--snapshot-root DIR` | `snapshots/` | directory holding `snapshots/<testcase>/` |
+| `--capture` | off | capture any missing snapshot via `qemu-snapshot.py` |
 
-`--bench-snap` / `--philo-snap` / `--shell-snap` select other snapshot
-directories. `--test {bench,philo,ruby,interactive,all}` selects a single
-test. The ruby test is not parameterised by `--cpu`; it always uses O3.
+Every `(testcase, cpu, mem)` triple is one run. How it is validated comes from
+the testcase's `testcases.py` entry:
 
-Verified results — all four CPU models, multicore `snapshots/philo` captured
-with `--smp 4`:
+* a **`terminal`** testcase (`bench`, `philo`, `syscall`) must print its
+  console pass-marker, exit via `m5_exit`, and have advanced every hart's
+  cycle counter in `stats.txt`. Under a Ruby `--mem` config the CHI cache
+  hierarchy and DRAM controller must additionally show real traffic (L1/L2/L3
+  demand accesses *and* misses, L3 home-node requests, DRAM reads and writes).
+* the **`interactive`** testcase (`shell`) is validated by connecting to
+  gem5's terminal, typing `echo OUT$((7*9))END` and checking the restored
+  shell wakes, executes it and prints `OUT63END` (output ≠ input, so this
+  proves *execution*, not just tty echo).
 
-| CPU | bench | philo (4-hart SMP) | interactive |
-|-----|-------|--------------------|-------------|
-| AtomicSimpleCPU | PASS | PASS | PASS |
-| TimingSimpleCPU | PASS | PASS | PASS |
-| O3CPU | PASS | PASS | PASS |
-| MinorCPU | PASS | PASS | PASS |
+Ruby requires a timing-class CPU, so `(ruby-*, atomic)` combinations are
+skipped automatically.
 
-Ruby CHI restore — multicore `snapshots/philo` on an O3 CPU, CustomMesh NoC:
+Verified results — all four CPU models, classic memory:
 
-| Network | result | CHI / DRAM statistics |
-|---------|--------|-----------------------|
-| simple network | PASS | cache acc 280518 / miss 44655, HNF reqs 3063, DRAM rd 4386 / wr 1366 |
-| Garnet | PASS | cache acc 229921 / miss 39499, HNF reqs 2796, DRAM rd 4257 / wr 1287 |
+| CPU | bench | philo (4-hart SMP) | syscall | shell |
+|-----|-------|--------------------|---------|-------|
+| AtomicSimpleCPU | PASS | PASS | PASS | PASS |
+| TimingSimpleCPU | PASS | PASS | PASS | PASS |
+| O3CPU | PASS | PASS | PASS | PASS |
+| MinorCPU | PASS | PASS | PASS | PASS |
+
+Any testcase also restores into the Ruby CHI memory subsystem on the
+CustomMesh NoC — e.g. on an O3 CPU with the Garnet network:
+
+| Testcase | result | CHI / DRAM statistics |
+|----------|--------|-----------------------|
+| philo (4-hart SMP) | PASS | cache acc 343386 / miss 52680, HNF reqs 3959, DRAM rd 4884 / wr 1560 |
+| syscall | PASS | cache acc 432256 / miss 59682, HNF reqs 4892, DRAM rd 7218 / wr 141 |
 
 ### 5.6 Troubleshooting
 
@@ -747,14 +833,16 @@ region of interest.
 
 | Path | Role |
 |------|------|
+| `util/qemu-cpu/scripts/testcases.py` | the testcase registry — single source of truth |
 | `util/qemu-cpu/scripts/build-image.sh` | builds the RISC-V Linux image |
 | `util/qemu-cpu/scripts/qemu-common.sh` | shared QEMU machine/CPU settings |
 | `util/qemu-cpu/scripts/qemu-boot.sh` | interactive QEMU boot (sanity check) |
 | `util/qemu-cpu/scripts/qemu-snapshot.py` | capture a snapshot (barrier + DTB + dumps) |
 | `util/qemu-cpu/scripts/gdb-dump-regs.py` | gdb helper: dump all harts' registers |
-| `util/qemu-cpu/scripts/qemu-cpu-test.py` | end-to-end test harness |
-| `util/qemu-cpu/bench/bench.c` | single-core matrix benchmark |
-| `util/qemu-cpu/bench/philo.c` | multicore dining-philosophers benchmark |
+| `util/qemu-cpu/scripts/qemu-cpu-test.py` | generic end-to-end test harness (testcase × CPU × memory) |
+| `util/qemu-cpu/bench/bench.c` | testcase: single-core matrix benchmark |
+| `util/qemu-cpu/bench/philo.c` | testcase: multicore dining-philosophers benchmark |
+| `util/qemu-cpu/bench/syscall.c` | testcase: Linux syscall / kernel exerciser |
 | `src/arch/riscv/qemu/qemu_snapshot.{hh,cc}` | `RiscvQemuSnapshotWorkload` |
 | `src/arch/riscv/RiscvFsWorkload.py` | the workload SimObject |
 | `configs/example/qemu_cpu/restore.py` | gem5 restore configuration (classic + Ruby/CHI) |

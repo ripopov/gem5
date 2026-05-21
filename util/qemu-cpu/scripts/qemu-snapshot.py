@@ -2,15 +2,20 @@
 """qemu-snapshot.py - boot the minimal RISC-V image under QEMU and capture a
 full machine snapshot for gem5 QEMU-CPU mode (pipeline stage 2 of 3).
 
-Three capture modes are supported:
+This script is testcase-agnostic: it captures whichever testcase is named by
+--test, driven entirely by that testcase's entry in the scripts/testcases.py
+registry.  There are exactly two capture mechanisms, and a testcase declares
+which one it uses:
 
-  * --mode bench  : a gdb breakpoint on the matrix benchmark's
-                    snapshot_barrier() function -- QEMU halts at *exactly*
-                    that instruction, so there is no capture-window race.
-  * --mode philo  : the same race-free breakpoint barrier, on the multicore
-                    dining-philosophers benchmark (use with --smp N>1).
-  * --mode shell  : wait for a marker on the serial console, then QMP-stop --
-                    used to snapshot the idle interactive shell.
+  * breakpoint capture : a gdb breakpoint on the testcase's snapshot_barrier()
+                         function -- QEMU halts at *exactly* that instruction,
+                         so there is no capture-window race.  Used by the
+                         benchmark testcases (bench, philo, syscall, ...).
+  * marker capture     : wait for a string on the serial console, then
+                         QMP-stop.  Used to snapshot the idle 'shell'.
+
+Adding a new testcase therefore needs no change to this script -- only a new
+entry in testcases.py (and a C file built into the image).
 
 The snapshot directory contains:
 
@@ -40,6 +45,9 @@ import time
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "..", ".."))
+
+sys.path.insert(0, SCRIPT_DIR)
+import testcases                                              # noqa: E402
 
 # Fallback addresses if the DTB cannot be parsed (standard QEMU 'virt').
 DEFAULT_RAM_BASE = 0x80000000
@@ -304,32 +312,40 @@ def main():
     ap.add_argument("--out",
                     default=os.path.join(REPO_ROOT, "snapshots", "snap"),
                     help="output snapshot directory")
-    ap.add_argument("--mode", choices=["bench", "philo", "shell"],
-                    default="bench",
-                    help="bench/philo: breakpoint barrier on the benchmark's "
-                         "snapshot_barrier(); shell: marker barrier on the "
-                         "idle shell")
+    ap.add_argument("--test", choices=testcases.NAMES, default="bench",
+                    help="testcase to capture (registered in testcases.py)")
     ap.add_argument("--mem-mb", type=int, default=256)
-    ap.add_argument("--smp", type=int, default=1, help="number of harts")
+    ap.add_argument("--smp", type=int, default=0,
+                    help="number of harts (0 = the testcase's default)")
     ap.add_argument("--cpu", default=DEFAULT_CPU)
     ap.add_argument("--gdb-port", type=int, default=11234)
     ap.add_argument("--boot-timeout", type=float, default=120.0)
-    ap.add_argument("--break-symbol", default="snapshot_barrier",
-                    help="(bench/philo mode) function to breakpoint on")
-    ap.add_argument("--marker", default="QEMU-CPU-MODE-SHELL-READY",
-                    help="(shell mode) serial-console string to snapshot on")
-    ap.add_argument("--settle", type=float, default=2.0,
-                    help="(shell mode) delay after the marker")
+    ap.add_argument("--break-symbol", default=None,
+                    help="(breakpoint capture) symbol to breakpoint on "
+                         "(default: the testcase's barrier symbol)")
+    ap.add_argument("--marker", default=None,
+                    help="(marker capture) serial-console string to snapshot "
+                         "on (default: the testcase's marker)")
+    ap.add_argument("--settle", type=float, default=None,
+                    help="(marker capture) delay in seconds after the marker")
     ap.add_argument("--qemu", default="qemu-system-riscv64")
     args = ap.parse_args()
+
+    # The testcase registry drives every testcase-specific decision below;
+    # command-line flags, when given, override the registry's defaults.
+    tc = testcases.get(args.test)
+    smp = args.smp if args.smp > 0 else tc.smp
+    break_symbol = args.break_symbol or tc.barrier
+    marker = args.marker or tc.marker
+    settle = args.settle if args.settle is not None else tc.settle
 
     img = args.image_dir
     kernel = os.path.join(img, "Image")
     initrd = os.path.join(img, "initramfs.cpio.gz")
     bios = os.path.join(img, "fw_jump.bin")
-    # bench/philo capture breakpoints on a symbol inside the benchmark ELF;
-    # the ELF basename matches the capture mode (/bin/bench, /bin/philo).
-    bench_elf = os.path.join(img, "src", "rootfs", "bin", args.mode)
+    # Breakpoint capture resolves a symbol inside the testcase ELF; its
+    # basename matches the testcase name (build-image.sh: /bin/<name>).
+    test_elf = os.path.join(img, "src", "rootfs", "bin", args.test)
     for p in (kernel, initrd, bios):
         if not os.path.exists(p):
             sys.exit("missing image artifact: %s (run build-image.sh)" % p)
@@ -347,7 +363,7 @@ def main():
     # ---- device tree: derive the platform layout up front ----------------
     dtb_path = os.path.join(out, "virt.dtb")
     log("dumping + parsing the QEMU 'virt' device tree")
-    plat = dump_and_parse_dtb(args.qemu, args.cpu, args.smp, args.mem_mb,
+    plat = dump_and_parse_dtb(args.qemu, args.cpu, smp, args.mem_mb,
                               bios, dtb_path)
     mem_bytes = args.mem_mb * 1024 * 1024
     plat["ram_size"] = mem_bytes
@@ -356,12 +372,12 @@ def main():
                          plat["plic_base"], plat["uart_base"],
                          plat["num_harts"], plat["timebase"]))
 
-    # /init in the initramfs picks what to run from qemucpu.mode=.
-    kcmd = "console=ttyS0 earlycon=sbi qemucpu.mode=" + args.mode
+    # /init in the initramfs picks what to run from qemucpu.test=.
+    kcmd = "console=ttyS0 earlycon=sbi qemucpu.test=" + args.test
 
     qemu_cmd = [
         args.qemu, "-machine", "virt", "-cpu", args.cpu,
-        "-smp", str(args.smp), "-m", "%dM" % args.mem_mb,
+        "-smp", str(smp), "-m", "%dM" % args.mem_mb,
         "-bios", bios, "-kernel", kernel, "-initrd", initrd,
         "-append", kcmd, "-display", "none",
         "-chardev", "socket,id=ser0,path=%s,server=on,wait=off" % ser_sock,
@@ -370,8 +386,8 @@ def main():
         "-gdb", "tcp::%d" % args.gdb_port, "-no-reboot",
     ]
 
-    log("launching QEMU (mode=%s, %d MiB, %d hart(s))"
-        % (args.mode, args.mem_mb, args.smp))
+    log("launching QEMU (test=%s, %d MiB, %d hart(s))"
+        % (args.test, args.mem_mb, smp))
     qemu = subprocess.Popen(qemu_cmd, stdout=subprocess.DEVNULL,
                             stderr=subprocess.PIPE)
     gdb = None
@@ -381,14 +397,14 @@ def main():
         ser = connect_unix(ser_sock)
         serial_log = os.path.join(out, "serial.log")
 
-        if args.mode in ("bench", "philo"):
+        if tc.capture == "breakpoint":
             # Race-free barrier: drain the console in the background while
             # gdb runs the guest to the breakpoint on snapshot_barrier().
             threading.Thread(target=serial_drainer,
                              args=(ser, serial_log, stop_evt),
                              daemon=True).start()
-            addr = resolve_symbol(bench_elf, args.break_symbol)
-            log("breakpoint barrier: %s @ %#x" % (args.break_symbol, addr))
+            addr = resolve_symbol(test_elf, break_symbol)
+            log("breakpoint barrier: %s @ %#x" % (break_symbol, addr))
             gdb = GdbDriver(args.gdb_port)
             gdb.set_breakpoint(addr)
             gdb.continue_to_breakpoint(args.boot_timeout)
@@ -400,12 +416,12 @@ def main():
             found = threading.Event()
             threading.Thread(
                 target=serial_drainer,
-                args=(ser, serial_log, stop_evt, args.marker.encode(), found),
+                args=(ser, serial_log, stop_evt, marker.encode(), found),
                 daemon=True).start()
-            log("waiting for marker %r ..." % args.marker)
+            log("waiting for marker %r ..." % marker)
             if not found.wait(timeout=args.boot_timeout):
-                raise RuntimeError("timed out waiting for %r" % args.marker)
-            time.sleep(args.settle)
+                raise RuntimeError("timed out waiting for %r" % marker)
+            time.sleep(settle)
             log("marker seen; pausing the VM")
             qmp.execute("stop")
             gdb = GdbDriver(args.gdb_port)
@@ -423,7 +439,7 @@ def main():
                      os.path.join(out, "uart.bin"))
 
         # ---- dump per-hart registers via the gdbstub ---------------------
-        log("dumping CPU registers / CSRs for %d hart(s)" % args.smp)
+        log("dumping CPU registers / CSRs for %d hart(s)" % smp)
         regtext = gdb.dump_registers()
         harts = parse_regs(regtext)
         hart_meta = []
@@ -442,7 +458,7 @@ def main():
         meta = {
             "version": 2,
             "arch": "riscv64",
-            "mode": args.mode,
+            "test": args.test,
             "qemu_cpu": args.cpu,
             "num_harts": len(hart_meta),
             "ram": {"base": plat["ram_base"], "size": mem_bytes,

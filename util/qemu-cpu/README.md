@@ -20,9 +20,24 @@ engineering problems solved, limitations, and a detailed usage guide.
  │ musl/busybox   │─▶│ Linux (SMP), halts   │─▶│ from the QEMU device tree; │
  │ initramfs +    │  │ at a barrier, dumps  │  │ injects RAM + per-hart     │
  │ OpenSBI +      │  │ RAM / regs / CLINT / │  │ regs + CLINT/PLIC/UART;    │
- │ bench + philo  │  │ PLIC / UART / DTB    │  │ O3/Timing/Atomic/Minor run │
+ │ testcases      │  │ PLIC / UART / DTB    │  │ O3/Timing/Atomic/Minor run │
  └────────────────┘  └──────────────────────┘  └────────────────────────────┘
 ```
+
+## Testcases vs. infrastructure vs. gem5 mode
+
+The three things are deliberately kept separate:
+
+* **Infrastructure** — `build-image.sh`, `qemu-snapshot.py`, `qemu-cpu-test.py`
+  — is generic and never names an individual testcase.
+* **Testcases** — the guest workloads — live in `bench/` as self-contained C
+  files and are declared in one registry, **`scripts/testcases.py`**.
+* **gem5 mode** — CPU model and memory system — is chosen at run time, so
+  *any testcase can be restored in any mode*.
+
+Adding a testcase is therefore: drop a C file in `bench/`, add one entry to
+`testcases.py`. Nothing else changes — the image build compiles it, the
+snapshot tool captures it, and the test harness validates it automatically.
 
 ## What it does
 
@@ -49,14 +64,16 @@ engineering problems solved, limitations, and a detailed usage guide.
 
 | Path | Role |
 |------|------|
+| `scripts/testcases.py` | **The testcase registry** — single source of truth. |
 | `scripts/build-image.sh` | Builds a minimal RISC-V Linux image into `images/`. |
 | `scripts/qemu-common.sh` | Shared QEMU machine/CPU settings. |
 | `scripts/qemu-boot.sh` | Boot the image interactively under QEMU. |
 | `scripts/qemu-snapshot.py` | Boot under QEMU, halt at a barrier, capture a snapshot. |
 | `scripts/gdb-dump-regs.py` | gdb helper: dump every hart's registers/CSRs. |
-| `scripts/qemu-cpu-test.py` | End-to-end test harness (bench + philo + interactive). |
-| `bench/bench.c` | Single-core matrix benchmark restored into gem5. |
-| `bench/philo.c` | Multicore dining-philosophers benchmark (SMP validation). |
+| `scripts/qemu-cpu-test.py` | Generic end-to-end test harness (testcase × CPU × memory). |
+| `bench/bench.c` | Testcase: single-core CPU-bound matrix multiply. |
+| `bench/philo.c` | Testcase: multicore dining philosophers (SMP validation). |
+| `bench/syscall.c` | Testcase: Linux syscall / kernel exerciser. |
 | `src/arch/riscv/qemu/qemu_snapshot.{hh,cc}` | gem5 `RiscvQemuSnapshotWorkload`. |
 | `configs/example/qemu_cpu/restore.py` | gem5 config: HiFive board + restore (classic or Ruby/CHI). |
 
@@ -71,17 +88,16 @@ kernel's boot-time "alternatives" patching stays inside it.
 ## Usage
 
 ```bash
-# 1. Build the minimal RISC-V Linux image (needs the RISC-V cross toolchain)
+# 1. Build the minimal RISC-V Linux image (needs the RISC-V cross toolchain).
+#    Every testcase registered in scripts/testcases.py is compiled in.
 util/qemu-cpu/scripts/build-image.sh
 
-# 2a. Capture a matrix-benchmark snapshot (race-free gdb-breakpoint barrier)
-util/qemu-cpu/scripts/qemu-snapshot.py --mode bench --out snapshots/bench
-
-# 2b. Capture a multicore dining-philosophers snapshot (4-hart SMP)
-util/qemu-cpu/scripts/qemu-snapshot.py --mode philo --smp 4 --out snapshots/philo
-
-# 2c. Capture an idle-shell snapshot (for interactive restore)
-util/qemu-cpu/scripts/qemu-snapshot.py --mode shell --out snapshots/shell
+# 2. Capture a snapshot of any registered testcase (--test names it; the
+#    hart count, capture barrier and so on come from testcases.py).
+util/qemu-cpu/scripts/qemu-snapshot.py --test bench   --out snapshots/bench
+util/qemu-cpu/scripts/qemu-snapshot.py --test philo   --out snapshots/philo
+util/qemu-cpu/scripts/qemu-snapshot.py --test syscall --out snapshots/syscall
+util/qemu-cpu/scripts/qemu-snapshot.py --test shell   --out snapshots/shell
 
 # 3. Restore into gem5 and run on a detailed CPU
 build/RISCV/gem5.opt configs/example/qemu_cpu/restore.py \
@@ -93,6 +109,9 @@ build/RISCV/gem5.opt configs/example/qemu_cpu/restore.py \
     --ruby --network garnet --timer-gap 100000
 ```
 
+`qemu-snapshot.py --list`-equivalent: `scripts/testcases.py list` prints every
+registered testcase.
+
 A benchmark run ends with `exit @ tick N : m5_exit instruction encountered`
 and prints its result to gem5's terminal — `BENCH-DONE ok sum=...` for the
 matrix benchmark, `PHILO-DONE ok meals=...` for dining philosophers. For an
@@ -102,20 +121,28 @@ terminal port it prints (`m5term localhost <port>`). `--cpu` accepts
 
 ## Tests
 
+`qemu-cpu-test.py` is a generic harness: it runs the cross product of three
+independent axes — testcase (`--test`), CPU model (`--cpu`) and memory system
+(`--mem`: `classic`, `ruby-simple`, `ruby-garnet`) — so any testcase can be
+validated in any gem5 mode.
+
 ```bash
-util/qemu-cpu/scripts/qemu-cpu-test.py --test all --cpu atomic,timing,o3,minor
+# default: every testcase, timing CPU, classic memory
+util/qemu-cpu/scripts/qemu-cpu-test.py
+
+# full sweep, capturing any missing snapshot first
+util/qemu-cpu/scripts/qemu-cpu-test.py \
+    --test all --cpu atomic,timing,o3,minor --mem all --capture
+
+# one testcase, one mode
+util/qemu-cpu/scripts/qemu-cpu-test.py --test syscall --cpu o3 --mem ruby-garnet
 ```
 
-Four end-to-end tests: the matrix benchmark (checks the checksum reaches the
-console), the multicore dining philosophers (checks the deterministic result
-*and* that every hart advanced its cycle counter in `stats.txt`), the **ruby**
-test (restores the multicore philo snapshot into O3 + the Ruby CHI memory
-subsystem on a CustomMesh NoC, once with the simple network and once with
-Garnet, and checks the result plus the CHI/DRAM statistics), and the idle
-shell (types a command, checks the restored shell wakes on the UART interrupt
-and executes it). The first, philo and shell tests pass on all four CPU
-models; the ruby test passes on both networks. The dining-philosophers
-snapshot is captured `--smp 4`.
+How each run is validated comes from the testcase's `testcases.py` entry: a
+`terminal` testcase must print its console pass-marker, exit via `m5_exit` and
+have advanced every hart (and, under Ruby, show real CHI/DRAM traffic); the
+`interactive` shell testcase is checked by typing a command and confirming it
+executes. The harness never names a testcase itself.
 
 ## Snapshot format (`snapshots/<name>/`)
 

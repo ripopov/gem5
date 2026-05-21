@@ -96,15 +96,24 @@ log "Assembling initramfs"
 ROOTFS="$SRC/rootfs"
 mkdir -p "$ROOTFS"/{proc,sys,dev,tmp,root,etc}
 
-# The benchmarks that run under gem5 after a snapshot restore.
-#   /bin/bench - single-core, CPU-bound matrix multiply
-#   /bin/philo - multicore dining philosophers (pthreads, SMP)
-log "Building benchmarks (/bin/bench, /bin/philo)"
-$MUSLCC -O2 -static -o "$ROOTFS/bin/bench" \
-    "$REPO_ROOT/util/qemu-cpu/bench/bench.c"
-$MUSLCC -O2 -static -pthread -o "$ROOTFS/bin/philo" \
-    "$REPO_ROOT/util/qemu-cpu/bench/philo.c"
+# The testcases that run under gem5 after a snapshot restore.  The set is not
+# hard-coded here: scripts/testcases.py is the single registry, and every
+# testcase with a C source is compiled into the initramfs as /bin/<name>.
+# Adding a testcase therefore needs no change to this script.
+log "Building testcases into the initramfs (from testcases.py)"
+while IFS=$'\t' read -r tc_name tc_src tc_cflags; do
+    [ -n "$tc_name" ] || continue
+    log "  /bin/$tc_name  <-  $tc_src  [${tc_cflags:-no extra cflags}]"
+    # shellcheck disable=SC2086  # tc_cflags is an intentional word list
+    $MUSLCC -O2 -static $tc_cflags -o "$ROOTFS/bin/$tc_name" \
+        "$REPO_ROOT/$tc_src"
+done < <(python3 "$SCRIPT_DIR/testcases.py" sources)
 
+# Generic, testcase-agnostic init.  qemu-snapshot.py passes qemucpu.test=<name>
+# on the kernel command line; init simply runs /bin/<name> if it exists.
+#   qemucpu.test=shell : drop straight to an interactive shell (snapshotted
+#                        idle to test interactive restore).
+#   qemucpu.test=<name>: run /bin/<name>, captured at its snapshot_barrier().
 cat > "$ROOTFS/init" <<'INIT'
 #!/bin/sh
 # Minimal init for gem5 QEMU-CPU mode bring-up.
@@ -115,21 +124,13 @@ mount -t devtmpfs devtmpfs /dev 2>/dev/null
 export PS1='qemucpu# '
 echo
 echo "QEMU-CPU-MODE-SHELL-READY"
-# Select what to run from the kernel command line (qemu-snapshot.py sets it):
-#   qemucpu.mode=shell : drop straight to an interactive shell, snapshotted
-#                        idle to test interactive restore.
-#   qemucpu.mode=philo : run the multicore dining-philosophers benchmark.
-#   (default / bench)  : run the single-core matrix benchmark.
-# Both benchmarks are snapshotted at their snapshot_barrier() breakpoint.
-mode=bench
+test=bench
 for tok in $(cat /proc/cmdline); do
-    case "$tok" in qemucpu.mode=*) mode="${tok#qemucpu.mode=}" ;; esac
+    case "$tok" in qemucpu.test=*) test="${tok#qemucpu.test=}" ;; esac
 done
-case "$mode" in
-    shell) exec /bin/sh ;;
-    philo) /bin/philo  ;;
-    *)     /bin/bench  ;;
-esac
+if [ "$test" != shell ] && [ -x "/bin/$test" ]; then
+    "/bin/$test"
+fi
 exec /bin/sh
 INIT
 chmod +x "$ROOTFS/init"

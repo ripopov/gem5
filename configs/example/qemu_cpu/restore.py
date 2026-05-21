@@ -163,7 +163,8 @@ uart = meta["uart"]
 num_harts = meta["num_harts"]
 regs_files = [spath(h["regs_file"]) for h in meta["harts"]]
 
-print("[restore] snapshot   : %s (mode=%s)" % (snap, meta.get("mode", "?")))
+print("[restore] snapshot   : %s (test=%s)"
+      % (snap, meta.get("test", meta.get("mode", "?"))))
 print("[restore] platform   : ram=%#x+%dMiB clint=%#x plic=%#x uart=%#x"
       % (ram["base"], ram["size"] >> 20, clint["base"], plic["base"],
          uart["base"]))
