@@ -175,12 +175,12 @@ workload maps them to gem5 MiscReg indices straight out of gem5's own
 * **classic** (default) — a `SystemXBar` with a single `SimpleMemory`. Fast,
   with no cache or coherence modelling; the CPUs share the crossbar with the
   on-chip IO devices.
-* **Ruby** (`--ruby`) — gem5's Ruby coherent cache subsystem: a per-core L1
-  cache (`MI_example` protocol), a directory + a real DRAM controller, joined
-  by a configurable interconnect (the simple network or **Garnet**) on any
-  topology under `configs/topologies` — including the **Ring** added for this
-  feature (§3.14). The platform's CLINT/PLIC/UART sit on a single `piobus`
-  that the Ruby sequencers drive directly.
+* **Ruby** (`--ruby`) — gem5's Ruby coherent cache subsystem running the
+  **CHI** protocol (Arm AMBA CHI): per-core private L1 (split I/D) and L2
+  caches, a set of distributed L3 home nodes, CHI memory nodes with a real
+  DRAM controller, all laid out on a **CustomMesh** NoC described by a
+  standard CHI NoC config script. The platform's CLINT/PLIC/UART sit on a
+  single `piobus` that the Ruby sequencers drive directly.
 
 Both paths are fed the *same* snapshot and `RiscvQemuSnapshotWorkload`; only
 the wiring between the CPUs and DRAM differs. See §3.13.
@@ -347,75 +347,73 @@ counter — proof the workload ran on all cores, not just hart 0.
 This surfaced and fixed §3.11; with that fix the dining-philosophers
 scenario passes on all four CPU models (§5.5).
 
-### 3.13 Restoring into the Ruby coherent memory subsystem
+### 3.13 Restoring into the Ruby CHI memory subsystem
 
 The classic restore path puts the CPUs on a `SystemXBar` with a flat
 `SimpleMemory` — fine for functional validation, but it models no caches,
 no coherence and no realistic DRAM. To study the memory system the snapshot
 must be restorable into **Ruby**, gem5's coherent cache subsystem, with a
-real DRAM controller and a configurable interconnect.
+real DRAM controller and a real interconnect.
 
 `--ruby` switches `restore.py` to build the memory system through gem5's
-Ruby configuration machinery (`configs/ruby/Ruby.py`) instead of by hand.
-A few things had to line up:
+**CHI** configuration scripts (`configs/ruby/CHI.py` and `CHI_config.py`)
+instead of by hand. CHI is the *only* protocol qemu-cpu supports: the gem5
+RISCV binary is built with several Ruby protocols, and `restore.py` pins
+`--protocol CHI` so callers need only pass `--ruby`. CHI builds, per hart, a
+request node (RNF) with private L1 (split I/D) and L2 caches; a set of L3
+home nodes (HNF); CHI memory nodes (SNF); and a misc node (MN) — all laid
+out on a NoC. A few things had to line up:
 
-* **One sequencer per hart.** Ruby's `MI_example` protocol creates a per-core
-  L1 cache, an L1 controller and a `RubySequencer`; `restore.py` builds the
-  CPUs first (one per hart, as always) and then wires each
-  `system.ruby._cpu_ports[i]` to its CPU with `connectCpuPorts()`.
+* **CHI plugs straight into the legacy Ruby entry point.** `restore.py`
+  builds the CPUs first (one per hart, as always) and calls
+  `Ruby.create_system()`, which dispatches to `CHI.create_system()`.
+  CHI returns a list of `CPUSequencerWrapper`s (each wrapping a hart's
+  instruction + data sequencer); `restore.py` wires each
+  `system.ruby._cpu_ports[i]` to its CPU with `connectCpuPorts()`, exactly
+  as for any other protocol.
+
+* **The standard CHI NoC config script.** CHI's `CustomMesh` topology needs a
+  NoC config script describing the mesh dimensions and which router each CHI
+  node type binds to. `restore.py` defaults `--chi-config` to the standard
+  example `configs/example/noc_config/2x4.py` — a 2×4 mesh with the four
+  request nodes on routers 1/2/5/6, home nodes alongside them, the memory
+  node and main-memory SNF near router 0/4. The four philo harts map one-to-
+  one onto the four RNF routers.
 
 * **The platform PIO devices need a home.** With no `SystemXBar`, CLINT/PLIC
-  /UART are placed on a single `piobus`, and `Ruby.create_system()` is handed
-  that bus so each sequencer's PIO request port is wired to it. CPU accesses
-  to a device address are routed by the sequencer out to the `piobus`;
-  accesses to DRAM go through the Ruby cache hierarchy.
+  /UART are placed on a single `piobus`, handed to `Ruby.create_system()` so
+  each sequencer's PIO request port is wired to it. CPU accesses to a device
+  address are routed by the sequencer out to the `piobus`; accesses to DRAM
+  go through the CHI cache hierarchy. CHI's IO request node
+  (`system.ruby._io_port`) is given a home on the `piobus` too.
 
 * **The snapshot still loads through a functional port.** The workload writes
   `ram.bin` and the device registers through `system->physProxy`. Under Ruby
-  that proxy is a `RubyPortProxy`: RAM writes reach the directory's memory
-  functionally, device-register writes are forwarded to the `piobus`. The
-  injection code in `qemu_snapshot.cc` is unchanged.
-
-* **`send_evictions` is forced on.** A detailed CPU's load/store queue must be
-  told when a cache line it holds is invalidated, or it can retain stale
-  speculative data. `restore.py` sets `send_evictions = True` on every L1
-  controller after `Ruby.create_system()`.
+  that proxy is a `RubyPortProxy`: RAM writes reach memory functionally,
+  device-register writes are forwarded to the `piobus`. The injection code in
+  `qemu_snapshot.cc` is unchanged.
 
 * **The `piobus` needs a `BadAddr` responder too.** This is §3.11 again: a
   detailed CPU issues wrong-path speculative loads, and under Ruby a stray
   non-memory address is routed by the sequencer onto the `piobus`. A bare
-  `IOXBar` `fatal()`s on it (this actually aborted an early Garnet run at
-  address `0x3320`). `restore.py` attaches a `BadAddr` responder to
+  `IOXBar` `fatal()`s on it. `restore.py` attaches a `BadAddr` responder to
   `system.piobus.default`, exactly as it does for the classic crossbar.
 
-A side effect worth noting: under a *real* coherence protocol, `LR`/`SC`
-reservations are genuinely lost when another hart writes the line, so a
-contended pthread mutex produces long runs of "consecutive SC failures"
-warnings as a spinning philosopher waits for a fork. This is correct
-behaviour — the classic flat memory simply never broke a reservation — and
-the benchmark still finishes with the exact deterministic result.
+CHI is a full directory/snoop coherence protocol, so it correctly handles
+`LR`/`SC` (its L1 controller sets `sc_lock_enabled`) and an O3 CPU's
+load/store queue without any of the eviction-notification tweaks a simpler
+protocol would need.
 
-### 3.14 A Ring topology for Ruby
-
-gem5 ships mesh, crossbar and point-to-point topologies but no ring.
-`configs/topologies/Ring.py` adds one: each Ruby controller gets its own
-router, and the routers are joined into a ring by an internal link in each
-direction between neighbours. It works for both the simple network and
-Garnet; with Garnet it should be run with the default weight-based ("table")
-routing, since XY routing assumes a mesh. For the 4-hart philo snapshot the
-ring has six routers (4 L1 + 1 directory + 1 IO controller) and Garnet
-reports an average hop count of ~1.85 — as expected for a six-node ring.
-
-### 3.15 Validating the Ruby restore — multicore philo on Ring + Garnet
+### 3.14 Validating the CHI restore — multicore philo on a CHI NoC
 
 The dining-philosophers snapshot (§3.12) is the validation workload here too:
-it is restored into an **O3 CPU + Ruby**, once with the simple network and
-once with **Garnet**, both on the **Ring** topology. Each run is checked for
-the deterministic `PHILO-DONE ok meals=320 checksum=640` result, that every
-hart advanced its cycle counter, and that the Ruby/DRAM statistics are
-populated and reasonable — per-core L1 demand accesses *and* misses, the
-directory receiving coherence requests over the network, and the DRAM
-controller serving both reads and writes. Both configurations pass (§5.5).
+it is restored into an **O3 CPU + Ruby/CHI** on the CustomMesh NoC, once with
+the simple network and once with **Garnet**. Each run is checked for the
+deterministic `PHILO-DONE ok meals=320 checksum=640` result, that every hart
+advanced its cycle counter, and that the CHI/DRAM statistics are populated
+and reasonable — L1/L2/L3 demand accesses *and* misses, the L3 home nodes
+receiving requests over the NoC, and the DRAM controller serving both reads
+and writes. Both configurations pass (§5.5).
 
 ---
 
@@ -432,10 +430,11 @@ controller serving both reads and writes. Both configurations pass (§5.5).
   mid-run and restored, with cross-hart `futex`/IPI wakeups and the SMP
   scheduler running threads on every hart — verified on all four CPU models
   (§3.12).
-* **Ruby memory subsystem**: the same multicore snapshot restored into an
-  O3 CPU + Ruby coherent caches + a real DRAM controller, on a **Ring**
-  topology, with both the simple network and **Garnet** — running to
-  completion with sane Ruby/DRAM statistics (§3.13–§3.15).
+* **Ruby CHI memory subsystem**: the same multicore snapshot restored into an
+  O3 CPU + the CHI coherent cache hierarchy (per-core L1+L2, distributed L3
+  home nodes, a real DRAM controller) on a CustomMesh NoC, with both the
+  simple network and **Garnet** — running to completion with sane CHI/DRAM
+  statistics (§3.13–§3.14).
 
 **Limitations:**
 
@@ -453,10 +452,10 @@ controller serving both reads and writes. Both configurations pass (§5.5).
 * **The benchmark still calls `m5_exit`** — now purely to end the simulation
   cleanly once its console output has drained, since otherwise the guest
   would idle in a shell forever.
-* **Ruby uses the `MI_example` protocol.** It is the protocol qemu-cpu is
-  validated against (a single-level coherent L1 per core). Other protocols
-  built into the binary (CHI, MSI) are not wired up by `restore.py`; Ruby
-  also requires a timing CPU (`timing`/`o3`/`minor`, not `atomic`).
+* **Ruby uses the CHI protocol only.** `restore.py` wires up exactly one
+  Ruby protocol — CHI — on a CustomMesh NoC; the other protocols built into
+  the binary are not exposed. Ruby also requires a timing CPU
+  (`timing`/`o3`/`minor`, not `atomic`).
 
 ---
 
@@ -528,25 +527,25 @@ build/RISCV/gem5.opt configs/example/qemu_cpu/restore.py \
 | `--max-insts N` | `0` | stop after N instructions (0 = unlimited) |
 | `--max-ticks N` | `0` | stop after N ticks (0 = unlimited) |
 | `--timer-gap N` | `0` | clamp each restored timer to fire ≤ N mtime ticks after mtime (0 = exact); avoids a long idle fast-forward for shell snapshots |
-| `--ruby` | off | restore into the Ruby coherent memory subsystem instead of the classic `SystemXBar` + `SimpleMemory` (§3.13) |
+| `--ruby` | off | restore into the Ruby CHI memory subsystem instead of the classic `SystemXBar` + `SimpleMemory` (§3.13) |
 
-With `--ruby`, the Ruby/network options from `configs/ruby/Ruby.py` and
-`configs/network/Network.py` also apply:
+With `--ruby`, the CHI / network options also apply (`restore.py` pins the
+protocol to CHI and the topology to CustomMesh):
 
 | Option | Default | Meaning |
 |--------|---------|---------|
-| `--protocol P` | `MI_example` | Ruby coherence protocol (`restore.py` defaults it) |
-| `--network N` | `simple` | interconnect model: `simple` or `garnet` |
-| `--topology T` | `Crossbar` | topology from `configs/topologies` — e.g. `Ring` (§3.14) |
-| `--num-dirs N` | `1` | number of directory / DRAM controllers |
-| `--mem-type M` | `DDR3_1600_8x8` | DRAM model for the Ruby memory controller |
-| `--l1d-size S` | `32KiB` | per-core Ruby L1 cache size |
+| `--network N` | `simple` | NoC model: `simple` or `garnet` |
+| `--chi-config F` | `noc_config/2x4.py` | standard CHI NoC config script for the CustomMesh |
+| `--num-dirs N` | `1` | number of CHI memory (SNF) / DRAM controllers |
+| `--num-l3caches N` | `4` | number of CHI L3 home nodes (HNF) |
+| `--mem-type M` | `DDR3_1600_8x8` | DRAM model for the CHI memory controller |
+| `--l1d-size S` / `--l2-size S` / `--l3-size S` | `32KiB` / `256KiB` / `1MiB` | CHI cache sizes |
 
 ```bash
-# restore the multicore philo snapshot into O3 + Ruby, Garnet on a ring
+# restore the multicore philo snapshot into O3 + Ruby/CHI, Garnet NoC
 build/RISCV/gem5.opt configs/example/qemu_cpu/restore.py \
     --snapshot-dir snapshots/philo --cpu o3 \
-    --ruby --network garnet --topology Ring --timer-gap 100000
+    --ruby --network garnet --timer-gap 100000
 ```
 
 A benchmark run ends with `exit @ tick N : m5_exit instruction encountered`
@@ -582,11 +581,11 @@ util/qemu-cpu/scripts/qemu-cpu-test.py --test all --cpu atomic,timing,o3,minor
   `stats.txt` to confirm every hart advanced its cycle counter (proof the
   workload ran on all cores).
 * **ruby test** — restores the multicore `snapshots/philo` into an O3 CPU +
-  Ruby coherent memory subsystem on a **Ring** topology, once with the simple
+  the Ruby CHI memory subsystem on the CustomMesh NoC, once with the simple
   network and once with **Garnet**. It checks `PHILO-DONE ok`, that every
-  hart advanced, and that the Ruby/DRAM statistics are populated and
-  reasonable (per-core L1 accesses and misses, directory request traffic,
-  DRAM reads and writes).
+  hart advanced, and that the CHI/DRAM statistics are populated and
+  reasonable (L1/L2/L3 cache accesses and misses, L3 home-node request
+  traffic, DRAM reads and writes).
 * **interactive test** — restores `snapshots/shell`, connects to gem5's
   terminal, types `echo OUT$((7*9))END`, and checks the restored shell
   wakes, executes it and prints `OUT63END` (output ≠ input, so this proves
@@ -606,12 +605,12 @@ with `--smp 4`:
 | O3CPU | PASS | PASS | PASS |
 | MinorCPU | PASS | PASS | PASS |
 
-Ruby restore — multicore `snapshots/philo` on an O3 CPU, Ring topology:
+Ruby CHI restore — multicore `snapshots/philo` on an O3 CPU, CustomMesh NoC:
 
-| Network | result | Ruby / DRAM statistics |
-|---------|--------|------------------------|
-| simple network | PASS | L1 acc 460139 / miss 200384, dir reqs 222068, DRAM rd 22891 / wr 21681 |
-| Garnet | PASS | L1 acc 369780 / miss 170578, dir reqs 188417, DRAM rd 19094 / wr 17832 |
+| Network | result | CHI / DRAM statistics |
+|---------|--------|-----------------------|
+| simple network | PASS | cache acc 280518 / miss 44655, HNF reqs 3063, DRAM rd 4386 / wr 1366 |
+| Garnet | PASS | cache acc 229921 / miss 39499, HNF reqs 2796, DRAM rd 4257 / wr 1287 |
 
 ### 5.6 Troubleshooting
 
@@ -624,7 +623,7 @@ Ruby restore — multicore `snapshots/philo` on an O3 CPU, Ring topology:
 | gem5 terminal not listening | pass `--listener-mode=on` to `gem5.opt` |
 | `Unable to find destination ... on system.membus` | the crossbar's `BadAddr` default responder is missing — see §3.11 |
 | `Unable to find destination ... on system.piobus` | (Ruby) the `piobus` `BadAddr` default responder is missing — see §3.13 |
-| `--ruby` aborts asking for `--protocol` | only with a custom parser; `restore.py` defaults `--protocol MI_example` |
+| `This script requires the CHI build` | the gem5 binary lacks the CHI protocol — rebuild with CHI (it is in the default RISCV `MULTIPLE` build) |
 
 ---
 
@@ -642,5 +641,6 @@ Ruby restore — multicore `snapshots/philo` on an O3 CPU, Ring topology:
 | `util/qemu-cpu/bench/philo.c` | multicore dining-philosophers benchmark |
 | `src/arch/riscv/qemu/qemu_snapshot.{hh,cc}` | `RiscvQemuSnapshotWorkload` |
 | `src/arch/riscv/RiscvFsWorkload.py` | the workload SimObject |
-| `configs/example/qemu_cpu/restore.py` | gem5 restore configuration (classic + Ruby) |
-| `configs/topologies/Ring.py` | Ring interconnect topology for Ruby (§3.14) |
+| `configs/example/qemu_cpu/restore.py` | gem5 restore configuration (classic + Ruby/CHI) |
+| `configs/ruby/CHI.py`, `configs/ruby/CHI_config.py` | gem5's standard CHI configuration scripts (used by `--ruby`) |
+| `configs/example/noc_config/2x4.py` | standard CHI NoC config script for the CustomMesh |

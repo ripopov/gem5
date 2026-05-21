@@ -39,17 +39,19 @@ Two memory subsystems are supported:
 
   * classic  (default) -- a SystemXBar with a single SimpleMemory; fast, no
     coherence modelling.
-  * Ruby     (--ruby)  -- the Ruby coherent cache subsystem with a real DRAM
-    controller and an interconnect that is either the simple network or
-    Garnet, on any topology under configs/topologies (e.g. Ring).
+  * Ruby     (--ruby)  -- the Ruby coherent cache subsystem running the CHI
+    protocol (Arm AMBA CHI): per-core private L1+L2 caches, distributed L3
+    home nodes, and a real DRAM controller, wired up by gem5's standard CHI
+    configuration scripts (configs/ruby/CHI.py + configs/ruby/CHI_config.py).
+    The interconnect is a CustomMesh NoC described by a standard CHI NoC
+    config script (default: configs/example/noc_config/2x4.py).
 
 Usage:
     build/RISCV/gem5.opt configs/example/qemu_cpu/restore.py \\
         --snapshot-dir snapshots/bench --cpu o3
 
     build/RISCV/gem5.opt configs/example/qemu_cpu/restore.py \\
-        --snapshot-dir snapshots/philo --cpu o3 \\
-        --ruby --network garnet --topology Ring
+        --snapshot-dir snapshots/philo --cpu o3 --ruby
 """
 import argparse
 import json
@@ -91,39 +93,56 @@ parser.add_argument("--timer-gap", type=int, default=0,
                          "restore). An early timer interrupt is harmless to "
                          "Linux and avoids a long idle fast-forward.")
 parser.add_argument("--ruby", action="store_true",
-                    help="use the Ruby coherent memory subsystem instead of "
-                         "the classic SystemXBar + SimpleMemory")
+                    help="use the Ruby coherent memory subsystem (CHI "
+                         "protocol) instead of the classic SystemXBar + "
+                         "SimpleMemory")
+
+# Path to the standard CHI NoC config script that describes the CustomMesh.
+NOC_CONFIG = os.path.join(sys.path[0], "..", "noc_config", "2x4.py")
 
 if USE_RUBY:
-    # The RISCV gem5 binary is built with multiple Ruby protocols; the Ruby
-    # option machinery insists on an explicit --protocol.  Default it to
-    # MI_example (the protocol qemu-cpu is validated against) so callers need
-    # only ask for --ruby.
+    # The RISCV gem5 binary is built with several Ruby protocols; the Ruby
+    # option machinery insists on an explicit --protocol.  qemu-cpu supports
+    # exactly one -- CHI -- so it is pinned here and not exposed to callers.
     if not any(a == "--protocol" or a.startswith("--protocol=")
                for a in sys.argv):
-        sys.argv += ["--protocol", "MI_example"]
+        sys.argv += ["--protocol", "CHI"]
 
     from ruby import Ruby
 
-    # Cache / directory / DRAM knobs consumed by the Ruby protocol and by
-    # Ruby.setup_memory_controllers().  These normally come from the common
-    # Options.py; qemu-cpu only needs this handful, so they are spelled out.
+    # Cache / home-node / DRAM knobs consumed by the CHI configuration
+    # (configs/ruby/CHI.py + CHI_config.py) and by Ruby's memory-controller
+    # setup.  These normally come from the common Options.py; qemu-cpu only
+    # needs this handful, so they are spelled out.
     parser.add_argument("--num-dirs", type=int, default=1,
-                        help="number of Ruby directory / DRAM controllers")
+                        help="number of CHI memory (SNF) / DRAM controllers")
+    parser.add_argument("--num-l3caches", type=int, default=4,
+                        help="number of CHI L3 home nodes (HNF)")
     parser.add_argument("--cacheline-size", type=int, default=64,
                         help="cache line size in bytes")
-    parser.add_argument("--l1d-size", type=str, default="32KiB",
-                        help="per-core Ruby L1 cache size")
-    parser.add_argument("--l1d-assoc", type=int, default=4,
-                        help="per-core Ruby L1 cache associativity")
+    parser.add_argument("--l1i-size", type=str, default="32KiB")
+    parser.add_argument("--l1i-assoc", type=int, default=4)
+    parser.add_argument("--l1d-size", type=str, default="32KiB")
+    parser.add_argument("--l1d-assoc", type=int, default=4)
+    parser.add_argument("--l2-size", type=str, default="256KiB")
+    parser.add_argument("--l2-assoc", type=int, default=8)
+    parser.add_argument("--l3-size", type=str, default="1MiB")
+    parser.add_argument("--l3-assoc", type=int, default=16)
     parser.add_argument("--mem-type", type=str, default="DDR3_1600_8x8",
-                        help="DRAM model for the Ruby memory controller")
+                        help="DRAM model for the CHI memory controller")
     parser.add_argument("--enable-dram-powerdown", action="store_true",
                         help="enable low-power DRAM states")
-    # Adds --ruby-clock, --topology, --network, --protocol, Garnet knobs, ...
+    # Adds --ruby-clock, --topology, --network, --protocol, --chi-config, ...
     Ruby.define_options(parser)
+    # CHI is built around a NoC; default to the CustomMesh described by the
+    # standard CHI NoC config script rather than the generic Crossbar.
+    parser.set_defaults(topology="CustomMesh")
 
 args = parser.parse_args()
+
+if USE_RUBY and args.topology == "CustomMesh" and not args.chi_config:
+    # CustomMesh needs a NoC config script; use the standard 2x4 example.
+    args.chi_config = os.path.abspath(NOC_CONFIG)
 
 # --------------------------------------------------------------------------
 # Read the snapshot metadata (DTB-derived platform description)
@@ -152,8 +171,8 @@ print("[restore] harts      : %d   timebase=%d Hz"
       % (num_harts, meta["timebase"]))
 print("[restore] CPU model  : %s" % args.cpu)
 if args.ruby:
-    print("[restore] memory     : Ruby (%s protocol, %s network, %s topology)"
-          % (args.protocol, args.network, args.topology))
+    print("[restore] memory     : Ruby CHI (%s network, %s topology)"
+          % (args.network, args.topology))
 else:
     print("[restore] memory     : classic (SystemXBar + SimpleMemory)")
 
@@ -296,21 +315,16 @@ for cpu in system.cpu:
 # Ruby memory subsystem (built after the CPUs so their ports can be wired)
 # --------------------------------------------------------------------------
 if args.ruby:
-    # The MI_example protocol indexes its per-core caches/sequencers by
-    # num_cpus; for a snapshot restore that is exactly the hart count.
+    # CHI's create_system asserts num_cpus == len(cpus); for a snapshot
+    # restore that is exactly the hart count.
     args.num_cpus = num_harts
     system.cache_line_size = args.cacheline_size
 
-    # Ruby's send_evicts() heuristic inspects options.cpu_type by name; give
-    # it a CPU class valid for this (RISCV) build so it does not trip over
-    # the X86 default.  Eviction notifications are then forced on below.
-    args.cpu_type = {
-        "atomic": "RiscvAtomicSimpleCPU",
-        "timing": "RiscvTimingSimpleCPU",
-        "o3": "RiscvO3CPU",
-        "minor": "RiscvMinorCPU",
-    }[args.cpu]
-
+    # Build the CHI cache hierarchy + NoC.  Ruby.create_system dispatches to
+    # configs/ruby/CHI.py, which creates one request node (RNF, private
+    # L1+L2) per hart, the L3 home nodes (HNF), the CHI memory nodes (SNF)
+    # and the misc node, then lays them out on the CustomMesh; Ruby then
+    # attaches a DRAM controller to each SNF.
     Ruby.create_system(
         args,
         True,             # full_system
@@ -323,13 +337,11 @@ if args.ruby:
     system.ruby.clk_domain = SrcClockDomain(
         clock=args.ruby_clock, voltage_domain=system.voltage_domain
     )
-    # A detailed CPU's load/store queue must be told when a cache line it
-    # holds is evicted, or it can keep stale speculative data; force the L1
-    # controllers to forward evictions regardless of Ruby's CPU heuristic.
-    for i in range(num_harts):
-        getattr(system.ruby, "l1_cntrl%d" % i).send_evictions = True
+    # The CHI IO request node forwards device-side accesses into Ruby; give
+    # its sequencer a home on the piobus (mirrors a full-system Ruby config).
+    system.piobus.mem_side_ports = system.ruby._io_port.in_ports
 
-    # Wire each Ruby sequencer to its hart's CPU ports.
+    # Wire each hart's CPU ports to its CHI request node's sequencers.
     for i, cpu in enumerate(system.cpu):
         system.ruby._cpu_ports[i].connectCpuPorts(cpu)
 

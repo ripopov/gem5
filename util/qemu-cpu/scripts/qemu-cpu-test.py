@@ -8,9 +8,9 @@
                      it, check the deterministic result on the console and
                      confirm from stats.txt that every hart executed.
   ruby test        : restore the multicore dining-philosophers snapshot into
-                     a Ruby coherent memory subsystem (O3 CPU, Ring topology),
-                     once with the simple network and once with Garnet; check
-                     the deterministic result and that the Ruby / DRAM
+                     the Ruby CHI coherent memory subsystem (O3 CPU, CustomMesh
+                     NoC), once with the simple network and once with Garnet;
+                     check the deterministic result and that the CHI / DRAM
                      statistics are populated and reasonable.
   interactive test : restore the idle-shell snapshot, connect to gem5's
                      terminal, type a command, and check the restored shell
@@ -139,8 +139,8 @@ def _sum_stats(stats, suffix):
 
 
 def test_ruby(timeout, snap, network):
-    """Restore the philo snapshot into Ruby (O3 CPU, Ring topology) on the
-    given network and validate the result plus the Ruby/DRAM statistics."""
+    """Restore the philo snapshot into Ruby/CHI (O3 CPU, CustomMesh NoC) on
+    the given network and validate the result plus the CHI/DRAM statistics."""
     cpu = "o3"
     outdir = os.path.join(REPO_ROOT, "m5out",
                           "test_ruby_%s_%s" % (network,
@@ -151,12 +151,12 @@ def test_ruby(timeout, snap, network):
     except OSError:
         log("ruby-%s: missing snapshot %s" % (network, snap))
         return False
-    log("ruby-%s: restoring %s (%d harts, O3 + Ruby, Ring topology)"
+    log("ruby-%s: restoring %s (%d harts, O3 + CHI, CustomMesh NoC)"
         % (network, snap, num_harts))
     res = subprocess.run(
         [GEM5, "--outdir=" + outdir, RESTORE,
          "--snapshot-dir", snap, "--cpu", cpu, "--timer-gap", "100000",
-         "--ruby", "--network", network, "--topology", "Ring"],
+         "--ruby", "--network", network],
         capture_output=True, text=True, timeout=timeout)
 
     term = ""
@@ -173,18 +173,17 @@ def test_ruby(timeout, snap, network):
     cycles = [stats.get("system.cpu%d.numCycles" % i, 0.0)
               for i in range(num_harts)]
     all_ran = all(c > 0 for c in cycles)
-    # The Ruby cache hierarchy and DRAM controller must show real traffic:
-    #   - every L1 saw demand accesses, and some missed (so the network and
-    #     directory were genuinely exercised),
-    #   - the directory received coherence requests over the network,
+    # The CHI cache hierarchy and DRAM controller must show real traffic:
+    #   - the L1/L2/L3 caches saw demand accesses, and some missed (so the
+    #     NoC and home nodes were genuinely exercised),
+    #   - the L3 home node received requests over the NoC,
     #   - the DRAM controller served reads and writes.
-    l1_acc = _sum_stats(stats, "cacheMemory.m_demand_accesses")
-    l1_miss = _sum_stats(stats, "cacheMemory.m_demand_misses")
-    dir_msgs = stats.get("system.ruby.dir_cntrl0.requestToDir.m_msg_count",
-                         0.0)
+    cache_acc = _sum_stats(stats, "cache.m_demand_accesses")
+    cache_miss = _sum_stats(stats, "cache.m_demand_misses")
+    hnf_reqs = stats.get("system.ruby.hnf0.cntrl.reqIn.m_msg_count", 0.0)
     dram_rd = stats.get("system.mem_ctrls.readReqs", 0.0)
     dram_wr = stats.get("system.mem_ctrls.writeReqs", 0.0)
-    stats_ok = (l1_acc > 0 and l1_miss > 0 and dir_msgs > 0
+    stats_ok = (cache_acc > 0 and cache_miss > 0 and hnf_reqs > 0
                 and dram_rd > 0 and dram_wr > 0)
 
     result_ok = "PHILO-DONE ok" in term
@@ -193,8 +192,8 @@ def test_ruby(timeout, snap, network):
     log("ruby-%s: %s | cycles/hart=%s" % (network,
         summary.group(0) if summary else "(no PHILO-DONE line)",
         [int(c) for c in cycles]))
-    log("ruby-%s: ruby L1 acc=%d miss=%d | dir reqs=%d | DRAM rd=%d wr=%d "
-        "-> %s" % (network, int(l1_acc), int(l1_miss), int(dir_msgs),
+    log("ruby-%s: CHI cache acc=%d miss=%d | HNF reqs=%d | DRAM rd=%d wr=%d "
+        "-> %s" % (network, int(cache_acc), int(cache_miss), int(hnf_reqs),
                    int(dram_rd), int(dram_wr), "PASS" if ok else "FAIL"))
     return ok
 
