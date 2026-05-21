@@ -29,8 +29,10 @@
 #ifndef __ARCH_RISCV_QEMU_QEMU_SNAPSHOT_HH__
 #define __ARCH_RISCV_QEMU_QEMU_SNAPSHOT_HH__
 
+#include <cstdint>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 #include "base/loader/object_file.hh"
 #include "base/loader/symtab.hh"
@@ -50,42 +52,55 @@ namespace RiscvISA
  * captured under QEMU (see util/qemu-cpu/) instead of booting a kernel.
  *
  * At initState() it
- *   1. copies the captured guest RAM image into gem5 physical memory,
- *   2. restores every GPR / PC / CSR of the boot hart from the register
- *      dump produced by the QEMU gdbstub, and
- *   3. seeds the CLINT mtime / mtimecmp so the guest's timer keeps ticking.
+ *   1. copies the captured guest RAM image into gem5 physical memory;
+ *   2. restores device state through MMIO -- CLINT (mtime/mtimecmp/msip),
+ *      PLIC (priority/enable/threshold) and the 8250 UART (IER/LCR/MCR) --
+ *      so timers and interrupt-driven I/O keep working after restore;
+ *   3. restores every GPR, FP register and CSR of every hart from the
+ *      per-hart gdbstub register dumps.
  *
- * gem5's O3 or TimingSimpleCPU then continues execution exactly where
- * QEMU left off - which lets a slow Linux boot happen under fast QEMU
- * emulation while the benchmark of interest runs under gem5's detailed
- * timing models.
+ * gem5's O3 / Timing / Atomic CPUs then continue execution exactly where
+ * QEMU left off.
  */
 class QemuSnapshot : public Workload
 {
   protected:
     const std::string ramFile;
     const Addr ramAddr;
-    const std::string regsFile;
+
     const Addr clintAddr;
-    const uint64_t clintMtime;
-    const uint64_t clintMtimecmp;
+    const std::string clintFile;
+    const uint64_t clintTimerGap;
+
+    const Addr plicAddr;
+    const std::string plicFile;
+    const unsigned plicNumSrc;
+    const unsigned plicNumContexts;
+
+    const Addr uartAddr;
+    const std::string uartFile;
+
     const bool verbose;
 
-    /** Parsed register dump (lower-case name -> 64-bit value). */
-    std::unordered_map<std::string, uint64_t> regs;
-    /** Restored program counter of the boot hart. */
+    /** Per-hart parsed register dumps (lower-case name -> 64-bit value). */
+    std::vector<std::unordered_map<std::string, uint64_t>> hartRegs;
+    /** Restored program counter of hart 0. */
     Addr entryPc = 0;
 
     loader::SymbolTable kernelSymtab;
 
-    /** Read regs.txt into the `regs` map; called from the constructor. */
-    void parseRegs();
-    /** Copy the guest RAM image into physical memory. */
+    /** Read a whole binary file into a byte vector. */
+    static std::vector<uint8_t> readFile(const std::string &path);
+    /** Parse a `name 0xvalue` register dump. */
+    static std::unordered_map<std::string, uint64_t>
+        parseRegs(const std::string &path);
+
     void loadRam();
-    /** Restore GPRs / PC / CSRs / privilege onto one hart. */
-    void applyRegisters(ThreadContext *tc);
-    /** Seed CLINT mtime / mtimecmp through its MMIO interface. */
     void restoreClint();
+    void restorePlic();
+    void restoreUart();
+    void applyRegisters(ThreadContext *tc,
+            const std::unordered_map<std::string, uint64_t> &regs);
 
   public:
     PARAMS(RiscvQemuSnapshotWorkload);

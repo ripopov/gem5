@@ -4,29 +4,35 @@
  * Built into the initramfs (build-image.sh) as /bin/bench and started by
  * /init.  Flow that the snapshot bridge relies on:
  *
- *   1. print BENCH_READY  -- qemu-snapshot.py waits for this, then stops
- *      the VM *immediately*, so the snapshot catches this process right
- *      at the start of the matrix-multiply loop;
- *   2. the matrix multiply -- a long CPU-bound region with no system
- *      calls, so it continues purely by instruction execution after the
- *      snapshot is restored into gem5's detailed CPU;
- *   3. signal completion to gem5 with an m5op: m5_exit if the checksum is
- *      correct, m5_fail otherwise.  m5ops are used (rather than printing
- *      to the console) because after a snapshot restore the interrupt-
- *      driven UART path is not wired up, whereas gem5 decodes m5ops
- *      directly - so this gives an unambiguous pass/fail.
- *
- * Under plain QEMU the trailing m5op is an illegal instruction; that is
- * harmless because qemu-snapshot.py always snapshots before it runs.
+ *   1. snapshot_barrier() -- an explicit, race-free barrier.  qemu-snapshot.py
+ *      sets a gdb breakpoint on this function, so QEMU halts at *exactly*
+ *      this instruction: the snapshot captures bench right at the start of
+ *      its CPU-bound region, with no capture-window timing race.
+ *   2. the matrix multiply -- a long CPU-bound region with no system calls,
+ *      continued purely by instruction execution after a snapshot restore.
+ *   3. report the checksum on the console with write(2).  After the device
+ *      state (PLIC, UART) is restored this reaches gem5's terminal normally;
+ *      bench then calls m5_exit only to end the simulation cleanly.
  */
 #include <unistd.h>
 #include <stdint.h>
+#include <termios.h>
 
 #define N 64
 #define REPS 8
 #define EXPECTED_SUM 3210805248ULL   /* verified under QEMU */
 
 static uint64_t a[N][N], b[N][N], c[N][N];
+
+/*
+ * The explicit snapshot barrier.  Kept in its own non-inlined function so it
+ * has a stable symbol address for qemu-snapshot.py to breakpoint on.
+ */
+__attribute__((noinline)) void
+snapshot_barrier(void)
+{
+    __asm__ volatile("nop" ::: "memory");
+}
 
 /* gem5 m5ops: instruction = 0x0000007b | (func << 25). */
 static inline void
@@ -36,19 +42,28 @@ m5_exit(uint64_t delay)
     __asm__ volatile(".word 0x4200007b" : : "r"(a0) : "memory");
 }
 
-static inline void
-m5_fail(uint64_t delay, uint64_t code)
+/* Append an unsigned decimal number to p, return the new end pointer. */
+static char *
+u64_to_dec(char *p, uint64_t v)
 {
-    register uint64_t a0 __asm__("a0") = delay;
-    register uint64_t a1 __asm__("a1") = code;
-    __asm__ volatile(".word 0x4400007b" : : "r"(a0), "r"(a1) : "memory");
+    char tmp[24];
+    int n = 0;
+    do {
+        tmp[n++] = (char)('0' + v % 10);
+        v /= 10;
+    } while (v);
+    while (n)
+        *p++ = tmp[--n];
+    return p;
 }
 
 int
 main(void)
 {
-    /* (1) Snapshot point: qemu-snapshot.py stops the VM right here. */
     write(1, "QEMU-CPU-MODE-BENCH-READY\n", 26);
+
+    /* (1) Race-free snapshot point. */
+    snapshot_barrier();
 
     /* (2) CPU-bound region - no syscalls until it finishes. */
     for (int i = 0; i < N; i++)
@@ -71,11 +86,22 @@ main(void)
         for (int j = 0; j < N; j++)
             sum += c[i][j];
 
-    /* (3) Tell gem5 whether the detailed run reproduced the checksum. */
-    if (sum == EXPECTED_SUM)
-        m5_exit(0);
-    else
-        m5_fail(0, sum);
+    /* (3) Report on the console - works once PLIC/UART state is restored. */
+    char msg[64];
+    char *p = msg;
+    const char *tag = (sum == EXPECTED_SUM) ? "BENCH-DONE ok sum="
+                                            : "BENCH-DONE BAD sum=";
+    while (*tag)
+        *p++ = *tag++;
+    p = u64_to_dec(p, sum);
+    *p++ = '\n';
+    write(1, msg, (size_t)(p - msg));
 
+    /* Wait for the console output to be fully transmitted by the (now
+     * interrupt-driven) UART before ending the simulation. */
+    tcdrain(1);
+
+    /* End the gem5 simulation cleanly. */
+    m5_exit(0);
     return 0;
 }

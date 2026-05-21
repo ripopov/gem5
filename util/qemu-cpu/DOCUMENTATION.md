@@ -4,8 +4,8 @@
 > Scope: RISC-V 64-bit full-system
 
 This document explains the design of gem5's QEMU-CPU mode, the engineering
-problems that were solved while building it, its current limitations, and a
-complete usage guide. For a short overview see [`README.md`](README.md).
+problems solved while building it, its current limitations, and a complete
+usage guide. For a short overview see [`README.md`](README.md).
 
 ---
 
@@ -19,12 +19,11 @@ the *benchmark that runs afterwards* is.
 The SystemC world solves this with the QEMU **QBox**: QEMU is embedded as a
 library and used as a fast CPU model. gem5 has no equivalent. Its closest
 mechanism, the KVM CPU, only works when the host and guest ISA match — so it
-cannot accelerate a RISC-V guest on an x86 host, which is exactly the common
-case.
+cannot accelerate a RISC-V guest on an x86 host, the common case.
 
 QEMU-CPU mode fills that gap: **boot fast under stock QEMU, snapshot the
-machine, and restore that snapshot into a gem5 detailed CPU** so that only the
-region of interest is simulated in detail.
+machine, and restore that snapshot into a gem5 detailed CPU** so that only
+the region of interest is simulated in detail.
 
 ### Why a "snapshot bridge" and not embedded libqemu
 
@@ -53,10 +52,11 @@ No QEMU modifications, no new QEMU build — only standard interfaces.
   build-image.sh          qemu-snapshot.py             restore.py + gem5
  ┌────────────────┐  ┌──────────────────────┐  ┌────────────────────────────┐
  │ Linux kernel   │  │ qemu-system-riscv64   │  │ gem5 RiscvSystem (HiFive)  │
- │ + musl/busybox │─▶│  -M virt boots Linux  │─▶│  RiscvQemuSnapshotWorkload │
- │   initramfs    │  │  to a marker, then    │  │  injects RAM+regs+CLINT,   │
- │ + OpenSBI      │  │  QMP+gdbstub dump the │  │  O3/Timing/Atomic CPU      │
- │ + /bin/bench   │  │  machine -> snapshot/ │  │  continues execution       │
+ │ + musl/busybox │─▶│  -M virt boots Linux, │─▶│  RiscvQemuSnapshotWorkload │
+ │   initramfs    │  │  halts at a barrier,  │  │  injects RAM + per-hart    │
+ │ + OpenSBI      │  │  dumps RAM/regs/CSRs/ │  │  regs + CLINT/PLIC/UART;   │
+ │ + /bin/bench   │  │  CLINT/PLIC/UART/DTB  │  │  O3/Timing/Atomic CPU(s)   │
+ │                │  │  -> snapshot/         │  │  continue execution       │
  └────────────────┘  └──────────────────────┘  └────────────────────────────┘
        stage 1                 stage 2                     stage 3
 ```
@@ -70,243 +70,230 @@ Produces, in `<repo>/images/`:
 | `Image` | Raw RISC-V Linux kernel (Linux 6.12, `defconfig`). |
 | `vmlinux` | Kernel ELF with symbols. |
 | `initramfs.cpio.gz` | musl + busybox root filesystem, plus `/bin/bench`. |
-| `fw_jump.bin` | OpenSBI M-mode firmware (copied from the host package). |
+| `fw_jump.bin` | OpenSBI M-mode firmware (from the host package). |
 
 Design choices:
 
-* **initramfs, not a disk.** The whole root filesystem lives in guest RAM, so
-  a snapshot contains *no virtio block-device state* — there is no device
-  queue to serialise across the QEMU→gem5 boundary.
-* **`rv64gc` userspace.** See §3.1 — userspace is built strictly for the base
-  `rv64gc` ISA so every executed instruction is one gem5 decodes.
-* **OpenSBI in RAM.** OpenSBI is the M-mode firmware. Because it lives in guest
-  RAM it is captured by the snapshot, so its M-mode trap handlers (timer, SBI
-  calls) keep working after restore without gem5 modelling them specially.
+* **initramfs, not a disk** — the whole root filesystem lives in guest RAM,
+  so a snapshot contains *no virtio block-device state*.
+* **`rv64gc` userspace** — see §3.1.
+* **OpenSBI lives in guest RAM** — so its M-mode trap handlers (timer, SBI
+  calls) are captured by the snapshot and keep working after restore.
+* **`/init` is mode-aware** — with `qemucpu.mode=shell` on the kernel command
+  line it drops straight to an interactive shell; otherwise it runs
+  `/bin/bench`.
 
 ### 2.3 Stage 2 — snapshot capture (`qemu-snapshot.py`)
 
-QEMU is launched with three control planes wired up simultaneously:
+QEMU is driven through three control planes: a UNIX-socket **serial
+console**, the **QMP** monitor (pause + dump physical memory) and the
+**gdbstub** (the capture barrier + architectural register/CSR read).
 
-* a **UNIX-socket serial console** — to watch for the marker that says the
-  guest has reached the point of interest;
-* the **QMP monitor** — to pause the VM and dump physical memory;
-* the **gdbstub** — to read the architectural CPU and CSR state.
+Two capture barriers are supported:
 
-The driver:
+* **`--mode bench`** — a *gdb breakpoint* on the benchmark's
+  `snapshot_barrier()` function. QEMU halts at exactly that instruction;
+  there is no capture-window timing race (§3.7).
+* **`--mode shell`** — wait for a marker on the serial console, then QMP
+  `stop`. Used to snapshot the idle interactive shell.
 
-1. connects QMP up front (so the eventual `stop` is a single, sub-millisecond
-   command);
-2. waits on the serial console for the marker string;
-3. issues QMP `stop` the instant the marker appears;
-4. dumps state into a snapshot directory.
+Up front, `qemu-snapshot.py` also dumps the QEMU `virt` **device tree**
+(`-machine virt,dumpdtb=`) and parses it (`dtc`) to learn the platform
+layout — see §3.8.
 
 The snapshot directory contains:
 
 | File | Contents | How captured |
 |------|----------|--------------|
-| `ram.bin` | Raw guest DRAM (256 MiB @ `0x80000000`) | QMP `pmemsave` |
-| `clint.bin` | CLINT MMIO region (`mtime`, `mtimecmp`) | QMP `pmemsave` (MMIO is dispatched too) |
-| `plic.bin` | PLIC MMIO region | QMP `pmemsave` |
-| `regs.txt` | Every GPR + CSR of the boot hart, `name 0xvalue` | gdbstub via `gdb-dump-regs.py` |
-| `serial.log` | Full boot console transcript | serial socket |
-| `meta.json` | Base addresses, sizes, paths | written by the driver |
+| `ram.bin` | Raw guest DRAM | QMP `pmemsave` |
+| `clint.bin` | CLINT MMIO dump (`mtime`/`mtimecmp`/`msip`) | QMP `pmemsave` |
+| `plic.bin` | PLIC MMIO dump (priority/enable/threshold) | QMP `pmemsave` |
+| `uart.bin` | 8250 UART register dump | QMP `pmemsave` |
+| `regs.hart<N>.txt` | Every GPR + FP reg + CSR of hart N | gdbstub |
+| `virt.dtb` | The QEMU `virt` device tree | `-machine dumpdtb` |
+| `serial.log` | Console transcript | serial socket |
+| `meta.json` | Addresses/sizes/hart list + DTB-derived platform | — |
 
 ### 2.4 Stage 3 — restore into gem5 (`restore.py` + `RiscvQemuSnapshotWorkload`)
 
-`configs/example/qemu_cpu/restore.py` builds a gem5 `RiscvSystem` whose HiFive
-platform deliberately mirrors the QEMU `virt` machine:
+`configs/example/qemu_cpu/restore.py` builds a gem5 `RiscvSystem` whose
+HiFive platform is configured **from the snapshot's `meta.json`** — CLINT,
+PLIC and UART base addresses, DRAM base/size, the hart count and the CLINT
+RTC timebase all come from the QEMU device tree rather than being hand-coded
+(§3.8). One CPU is created per hart.
 
-| Device | Address | Matches QEMU `virt` |
-|--------|---------|---------------------|
-| DRAM | `0x80000000` | yes |
-| CLINT | `0x02000000` | yes |
-| PLIC | `0x0c000000` | yes |
-| UART (8250/16550) | `0x10000000` | yes |
-| CLINT timebase | 10 MHz RTC | yes |
+The system's workload is the C++ SimObject **`RiscvQemuSnapshotWorkload`**
+(`gem5::RiscvISA::QemuSnapshot`, `src/arch/riscv/qemu/qemu_snapshot.{hh,cc}`).
+A *workload*'s `initState()` runs after `m5.instantiate()` with full access
+to physical memory and the thread contexts. Instead of loading a kernel it:
 
-The system's workload is the new C++ SimObject
-**`RiscvQemuSnapshotWorkload`** (`gem5::RiscvISA::QemuSnapshot`,
-`src/arch/riscv/qemu/qemu_snapshot.{hh,cc}`). A gem5 *workload* is the right
-abstraction: its `initState()` runs after `m5.instantiate()` with full access
-to physical memory and the thread contexts. Instead of loading a kernel, it:
+1. **loads `ram.bin`** into physical memory (`system->physProxy`, chunked);
+2. **restores device state** via MMIO writes through the same proxy —
+   * CLINT: `mtime`, and per-hart `mtimecmp`/`msip`;
+   * PLIC: per-source priority, per-context interrupt-enable bitmaps and
+     per-context threshold;
+   * UART: `IER`/`LCR`/`MCR` (with the receive-interrupt-enable forced on);
+3. **restores every hart** — for each thread context it calls
+   `resetThread()`, writes the integer registers, the 32 FP registers, the
+   PC, every CSR and the privilege mode from that hart's dump, then
+   `activate()`s it.
 
-1. **loads `ram.bin`** into physical memory through `system->physProxy`
-   (chunked `writeBlob`);
-2. **restores the boot hart** — for each thread context it calls
-   `resetThread()`, then writes the integer registers, PC, privilege mode and
-   every CSR from `regs.txt`, then `activate()`s the thread;
-3. **seeds the CLINT** — writes `mtime` and `mtimecmp` through the CLINT's
-   MMIO interface so the guest's timer keeps ticking.
+gem5's chosen CPU model(s) then continue execution exactly where QEMU left
+off.
 
-gem5's chosen CPU model (`--cpu atomic|timing|o3|minor`) then begins fetching
-at the restored PC — exactly as if it were resuming from a gem5 checkpoint.
+#### CSR restore order and side effects
 
-#### CSR name mapping
+The register dump uses QEMU/gdb names (`mstatus`, `satp`, `mie`, …); the
+workload maps them to gem5 MiscReg indices straight out of gem5's own
+`CSRData` table. Three subtleties (each cost a debugging session):
 
-The register dump uses QEMU/gdb CSR names (`mstatus`, `satp`, `stvec`, …). The
-workload builds a name→index map straight out of gem5's own `CSRData` table,
-so the two naming schemes line up automatically without a hand-maintained
-table. Subtleties handled:
-
-* `sstatus`/`sie`/`sip` are restricted *views* of `mstatus`/`mie`/`mip`; only
-  the machine-level CSRs are restored, the views are skipped.
-* PMP config/address CSRs are written **with side effects** (so the MMU's PMP
-  table is rebuilt) and **before** the privilege level is dropped, because
-  those writes are only legal from M-mode (see §3.6).
-* gdb names integer register x8 `fp`; gem5 calls it `s0` (see §3.8).
+* **PMP CSRs** are written *with side effects* and *before* the privilege
+  level is dropped — those writes rebuild the MMU's PMP table and are only
+  legal from M-mode (§3.6).
+* **Interrupt CSRs** (`mie`/`mip`/`mideleg`/`medeleg`) are written *with side
+  effects* so the value also propagates into gem5's interrupt-controller
+  state — otherwise a restored guest never takes an interrupt (§3.9).
+* **`sstatus`/`sie`/`sip`** are restricted *views* of `mstatus`/`mie`/`mip`
+  and are skipped; only the machine-level CSRs are restored.
+* gdb names integer register x8 `fp`; gem5 calls it `s0` (§3.5).
 
 ---
 
 ## 3. Issues solved along the way
 
-This section documents the non-obvious problems encountered, because they are
-the parts most likely to bite anyone extending this work.
-
 ### 3.1 The toolchain emits instructions gem5 cannot decode
 
-Ubuntu's RISC-V cross toolchain targets the **RVA23 profile**: its default
-`-march` includes the vector extension, vector crypto (`zvbb`, `zvkb`, …),
-`zicond`, `zfa`, `zcb`, and more. Even a trivial statically-linked program
-contained thousands of vector instructions, and the first boot attempt
-panicked with an illegal-instruction trap inside `init` — glibc's
-vector-optimised routines.
-
-gem5's RISC-V decoder implements the base ISA, `V`, `Zba/Zbb/Zbs` and
-`Zicbo*`, but **not** `Zicond`, the vector-crypto extensions, `Zfa`, `Zcb`,
-etc.
-
-**Fix:** build userspace strictly for plain `rv64gc`. The Ubuntu cross-glibc
-is itself RVA23 and cannot be used, so userspace is built against **musl
-libc** (`musl 1.2.5`) — musl + busybox compiled with `-march=rv64gc
--mabi=lp64d`, statically linked. A build-time check (`objdump | grep`)
-asserts the resulting busybox contains zero vector instructions.
+Ubuntu's RISC-V cross toolchain targets the RVA23 profile: its default
+`-march` includes the vector extension, vector crypto, `Zicond`, `Zfa`, …
+gem5's decoder implements the base ISA, `V`, `Zba/Zbb/Zbs` and `Zicbo*` but
+not the rest. **Fix:** userspace is built strictly for `rv64gc` against
+**musl libc** (the Ubuntu cross-glibc is itself RVA23 and unusable); the
+QEMU CPU is constrained so the kernel's boot-time "alternatives" patching
+stays inside gem5's set (§3.2).
 
 ### 3.2 The kernel's boot-time "alternatives"
 
-The kernel's *C code* is compiled `rv64imac` regardless of the toolchain
-default (the kernel Makefile strips `f`, `d` and `v` from the C `-march`), so
-the kernel itself is safe. But the kernel patches in optimised routines at
-boot via the **alternatives** mechanism, keyed on the extensions the CPU
-*advertises*.
-
-**Fix:** the QEMU CPU is constrained so it only advertises what gem5 supports:
-
-```
--cpu rv64,v=false,h=false,sstc=false,zicond=false,zacas=false,zawrs=false,
-         zbc=false,zbkb=false,zfa=false,zfh=false,zfhmin=false,svadu=false,
-         sv57=false,sv48=false
-```
-
-`sv48`/`sv57` are disabled to pin paging to **Sv39**; `H` (hypervisor) and
-`Sstc` are disabled both to shrink the CSR set and to force the timer down the
-simple SBI/CLINT path (see §3.5).
+The kernel's C code is compiled `rv64imac` regardless of the toolchain
+default, but it patches in optimised routines at boot keyed on the CPU's
+advertised extensions. **Fix:** the QEMU CPU disables every extension gem5
+lacks (`v`, `h`, `sstc`, `zicond`, …) and pins paging to Sv39 — see
+`qemu-common.sh:QEMU_CPU`.
 
 ### 3.3 `build-image.sh`: `yes | make oldconfig` + `pipefail`
 
-The build script runs `set -euo pipefail`. `yes "" | make oldconfig` fails:
-`make` finishes and closes the pipe, `yes` gets `SIGPIPE` and exits non-zero,
-`pipefail` propagates that, and `set -e` aborts the build mid-way.
-
-**Fix:** feed config input from `/dev/null` instead of `yes`.
+`yes "" | make oldconfig` aborts the build: `yes` gets `SIGPIPE`, `pipefail`
+propagates it and `set -e` aborts. **Fix:** feed config from `/dev/null`.
 
 ### 3.4 musl: host `/lib` symlink and missing UAPI headers
 
-`make install` for musl tried to create the dynamic-linker symlink in the
-host's `/lib` (permission denied), and busybox failed to compile because musl
-does not ship the Linux UAPI headers (`linux/kd.h`, …).
+musl's `make install` tried to symlink into the host `/lib`, and busybox
+needs the Linux UAPI headers musl does not ship. **Fix:** `--syslibdir`
+inside the build tree, and `make headers_install` from the kernel tree.
 
-**Fix:** configure musl with `--syslibdir` pointing inside the build tree, and
-`make headers_install` the Linux UAPI headers from the kernel tree into musl's
-include directory.
+### 3.5 gdb calls x8 `fp`, gem5 calls it `s0`
 
-### 3.5 CLINT requires a `RiscvSystem`, not a plain `System`
-
-The first restore hung forever. gem5's RISC-V CLINT does
-`dynamic_cast<RiscvSystem*>(system)` in `init()`; with a plain `System` it
-prints *"Set Clint to RiscvSystem failed"* and cannot deliver timer
-interrupts to the harts.
-
-**Fix:** `restore.py` builds a `RiscvSystem`.
+x8 is the RISC-V frame pointer (`s0`/`fp`). QEMU's gdbstub dumps it as `fp`;
+gem5's table calls it `s0`. The original workload left x8 at 0 — the
+benchmark ran fine (the matmul does not touch x8) until its closing
+stack-canary check `ld a5,0(s0)` dereferenced 0. **Fix:** accept either
+name for x8.
 
 ### 3.6 PMP writes assert M-mode
 
-`RiscvISA::ISA::setMiscReg` asserts the current privilege is `PRV_M` when a
-PMP CSR is written. The workload originally restored the privilege level
-(Supervisor) before restoring CSRs, so the PMP writes asserted and aborted.
+`ISA::setMiscReg` asserts the privilege is M when a PMP CSR is written.
+**Fix:** `resetThread()` leaves the hart in M-mode; PMP CSRs are written
+first, with side effects, and the privilege register is set last.
 
-**Fix:** ordering in `applyRegisters()` — `resetThread()` leaves the hart in
-M-mode; PMP CSRs are written first (with side effects, while still M-mode),
-all other CSRs next, and the privilege register is set **last**.
+### 3.7 The capture-window race — race-free barrier
 
-### 3.7 The idle fast-forward is slow
+The first design snapshotted "shortly after a serial-console marker": QEMU
+ran free for the sub-millisecond between the marker and QMP `stop`.
 
-When a snapshot is restored, the CLINT's `mtime` starts at the captured value
-and the next timer fires when it reaches the captured `mtimecmp`. If that gap
-is large (the guest scheduled a tick tens of milliseconds away), gem5 must
-step the 10 MHz RTC through millions of discrete events before anything
-happens.
+**Fix (bench mode):** an explicit, race-free barrier. `bench` calls a
+non-inlined `snapshot_barrier()`; `qemu-snapshot.py` resolves its address
+(`nm` on the benchmark ELF) and sets a *gdb breakpoint* there. QEMU halts at
+exactly that instruction. `GdbDriver` keeps gdb attached for the whole
+capture (so the VM stays halted while QMP dumps memory) and synchronises the
+asynchronous `continue` by appending an `echo <sentinel>` after it and
+reading gdb's output until the sentinel appears.
 
-**Fix:** `restore.py --timer-gap N` clamps `mtimecmp` to at most `mtime + N`
-(default 200000). The timer then fires soon after restore; an early timer
-interrupt is benign to Linux, which simply reads the clock, finds nothing due,
-and reprograms. `--timer-gap 0` disables the clamp for an exact restore.
+### 3.8 Auto-deriving the gem5 platform from the QEMU DTB
 
-### 3.8 gdb calls x8 `fp`, gem5 calls it `s0`
+The gem5 HiFive board and the QEMU `virt` machine must agree on device
+addresses, the hart count and the timebase. These were hand-matched.
 
-This one produced a hard-to-find segfault. The benchmark ran its entire
-matrix-multiply correctly, then crashed at the *function epilogue* with a
-`SIGSEGV` loading from address 0.
+**Fix:** `qemu-snapshot.py` dumps the QEMU device tree
+(`-machine virt,dumpdtb=`), parses it with `dtc`, and records the CLINT /
+PLIC / UART addresses, DRAM base/size, hart count and timebase in
+`meta.json`. `restore.py` configures `system.platform.{clint,plic,uart}
+.pio_addr`, the memory range, the RTC frequency and the CPU count from
+there — a change on the QEMU side is now followed automatically.
 
-x8 is the RISC-V frame pointer; its ABI names are both `s0` and `fp`. QEMU's
-gdbstub dumps it as `fp`, but gem5's register-name table calls it `s0`. The
-workload looked up `s0`, did not find it, and **left x8 at 0**. The benchmark
-keeps `&__stack_chk_guard` in x8 across the whole function; the matrix
-multiply happens to not touch x8, so it ran fine — but the closing
-stack-canary check `ld a5, 0(s0)` dereferenced 0.
+### 3.9 Interrupt-driven I/O — restoring interrupt-controller state
 
-**Fix:** when restoring x8, accept either name (`s0` or `fp`).
+After a restore the guest could run but had **no working interrupts**: the
+idle shell never woke on input, and userspace console output never appeared
+(kernel `printk` did, because the console driver writes the UART by
+polling).
 
-### 3.9 Userspace console output needs interrupts; m5ops do not
+Two distinct causes:
 
-After the segfault was fixed the benchmark ran to completion but produced no
-output. Kernel `printk` (e.g. a panic) *does* appear, because the kernel
-console uses a **polled** UART write. Userspace `write()` to the console goes
-through the **interrupt-driven** tty path, which needs the UART→PLIC interrupt
-chain — and PLIC state / interrupt routing is not re-established by a snapshot
-restore.
+* **PLIC state was not restored.** The kernel had configured the PLIC during
+  boot (UART source enabled, priorities, thresholds). gem5's PLIC started
+  blank, so the UART interrupt was never routed to a hart. **Fix:** the
+  workload replays the PLIC priority/enable/threshold registers from
+  `plic.bin`. (Both gem5 and QEMU follow the standard SiFive PLIC layout, so
+  the contexts and bitmaps line up.)
 
-**Fix:** the benchmark does not rely on the console. It verifies its own
-checksum and signals gem5 directly with an **m5op**: `m5_exit` if the result
-is correct, `m5_fail` otherwise. gem5 decodes m5ops regardless of any device
-state, giving an unambiguous pass/fail. (See also §4, Limitations.)
+* **Interrupt CSRs were restored without side effects.** gem5's interrupt
+  controller keeps cached `ie`/`ip` bitsets that are updated by the *side
+  effect* of a `mie`/`mip` write. The workload used `setMiscRegNoEffect`, so
+  those bitsets stayed zero and `checkInterrupt()` always returned false —
+  the PLIC posted the interrupt but the CPU never took it. **Fix:**
+  `mie`/`mip`/`mideleg`/`medeleg` are restored *with* side effects.
+
+With both fixed, the UART→PLIC→CPU chain works: a restored idle shell wakes
+on a keypress, and userspace `write()` to the console transmits normally.
+
+### 3.10 Letting the interrupt-driven console drain
+
+`write()` to the console returns once the data is *queued*; the 8250 driver
+then drains it via TX interrupts. The benchmark called `m5_exit`
+immediately, ending the simulation before the queue drained. **Fix:** the
+benchmark calls `tcdrain()` to wait for the console to flush before
+`m5_exit`. (`m5_exit` is now only a clean end-of-run signal, not a
+console-output workaround.)
 
 ---
 
-## 4. Limitations
+## 4. What works, and limitations
 
-* **Interrupt-driven I/O is not restored.** A snapshot does not reconstruct
-  PLIC routing/enable state or the wakeup path, so interrupt-driven UART
-  input/output and a fully interactive restored shell do not work. The
-  benchmark is therefore snapshotted *mid-run* (CPU-bound, no I/O needed) and
-  reports its result via m5ops. Restoring an idle shell to full interactivity
-  is the natural next piece of work.
-* **Single hart.** The snapshot and workload restore one hart (`-smp 1`).
-  Multi-core would need per-hart register dumps and careful secondary-hart
-  bring-up.
-* **Floating-point registers are not restored.** `f0`–`f31`/`fcsr` are not
-  copied; the integer matmul benchmark does not use them. Add them if a
-  workload relies on live FP state across the snapshot.
-* **ISA is constrained to what gem5 decodes.** Userspace is `rv64gc`; the QEMU
-  CPU is restricted (no `V`, `Zicond`, `H`, `Sstc`, …). Workloads needing
-  those extensions are out of scope until gem5's decoder catches up.
-* **Capture window.** `qemu-snapshot.py` stops the VM a fraction of a
-  millisecond after the marker; the benchmark advances slightly under QEMU
-  before the snapshot. This is intentional fast-forwarding and is negligible
-  relative to the benchmark length, but it means the gem5 run is not the
-  *entire* benchmark to the instruction.
-* **Platform must match.** gem5's HiFive board and the QEMU `virt` machine
-  must agree on device addresses and the timebase. They do today; changing one
-  side requires changing the other.
+**Working and tested** (see §5.5):
+
+* restore onto AtomicSimpleCPU, TimingSimpleCPU and O3CPU;
+* a CPU-bound benchmark restored mid-run, reporting its result on the
+  (interrupt-driven) console;
+* a restored idle shell that is fully interactive — it wakes on the UART
+  interrupt, echoes input and executes typed commands;
+* multi-hart snapshots (verified with `--smp 2`): every hart's state is
+  captured and restored.
+
+**Limitations:**
+
+* **Secondary harts are restored in their online/idle state.** A hart that
+  was *offline* (SBI HSM stopped) at snapshot time is not cold-started; all
+  harts present in the snapshot are assumed online.
+* **ISA constrained to gem5's decoder set** — userspace is `rv64gc`, the
+  QEMU CPU disables `V`, `Zicond`, `H`, `Sstc`, … Workloads needing those
+  are out of scope until gem5's decoder catches up.
+* **FP yes, vector no** — `f0`–`f31` and `fcsr` are restored; the vector
+  registers are not (V is disabled anyway).
+* **Platform compatibility** — the DTB supplies addresses, hart count and
+  timebase, but gem5's HiFive devices must still be *register-compatible*
+  with QEMU `virt`'s (they are: both are SiFive-style CLINT/PLIC/8250).
+* **The benchmark still calls `m5_exit`** — now purely to end the simulation
+  cleanly once its console output has drained, since otherwise the guest
+  would idle in a shell forever.
 
 ---
 
@@ -314,7 +301,7 @@ state, giving an unambiguous pass/fail. (See also §4, Limitations.)
 
 ### 5.1 Prerequisites
 
-A built `build/RISCV/gem5.opt`, and these host packages (Debian/Ubuntu names):
+A built `build/RISCV/gem5.opt`, and these host packages (Debian/Ubuntu):
 
 ```bash
 sudo apt install -y \
@@ -324,14 +311,9 @@ sudo apt install -y \
   qemu-system-misc opensbi
 ```
 
-| Package(s) | Used for |
-|------------|----------|
-| `gcc-riscv64-linux-gnu`, `libc6-dev-riscv64-cross` | cross-compile kernel, musl, busybox, bench |
-| `flex bison bc libelf-dev libssl-dev` | Linux kernel build |
-| `gdb-multiarch` | read CPU/CSR state from QEMU's gdbstub |
-| `expect`, `cpio` | console handling / initramfs packing |
-| `qemu-system-misc` | provides `qemu-system-riscv64` |
-| `opensbi` | provides `fw_jump.bin` |
+`device-tree-compiler` (`dtc`) is required — the platform layout is parsed
+from the QEMU device tree. `gdb-multiarch` drives the race-free barrier and
+reads the architectural state.
 
 ### 5.2 Build the guest image
 
@@ -339,45 +321,34 @@ sudo apt install -y \
 util/qemu-cpu/scripts/build-image.sh
 ```
 
-Downloads and builds Linux, musl, busybox and the benchmark into `images/`.
-The kernel build is the slow step (a few minutes); it is skipped on reruns if
-`images/Image` already exists. Useful environment overrides:
-
-| Variable | Default | Meaning |
-|----------|---------|---------|
-| `IMG` | `<repo>/images` | output directory |
-| `KERNEL_VER` | `6.12` | Linux version |
-| `QEMU_MEM_MB` | `256` | guest RAM (also set in `qemu-common.sh`) |
-
-Optionally sanity-check the image interactively (exit QEMU with `Ctrl-A x`):
-
-```bash
-util/qemu-cpu/scripts/qemu-boot.sh
-```
+Builds Linux, musl, busybox and the benchmark into `images/`. The kernel
+build is the slow step; it is skipped on reruns if `images/Image` exists.
+`util/qemu-cpu/scripts/qemu-boot.sh` boots the image interactively for a
+sanity check.
 
 ### 5.3 Capture a snapshot
 
 ```bash
-util/qemu-cpu/scripts/qemu-snapshot.py --out snapshots/bench
+# benchmark snapshot - race-free gdb-breakpoint barrier
+util/qemu-cpu/scripts/qemu-snapshot.py --mode bench  --out snapshots/bench
+
+# idle-shell snapshot - for interactive restore
+util/qemu-cpu/scripts/qemu-snapshot.py --mode shell  --out snapshots/shell
+
+# multi-hart snapshot
+util/qemu-cpu/scripts/qemu-snapshot.py --mode shell --smp 2 --out snapshots/shell2
 ```
 
-Boots the image under QEMU, waits for the benchmark's readiness marker, and
-writes the snapshot to `snapshots/bench/`. Key options:
+Key options:
 
 | Option | Default | Meaning |
 |--------|---------|---------|
-| `--out DIR` | `snapshots/snap` | snapshot output directory |
-| `--marker STR` | `QEMU-CPU-MODE-BENCH-READY` | console string to snapshot on |
+| `--mode` | `bench` | `bench` (breakpoint barrier) or `shell` (marker barrier) |
+| `--out DIR` | `snapshots/snap` | output snapshot directory |
+| `--smp N` | `1` | number of harts |
 | `--mem-mb N` | `256` | guest RAM size |
-| `--settle SEC` | `0` | extra delay after the marker before snapshotting |
-| `--boot-timeout SEC` | `120` | give up if the marker never appears |
-
-To snapshot the **idle shell** instead of the benchmark:
-
-```bash
-util/qemu-cpu/scripts/qemu-snapshot.py --out snapshots/shell \
-    --marker QEMU-CPU-MODE-SHELL-READY
-```
+| `--break-symbol S` | `snapshot_barrier` | (bench mode) breakpoint symbol |
+| `--marker STR` | `QEMU-CPU-MODE-SHELL-READY` | (shell mode) console marker |
 
 ### 5.4 Restore into gem5
 
@@ -388,42 +359,64 @@ build/RISCV/gem5.opt configs/example/qemu_cpu/restore.py \
 
 | Option | Default | Meaning |
 |--------|---------|---------|
-| `--snapshot-dir DIR` | (required) | snapshot produced by stage 2 |
+| `--snapshot-dir DIR` | (required) | snapshot from stage 2 |
 | `--cpu MODEL` | `timing` | `atomic`, `timing`, `o3` or `minor` |
 | `--clock FREQ` | `1GHz` | CPU/system clock |
 | `--max-insts N` | `0` | stop after N instructions (0 = unlimited) |
 | `--max-ticks N` | `0` | stop after N ticks (0 = unlimited) |
-| `--timer-gap N` | `200000` | clamp the restored timer (see §3.7); 0 = exact |
+| `--timer-gap N` | `0` | clamp each restored timer to fire ≤ N mtime ticks after mtime (0 = exact); avoids a long idle fast-forward for shell snapshots |
 
-A successful benchmark run ends with:
+A benchmark run ends with `exit @ tick N : m5_exit instruction encountered`
+and prints `BENCH-DONE ok sum=...` to gem5's terminal
+(`m5out/.../system.platform.terminal`).
 
+For an **interactive** restore of a shell snapshot, run gem5 with
+`--listener-mode=on` and connect to the terminal port it prints:
+
+```bash
+build/RISCV/gem5.opt --listener-mode=on configs/example/qemu_cpu/restore.py \
+    --snapshot-dir snapshots/shell --cpu timing --timer-gap 200000
+# -> "system.platform.terminal: Listening for connections on port 3456"
+m5term localhost 3456     # or: telnet localhost 3456
 ```
-[restore] exit @ tick NNNN : m5_exit instruction encountered
+
+### 5.5 The test harness
+
+`qemu-cpu-test.py` runs both end-to-end tests and reports PASS/FAIL:
+
+```bash
+util/qemu-cpu/scripts/qemu-cpu-test.py --test all --cpu atomic,timing,o3
 ```
 
-`m5_exit` means the benchmark completed under the detailed CPU **and**
-reproduced the expected checksum. `m5_fail` would mean the result was wrong.
+* **bench test** — restores `snapshots/bench`, runs the matmul on the
+  detailed CPU, and checks `BENCH-DONE ok` appears on the console.
+* **interactive test** — restores `snapshots/shell`, connects to gem5's
+  terminal, types `echo OUT$((7*9))END`, and checks the restored shell
+  wakes, executes it and prints `OUT63END` (output ≠ input, so this proves
+  *execution*, not just tty echo).
 
-### 5.5 Expected results
+`--bench-snap` / `--shell-snap` select other snapshot directories (e.g. the
+multi-hart `snapshots/shell2`).
 
-Verified end-to-end — QEMU boots RISC-V Linux, the snapshot is captured at the
-benchmark, and gem5 restores and runs it to a correct checksum:
+Verified results:
 
-| CPU model | Outcome |
-|-----------|---------|
-| `atomic` (AtomicSimpleCPU) | `m5_exit` — checksum correct |
-| `timing` (TimingSimpleCPU) | `m5_exit` — checksum correct |
-| `o3` (O3CPU) | `m5_exit` — checksum correct |
+| CPU | bench (console output) | interactive (idle shell) |
+|-----|------------------------|--------------------------|
+| AtomicSimpleCPU | PASS | PASS |
+| TimingSimpleCPU | PASS | PASS |
+| O3CPU | PASS | PASS |
+
+Multi-hart (`--smp 2`): bench and interactive both PASS.
 
 ### 5.6 Troubleshooting
 
 | Symptom | Likely cause / fix |
 |---------|--------------------|
-| `qemu-snapshot.py` times out waiting for the marker | image did not boot — run `qemu-boot.sh` and inspect; check the cross toolchain is installed |
-| Illegal-instruction panic in `init` under QEMU | userspace contains an extension gem5/QEMU-CPU rejects — rebuild the image (§3.1) |
-| Restore hangs immediately | config not using `RiscvSystem` (§3.5), or the timer never fires — check `--timer-gap` |
+| snapshot times out at the barrier | image did not boot — run `qemu-boot.sh`; check the cross toolchain |
+| restore hangs immediately | config not using `RiscvSystem`, or the timer never fires — try `--timer-gap 200000` |
 | `m5_fail` instead of `m5_exit` | the detailed run computed the wrong checksum — a state-restore fidelity bug |
-| gem5 runs forever after the benchmark | expected for a shell snapshot — the restored CPU goes idle (§4); bound it with `--max-insts` |
+| restored shell ignores input | PLIC/UART state or interrupt CSRs not restored — check the `QemuSnapshot:` log lines |
+| gem5 terminal not listening | pass `--listener-mode=on` to `gem5.opt` |
 
 ---
 
@@ -434,12 +427,10 @@ benchmark, and gem5 restores and runs it to a correct checksum:
 | `util/qemu-cpu/scripts/build-image.sh` | builds the RISC-V Linux image |
 | `util/qemu-cpu/scripts/qemu-common.sh` | shared QEMU machine/CPU settings |
 | `util/qemu-cpu/scripts/qemu-boot.sh` | interactive QEMU boot (sanity check) |
-| `util/qemu-cpu/scripts/qemu-snapshot.py` | boot under QEMU + capture a snapshot |
-| `util/qemu-cpu/scripts/gdb-dump-regs.py` | gdb helper: dump all registers/CSRs |
+| `util/qemu-cpu/scripts/qemu-snapshot.py` | capture a snapshot (barrier + DTB + dumps) |
+| `util/qemu-cpu/scripts/gdb-dump-regs.py` | gdb helper: dump all harts' registers |
+| `util/qemu-cpu/scripts/qemu-cpu-test.py` | end-to-end test harness |
 | `util/qemu-cpu/bench/bench.c` | the benchmark restored into gem5 |
-| `util/qemu-cpu/README.md` | short overview |
-| `util/qemu-cpu/DOCUMENTATION.md` | this document |
-| `src/arch/riscv/qemu/qemu_snapshot.hh` | `RiscvQemuSnapshotWorkload` declaration |
-| `src/arch/riscv/qemu/qemu_snapshot.cc` | snapshot injection logic |
-| `src/arch/riscv/RiscvFsWorkload.py` | `RiscvQemuSnapshotWorkload` SimObject |
+| `src/arch/riscv/qemu/qemu_snapshot.{hh,cc}` | `RiscvQemuSnapshotWorkload` |
+| `src/arch/riscv/RiscvFsWorkload.py` | the workload SimObject |
 | `configs/example/qemu_cpu/restore.py` | gem5 restore configuration |

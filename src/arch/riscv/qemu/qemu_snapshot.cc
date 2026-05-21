@@ -28,11 +28,12 @@
 
 #include "arch/riscv/qemu/qemu_snapshot.hh"
 
+#include <cstring>
 #include <fstream>
 #include <set>
-#include <vector>
 
 #include "arch/riscv/isa.hh"
+#include "arch/riscv/regs/float.hh"
 #include "arch/riscv/regs/int.hh"
 #include "arch/riscv/regs/misc.hh"
 #include "base/logging.hh"
@@ -47,53 +48,86 @@ namespace RiscvISA
 {
 
 // CLINT MMIO register offsets (SiFive / QEMU ACLINT layout).
+static constexpr Addr CLINT_MSIP0 = 0x0000;
 static constexpr Addr CLINT_MTIMECMP0 = 0x4000;
 static constexpr Addr CLINT_MTIME = 0xBFF8;
+
+// PLIC MMIO register offsets (standard SiFive PLIC layout).
+static constexpr Addr PLIC_PRIORITY = 0x000000;
+static constexpr Addr PLIC_ENABLE = 0x002000;
+static constexpr Addr PLIC_ENABLE_STRIDE = 0x80;
+static constexpr Addr PLIC_THRESHOLD = 0x200000;
+static constexpr Addr PLIC_THRESHOLD_STRIDE = 0x1000;
+
+// 8250 UART register offsets (reg-shift 0).
+static constexpr Addr UART_IER = 1;
+static constexpr Addr UART_LCR = 3;
+static constexpr Addr UART_MCR = 4;
 
 QemuSnapshot::QemuSnapshot(const Params &p)
     : Workload(p),
       ramFile(p.ram_file),
       ramAddr(p.ram_addr),
-      regsFile(p.regs_file),
       clintAddr(p.clint_addr),
-      clintMtime(p.clint_mtime),
-      clintMtimecmp(p.clint_mtimecmp),
+      clintFile(p.clint_file),
+      clintTimerGap(p.clint_timer_gap),
+      plicAddr(p.plic_addr),
+      plicFile(p.plic_file),
+      plicNumSrc(p.plic_num_src),
+      plicNumContexts(p.plic_num_contexts),
+      uartAddr(p.uart_addr),
+      uartFile(p.uart_file),
       verbose(p.verbose)
 {
-    parseRegs();
+    fatal_if(p.regs_files.empty(),
+             "QemuSnapshot: no per-hart register dumps given");
+    for (const auto &f : p.regs_files)
+        hartRegs.push_back(parseRegs(f));
+
+    auto pc = hartRegs[0].find("pc");
+    fatal_if(pc == hartRegs[0].end(),
+             "QemuSnapshot: hart 0 register dump has no 'pc'");
+    entryPc = pc->second;
+    inform("QemuSnapshot: %d hart(s), hart0 pc=%#x", hartRegs.size(), entryPc);
 }
 
-void
-QemuSnapshot::parseRegs()
+std::vector<uint8_t>
+QemuSnapshot::readFile(const std::string &path)
 {
-    std::ifstream f(regsFile);
-    fatal_if(!f.is_open(),
-             "QemuSnapshot: cannot open register dump '%s'", regsFile);
+    std::ifstream f(path, std::ios::binary | std::ios::ate);
+    fatal_if(!f.is_open(), "QemuSnapshot: cannot open '%s'", path);
+    std::streamsize n = f.tellg();
+    f.seekg(0);
+    std::vector<uint8_t> buf(n > 0 ? n : 0);
+    if (n > 0)
+        f.read(reinterpret_cast<char *>(buf.data()), n);
+    return buf;
+}
 
+std::unordered_map<std::string, uint64_t>
+QemuSnapshot::parseRegs(const std::string &path)
+{
+    std::ifstream f(path);
+    fatal_if(!f.is_open(),
+             "QemuSnapshot: cannot open register dump '%s'", path);
+    std::unordered_map<std::string, uint64_t> regs;
     std::string name, val;
     while (f >> name >> val) {
         try {
             regs[name] = std::stoull(val, nullptr, 0);
         } catch (const std::exception &) {
-            warn("QemuSnapshot: ignoring malformed register line '%s %s'",
-                 name, val);
+            warn("QemuSnapshot: ignoring malformed line '%s %s'", name, val);
         }
     }
-    auto it = regs.find("pc");
-    fatal_if(it == regs.end(),
-             "QemuSnapshot: register dump '%s' has no 'pc'", regsFile);
-    entryPc = it->second;
-    inform("QemuSnapshot: parsed %d registers from %s (pc=%#x)",
-           regs.size(), regsFile, entryPc);
+    return regs;
 }
 
 void
 QemuSnapshot::loadRam()
 {
     std::ifstream f(ramFile, std::ios::binary);
-    fatal_if(!f.is_open(),
-             "QemuSnapshot: cannot open RAM image '%s'", ramFile);
-
+    fatal_if(!f.is_open(), "QemuSnapshot: cannot open RAM image '%s'",
+             ramFile);
     const size_t chunk = 1 << 20; // 1 MiB
     std::vector<uint8_t> buf(chunk);
     Addr off = 0;
@@ -112,32 +146,116 @@ QemuSnapshot::loadRam()
 void
 QemuSnapshot::restoreClint()
 {
-    uint64_t mtime = clintMtime;
-    uint64_t mtimecmp = clintMtimecmp;
+    auto d = readFile(clintFile);
+    auto rd64 = [&](Addr o) {
+        uint64_t v = 0;
+        if (o + 8 <= d.size())
+            std::memcpy(&v, &d[o], 8);
+        return v;
+    };
+    auto rd32 = [&](Addr o) {
+        uint32_t v = 0;
+        if (o + 4 <= d.size())
+            std::memcpy(&v, &d[o], 4);
+        return v;
+    };
+
+    uint64_t mtime = rd64(CLINT_MTIME);
     system->physProxy.writeBlob(clintAddr + CLINT_MTIME, &mtime, 8);
-    system->physProxy.writeBlob(clintAddr + CLINT_MTIMECMP0, &mtimecmp, 8);
-    inform("QemuSnapshot: CLINT @%#x mtime=%#x mtimecmp=%#x",
-           clintAddr, mtime, mtimecmp);
+
+    for (unsigned h = 0; h < hartRegs.size(); h++) {
+        uint32_t msip = rd32(CLINT_MSIP0 + 4 * h);
+        uint64_t mtimecmp = rd64(CLINT_MTIMECMP0 + 8 * h);
+        // Optionally pull a far-future timer interrupt closer so gem5 need
+        // not fast-forward through millions of idle RTC ticks.
+        if (clintTimerGap && mtimecmp > mtime + clintTimerGap)
+            mtimecmp = mtime + clintTimerGap;
+        system->physProxy.writeBlob(clintAddr + CLINT_MSIP0 + 4 * h,
+                                    &msip, 4);
+        system->physProxy.writeBlob(clintAddr + CLINT_MTIMECMP0 + 8 * h,
+                                    &mtimecmp, 8);
+    }
+    inform("QemuSnapshot: CLINT @%#x mtime=%#x restored for %d hart(s)",
+           clintAddr, mtime, hartRegs.size());
 }
 
 void
-QemuSnapshot::applyRegisters(ThreadContext *tc)
+QemuSnapshot::restorePlic()
 {
-    // Map every CSR name gem5 knows about to its internal MiscReg index,
-    // straight out of gem5's own CSR table - so the QEMU CSR names line up.
+    auto d = readFile(plicFile);
+    auto wr = [&](Addr off) {
+        if (off + 4 <= d.size())
+            system->physProxy.writeBlob(plicAddr + off, &d[off], 4);
+    };
+
+    // Per-source interrupt priority.
+    for (unsigned s = 0; s < plicNumSrc; s++)
+        wr(PLIC_PRIORITY + 4 * s);
+
+    // Per-context interrupt-enable bitmaps.
+    unsigned nSrc32 = (plicNumSrc + 31) / 32;
+    for (unsigned c = 0; c < plicNumContexts; c++)
+        for (unsigned w = 0; w < nSrc32; w++)
+            wr(PLIC_ENABLE + c * PLIC_ENABLE_STRIDE + 4 * w);
+
+    // Per-context priority threshold (the +0 word; +4 is claim - skip it).
+    for (unsigned c = 0; c < plicNumContexts; c++)
+        wr(PLIC_THRESHOLD + c * PLIC_THRESHOLD_STRIDE);
+
+    inform("QemuSnapshot: PLIC @%#x restored (%d sources, %d contexts)",
+           plicAddr, plicNumSrc, plicNumContexts);
+}
+
+void
+QemuSnapshot::restoreUart()
+{
+    auto d = readFile(uartFile);
+    if (d.size() < 8) {
+        warn("QemuSnapshot: UART dump too small, skipping");
+        return;
+    }
+    // Restore with DLAB clear so offset 1 addresses IER (not the divisor
+    // latch).  Force the receive-data interrupt enable on: the console tty
+    // is open for input across the snapshot, so a restored guest must get
+    // an interrupt when a character arrives (interactive input).
+    uint8_t lcr = d[UART_LCR] & 0x7f;
+    uint8_t ier = d[UART_IER] | 0x01;
+    uint8_t mcr = d[UART_MCR];
+    system->physProxy.writeBlob(uartAddr + UART_LCR, &lcr, 1);
+    system->physProxy.writeBlob(uartAddr + UART_IER, &ier, 1);
+    system->physProxy.writeBlob(uartAddr + UART_MCR, &mcr, 1);
+    inform("QemuSnapshot: UART @%#x restored (IER=%#x LCR=%#x MCR=%#x)",
+           uartAddr, ier, lcr, mcr);
+}
+
+void
+QemuSnapshot::applyRegisters(ThreadContext *tc,
+        const std::unordered_map<std::string, uint64_t> &regs)
+{
+    // Map every CSR name gem5 knows to its internal MiscReg index, straight
+    // out of gem5's own CSR table - so the QEMU CSR names line up.
     std::unordered_map<std::string, int> csrByName;
     for (const auto &kv : CSRData)
         csrByName[kv.second.name] = kv.second.physIndex;
 
-    // sstatus/sie/sip are restricted views of mstatus/mie/mip, which we
-    // restore in full - skip the aliases so they do not clobber them.
+    // sstatus/sie/sip are restricted views of mstatus/mie/mip (restored in
+    // full) - skip the aliases so they do not clobber them.
     static const std::set<std::string> aliases = {"sstatus", "sie", "sip"};
-
+    // These CSRs must be written *with side effects* so the value also
+    // propagates into gem5's interrupt controller (the cached ie/ip
+    // bitsets and the delegation state) - otherwise a restored guest never
+    // takes interrupts.
+    static const std::set<std::string> withEffect = {
+        "mie", "mip", "mideleg", "medeleg"};
     auto isPmp = [](const std::string &n) { return n.rfind("pmp", 0) == 0; };
+    auto get = [&](const std::string &n) -> const uint64_t * {
+        auto it = regs.find(n);
+        return it == regs.end() ? nullptr : &it->second;
+    };
 
-    // resetThread() left the hart in M-mode.  PMP config/addr writes are
-    // only legal from M-mode and must take effect (so the MMU's PMP table
-    // is rebuilt), so do them first, before we drop the privilege level.
+    // resetThread() left the hart in M-mode; PMP CSR writes are only legal
+    // from M-mode and must take effect (rebuilding the MMU's PMP table), so
+    // do them first, before privilege is dropped.
     for (const auto &kv : regs) {
         if (!isPmp(kv.first))
             continue;
@@ -151,20 +269,29 @@ QemuSnapshot::applyRegisters(ThreadContext *tc)
     for (size_t i = 1; i < int_reg::NumArchRegs &&
                        i < int_reg::RegNames.size(); i++) {
         const std::string &name = int_reg::RegNames[i];
-        auto it = regs.find(name);
-        if (it == regs.end() && name == "s0")
-            it = regs.find("fp");
-        if (it != regs.end())
-            tc->setReg(intRegClass[i], (RegVal)it->second);
-        else
-            warn("QemuSnapshot: register '%s' (x%d) not in dump", name, i);
+        const uint64_t *v = get(name);
+        if (!v && name == "s0")
+            v = get("fp");
+        if (v)
+            tc->setReg(intRegClass[i], (RegVal)*v);
+    }
+
+    // Floating-point registers f0..f31 (gdb's ABI names match gem5's).
+    int fpRestored = 0;
+    for (size_t i = 0; i < float_reg::NumRegs &&
+                       i < float_reg::RegNames.size(); i++) {
+        const uint64_t *v = get(float_reg::RegNames[i]);
+        if (v) {
+            tc->setReg(floatRegClass[i], (RegVal)*v);
+            fpRestored++;
+        }
     }
 
     // Program counter.
-    tc->pcState(entryPc);
+    tc->pcState(get("pc") ? *get("pc") : entryPc);
 
     // Remaining CSRs - restored verbatim, no side effects.
-    int restored = 0;
+    int csrRestored = 0;
     for (const auto &kv : regs) {
         const std::string &name = kv.first;
         if (name == "pc" || name == "priv" || aliases.count(name) ||
@@ -172,19 +299,21 @@ QemuSnapshot::applyRegisters(ThreadContext *tc)
             continue;
         auto it = csrByName.find(name);
         if (it == csrByName.end())
-            continue; // GPR or a CSR gem5 does not model - skip
-        tc->setMiscRegNoEffect(it->second, kv.second);
-        restored++;
+            continue; // GPR / FP reg / a CSR gem5 does not model
+        if (withEffect.count(name))
+            tc->setMiscReg(it->second, kv.second);
+        else
+            tc->setMiscRegNoEffect(it->second, kv.second);
+        csrRestored++;
     }
 
-    // Current privilege mode (0=U, 1=S, 3=M) - set last, after the
-    // M-mode-only PMP writes above.
-    auto prv = regs.find("priv");
-    if (prv != regs.end())
-        tc->setMiscRegNoEffect(MISCREG_PRV, prv->second);
+    // Current privilege mode - set last, after the M-mode-only PMP writes.
+    if (const uint64_t *prv = get("priv"))
+        tc->setMiscRegNoEffect(MISCREG_PRV, *prv);
 
-    inform("QemuSnapshot: restored 31 GPRs, pc=%#x, %d CSRs onto hart %d",
-           entryPc, restored, tc->contextId());
+    inform("QemuSnapshot: hart %d restored - pc=%#x, 31 GPRs, %d FP regs, "
+           "%d CSRs", tc->contextId(),
+           get("pc") ? *get("pc") : entryPc, fpRestored, csrRestored);
 }
 
 void
@@ -192,15 +321,20 @@ QemuSnapshot::initState()
 {
     Workload::initState();
 
-    fatal_if(system->threads.empty(),
-             "QemuSnapshot: system has no thread contexts");
+    fatal_if(system->threads.size() < hartRegs.size(),
+             "QemuSnapshot: snapshot has %d harts but the system has only "
+             "%d thread context(s)", hartRegs.size(),
+             system->threads.size());
 
     loadRam();
     restoreClint();
+    restorePlic();
+    restoreUart();
 
-    for (auto *tc : system->threads) {
+    for (unsigned h = 0; h < hartRegs.size(); h++) {
+        ThreadContext *tc = system->threads[h];
         tc->getIsaPtr()->resetThread();
-        applyRegisters(tc);
+        applyRegisters(tc, hartRegs[h]);
         tc->activate();
     }
     inform("QemuSnapshot: snapshot restored - handing control to gem5");

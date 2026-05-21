@@ -111,10 +111,14 @@ mount -t devtmpfs devtmpfs /dev 2>/dev/null
 export PS1='qemucpu# '
 echo
 echo "QEMU-CPU-MODE-SHELL-READY"
-# Run the benchmark.  qemu-snapshot.py snapshots the VM the instant bench
-# prints its readiness marker, so the matrix-multiply runs under gem5.
+# qemucpu.mode=shell : drop straight to an interactive shell, which
+#   qemu-snapshot.py --mode shell snapshots idle (to test interactive
+#   restore).  Otherwise run the benchmark, which qemu-snapshot.py
+#   --mode bench snapshots at its snapshot_barrier() breakpoint.
+if grep -q qemucpu.mode=shell /proc/cmdline; then
+    exec /bin/sh
+fi
 /bin/bench
-# If execution reaches here (e.g. an interactive QEMU boot) drop to a shell.
 exec /bin/sh
 INIT
 chmod +x "$ROOTFS/init"

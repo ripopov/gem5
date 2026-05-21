@@ -1,40 +1,49 @@
 #!/usr/bin/env python3
-"""qemu-snapshot.py - boot the minimal RISC-V image under QEMU, run to the
-shell, and capture a full machine snapshot for gem5 QEMU-CPU mode.
+"""qemu-snapshot.py - boot the minimal RISC-V image under QEMU and capture a
+full machine snapshot for gem5 QEMU-CPU mode (pipeline stage 2 of 3).
 
-Pipeline stage 1 of 3:
+Two capture barriers are supported:
 
-    [qemu-snapshot.py]  ->  [qemu2gem5.py converter]  ->  [gem5 restore]
+  * --mode bench  : a gdb breakpoint on the benchmark's snapshot_barrier()
+                    function -- QEMU halts at *exactly* that instruction, so
+                    there is no capture-window timing race.
+  * --mode shell  : wait for a marker on the serial console, then QMP-stop --
+                    used to snapshot the idle interactive shell.
 
-The snapshot directory it produces contains:
+The snapshot directory contains:
 
-    ram.bin     raw guest DRAM image          (base 0x80000000)
-    clint.bin   CLINT MMIO region dump        (base 0x02000000)
-    plic.bin    PLIC  MMIO region dump        (base 0x0c000000)
-    regs.txt    every CPU register + CSR      (from the QEMU gdbstub)
-    serial.log  full boot console transcript
-    meta.json   addresses / sizes / parameters tying it all together
+    ram.bin            raw guest DRAM image
+    clint.bin          CLINT MMIO dump  (mtime / mtimecmp)
+    plic.bin           PLIC  MMIO dump  (priority / enable / threshold)
+    uart.bin           UART 8250 register dump
+    regs.hart<N>.txt   every GPR + FP reg + CSR of hart N (via the gdbstub)
+    virt.dtb           the QEMU 'virt' device tree
+    serial.log         console transcript
+    meta.json          addresses / sizes / hart list, incl. the DTB-derived
+                       platform description gem5's restore.py consumes
 
-QEMU is driven through three control planes simultaneously:
-  * a UNIX-socket serial console (to detect the shell prompt),
-  * the QMP monitor      (to pause the VM and dump physical memory),
-  * the gdbstub          (to read the architectural CPU/CSR state).
+QEMU is driven through three control planes: a UNIX-socket serial console,
+the QMP monitor (pause + dump physical memory) and the gdbstub (breakpoint
+barrier + architectural register/CSR read).
 """
 import argparse
 import json
 import os
+import re
 import socket
 import subprocess
 import sys
+import threading
 import time
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "..", ".."))
 
-GUEST_RAM_BASE = 0x80000000
-CLINT_BASE, CLINT_SIZE = 0x02000000, 0x10000
-PLIC_BASE, PLIC_SIZE = 0x0C000000, 0x600000
-SHELL_MARKER = b"QEMU-CPU-MODE-SHELL-READY"
+# Fallback addresses if the DTB cannot be parsed (standard QEMU 'virt').
+DEFAULT_RAM_BASE = 0x80000000
+DEFAULT_CLINT, CLINT_SIZE = 0x02000000, 0x10000
+DEFAULT_PLIC, PLIC_SIZE = 0x0C000000, 0x600000
+DEFAULT_UART, UART_SIZE = 0x10000000, 0x100
 
 # Keep in sync with qemu-common.sh:QEMU_CPU
 DEFAULT_CPU = ("rv64,v=false,h=false,sstc=false,zicond=false,zacas=false,"
@@ -95,6 +104,97 @@ class QMP:
 
 
 # --------------------------------------------------------------------------
+# gdb driver - drives gdb-multiarch over pipes, synced with echo sentinels
+# --------------------------------------------------------------------------
+class GdbDriver:
+    """Drives a long-lived gdb-multiarch session connected to QEMU's gdbstub.
+
+    gdb stays attached for the whole capture so the VM remains halted at the
+    breakpoint while QMP dumps physical memory.  Commands are synchronised by
+    appending an `echo <sentinel>` and reading stdout until it appears -- this
+    copes with `continue` blocking until the breakpoint is hit.
+    """
+
+    def __init__(self, port):
+        self.proc = subprocess.Popen(
+            ["gdb-multiarch", "-q", "-nx"],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT, text=True, bufsize=1)
+        self._buf = []
+        self._lock = threading.Lock()
+        self._reader = threading.Thread(target=self._read_loop, daemon=True)
+        self._reader.start()
+        self._n = 0
+        self._run("set pagination off")
+        self._run("set confirm off")
+        self._run("set osabi none")
+        if self._run("target remote :%d" % port, timeout=30) is None:
+            raise RuntimeError("gdb could not attach to :%d" % port)
+
+    def _read_loop(self):
+        for line in self.proc.stdout:
+            with self._lock:
+                self._buf.append(line)
+
+    def _drain(self):
+        with self._lock:
+            out = "".join(self._buf)
+            self._buf.clear()
+            return out
+
+    def send(self, cmd):
+        self.proc.stdin.write(cmd + "\n")
+        self.proc.stdin.flush()
+
+    def _run(self, cmd, timeout=60.0):
+        """Run a gdb command, return all output it produced (or None on
+        timeout)."""
+        self._n += 1
+        sentinel = "@@SYNC%d@@" % self._n
+        self.send(cmd)
+        self.send("echo " + sentinel + "\\n")
+        deadline = time.time() + timeout
+        acc = ""
+        while time.time() < deadline:
+            acc += self._drain()
+            if sentinel in acc:
+                return acc.split(sentinel)[0]
+            if self.proc.poll() is not None:
+                raise RuntimeError("gdb exited unexpectedly:\n" + acc)
+            time.sleep(0.05)
+        return None
+
+    def set_breakpoint(self, addr):
+        self._run("break *0x%x" % addr)
+
+    def continue_to_breakpoint(self, timeout):
+        out = self._run("continue", timeout=timeout)
+        if out is None:
+            raise RuntimeError("timed out waiting for the snapshot barrier")
+        if "Breakpoint" not in out and "received signal" not in out:
+            raise RuntimeError("unexpected gdb stop:\n" + out)
+        return out
+
+    def delete_breakpoints(self):
+        self._run("delete")
+
+    def dump_registers(self):
+        out = self._run("source " + os.path.join(SCRIPT_DIR,
+                                                  "gdb-dump-regs.py"))
+        if out is None or "REGDUMP-OK" not in out:
+            raise RuntimeError("register dump failed:\n%s" % out)
+        return out
+
+    def quit(self):
+        try:
+            self.send("detach")
+            self.send("quit")
+            self.proc.wait(timeout=5)
+        except Exception:
+            self.proc.kill()
+
+
+# --------------------------------------------------------------------------
 # helpers
 # --------------------------------------------------------------------------
 def connect_unix(path, timeout=30.0):
@@ -109,76 +209,113 @@ def connect_unix(path, timeout=30.0):
     raise RuntimeError("could not connect to socket %s" % path)
 
 
-def read_until(sock, marker, timeout, logpath):
-    """Read from the serial socket until `marker` appears; tee to logpath."""
-    sock.settimeout(1.0)
+def serial_drainer(sock, logpath, stop_evt, marker=None, found_evt=None):
+    """Background thread: copy the serial console to a log file, and (if a
+    marker is given) set found_evt when it appears."""
+    sock.settimeout(0.5)
     buf = bytearray()
-    deadline = time.time() + timeout
     with open(logpath, "wb") as logf:
-        while time.time() < deadline:
+        while not stop_evt.is_set():
             try:
                 chunk = sock.recv(4096)
             except socket.timeout:
                 continue
+            except OSError:
+                break
             if not chunk:
-                raise RuntimeError("serial connection closed before marker")
-            buf += chunk
+                break
             logf.write(chunk)
             logf.flush()
-            if marker in buf:
-                return bytes(buf)
-    raise RuntimeError("timed out waiting for shell marker %r" % marker)
+            if marker is not None and found_evt is not None:
+                buf += chunk
+                if marker in buf:
+                    found_evt.set()
 
 
-def dump_registers(gdb_port, out_path):
-    """Read all CPU registers/CSRs through the QEMU gdbstub."""
-    cmd = [
-        "gdb-multiarch", "-nx", "-batch", "-q",
-        "-ex", "set pagination off",
-        "-ex", "set confirm off",
-        "-ex", "target remote :%d" % gdb_port,
-        "-x", os.path.join(SCRIPT_DIR, "gdb-dump-regs.py"),
-        "-ex", "detach",
-    ]
-    res = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-    regs = {}
-    for line in res.stdout.splitlines():
-        parts = line.split()
-        if len(parts) == 3 and parts[0] == "REG":
+def resolve_symbol(elf, symbol):
+    """Return the address of `symbol` in `elf` via riscv64 nm."""
+    for nm in ("riscv64-linux-gnu-nm", "nm"):
+        try:
+            out = subprocess.check_output([nm, elf], text=True)
+        except (OSError, subprocess.CalledProcessError):
+            continue
+        for line in out.splitlines():
+            parts = line.split()
+            if len(parts) == 3 and parts[2] == symbol:
+                return int(parts[0], 16)
+    raise RuntimeError("symbol %r not found in %s" % (symbol, elf))
+
+
+def parse_regs(text):
+    """Parse `REG <hart> <name> 0x<val>` lines into {hart: {name: val}}."""
+    harts = {}
+    for line in text.splitlines():
+        p = line.split()
+        if len(p) == 4 and p[0] == "REG":
             try:
-                regs[parts[1]] = int(parts[2], 0)
+                harts.setdefault(int(p[1]), {})[p[2]] = int(p[3], 0)
             except ValueError:
                 pass
-    if "REGDUMP-OK" not in res.stdout:
-        log("gdb stdout:\n" + res.stdout)
-        log("gdb stderr:\n" + res.stderr)
-        raise RuntimeError("register dump failed")
-    with open(out_path, "w") as f:
-        for name in sorted(regs):
-            f.write("%s 0x%x\n" % (name, regs[name]))
-    return regs
+    return harts
+
+
+# --------------------------------------------------------------------------
+# Device tree: dump from QEMU and parse the platform layout
+# --------------------------------------------------------------------------
+def dump_and_parse_dtb(qemu, cpu, smp, mem_mb, bios, dtb_path):
+    """Dump the QEMU 'virt' DTB and extract the platform layout."""
+    subprocess.run(
+        [qemu, "-machine", "virt,dumpdtb=%s" % dtb_path, "-cpu", cpu,
+         "-smp", str(smp), "-m", "%dM" % mem_mb, "-bios", bios,
+         "-display", "none"],
+        check=True, capture_output=True, text=True)
+    dts = subprocess.check_output(["dtc", "-I", "dtb", "-O", "dts", dtb_path],
+                                  text=True, stderr=subprocess.DEVNULL)
+
+    def node_addr(pattern, default):
+        m = re.search(pattern + r"@([0-9a-fA-F]+)", dts)
+        return int(m.group(1), 16) if m else default
+
+    plat = {
+        "ram_base": node_addr("memory", DEFAULT_RAM_BASE),
+        "clint_base": node_addr(r"(?:clint|aclint-mtimer)", DEFAULT_CLINT),
+        "plic_base": node_addr(r"(?:plic|interrupt-controller)",
+                               DEFAULT_PLIC),
+        "uart_base": node_addr("serial", DEFAULT_UART),
+        "num_harts": len(re.findall(r"cpu@\d+\s*{", dts)),
+    }
+    m = re.search(r"timebase-frequency\s*=\s*<\s*(0x[0-9a-fA-F]+|\d+)", dts)
+    plat["timebase"] = int(m.group(1), 0) if m else 10000000
+    if plat["num_harts"] < 1:
+        plat["num_harts"] = smp
+    return plat
 
 
 # --------------------------------------------------------------------------
 # main
 # --------------------------------------------------------------------------
 def main():
-    ap = argparse.ArgumentParser(description=__doc__,
-                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--image-dir", default=os.path.join(REPO_ROOT, "images"))
-    ap.add_argument("--out", default=os.path.join(REPO_ROOT, "snapshots", "snap"),
+    ap.add_argument("--out",
+                    default=os.path.join(REPO_ROOT, "snapshots", "snap"),
                     help="output snapshot directory")
+    ap.add_argument("--mode", choices=["bench", "shell"], default="bench",
+                    help="bench: breakpoint barrier on snapshot_barrier(); "
+                         "shell: marker barrier on the idle shell")
     ap.add_argument("--mem-mb", type=int, default=256)
+    ap.add_argument("--smp", type=int, default=1, help="number of harts")
     ap.add_argument("--cpu", default=DEFAULT_CPU)
     ap.add_argument("--gdb-port", type=int, default=11234)
     ap.add_argument("--boot-timeout", type=float, default=120.0)
-    ap.add_argument("--marker", default="QEMU-CPU-MODE-BENCH-READY",
-                    help="serial-console string to snapshot on. The default "
-                         "is printed by /bin/bench right before its CPU-bound "
-                         "region; use QEMU-CPU-MODE-SHELL-READY to snapshot "
-                         "the idle shell instead.")
-    ap.add_argument("--settle", type=float, default=0.0,
-                    help="seconds to wait after the marker before snapshotting")
+    ap.add_argument("--break-symbol", default="snapshot_barrier",
+                    help="(bench mode) function to breakpoint on")
+    ap.add_argument("--marker", default="QEMU-CPU-MODE-SHELL-READY",
+                    help="(shell mode) serial-console string to snapshot on")
+    ap.add_argument("--settle", type=float, default=2.0,
+                    help="(shell mode) delay after the marker")
     ap.add_argument("--qemu", default="qemu-system-riscv64")
     args = ap.parse_args()
 
@@ -186,19 +323,13 @@ def main():
     kernel = os.path.join(img, "Image")
     initrd = os.path.join(img, "initramfs.cpio.gz")
     bios = os.path.join(img, "fw_jump.bin")
+    bench_elf = os.path.join(img, "src", "rootfs", "bin", "bench")
     for p in (kernel, initrd, bios):
         if not os.path.exists(p):
             sys.exit("missing image artifact: %s (run build-image.sh)" % p)
 
     out = os.path.abspath(args.out)
     os.makedirs(out, exist_ok=True)
-    ram_bin = os.path.join(out, "ram.bin")
-    clint_bin = os.path.join(out, "clint.bin")
-    plic_bin = os.path.join(out, "plic.bin")
-    regs_txt = os.path.join(out, "regs.txt")
-    serial_log = os.path.join(out, "serial.log")
-    meta_json = os.path.join(out, "meta.json")
-
     run_dir = os.path.join(out, ".run")
     os.makedirs(run_dir, exist_ok=True)
     qmp_sock = os.path.join(run_dir, "qmp.sock")
@@ -207,89 +338,144 @@ def main():
         if os.path.exists(s):
             os.unlink(s)
 
+    # ---- device tree: derive the platform layout up front ----------------
+    dtb_path = os.path.join(out, "virt.dtb")
+    log("dumping + parsing the QEMU 'virt' device tree")
+    plat = dump_and_parse_dtb(args.qemu, args.cpu, args.smp, args.mem_mb,
+                              bios, dtb_path)
     mem_bytes = args.mem_mb * 1024 * 1024
+    plat["ram_size"] = mem_bytes
+    log("platform: ram=%#x+%dMiB clint=%#x plic=%#x uart=%#x harts=%d "
+        "timebase=%d" % (plat["ram_base"], args.mem_mb, plat["clint_base"],
+                         plat["plic_base"], plat["uart_base"],
+                         plat["num_harts"], plat["timebase"]))
+
+    kcmd = "console=ttyS0 earlycon=sbi"
+    if args.mode == "shell":
+        kcmd += " qemucpu.mode=shell"
+
     qemu_cmd = [
-        args.qemu,
-        "-machine", "virt",
-        "-cpu", args.cpu,
-        "-smp", "1",
-        "-m", "%dM" % args.mem_mb,
-        "-bios", bios,
-        "-kernel", kernel,
-        "-initrd", initrd,
-        "-append", "console=ttyS0 earlycon=sbi",
-        "-display", "none",
+        args.qemu, "-machine", "virt", "-cpu", args.cpu,
+        "-smp", str(args.smp), "-m", "%dM" % args.mem_mb,
+        "-bios", bios, "-kernel", kernel, "-initrd", initrd,
+        "-append", kcmd, "-display", "none",
         "-chardev", "socket,id=ser0,path=%s,server=on,wait=off" % ser_sock,
         "-serial", "chardev:ser0",
         "-qmp", "unix:%s,server=on,wait=off" % qmp_sock,
-        "-gdb", "tcp::%d" % args.gdb_port,
-        "-no-reboot",
+        "-gdb", "tcp::%d" % args.gdb_port, "-no-reboot",
     ]
 
-    log("launching QEMU (%d MB, cpu=%s)" % (args.mem_mb, args.cpu))
+    log("launching QEMU (mode=%s, %d MiB, %d hart(s))"
+        % (args.mode, args.mem_mb, args.smp))
     qemu = subprocess.Popen(qemu_cmd, stdout=subprocess.DEVNULL,
                             stderr=subprocess.PIPE)
+    gdb = None
+    stop_evt = threading.Event()
     try:
-        # Connect QMP up front so that, the instant the marker appears, the
-        # only thing between us and a paused VM is a single 'stop' command -
-        # the benchmark barely advances during the capture window.
         qmp = QMP(qmp_sock)
         ser = connect_unix(ser_sock)
-        marker = args.marker.encode()
-        log("waiting for marker %r on the serial console ..." % args.marker)
-        read_until(ser, marker, args.boot_timeout, serial_log)
-        if args.settle > 0:
+        serial_log = os.path.join(out, "serial.log")
+
+        if args.mode == "bench":
+            # Race-free barrier: drain the console in the background while
+            # gdb runs the guest to the breakpoint on snapshot_barrier().
+            threading.Thread(target=serial_drainer,
+                             args=(ser, serial_log, stop_evt),
+                             daemon=True).start()
+            addr = resolve_symbol(bench_elf, args.break_symbol)
+            log("breakpoint barrier: %s @ %#x" % (args.break_symbol, addr))
+            gdb = GdbDriver(args.gdb_port)
+            gdb.set_breakpoint(addr)
+            gdb.continue_to_breakpoint(args.boot_timeout)
+            gdb.delete_breakpoints()
+            log("barrier reached; pausing the VM")
+            qmp.execute("stop")
+        else:
+            # Marker barrier: snapshot the idle interactive shell.
+            found = threading.Event()
+            threading.Thread(
+                target=serial_drainer,
+                args=(ser, serial_log, stop_evt, args.marker.encode(), found),
+                daemon=True).start()
+            log("waiting for marker %r ..." % args.marker)
+            if not found.wait(timeout=args.boot_timeout):
+                raise RuntimeError("timed out waiting for %r" % args.marker)
             time.sleep(args.settle)
-        log("marker seen; pausing the VM")
-        qmp.execute("stop")
+            log("marker seen; pausing the VM")
+            qmp.execute("stop")
+            gdb = GdbDriver(args.gdb_port)
 
-        log("dumping guest RAM (%d MB) -> ram.bin" % args.mem_mb)
-        qmp.pmemsave(GUEST_RAM_BASE, mem_bytes, ram_bin)
-        log("dumping CLINT MMIO -> clint.bin")
-        qmp.pmemsave(CLINT_BASE, CLINT_SIZE, clint_bin)
-        log("dumping PLIC MMIO -> plic.bin")
-        qmp.pmemsave(PLIC_BASE, PLIC_SIZE, plic_bin)
+        # ---- dump physical memory + MMIO device state --------------------
+        log("dumping guest RAM (%d MiB) -> ram.bin" % args.mem_mb)
+        qmp.pmemsave(plat["ram_base"], mem_bytes,
+                     os.path.join(out, "ram.bin"))
+        log("dumping CLINT / PLIC / UART MMIO")
+        qmp.pmemsave(plat["clint_base"], CLINT_SIZE,
+                     os.path.join(out, "clint.bin"))
+        qmp.pmemsave(plat["plic_base"], PLIC_SIZE,
+                     os.path.join(out, "plic.bin"))
+        qmp.pmemsave(plat["uart_base"], UART_SIZE,
+                     os.path.join(out, "uart.bin"))
 
-        log("dumping CPU registers / CSRs via gdbstub -> regs.txt")
-        regs = dump_registers(args.gdb_port, regs_txt)
-        log("captured %d registers (pc=0x%x)"
-            % (len(regs), regs.get("pc", 0)))
+        # ---- dump per-hart registers via the gdbstub ---------------------
+        log("dumping CPU registers / CSRs for %d hart(s)" % args.smp)
+        regtext = gdb.dump_registers()
+        harts = parse_regs(regtext)
+        hart_meta = []
+        for h in sorted(harts):
+            fn = "regs.hart%d.txt" % h
+            with open(os.path.join(out, fn), "w") as f:
+                for name in sorted(harts[h]):
+                    f.write("%s 0x%x\n" % (name, harts[h][name]))
+            hart_meta.append({"hart": h, "regs_file": fn,
+                              "pc": harts[h].get("pc", 0)})
+            log("  hart %d: %d registers, pc=%#x"
+                % (h, len(harts[h]), harts[h].get("pc", 0)))
+        if not hart_meta:
+            raise RuntimeError("no register state captured")
 
         meta = {
-            "version": 1,
+            "version": 2,
             "arch": "riscv64",
+            "mode": args.mode,
             "qemu_cpu": args.cpu,
-            "guest_ram_base": GUEST_RAM_BASE,
-            "guest_ram_size": mem_bytes,
-            "ram_file": "ram.bin",
-            "clint_base": CLINT_BASE,
-            "clint_size": CLINT_SIZE,
-            "clint_file": "clint.bin",
-            "plic_base": PLIC_BASE,
-            "plic_size": PLIC_SIZE,
-            "plic_file": "plic.bin",
-            "regs_file": "regs.txt",
-            "pc": regs.get("pc", 0),
+            "num_harts": len(hart_meta),
+            "ram": {"base": plat["ram_base"], "size": mem_bytes,
+                    "file": "ram.bin"},
+            "clint": {"base": plat["clint_base"], "size": CLINT_SIZE,
+                      "file": "clint.bin"},
+            "plic": {"base": plat["plic_base"], "size": PLIC_SIZE,
+                     "file": "plic.bin"},
+            "uart": {"base": plat["uart_base"], "size": UART_SIZE,
+                     "file": "uart.bin"},
+            "timebase": plat["timebase"],
+            "harts": hart_meta,
+            "dtb_file": "virt.dtb",
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         }
-        with open(meta_json, "w") as f:
+        with open(os.path.join(out, "meta.json"), "w") as f:
             json.dump(meta, f, indent=2)
 
         log("quitting QEMU")
         try:
             qmp.execute("quit")
-        except RuntimeError:
+        except (RuntimeError, OSError):
             pass
+        gdb.quit()
+        gdb = None
         qemu.wait(timeout=10)
     finally:
+        stop_evt.set()
+        if gdb is not None:
+            gdb.quit()
         if qemu.poll() is None:
             qemu.kill()
 
     log("snapshot written to %s" % out)
-    for name in ("ram.bin", "clint.bin", "plic.bin", "regs.txt", "meta.json"):
+    for name in sorted(os.listdir(out)):
         p = os.path.join(out, name)
-        sz = os.path.getsize(p) if os.path.exists(p) else 0
-        print("    %-12s %10d bytes" % (name, sz))
+        if os.path.isfile(p):
+            print("    %-18s %10d bytes" % (name, os.path.getsize(p)))
 
 
 if __name__ == "__main__":

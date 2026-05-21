@@ -159,12 +159,32 @@ class RiscvQemuSnapshotWorkload(Workload):
     cxx_class = "gem5::RiscvISA::QemuSnapshot"
     cxx_header = "arch/riscv/qemu/qemu_snapshot.hh"
 
+    # Guest RAM image.
     ram_file = Param.String("Raw guest RAM image captured from QEMU (ram.bin)")
     ram_addr = Param.Addr(0x80000000, "Physical base address of guest RAM")
-    regs_file = Param.String("CPU register / CSR dump captured from QEMU")
-    clint_addr = Param.Addr(0x02000000, "CLINT MMIO base address")
-    clint_mtime = Param.UInt64(0, "CLINT mtime value to restore")
-    clint_mtimecmp = Param.UInt64(
-        0xFFFFFFFFFFFFFFFF, "CLINT mtimecmp[hart0] value to restore"
+
+    # Per-hart register/CSR dumps, in hart order (regs.hart0.txt, ...).
+    regs_files = VectorParam.String(
+        [], "Per-hart CPU register / CSR dump files captured from QEMU"
     )
+
+    # CLINT (timer / software interrupts).
+    clint_addr = Param.Addr(0x02000000, "CLINT MMIO base address")
+    clint_file = Param.String("CLINT MMIO dump (mtime / mtimecmp / msip)")
+    clint_timer_gap = Param.UInt64(
+        0,
+        "If non-zero, clamp each restored mtimecmp to mtime+gap so gem5 need "
+        "not fast-forward through millions of idle RTC ticks (0 = exact).",
+    )
+
+    # PLIC (external interrupt controller).
+    plic_addr = Param.Addr(0x0C000000, "PLIC MMIO base address")
+    plic_file = Param.String("PLIC MMIO dump (priority / enable / threshold)")
+    plic_num_src = Param.Unsigned(64, "Number of PLIC interrupt sources")
+    plic_num_contexts = Param.Unsigned(2, "Number of PLIC contexts")
+
+    # 8250 UART.
+    uart_addr = Param.Addr(0x10000000, "UART MMIO base address")
+    uart_file = Param.String("UART 8250 register dump")
+
     verbose = Param.Bool(True, "Log every step of the snapshot restore")
