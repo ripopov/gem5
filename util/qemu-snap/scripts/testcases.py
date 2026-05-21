@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""testcases.py - the qemu-cpu testcase registry (single source of truth).
+"""testcases.py - the qemu-snap testcase registry (single source of truth).
 
 A *testcase* is a guest workload plus a description of how to snapshot it and
 how to tell, from a restored gem5 run, whether it passed.  It is deliberately
@@ -12,18 +12,18 @@ decoupled from two orthogonal things:
     time, so any testcase can be run in any mode.
 
 This module is the only place a testcase is named.  It is imported by
-qemu-snapshot.py and qemu-cpu-test.py, and invoked as a CLI helper by the
+qemu-snapshot.py and qemu-snap-test.py, and invoked as a CLI helper by the
 (bash) build-image.sh.
 
 Adding a testcase
 -----------------
-  1. drop a self-contained C file in util/qemu-cpu/bench/;
+  1. drop a self-contained C file in util/qemu-snap/bench/;
   2. add one TestCase(...) entry to TESTCASES below.
 
 That is all.  build-image.sh compiles every registered source into the
 initramfs as /bin/<name>, the generic /init runs /bin/<name> when the kernel
-command line says qemucpu.test=<name>, qemu-snapshot.py captures it, and
-qemu-cpu-test.py validates it - none of those scripts needs to be touched.
+command line says qemusnap.test=<name>, qemu-snapshot.py captures it, and
+qemu-snap-test.py validates it - none of those scripts needs to be touched.
 
 A testcase C file must provide a non-inlined snapshot_barrier() function (the
 race-free capture point) unless it uses 'marker' capture; see bench/bench.c.
@@ -41,7 +41,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "..", ".."))
 
 # C testcase sources live here (repo-relative).
-BENCH_DIR = os.path.join("util", "qemu-cpu", "bench")
+BENCH_DIR = os.path.join("util", "qemu-snap", "bench")
 
 
 class TestCase:
@@ -65,7 +65,7 @@ class TestCase:
     marker      (marker capture) serial-console string to snapshot on.
     settle      (marker capture) delay after the marker before the QMP stop.
 
-    check       how qemu-cpu-test.py validates a restored gem5 run:
+    check       how qemu-snap-test.py validates a restored gem5 run:
                   'terminal'    - `pass_marker` must appear on the gem5
                                   console and every hart must have advanced;
                   'interactive' - connect to the gem5 terminal, type a
@@ -123,7 +123,7 @@ TESTCASES = [
     TestCase(
         "shell", "idle interactive shell",
         source=None, smp=1,
-        capture="marker", marker="QEMU-CPU-MODE-SHELL-READY",
+        capture="marker", marker="QEMU-SNAP-MODE-SHELL-READY",
         check="interactive", timer_gap=200000),
 ]
 

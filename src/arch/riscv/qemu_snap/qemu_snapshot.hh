@@ -26,8 +26,8 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef __ARCH_RISCV_QEMU_QEMU_SNAPSHOT_HH__
-#define __ARCH_RISCV_QEMU_QEMU_SNAPSHOT_HH__
+#ifndef __ARCH_RISCV_QEMU_SNAP_QEMU_SNAPSHOT_HH__
+#define __ARCH_RISCV_QEMU_SNAP_QEMU_SNAPSHOT_HH__
 
 #include <cstdint>
 #include <string>
@@ -48,8 +48,8 @@ namespace RiscvISA
 {
 
 /**
- * QEMU-CPU mode: a full-system workload that restores a machine snapshot
- * captured under QEMU (see util/qemu-cpu/) instead of booting a kernel.
+ * QEMU-snapshot mode: a full-system workload that restores a machine snapshot
+ * captured under QEMU (see util/qemu-snap/) instead of booting a kernel.
  *
  * At initState() it
  *   1. copies the captured guest RAM image into gem5 physical memory;
@@ -128,4 +128,4 @@ class QemuSnapshot : public Workload
 } // namespace RiscvISA
 } // namespace gem5
 
-#endif // __ARCH_RISCV_QEMU_QEMU_SNAPSHOT_HH__
+#endif // __ARCH_RISCV_QEMU_SNAP_QEMU_SNAPSHOT_HH__

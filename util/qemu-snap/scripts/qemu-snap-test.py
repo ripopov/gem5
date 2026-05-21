@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""qemu-cpu-test.py - end-to-end test harness for gem5 QEMU-CPU mode.
+"""qemu-snap-test.py - end-to-end test harness for gem5 QEMU-snapshot mode.
 
 This harness is generic: it knows how to *restore a snapshot into gem5 and
 validate the run*, but it has no per-testcase or per-gem5-mode code.  What to
@@ -22,13 +22,13 @@ invoking qemu-snapshot.py.
 Examples
 --------
   # default: every testcase, timing CPU, classic memory
-  qemu-cpu-test.py
+  qemu-snap-test.py
 
   # the syscall testcase on O3, both classic and Ruby/CHI+Garnet
-  qemu-cpu-test.py --test syscall --cpu o3 --mem classic,ruby-garnet
+  qemu-snap-test.py --test syscall --cpu o3 --mem classic,ruby-garnet
 
   # full sweep, capturing any missing snapshots first
-  qemu-cpu-test.py --test all --cpu atomic,timing,o3,minor --mem all --capture
+  qemu-snap-test.py --test all --cpu atomic,timing,o3,minor --mem all --capture
 """
 import argparse
 import json
@@ -43,7 +43,7 @@ import time
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "..", ".."))
 GEM5 = os.path.join(REPO_ROOT, "build", "RISCV", "gem5.opt")
-RESTORE = os.path.join(REPO_ROOT, "configs", "example", "qemu_cpu",
+RESTORE = os.path.join(REPO_ROOT, "configs", "example", "qemu_snap",
                        "restore.py")
 SNAPSHOT_PY = os.path.join(SCRIPT_DIR, "qemu-snapshot.py")
 
@@ -60,7 +60,7 @@ MEM_CONFIGS = {
 
 
 def log(msg):
-    print("\033[1;32m[qemu-cpu-test]\033[0m %s" % msg, flush=True)
+    print("\033[1;32m[qemu-snap-test]\033[0m %s" % msg, flush=True)
 
 
 # --------------------------------------------------------------------------

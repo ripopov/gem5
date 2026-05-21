@@ -147,17 +147,17 @@ class RiscvBootloaderKernelWorkload(Workload):
 
 
 class RiscvQemuSnapshotWorkload(Workload):
-    """QEMU-CPU mode: restore a machine snapshot captured under QEMU.
+    """QEMU-snapshot mode: restore a machine snapshot captured under QEMU.
 
     Instead of booting a kernel, this workload injects a full machine state
     (guest RAM image + CPU/CSR register dump + CLINT timer state) produced by
-    util/qemu-cpu/scripts/qemu-snapshot.py, so gem5's detailed CPU models can
+    util/qemu-snap/scripts/qemu-snapshot.py, so gem5's detailed CPU models can
     continue execution from where fast QEMU emulation left off.
     """
 
     type = "RiscvQemuSnapshotWorkload"
     cxx_class = "gem5::RiscvISA::QemuSnapshot"
-    cxx_header = "arch/riscv/qemu/qemu_snapshot.hh"
+    cxx_header = "arch/riscv/qemu_snap/qemu_snapshot.hh"
 
     # Guest RAM image.
     ram_file = Param.String("Raw guest RAM image captured from QEMU (ram.bin)")

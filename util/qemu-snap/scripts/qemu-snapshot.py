@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """qemu-snapshot.py - boot the minimal RISC-V image under QEMU and capture a
-full machine snapshot for gem5 QEMU-CPU mode (pipeline stage 2 of 3).
+full machine snapshot for gem5 QEMU-snapshot mode (pipeline stage 2 of 3).
 
 This script is testcase-agnostic: it captures whichever testcase is named by
 --test, driven entirely by that testcase's entry in the scripts/testcases.py
@@ -372,8 +372,8 @@ def main():
                          plat["plic_base"], plat["uart_base"],
                          plat["num_harts"], plat["timebase"]))
 
-    # /init in the initramfs picks what to run from qemucpu.test=.
-    kcmd = "console=ttyS0 earlycon=sbi qemucpu.test=" + args.test
+    # /init in the initramfs picks what to run from qemusnap.test=.
+    kcmd = "console=ttyS0 earlycon=sbi qemusnap.test=" + args.test
 
     qemu_cmd = [
         args.qemu, "-machine", "virt", "-cpu", args.cpu,

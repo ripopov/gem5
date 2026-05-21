@@ -1,5 +1,5 @@
 /*
- * bench.c - tiny deterministic benchmark for gem5 QEMU-CPU mode.
+ * bench.c - tiny deterministic benchmark for gem5 QEMU-snapshot mode.
  *
  * Built into the initramfs (build-image.sh) as /bin/bench and started by
  * /init.  Flow that the snapshot bridge relies on:
@@ -60,7 +60,7 @@ u64_to_dec(char *p, uint64_t v)
 int
 main(void)
 {
-    write(1, "QEMU-CPU-MODE-BENCH-READY\n", 26);
+    write(1, "QEMU-SNAP-MODE-BENCH-READY\n", 26);
 
     /* (1) Race-free snapshot point. */
     snapshot_barrier();

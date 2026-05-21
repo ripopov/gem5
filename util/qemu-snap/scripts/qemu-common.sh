@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# qemu-common.sh - shared settings for gem5 QEMU-CPU mode scripts.
+# qemu-common.sh - shared settings for gem5 QEMU-snapshot mode scripts.
 #
 # Source this from other scripts:  . "$(dirname "$0")/qemu-common.sh"
 #
@@ -25,4 +25,4 @@ BIOS="${BIOS:-$IMG/fw_jump.bin}"
 KCMDLINE="${KCMDLINE:-console=ttyS0 earlycon=sbi}"
 
 # Marker printed by the initramfs /init once the shell is ready.
-SHELL_MARKER="QEMU-CPU-MODE-SHELL-READY"
+SHELL_MARKER="QEMU-SNAP-MODE-SHELL-READY"

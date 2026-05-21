@@ -1,5 +1,5 @@
 /*
- * philo.c - dining-philosophers benchmark for gem5 QEMU-CPU mode.
+ * philo.c - dining-philosophers benchmark for gem5 QEMU-snapshot mode.
  *
  * A genuinely multi-threaded, multicore workload used to validate that a
  * snapshot of an SMP RISC-V system restores and runs correctly on gem5's
@@ -130,7 +130,7 @@ philosopher(void *arg)
 int
 main(void)
 {
-    write(1, "QEMU-CPU-MODE-PHILO-READY\n", 26);
+    write(1, "QEMU-SNAP-MODE-PHILO-READY\n", 26);
 
     for (int i = 0; i < NPHIL; i++)
         pthread_mutex_init(&fork_mtx[i], NULL);

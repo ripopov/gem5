@@ -1,4 +1,4 @@
-# gem5 QEMU-CPU mode (RISC-V)
+# gem5 QEMU-snapshot mode (RISC-V)
 
 Booting Linux on a detailed gem5 CPU model is slow. This feature boots Linux
 **fast under QEMU**, captures a full machine snapshot, and **restores it into
@@ -28,7 +28,7 @@ engineering problems solved, limitations, and a detailed usage guide.
 
 The three things are deliberately kept separate:
 
-* **Infrastructure** — `build-image.sh`, `qemu-snapshot.py`, `qemu-cpu-test.py`
+* **Infrastructure** — `build-image.sh`, `qemu-snapshot.py`, `qemu-snap-test.py`
   — is generic and never names an individual testcase.
 * **Testcases** — the guest workloads — live in `bench/` as self-contained C
   files and are declared in one registry, **`scripts/testcases.py`**.
@@ -70,12 +70,12 @@ snapshot tool captures it, and the test harness validates it automatically.
 | `scripts/qemu-boot.sh` | Boot the image interactively under QEMU. |
 | `scripts/qemu-snapshot.py` | Boot under QEMU, halt at a barrier, capture a snapshot. |
 | `scripts/gdb-dump-regs.py` | gdb helper: dump every hart's registers/CSRs. |
-| `scripts/qemu-cpu-test.py` | Generic end-to-end test harness (testcase × CPU × memory). |
+| `scripts/qemu-snap-test.py` | Generic end-to-end test harness (testcase × CPU × memory). |
 | `bench/bench.c` | Testcase: single-core CPU-bound matrix multiply. |
 | `bench/philo.c` | Testcase: multicore dining philosophers (SMP validation). |
 | `bench/syscall.c` | Testcase: Linux syscall / kernel exerciser. |
-| `src/arch/riscv/qemu/qemu_snapshot.{hh,cc}` | gem5 `RiscvQemuSnapshotWorkload`. |
-| `configs/example/qemu_cpu/restore.py` | gem5 config: HiFive board + restore (classic or Ruby/CHI). |
+| `src/arch/riscv/qemu_snap/qemu_snapshot.{hh,cc}` | gem5 `RiscvQemuSnapshotWorkload`. |
+| `configs/example/qemu_snap/restore.py` | gem5 config: HiFive board + restore (classic or Ruby/CHI). |
 
 ## Why the constrained ISA
 
@@ -90,21 +90,21 @@ kernel's boot-time "alternatives" patching stays inside it.
 ```bash
 # 1. Build the minimal RISC-V Linux image (needs the RISC-V cross toolchain).
 #    Every testcase registered in scripts/testcases.py is compiled in.
-util/qemu-cpu/scripts/build-image.sh
+util/qemu-snap/scripts/build-image.sh
 
 # 2. Capture a snapshot of any registered testcase (--test names it; the
 #    hart count, capture barrier and so on come from testcases.py).
-util/qemu-cpu/scripts/qemu-snapshot.py --test bench   --out snapshots/bench
-util/qemu-cpu/scripts/qemu-snapshot.py --test philo   --out snapshots/philo
-util/qemu-cpu/scripts/qemu-snapshot.py --test syscall --out snapshots/syscall
-util/qemu-cpu/scripts/qemu-snapshot.py --test shell   --out snapshots/shell
+util/qemu-snap/scripts/qemu-snapshot.py --test bench   --out snapshots/bench
+util/qemu-snap/scripts/qemu-snapshot.py --test philo   --out snapshots/philo
+util/qemu-snap/scripts/qemu-snapshot.py --test syscall --out snapshots/syscall
+util/qemu-snap/scripts/qemu-snapshot.py --test shell   --out snapshots/shell
 
 # 3. Restore into gem5 and run on a detailed CPU
-build/RISCV/gem5.opt configs/example/qemu_cpu/restore.py \
+build/RISCV/gem5.opt configs/example/qemu_snap/restore.py \
     --snapshot-dir snapshots/philo --cpu o3
 
 # 3b. ...or restore into the Ruby CHI memory subsystem (Garnet NoC)
-build/RISCV/gem5.opt configs/example/qemu_cpu/restore.py \
+build/RISCV/gem5.opt configs/example/qemu_snap/restore.py \
     --snapshot-dir snapshots/philo --cpu o3 \
     --ruby --network garnet --timer-gap 100000
 ```
@@ -121,21 +121,21 @@ terminal port it prints (`m5term localhost <port>`). `--cpu` accepts
 
 ## Tests
 
-`qemu-cpu-test.py` is a generic harness: it runs the cross product of three
+`qemu-snap-test.py` is a generic harness: it runs the cross product of three
 independent axes — testcase (`--test`), CPU model (`--cpu`) and memory system
 (`--mem`: `classic`, `ruby-simple`, `ruby-garnet`) — so any testcase can be
 validated in any gem5 mode.
 
 ```bash
 # default: every testcase, timing CPU, classic memory
-util/qemu-cpu/scripts/qemu-cpu-test.py
+util/qemu-snap/scripts/qemu-snap-test.py
 
 # full sweep, capturing any missing snapshot first
-util/qemu-cpu/scripts/qemu-cpu-test.py \
+util/qemu-snap/scripts/qemu-snap-test.py \
     --test all --cpu atomic,timing,o3,minor --mem all --capture
 
 # one testcase, one mode
-util/qemu-cpu/scripts/qemu-cpu-test.py --test syscall --cpu o3 --mem ruby-garnet
+util/qemu-snap/scripts/qemu-snap-test.py --test syscall --cpu o3 --mem ruby-garnet
 ```
 
 How each run is validated comes from the testcase's `testcases.py` entry: a

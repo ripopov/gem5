@@ -1,9 +1,9 @@
-# gem5 QEMU-CPU mode (RISC-V) — Detailed Documentation
+# gem5 QEMU-snapshot mode (RISC-V) — Detailed Documentation
 
 > Branch: `qemu-cpu-mode`
 > Scope: RISC-V 64-bit full-system
 
-This document explains the design of gem5's QEMU-CPU mode, the engineering
+This document explains the design of gem5's QEMU-snapshot mode, the engineering
 problems solved while building it, its current limitations, and a complete
 usage guide. For a short overview see [`README.md`](README.md).
 
@@ -21,7 +21,7 @@ library and used as a fast CPU model. gem5 has no equivalent. Its closest
 mechanism, the KVM CPU, only works when the host and guest ISA match — so it
 cannot accelerate a RISC-V guest on an x86 host, the common case.
 
-QEMU-CPU mode fills that gap: **boot fast under stock QEMU, snapshot the
+QEMU-snapshot mode fills that gap: **boot fast under stock QEMU, snapshot the
 machine, and restore that snapshot into a gem5 detailed CPU** so that only
 the region of interest is simulated in detail.
 
@@ -79,9 +79,9 @@ Design choices:
 * **`rv64gc` userspace** — see §3.1.
 * **OpenSBI lives in guest RAM** — so its M-mode trap handlers (timer, SBI
   calls) are captured by the snapshot and keep working after restore.
-* **`/init` is generic** — it reads `qemucpu.test=<name>` from the kernel
+* **`/init` is generic** — it reads `qemusnap.test=<name>` from the kernel
   command line and simply runs `/bin/<name>` (or drops to an interactive
-  shell for `qemucpu.test=shell`). It contains no per-testcase logic, so a
+  shell for `qemusnap.test=shell`). It contains no per-testcase logic, so a
   new testcase needs no `/init` change.
 
 The set of testcases compiled into the image is *not* hard-coded in
@@ -134,14 +134,14 @@ The snapshot directory contains:
 
 ### 2.4 Stage 3 — restore into gem5 (`restore.py` + `RiscvQemuSnapshotWorkload`)
 
-`configs/example/qemu_cpu/restore.py` builds a gem5 `RiscvSystem` whose
+`configs/example/qemu_snap/restore.py` builds a gem5 `RiscvSystem` whose
 HiFive platform is configured **from the snapshot's `meta.json`** — CLINT,
 PLIC and UART base addresses, DRAM base/size, the hart count and the CLINT
 RTC timebase all come from the QEMU device tree rather than being hand-coded
 (§3.8). One CPU is created per hart.
 
 The system's workload is the C++ SimObject **`RiscvQemuSnapshotWorkload`**
-(`gem5::RiscvISA::QemuSnapshot`, `src/arch/riscv/qemu/qemu_snapshot.{hh,cc}`).
+(`gem5::RiscvISA::QemuSnapshot`, `src/arch/riscv/qemu_snap/qemu_snapshot.{hh,cc}`).
 A *workload*'s `initState()` runs after `m5.instantiate()` with full access
 to physical memory and the thread contexts. Instead of loading a kernel it:
 
@@ -364,7 +364,7 @@ real DRAM controller and a real interconnect.
 
 `--ruby` switches `restore.py` to build the memory system through gem5's
 **CHI** configuration scripts (`configs/ruby/CHI.py` and `CHI_config.py`)
-instead of by hand. CHI is the *only* protocol qemu-cpu supports: the gem5
+instead of by hand. CHI is the *only* protocol qemu-snap supports: the gem5
 RISCV binary is built with several Ruby protocols, and `restore.py` pins
 `--protocol CHI` so callers need only pass `--ruby`. CHI builds, per hart, a
 request node (RNF) with private L1 (split I/D) and L2 caches; a set of L3
@@ -432,7 +432,7 @@ The first cut of the tooling mixed three concerns that should be independent:
   branch per mode; `build-image.sh` named each benchmark source explicitly and
   generated a per-testcase `/init` dispatch.
 * the **gem5 mode** — CPU model and memory system — was tangled into the test
-  harness: `qemu-cpu-test.py` had a separate `test_bench` / `test_philo` /
+  harness: `qemu-snap-test.py` had a separate `test_bench` / `test_philo` /
   `test_ruby` / `test_interactive` function, and the Ruby path was hard-wired
   to *one* testcase (the dining philosophers) on *one* CPU (O3). There was no
   way to run, say, a single-core benchmark against the CHI memory subsystem.
@@ -451,7 +451,7 @@ registry is the *only* place a testcase is named:
   builds each as `/bin/<name>`; `/init` became a generic `exec /bin/<name>`.
 * `qemu-snapshot.py --test <name>` looks the testcase up and drives the
   capture from its registry entry — no per-testcase branches remain.
-* `qemu-cpu-test.py` became one generic runner over the cross product of
+* `qemu-snap-test.py` became one generic runner over the cross product of
   three orthogonal axes — testcase (`--test`), CPU model (`--cpu`) and memory
   system (`--mem`: `classic`, `ruby-simple`, `ruby-garnet`). It selects a
   validation strategy from the testcase's `check` field and never names a
@@ -555,12 +555,12 @@ reads the architectural state.
 ### 5.2 Build the guest image
 
 ```bash
-util/qemu-cpu/scripts/build-image.sh
+util/qemu-snap/scripts/build-image.sh
 ```
 
 Builds Linux, musl, busybox and every registered testcase into `images/`.
 The kernel build is the slow step; it is skipped on reruns if `images/Image`
-exists. `util/qemu-cpu/scripts/qemu-boot.sh` boots the image interactively for
+exists. `util/qemu-snap/scripts/qemu-boot.sh` boots the image interactively for
 a sanity check (`QEMU_SMP=4 qemu-boot.sh` for a multicore boot).
 `scripts/testcases.py list` prints the registered testcases.
 
@@ -570,10 +570,10 @@ a sanity check (`QEMU_SMP=4 qemu-boot.sh` for a multicore boot).
 count, capture mechanism and barrier all come from `testcases.py`.
 
 ```bash
-util/qemu-cpu/scripts/qemu-snapshot.py --test bench   --out snapshots/bench
-util/qemu-cpu/scripts/qemu-snapshot.py --test philo   --out snapshots/philo
-util/qemu-cpu/scripts/qemu-snapshot.py --test syscall --out snapshots/syscall
-util/qemu-cpu/scripts/qemu-snapshot.py --test shell   --out snapshots/shell
+util/qemu-snap/scripts/qemu-snapshot.py --test bench   --out snapshots/bench
+util/qemu-snap/scripts/qemu-snapshot.py --test philo   --out snapshots/philo
+util/qemu-snap/scripts/qemu-snapshot.py --test syscall --out snapshots/syscall
+util/qemu-snap/scripts/qemu-snapshot.py --test shell   --out snapshots/shell
 ```
 
 Key options:
@@ -590,7 +590,7 @@ Key options:
 ### 5.4 Restore into gem5
 
 ```bash
-build/RISCV/gem5.opt configs/example/qemu_cpu/restore.py \
+build/RISCV/gem5.opt configs/example/qemu_snap/restore.py \
     --snapshot-dir snapshots/bench --cpu o3
 ```
 
@@ -618,7 +618,7 @@ protocol to CHI and the topology to CustomMesh):
 
 ```bash
 # restore the multicore philo snapshot into O3 + Ruby/CHI, Garnet NoC
-build/RISCV/gem5.opt configs/example/qemu_cpu/restore.py \
+build/RISCV/gem5.opt configs/example/qemu_snap/restore.py \
     --snapshot-dir snapshots/philo --cpu o3 \
     --ruby --network garnet --timer-gap 100000
 ```
@@ -637,7 +637,7 @@ For an **interactive** restore of a shell snapshot, run gem5 with
 `--listener-mode=on` and connect to the terminal port it prints:
 
 ```bash
-build/RISCV/gem5.opt --listener-mode=on configs/example/qemu_cpu/restore.py \
+build/RISCV/gem5.opt --listener-mode=on configs/example/qemu_snap/restore.py \
     --snapshot-dir snapshots/shell --cpu timing --timer-gap 200000
 # -> "system.platform.terminal: Listening for connections on port 3456"
 m5term localhost 3456     # or: telnet localhost 3456
@@ -645,15 +645,15 @@ m5term localhost 3456     # or: telnet localhost 3456
 
 ### 5.5 The test harness
 
-`qemu-cpu-test.py` is generic: it runs the cross product of three independent
+`qemu-snap-test.py` is generic: it runs the cross product of three independent
 axes and reports PASS/FAIL for each combination.
 
 ```bash
 # default: every testcase, timing CPU, classic memory
-util/qemu-cpu/scripts/qemu-cpu-test.py
+util/qemu-snap/scripts/qemu-snap-test.py
 
 # full sweep, capturing any missing snapshot first
-util/qemu-cpu/scripts/qemu-cpu-test.py \
+util/qemu-snap/scripts/qemu-snap-test.py \
     --test all --cpu atomic,timing,o3,minor --mem all --capture
 ```
 
@@ -823,7 +823,7 @@ detailed simulation.
 Linux boot in ~1.25 s. gem5's detailed O3 + Ruby/CHI + Garnet model runs at
 ~2×10⁵ inst/s, so simulating that *same* boot inside gem5 would take roughly
 296.5×10⁶ / 2×10⁵ ≈ **25 minutes** — before the benchmark even starts.
-QEMU-CPU mode replaces that with a ~1 s QEMU boot plus a ~17.5 s fixed
+QEMU-snapshot mode replaces that with a ~1 s QEMU boot plus a ~17.5 s fixed
 restore cost, and spends detailed simulation only on the ~1.07 M-instruction
 region of interest.
 
@@ -833,18 +833,18 @@ region of interest.
 
 | Path | Role |
 |------|------|
-| `util/qemu-cpu/scripts/testcases.py` | the testcase registry — single source of truth |
-| `util/qemu-cpu/scripts/build-image.sh` | builds the RISC-V Linux image |
-| `util/qemu-cpu/scripts/qemu-common.sh` | shared QEMU machine/CPU settings |
-| `util/qemu-cpu/scripts/qemu-boot.sh` | interactive QEMU boot (sanity check) |
-| `util/qemu-cpu/scripts/qemu-snapshot.py` | capture a snapshot (barrier + DTB + dumps) |
-| `util/qemu-cpu/scripts/gdb-dump-regs.py` | gdb helper: dump all harts' registers |
-| `util/qemu-cpu/scripts/qemu-cpu-test.py` | generic end-to-end test harness (testcase × CPU × memory) |
-| `util/qemu-cpu/bench/bench.c` | testcase: single-core matrix benchmark |
-| `util/qemu-cpu/bench/philo.c` | testcase: multicore dining-philosophers benchmark |
-| `util/qemu-cpu/bench/syscall.c` | testcase: Linux syscall / kernel exerciser |
-| `src/arch/riscv/qemu/qemu_snapshot.{hh,cc}` | `RiscvQemuSnapshotWorkload` |
+| `util/qemu-snap/scripts/testcases.py` | the testcase registry — single source of truth |
+| `util/qemu-snap/scripts/build-image.sh` | builds the RISC-V Linux image |
+| `util/qemu-snap/scripts/qemu-common.sh` | shared QEMU machine/CPU settings |
+| `util/qemu-snap/scripts/qemu-boot.sh` | interactive QEMU boot (sanity check) |
+| `util/qemu-snap/scripts/qemu-snapshot.py` | capture a snapshot (barrier + DTB + dumps) |
+| `util/qemu-snap/scripts/gdb-dump-regs.py` | gdb helper: dump all harts' registers |
+| `util/qemu-snap/scripts/qemu-snap-test.py` | generic end-to-end test harness (testcase × CPU × memory) |
+| `util/qemu-snap/bench/bench.c` | testcase: single-core matrix benchmark |
+| `util/qemu-snap/bench/philo.c` | testcase: multicore dining-philosophers benchmark |
+| `util/qemu-snap/bench/syscall.c` | testcase: Linux syscall / kernel exerciser |
+| `src/arch/riscv/qemu_snap/qemu_snapshot.{hh,cc}` | `RiscvQemuSnapshotWorkload` |
 | `src/arch/riscv/RiscvFsWorkload.py` | the workload SimObject |
-| `configs/example/qemu_cpu/restore.py` | gem5 restore configuration (classic + Ruby/CHI) |
+| `configs/example/qemu_snap/restore.py` | gem5 restore configuration (classic + Ruby/CHI) |
 | `configs/ruby/CHI.py`, `configs/ruby/CHI_config.py` | gem5's standard CHI configuration scripts (used by `--ruby`) |
 | `configs/example/noc_config/2x4.py` | standard CHI NoC config script for the CustomMesh |

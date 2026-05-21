@@ -26,7 +26,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "arch/riscv/qemu/qemu_snapshot.hh"
+#include "arch/riscv/qemu_snap/qemu_snapshot.hh"
 
 #include <cstring>
 #include <fstream>

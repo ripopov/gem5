@@ -24,9 +24,9 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-"""gem5 QEMU-CPU mode -- stage 3 of 3.
+"""gem5 QEMU-snapshot mode -- stage 3 of 3.
 
-Restore a machine snapshot captured under QEMU (util/qemu-cpu/scripts/
+Restore a machine snapshot captured under QEMU (util/qemu-snap/scripts/
 qemu-snapshot.py) into a RISC-V full-system simulation and continue
 execution on one of gem5's detailed CPU models.
 
@@ -47,10 +47,10 @@ Two memory subsystems are supported:
     config script (default: configs/example/noc_config/2x4.py).
 
 Usage:
-    build/RISCV/gem5.opt configs/example/qemu_cpu/restore.py \\
+    build/RISCV/gem5.opt configs/example/qemu_snap/restore.py \\
         --snapshot-dir snapshots/bench --cpu o3
 
-    build/RISCV/gem5.opt configs/example/qemu_cpu/restore.py \\
+    build/RISCV/gem5.opt configs/example/qemu_snap/restore.py \\
         --snapshot-dir snapshots/philo --cpu o3 --ruby
 """
 import argparse
@@ -102,7 +102,7 @@ NOC_CONFIG = os.path.join(sys.path[0], "..", "noc_config", "2x4.py")
 
 if USE_RUBY:
     # The RISCV gem5 binary is built with several Ruby protocols; the Ruby
-    # option machinery insists on an explicit --protocol.  qemu-cpu supports
+    # option machinery insists on an explicit --protocol.  qemu-snap supports
     # exactly one -- CHI -- so it is pinned here and not exposed to callers.
     if not any(a == "--protocol" or a.startswith("--protocol=")
                for a in sys.argv):
@@ -112,7 +112,7 @@ if USE_RUBY:
 
     # Cache / home-node / DRAM knobs consumed by the CHI configuration
     # (configs/ruby/CHI.py + CHI_config.py) and by Ruby's memory-controller
-    # setup.  These normally come from the common Options.py; qemu-cpu only
+    # setup.  These normally come from the common Options.py; qemu-snap only
     # needs this handful, so they are spelled out.
     parser.add_argument("--num-dirs", type=int, default=1,
                         help="number of CHI memory (SNF) / DRAM controllers")

@@ -16,5 +16,5 @@ exec "$QEMU_BIN" \
     -bios "$BIOS" \
     -kernel "$KERNEL" \
     -initrd "$INITRD" \
-    -append "$KCMDLINE qemucpu.test=shell" \
+    -append "$KCMDLINE qemusnap.test=shell" \
     -nographic -no-reboot "$@"

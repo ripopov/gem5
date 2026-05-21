@@ -1,5 +1,5 @@
 /*
- * syscall.c - Linux syscall / kernel exerciser for gem5 QEMU-CPU mode.
+ * syscall.c - Linux syscall / kernel exerciser for gem5 QEMU-snapshot mode.
  *
  * Where bench.c stresses the CPU pipeline and philo.c stresses SMP, this
  * testcase stresses the *kernel* and gem5's full-system plumbing: after the
@@ -97,7 +97,7 @@ static int
 check_file_io(void)
 {
     const char *path = "/tmp/syscall.dat";
-    const char payload[] = "qemu-cpu syscall testcase payload\n";
+    const char payload[] = "qemu-snap syscall testcase payload\n";
     int ok = 1;
 
     int fd = open(path, O_CREAT | O_RDWR | O_TRUNC, 0644);
@@ -283,7 +283,7 @@ check_ids(void)
 int
 main(void)
 {
-    write(1, "QEMU-CPU-MODE-SYSCALL-READY\n", 28);
+    write(1, "QEMU-SNAP-MODE-SYSCALL-READY\n", 28);
 
     /* (1) Race-free snapshot point: everything below runs under gem5. */
     snapshot_barrier();

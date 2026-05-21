@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# build-image.sh - Build a minimal RISC-V Linux image for gem5 QEMU-CPU mode.
+# build-image.sh - Build a minimal RISC-V Linux image for gem5 QEMU-snapshot mode.
 #
 # Produces, in $IMG (default: <repo>/images):
 #   - Image              : raw RISC-V kernel image (for QEMU -kernel / gem5)
@@ -109,24 +109,24 @@ while IFS=$'\t' read -r tc_name tc_src tc_cflags; do
         "$REPO_ROOT/$tc_src"
 done < <(python3 "$SCRIPT_DIR/testcases.py" sources)
 
-# Generic, testcase-agnostic init.  qemu-snapshot.py passes qemucpu.test=<name>
+# Generic, testcase-agnostic init.  qemu-snapshot.py passes qemusnap.test=<name>
 # on the kernel command line; init simply runs /bin/<name> if it exists.
-#   qemucpu.test=shell : drop straight to an interactive shell (snapshotted
+#   qemusnap.test=shell : drop straight to an interactive shell (snapshotted
 #                        idle to test interactive restore).
-#   qemucpu.test=<name>: run /bin/<name>, captured at its snapshot_barrier().
+#   qemusnap.test=<name>: run /bin/<name>, captured at its snapshot_barrier().
 cat > "$ROOTFS/init" <<'INIT'
 #!/bin/sh
-# Minimal init for gem5 QEMU-CPU mode bring-up.
+# Minimal init for gem5 QEMU-snapshot mode bring-up.
 /bin/busybox --install -s /bin 2>/dev/null
 mount -t proc     proc     /proc
 mount -t sysfs    sysfs    /sys
 mount -t devtmpfs devtmpfs /dev 2>/dev/null
-export PS1='qemucpu# '
+export PS1='qemusnap# '
 echo
-echo "QEMU-CPU-MODE-SHELL-READY"
+echo "QEMU-SNAP-MODE-SHELL-READY"
 test=bench
 for tok in $(cat /proc/cmdline); do
-    case "$tok" in qemucpu.test=*) test="${tok#qemucpu.test=}" ;; esac
+    case "$tok" in qemusnap.test=*) test="${tok#qemusnap.test=}" ;; esac
 done
 if [ "$test" != shell ] && [ -x "/bin/$test" ]; then
     "/bin/$test"
