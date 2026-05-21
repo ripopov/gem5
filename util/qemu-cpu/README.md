@@ -37,6 +37,10 @@ engineering problems solved, limitations, and a detailed usage guide.
 * **Multicore** — `--smp N` snapshots and restores every hart; a 4-hart SMP
   dining-philosophers benchmark restores and runs to completion (cross-hart
   `futex`/IPI wakeups, SMP scheduling) on all four CPU models.
+* **Classic or Ruby memory** — restore into a flat `SystemXBar`/`SimpleMemory`
+  (default), or with `--ruby` into the Ruby coherent cache subsystem: per-core
+  L1 caches, a real DRAM controller, and the simple network or **Garnet** on
+  any topology — including a new **Ring** (`configs/topologies/Ring.py`).
 * **Self-configuring** — the gem5 HiFive board (device addresses, hart count,
   timebase) is derived from the QEMU `virt` device tree.
 
@@ -53,7 +57,8 @@ engineering problems solved, limitations, and a detailed usage guide.
 | `bench/bench.c` | Single-core matrix benchmark restored into gem5. |
 | `bench/philo.c` | Multicore dining-philosophers benchmark (SMP validation). |
 | `src/arch/riscv/qemu/qemu_snapshot.{hh,cc}` | gem5 `RiscvQemuSnapshotWorkload`. |
-| `configs/example/qemu_cpu/restore.py` | gem5 config: HiFive board + restore. |
+| `configs/example/qemu_cpu/restore.py` | gem5 config: HiFive board + restore (classic or Ruby). |
+| `configs/topologies/Ring.py` | Ring interconnect topology for Ruby. |
 
 ## Why the constrained ISA
 
@@ -81,6 +86,11 @@ util/qemu-cpu/scripts/qemu-snapshot.py --mode shell --out snapshots/shell
 # 3. Restore into gem5 and run on a detailed CPU
 build/RISCV/gem5.opt configs/example/qemu_cpu/restore.py \
     --snapshot-dir snapshots/philo --cpu o3
+
+# 3b. ...or restore into a Ruby coherent memory subsystem (Garnet, Ring)
+build/RISCV/gem5.opt configs/example/qemu_cpu/restore.py \
+    --snapshot-dir snapshots/philo --cpu o3 \
+    --ruby --network garnet --topology Ring --timer-gap 100000
 ```
 
 A benchmark run ends with `exit @ tick N : m5_exit instruction encountered`
@@ -96,12 +106,15 @@ terminal port it prints (`m5term localhost <port>`). `--cpu` accepts
 util/qemu-cpu/scripts/qemu-cpu-test.py --test all --cpu atomic,timing,o3,minor
 ```
 
-Three end-to-end tests: the matrix benchmark (checks the checksum reaches the
+Four end-to-end tests: the matrix benchmark (checks the checksum reaches the
 console), the multicore dining philosophers (checks the deterministic result
-*and* that every hart advanced its cycle counter in `stats.txt`), and the
-idle shell (types a command, checks the restored shell wakes on the UART
-interrupt and executes it). All three pass on all four CPU models, with the
-dining-philosophers snapshot captured `--smp 4`.
+*and* that every hart advanced its cycle counter in `stats.txt`), the **ruby**
+test (restores the multicore philo snapshot into O3 + Ruby on a Ring topology,
+once with the simple network and once with Garnet, and checks the result plus
+the Ruby/DRAM statistics), and the idle shell (types a command, checks the
+restored shell wakes on the UART interrupt and executes it). The first, philo
+and shell tests pass on all four CPU models; the ruby test passes on both
+networks. The dining-philosophers snapshot is captured `--smp 4`.
 
 ## Snapshot format (`snapshots/<name>/`)
 

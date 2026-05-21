@@ -168,6 +168,23 @@ workload maps them to gem5 MiscReg indices straight out of gem5's own
   and are skipped; only the machine-level CSRs are restored.
 * gdb names integer register x8 `fp`; gem5 calls it `s0` (§3.5).
 
+#### Memory subsystem: classic or Ruby
+
+`restore.py` builds one of two memory systems behind the CPUs:
+
+* **classic** (default) — a `SystemXBar` with a single `SimpleMemory`. Fast,
+  with no cache or coherence modelling; the CPUs share the crossbar with the
+  on-chip IO devices.
+* **Ruby** (`--ruby`) — gem5's Ruby coherent cache subsystem: a per-core L1
+  cache (`MI_example` protocol), a directory + a real DRAM controller, joined
+  by a configurable interconnect (the simple network or **Garnet**) on any
+  topology under `configs/topologies` — including the **Ring** added for this
+  feature (§3.14). The platform's CLINT/PLIC/UART sit on a single `piobus`
+  that the Ruby sequencers drive directly.
+
+Both paths are fed the *same* snapshot and `RiscvQemuSnapshotWorkload`; only
+the wiring between the CPUs and DRAM differs. See §3.13.
+
 ---
 
 ## 3. Issues solved along the way
@@ -330,6 +347,76 @@ counter — proof the workload ran on all cores, not just hart 0.
 This surfaced and fixed §3.11; with that fix the dining-philosophers
 scenario passes on all four CPU models (§5.5).
 
+### 3.13 Restoring into the Ruby coherent memory subsystem
+
+The classic restore path puts the CPUs on a `SystemXBar` with a flat
+`SimpleMemory` — fine for functional validation, but it models no caches,
+no coherence and no realistic DRAM. To study the memory system the snapshot
+must be restorable into **Ruby**, gem5's coherent cache subsystem, with a
+real DRAM controller and a configurable interconnect.
+
+`--ruby` switches `restore.py` to build the memory system through gem5's
+Ruby configuration machinery (`configs/ruby/Ruby.py`) instead of by hand.
+A few things had to line up:
+
+* **One sequencer per hart.** Ruby's `MI_example` protocol creates a per-core
+  L1 cache, an L1 controller and a `RubySequencer`; `restore.py` builds the
+  CPUs first (one per hart, as always) and then wires each
+  `system.ruby._cpu_ports[i]` to its CPU with `connectCpuPorts()`.
+
+* **The platform PIO devices need a home.** With no `SystemXBar`, CLINT/PLIC
+  /UART are placed on a single `piobus`, and `Ruby.create_system()` is handed
+  that bus so each sequencer's PIO request port is wired to it. CPU accesses
+  to a device address are routed by the sequencer out to the `piobus`;
+  accesses to DRAM go through the Ruby cache hierarchy.
+
+* **The snapshot still loads through a functional port.** The workload writes
+  `ram.bin` and the device registers through `system->physProxy`. Under Ruby
+  that proxy is a `RubyPortProxy`: RAM writes reach the directory's memory
+  functionally, device-register writes are forwarded to the `piobus`. The
+  injection code in `qemu_snapshot.cc` is unchanged.
+
+* **`send_evictions` is forced on.** A detailed CPU's load/store queue must be
+  told when a cache line it holds is invalidated, or it can retain stale
+  speculative data. `restore.py` sets `send_evictions = True` on every L1
+  controller after `Ruby.create_system()`.
+
+* **The `piobus` needs a `BadAddr` responder too.** This is §3.11 again: a
+  detailed CPU issues wrong-path speculative loads, and under Ruby a stray
+  non-memory address is routed by the sequencer onto the `piobus`. A bare
+  `IOXBar` `fatal()`s on it (this actually aborted an early Garnet run at
+  address `0x3320`). `restore.py` attaches a `BadAddr` responder to
+  `system.piobus.default`, exactly as it does for the classic crossbar.
+
+A side effect worth noting: under a *real* coherence protocol, `LR`/`SC`
+reservations are genuinely lost when another hart writes the line, so a
+contended pthread mutex produces long runs of "consecutive SC failures"
+warnings as a spinning philosopher waits for a fork. This is correct
+behaviour — the classic flat memory simply never broke a reservation — and
+the benchmark still finishes with the exact deterministic result.
+
+### 3.14 A Ring topology for Ruby
+
+gem5 ships mesh, crossbar and point-to-point topologies but no ring.
+`configs/topologies/Ring.py` adds one: each Ruby controller gets its own
+router, and the routers are joined into a ring by an internal link in each
+direction between neighbours. It works for both the simple network and
+Garnet; with Garnet it should be run with the default weight-based ("table")
+routing, since XY routing assumes a mesh. For the 4-hart philo snapshot the
+ring has six routers (4 L1 + 1 directory + 1 IO controller) and Garnet
+reports an average hop count of ~1.85 — as expected for a six-node ring.
+
+### 3.15 Validating the Ruby restore — multicore philo on Ring + Garnet
+
+The dining-philosophers snapshot (§3.12) is the validation workload here too:
+it is restored into an **O3 CPU + Ruby**, once with the simple network and
+once with **Garnet**, both on the **Ring** topology. Each run is checked for
+the deterministic `PHILO-DONE ok meals=320 checksum=640` result, that every
+hart advanced its cycle counter, and that the Ruby/DRAM statistics are
+populated and reasonable — per-core L1 demand accesses *and* misses, the
+directory receiving coherence requests over the network, and the DRAM
+controller serving both reads and writes. Both configurations pass (§5.5).
+
 ---
 
 ## 4. What works, and limitations
@@ -345,6 +432,10 @@ scenario passes on all four CPU models (§5.5).
   mid-run and restored, with cross-hart `futex`/IPI wakeups and the SMP
   scheduler running threads on every hart — verified on all four CPU models
   (§3.12).
+* **Ruby memory subsystem**: the same multicore snapshot restored into an
+  O3 CPU + Ruby coherent caches + a real DRAM controller, on a **Ring**
+  topology, with both the simple network and **Garnet** — running to
+  completion with sane Ruby/DRAM statistics (§3.13–§3.15).
 
 **Limitations:**
 
@@ -362,6 +453,10 @@ scenario passes on all four CPU models (§5.5).
 * **The benchmark still calls `m5_exit`** — now purely to end the simulation
   cleanly once its console output has drained, since otherwise the guest
   would idle in a shell forever.
+* **Ruby uses the `MI_example` protocol.** It is the protocol qemu-cpu is
+  validated against (a single-level coherent L1 per core). Other protocols
+  built into the binary (CHI, MSI) are not wired up by `restore.py`; Ruby
+  also requires a timing CPU (`timing`/`o3`/`minor`, not `atomic`).
 
 ---
 
@@ -433,6 +528,26 @@ build/RISCV/gem5.opt configs/example/qemu_cpu/restore.py \
 | `--max-insts N` | `0` | stop after N instructions (0 = unlimited) |
 | `--max-ticks N` | `0` | stop after N ticks (0 = unlimited) |
 | `--timer-gap N` | `0` | clamp each restored timer to fire ≤ N mtime ticks after mtime (0 = exact); avoids a long idle fast-forward for shell snapshots |
+| `--ruby` | off | restore into the Ruby coherent memory subsystem instead of the classic `SystemXBar` + `SimpleMemory` (§3.13) |
+
+With `--ruby`, the Ruby/network options from `configs/ruby/Ruby.py` and
+`configs/network/Network.py` also apply:
+
+| Option | Default | Meaning |
+|--------|---------|---------|
+| `--protocol P` | `MI_example` | Ruby coherence protocol (`restore.py` defaults it) |
+| `--network N` | `simple` | interconnect model: `simple` or `garnet` |
+| `--topology T` | `Crossbar` | topology from `configs/topologies` — e.g. `Ring` (§3.14) |
+| `--num-dirs N` | `1` | number of directory / DRAM controllers |
+| `--mem-type M` | `DDR3_1600_8x8` | DRAM model for the Ruby memory controller |
+| `--l1d-size S` | `32KiB` | per-core Ruby L1 cache size |
+
+```bash
+# restore the multicore philo snapshot into O3 + Ruby, Garnet on a ring
+build/RISCV/gem5.opt configs/example/qemu_cpu/restore.py \
+    --snapshot-dir snapshots/philo --cpu o3 \
+    --ruby --network garnet --topology Ring --timer-gap 100000
+```
 
 A benchmark run ends with `exit @ tick N : m5_exit instruction encountered`
 and prints its result to gem5's terminal
@@ -454,7 +569,7 @@ m5term localhost 3456     # or: telnet localhost 3456
 
 ### 5.5 The test harness
 
-`qemu-cpu-test.py` runs the three end-to-end tests and reports PASS/FAIL:
+`qemu-cpu-test.py` runs the four end-to-end tests and reports PASS/FAIL:
 
 ```bash
 util/qemu-cpu/scripts/qemu-cpu-test.py --test all --cpu atomic,timing,o3,minor
@@ -466,13 +581,20 @@ util/qemu-cpu/scripts/qemu-cpu-test.py --test all --cpu atomic,timing,o3,minor
   philosophers, checks `PHILO-DONE ok` on the console *and* parses
   `stats.txt` to confirm every hart advanced its cycle counter (proof the
   workload ran on all cores).
+* **ruby test** — restores the multicore `snapshots/philo` into an O3 CPU +
+  Ruby coherent memory subsystem on a **Ring** topology, once with the simple
+  network and once with **Garnet**. It checks `PHILO-DONE ok`, that every
+  hart advanced, and that the Ruby/DRAM statistics are populated and
+  reasonable (per-core L1 accesses and misses, directory request traffic,
+  DRAM reads and writes).
 * **interactive test** — restores `snapshots/shell`, connects to gem5's
   terminal, types `echo OUT$((7*9))END`, and checks the restored shell
   wakes, executes it and prints `OUT63END` (output ≠ input, so this proves
   *execution*, not just tty echo).
 
 `--bench-snap` / `--philo-snap` / `--shell-snap` select other snapshot
-directories. `--test {bench,philo,interactive,all}` selects a single test.
+directories. `--test {bench,philo,ruby,interactive,all}` selects a single
+test. The ruby test is not parameterised by `--cpu`; it always uses O3.
 
 Verified results — all four CPU models, multicore `snapshots/philo` captured
 with `--smp 4`:
@@ -484,6 +606,13 @@ with `--smp 4`:
 | O3CPU | PASS | PASS | PASS |
 | MinorCPU | PASS | PASS | PASS |
 
+Ruby restore — multicore `snapshots/philo` on an O3 CPU, Ring topology:
+
+| Network | result | Ruby / DRAM statistics |
+|---------|--------|------------------------|
+| simple network | PASS | L1 acc 460139 / miss 200384, dir reqs 222068, DRAM rd 22891 / wr 21681 |
+| Garnet | PASS | L1 acc 369780 / miss 170578, dir reqs 188417, DRAM rd 19094 / wr 17832 |
+
 ### 5.6 Troubleshooting
 
 | Symptom | Likely cause / fix |
@@ -494,6 +623,8 @@ with `--smp 4`:
 | restored shell ignores input | PLIC/UART state or interrupt CSRs not restored — check the `QemuSnapshot:` log lines |
 | gem5 terminal not listening | pass `--listener-mode=on` to `gem5.opt` |
 | `Unable to find destination ... on system.membus` | the crossbar's `BadAddr` default responder is missing — see §3.11 |
+| `Unable to find destination ... on system.piobus` | (Ruby) the `piobus` `BadAddr` default responder is missing — see §3.13 |
+| `--ruby` aborts asking for `--protocol` | only with a custom parser; `restore.py` defaults `--protocol MI_example` |
 
 ---
 
@@ -511,4 +642,5 @@ with `--smp 4`:
 | `util/qemu-cpu/bench/philo.c` | multicore dining-philosophers benchmark |
 | `src/arch/riscv/qemu/qemu_snapshot.{hh,cc}` | `RiscvQemuSnapshotWorkload` |
 | `src/arch/riscv/RiscvFsWorkload.py` | the workload SimObject |
-| `configs/example/qemu_cpu/restore.py` | gem5 restore configuration |
+| `configs/example/qemu_cpu/restore.py` | gem5 restore configuration (classic + Ruby) |
+| `configs/topologies/Ring.py` | Ring interconnect topology for Ruby (§3.14) |

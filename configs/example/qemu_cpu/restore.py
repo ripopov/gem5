@@ -35,21 +35,46 @@ section is derived from the QEMU 'virt' device tree -- CLINT/PLIC/UART
 addresses, DRAM base/size, hart count and the CLINT timebase all come from
 there rather than being hand-matched.
 
+Two memory subsystems are supported:
+
+  * classic  (default) -- a SystemXBar with a single SimpleMemory; fast, no
+    coherence modelling.
+  * Ruby     (--ruby)  -- the Ruby coherent cache subsystem with a real DRAM
+    controller and an interconnect that is either the simple network or
+    Garnet, on any topology under configs/topologies (e.g. Ring).
+
 Usage:
     build/RISCV/gem5.opt configs/example/qemu_cpu/restore.py \\
         --snapshot-dir snapshots/bench --cpu o3
+
+    build/RISCV/gem5.opt configs/example/qemu_cpu/restore.py \\
+        --snapshot-dir snapshots/philo --cpu o3 \\
+        --ruby --network garnet --topology Ring
 """
 import argparse
 import json
 import os
+import sys
 
 import m5
 from m5.objects import *
+from m5.util import addToPath
+
+# Ruby / network / topology helpers live under configs/.
+addToPath("../..")
+
+# --------------------------------------------------------------------------
+# Ruby is opt-in.  Scan argv early: the Ruby option machinery (and the
+# multi-protocol gem5 binary) is only pulled in when --ruby is requested, so
+# a plain classic-memory restore needs none of it and stays argument-clean.
+# --------------------------------------------------------------------------
+USE_RUBY = "--ruby" in sys.argv
 
 # --------------------------------------------------------------------------
 # Arguments
 # --------------------------------------------------------------------------
-parser = argparse.ArgumentParser(description=__doc__)
+parser = argparse.ArgumentParser(description=__doc__,
+    formatter_class=argparse.RawDescriptionHelpFormatter)
 parser.add_argument("--snapshot-dir", required=True,
                     help="snapshot directory produced by qemu-snapshot.py")
 parser.add_argument("--cpu", default="timing",
@@ -65,6 +90,39 @@ parser.add_argument("--timer-gap", type=int, default=0,
                          "this many mtime ticks after mtime (0 = exact "
                          "restore). An early timer interrupt is harmless to "
                          "Linux and avoids a long idle fast-forward.")
+parser.add_argument("--ruby", action="store_true",
+                    help="use the Ruby coherent memory subsystem instead of "
+                         "the classic SystemXBar + SimpleMemory")
+
+if USE_RUBY:
+    # The RISCV gem5 binary is built with multiple Ruby protocols; the Ruby
+    # option machinery insists on an explicit --protocol.  Default it to
+    # MI_example (the protocol qemu-cpu is validated against) so callers need
+    # only ask for --ruby.
+    if not any(a == "--protocol" or a.startswith("--protocol=")
+               for a in sys.argv):
+        sys.argv += ["--protocol", "MI_example"]
+
+    from ruby import Ruby
+
+    # Cache / directory / DRAM knobs consumed by the Ruby protocol and by
+    # Ruby.setup_memory_controllers().  These normally come from the common
+    # Options.py; qemu-cpu only needs this handful, so they are spelled out.
+    parser.add_argument("--num-dirs", type=int, default=1,
+                        help="number of Ruby directory / DRAM controllers")
+    parser.add_argument("--cacheline-size", type=int, default=64,
+                        help="cache line size in bytes")
+    parser.add_argument("--l1d-size", type=str, default="32KiB",
+                        help="per-core Ruby L1 cache size")
+    parser.add_argument("--l1d-assoc", type=int, default=4,
+                        help="per-core Ruby L1 cache associativity")
+    parser.add_argument("--mem-type", type=str, default="DDR3_1600_8x8",
+                        help="DRAM model for the Ruby memory controller")
+    parser.add_argument("--enable-dram-powerdown", action="store_true",
+                        help="enable low-power DRAM states")
+    # Adds --ruby-clock, --topology, --network, --protocol, Garnet knobs, ...
+    Ruby.define_options(parser)
+
 args = parser.parse_args()
 
 # --------------------------------------------------------------------------
@@ -93,6 +151,11 @@ print("[restore] platform   : ram=%#x+%dMiB clint=%#x plic=%#x uart=%#x"
 print("[restore] harts      : %d   timebase=%d Hz"
       % (num_harts, meta["timebase"]))
 print("[restore] CPU model  : %s" % args.cpu)
+if args.ruby:
+    print("[restore] memory     : Ruby (%s protocol, %s network, %s topology)"
+          % (args.protocol, args.network, args.topology))
+else:
+    print("[restore] memory     : classic (SystemXBar + SimpleMemory)")
 
 CPU_CLASSES = {
     "atomic": RiscvAtomicSimpleCPU,
@@ -101,7 +164,13 @@ CPU_CLASSES = {
     "minor": RiscvMinorCPU,
 }
 CPUClass = CPU_CLASSES[args.cpu]
-mem_mode = "atomic" if args.cpu == "atomic" else "timing"
+
+if args.ruby and args.cpu == "atomic":
+    m5.util.fatal("--ruby requires a timing CPU model (timing/o3/minor); "
+                  "AtomicSimpleCPU has no timing memory protocol")
+
+# Ruby is a timing-only memory system.
+mem_mode = "atomic" if (args.cpu == "atomic" and not args.ruby) else "timing"
 
 # --------------------------------------------------------------------------
 # System
@@ -116,23 +185,47 @@ system.clk_domain = SrcClockDomain(
     clock=args.clock, voltage_domain=system.voltage_domain
 )
 
-system.membus = SystemXBar()
-system.iobus = IOXBar()
-system.system_port = system.membus.cpu_side_ports
+# --------------------------------------------------------------------------
+# Memory interconnect
+#
+# classic: CPUs hang off a SystemXBar that also carries on-chip IO; off-chip
+#          IO sits behind a bridge on a separate IOXBar.
+# Ruby:    CPUs reach memory through Ruby; all platform PIO devices sit on a
+#          single piobus that the Ruby sequencers drive directly.
+# --------------------------------------------------------------------------
+if not args.ruby:
+    system.membus = SystemXBar()
+    system.iobus = IOXBar()
+    system.system_port = system.membus.cpu_side_ports
 
-# Catch-all for unmapped physical addresses.  A detailed CPU (notably
-# MinorCPU) speculatively issues load requests down mispredicted paths;
-# with no caches such a stray access reaches the crossbar directly, and a
-# bare SystemXBar fatals on any address no port claims.  A BadAddr
-# responder turns those into ordinary bad-address responses -- the CPU
-# squashes the wrong-path instruction, so the response is harmless, and a
-# genuine unmapped access still becomes a proper access fault.  This mirrors
-# gem5's standard NoCache hierarchy (no_cache.py).
-system.membus.badaddr_responder = BadAddr()
-system.membus.default = system.membus.badaddr_responder.pio
+    # Catch-all for unmapped physical addresses.  A detailed CPU (notably
+    # MinorCPU) speculatively issues load requests down mispredicted paths;
+    # with no caches such a stray access reaches the crossbar directly, and a
+    # bare SystemXBar fatals on any address no port claims.  A BadAddr
+    # responder turns those into ordinary bad-address responses -- the CPU
+    # squashes the wrong-path instruction, so the response is harmless, and a
+    # genuine unmapped access still becomes a proper access fault.  This
+    # mirrors gem5's standard NoCache hierarchy (no_cache.py).
+    system.membus.badaddr_responder = BadAddr()
+    system.membus.default = system.membus.badaddr_responder.pio
 
-system.mem_ctrl = SimpleMemory(range=system.mem_ranges[0], latency="30ns")
-system.mem_ctrl.port = system.membus.mem_side_ports
+    system.mem_ctrl = SimpleMemory(range=system.mem_ranges[0], latency="30ns")
+    system.mem_ctrl.port = system.membus.mem_side_ports
+else:
+    # All platform PIO devices share one bus; the Ruby sequencers' PIO ports
+    # are wired to it by Ruby.create_system(..., piobus=...).
+    system.piobus = IOXBar()
+    # Catch-all for unmapped addresses.  A detailed CPU speculatively issues
+    # wrong-path loads; under Ruby a stray non-memory address is routed by
+    # the sequencer out to the piobus, and a bare IOXBar fatals on any
+    # address no device claims.  A BadAddr responder turns those into
+    # ordinary bad-address responses -- the CPU squashes the wrong-path
+    # instruction, so the response is harmless.
+    system.piobus.badaddr_responder = BadAddr()
+    system.piobus.default = system.piobus.badaddr_responder.pio
+    # A small private IOXBar carries only the (unused) PCI host's self-wiring
+    # so none of its ports dangle.
+    system.iobus = IOXBar()
 
 # --------------------------------------------------------------------------
 # HiFive platform -- addresses taken from the snapshot's (DTB-derived) meta
@@ -158,17 +251,24 @@ system.platform.pci_bus.config_error_port = (
     system.platform.pci_host.config_error.pio
 )
 
-system.bridge = Bridge(delay="50ns")
-system.bridge.mem_side_port = system.iobus.cpu_side_ports
-system.bridge.cpu_side_port = system.membus.mem_side_ports
-system.bridge.ranges = system.platform._off_chip_ranges()
+if not args.ruby:
+    # Bridge the on-chip membus to the off-chip iobus both ways.
+    system.bridge = Bridge(delay="50ns")
+    system.bridge.mem_side_port = system.iobus.cpu_side_ports
+    system.bridge.cpu_side_port = system.membus.mem_side_ports
+    system.bridge.ranges = system.platform._off_chip_ranges()
 
-system.iobridge = Bridge(delay="50ns", ranges=system.mem_ranges)
-system.iobridge.cpu_side_port = system.iobus.mem_side_ports
-system.iobridge.mem_side_port = system.membus.cpu_side_ports
+    system.iobridge = Bridge(delay="50ns", ranges=system.mem_ranges)
+    system.iobridge.cpu_side_port = system.iobus.mem_side_ports
+    system.iobridge.mem_side_port = system.membus.cpu_side_ports
 
-system.platform.attachOnChipIO(system.membus)
-system.platform.attachOffChipIO(system.iobus)
+    system.platform.attachOnChipIO(system.membus)
+    system.platform.attachOffChipIO(system.iobus)
+else:
+    # With Ruby every platform device lives on the single piobus.
+    system.platform.attachOnChipIO(system.piobus)
+    system.platform.attachOffChipIO(system.piobus)
+
 system.platform.attachPlic()
 system.platform.setNumCores(num_harts)
 
@@ -186,10 +286,52 @@ uncacheable = [
 for cpu in system.cpu:
     cpu.createThreads()
     cpu.createInterruptController()
-    cpu.connectBus(system.membus)
     cpu.mmu.pma_checker = PMAChecker(uncacheable=uncacheable)
     if args.max_insts > 0:
         cpu.max_insts_any_thread = args.max_insts
+    if not args.ruby:
+        cpu.connectBus(system.membus)
+
+# --------------------------------------------------------------------------
+# Ruby memory subsystem (built after the CPUs so their ports can be wired)
+# --------------------------------------------------------------------------
+if args.ruby:
+    # The MI_example protocol indexes its per-core caches/sequencers by
+    # num_cpus; for a snapshot restore that is exactly the hart count.
+    args.num_cpus = num_harts
+    system.cache_line_size = args.cacheline_size
+
+    # Ruby's send_evicts() heuristic inspects options.cpu_type by name; give
+    # it a CPU class valid for this (RISCV) build so it does not trip over
+    # the X86 default.  Eviction notifications are then forced on below.
+    args.cpu_type = {
+        "atomic": "RiscvAtomicSimpleCPU",
+        "timing": "RiscvTimingSimpleCPU",
+        "o3": "RiscvO3CPU",
+        "minor": "RiscvMinorCPU",
+    }[args.cpu]
+
+    Ruby.create_system(
+        args,
+        True,             # full_system
+        system,
+        system.piobus,    # platform PIO devices reachable via the sequencers
+        [],               # no DMA devices on this HiFive board
+        None,             # no separate boot ROM
+        system.cpu,
+    )
+    system.ruby.clk_domain = SrcClockDomain(
+        clock=args.ruby_clock, voltage_domain=system.voltage_domain
+    )
+    # A detailed CPU's load/store queue must be told when a cache line it
+    # holds is evicted, or it can keep stale speculative data; force the L1
+    # controllers to forward evictions regardless of Ruby's CPU heuristic.
+    for i in range(num_harts):
+        getattr(system.ruby, "l1_cntrl%d" % i).send_evictions = True
+
+    # Wire each Ruby sequencer to its hart's CPU ports.
+    for i, cpu in enumerate(system.cpu):
+        system.ruby._cpu_ports[i].connectCpuPorts(cpu)
 
 # --------------------------------------------------------------------------
 # Workload: restore the QEMU snapshot instead of booting a kernel

@@ -7,6 +7,11 @@
   philo test       : restore the multicore dining-philosophers snapshot, run
                      it, check the deterministic result on the console and
                      confirm from stats.txt that every hart executed.
+  ruby test        : restore the multicore dining-philosophers snapshot into
+                     a Ruby coherent memory subsystem (O3 CPU, Ring topology),
+                     once with the simple network and once with Garnet; check
+                     the deterministic result and that the Ruby / DRAM
+                     statistics are populated and reasonable.
   interactive test : restore the idle-shell snapshot, connect to gem5's
                      terminal, type a command, and check the restored shell
                      wakes on the UART interrupt and runs it.
@@ -126,7 +131,76 @@ def test_philo(cpu, timeout, snap):
 
 
 # --------------------------------------------------------------------------
-# Test 3: idle-shell restore -> interactive
+# Test 3: multicore philo restore into a Ruby memory subsystem
+# --------------------------------------------------------------------------
+def _sum_stats(stats, suffix):
+    """Sum every stat whose name ends with the given suffix."""
+    return sum(v for k, v in stats.items() if k.endswith(suffix))
+
+
+def test_ruby(timeout, snap, network):
+    """Restore the philo snapshot into Ruby (O3 CPU, Ring topology) on the
+    given network and validate the result plus the Ruby/DRAM statistics."""
+    cpu = "o3"
+    outdir = os.path.join(REPO_ROOT, "m5out",
+                          "test_ruby_%s_%s" % (network,
+                                               os.path.basename(snap)))
+    try:
+        with open(os.path.join(snap, "meta.json")) as f:
+            num_harts = json.load(f)["num_harts"]
+    except OSError:
+        log("ruby-%s: missing snapshot %s" % (network, snap))
+        return False
+    log("ruby-%s: restoring %s (%d harts, O3 + Ruby, Ring topology)"
+        % (network, snap, num_harts))
+    res = subprocess.run(
+        [GEM5, "--outdir=" + outdir, RESTORE,
+         "--snapshot-dir", snap, "--cpu", cpu, "--timer-gap", "100000",
+         "--ruby", "--network", network, "--topology", "Ring"],
+        capture_output=True, text=True, timeout=timeout)
+
+    term = ""
+    tf = os.path.join(outdir, "system.platform.terminal")
+    if os.path.exists(tf):
+        term = open(tf).read()
+    cause = ""
+    m = re.search(r"exit @ tick \d+ : (.*)", res.stdout)
+    if m:
+        cause = m.group(1)
+
+    stats = parse_stats(os.path.join(outdir, "stats.txt"))
+    # Every hart's CPU must have advanced -- a true multicore restore.
+    cycles = [stats.get("system.cpu%d.numCycles" % i, 0.0)
+              for i in range(num_harts)]
+    all_ran = all(c > 0 for c in cycles)
+    # The Ruby cache hierarchy and DRAM controller must show real traffic:
+    #   - every L1 saw demand accesses, and some missed (so the network and
+    #     directory were genuinely exercised),
+    #   - the directory received coherence requests over the network,
+    #   - the DRAM controller served reads and writes.
+    l1_acc = _sum_stats(stats, "cacheMemory.m_demand_accesses")
+    l1_miss = _sum_stats(stats, "cacheMemory.m_demand_misses")
+    dir_msgs = stats.get("system.ruby.dir_cntrl0.requestToDir.m_msg_count",
+                         0.0)
+    dram_rd = stats.get("system.mem_ctrls.readReqs", 0.0)
+    dram_wr = stats.get("system.mem_ctrls.writeReqs", 0.0)
+    stats_ok = (l1_acc > 0 and l1_miss > 0 and dir_msgs > 0
+                and dram_rd > 0 and dram_wr > 0)
+
+    result_ok = "PHILO-DONE ok" in term
+    ok = result_ok and "m5_exit" in cause and all_ran and stats_ok
+    summary = re.search(r"PHILO-DONE [^\n]*", term)
+    log("ruby-%s: %s | cycles/hart=%s" % (network,
+        summary.group(0) if summary else "(no PHILO-DONE line)",
+        [int(c) for c in cycles]))
+    log("ruby-%s: ruby L1 acc=%d miss=%d | dir reqs=%d | DRAM rd=%d wr=%d "
+        "-> %s" % (network, int(l1_acc), int(l1_miss), int(dir_msgs),
+                   int(dram_rd), int(dram_wr), "PASS" if ok else "FAIL"))
+    return ok
+
+
+# --------------------------------------------------------------------------
+# Test 4: idle-shell restore -> interactive
 # --------------------------------------------------------------------------
 def test_interactive(cpu, timeout, snap):
     outdir = os.path.join(REPO_ROOT, "m5out",
@@ -212,7 +286,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--test",
-                    choices=["bench", "philo", "interactive", "all"],
+                    choices=["bench", "philo", "ruby", "interactive", "all"],
                     default="all")
     ap.add_argument("--cpu", default="atomic",
                     help="CPU model(s), comma-separated")
@@ -244,6 +318,15 @@ def main():
             results.append(("interactive/%s" % cpu,
                              test_interactive(cpu, args.timeout,
                                               args.shell_snap)))
+
+    # The Ruby tests are not parameterised by --cpu: they always restore the
+    # multicore philo snapshot into an O3 CPU (per the validated scenario),
+    # once per interconnect.
+    if args.test in ("ruby", "all"):
+        for network in ("simple", "garnet"):
+            results.append(("ruby/%s" % network,
+                             test_ruby(args.timeout, args.philo_snap,
+                                       network)))
 
     print()
     log("==== results ====")
