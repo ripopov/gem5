@@ -244,10 +244,10 @@ first, with side effects, and the privilege register is set last.
 The first design snapshotted "shortly after a serial-console marker": QEMU
 ran free for the sub-millisecond between the marker and QMP `stop`.
 
-**Fix (bench mode):** an explicit, race-free barrier. `bench` calls a
-non-inlined `snapshot_barrier()`; `qemu-snapshot.py` resolves its address
-(`nm` on the benchmark ELF) and sets a *gdb breakpoint* there. QEMU halts at
-exactly that instruction. `GdbDriver` keeps gdb attached for the whole
+**Fix — breakpoint capture:** an explicit, race-free barrier. Each benchmark
+testcase calls a non-inlined `snapshot_barrier()`; `qemu-snapshot.py` resolves
+its address (`nm` on the testcase ELF) and sets a *gdb breakpoint* there. QEMU
+halts at exactly that instruction. `GdbDriver` keeps gdb attached for the whole
 capture (so the VM stays halted while QMP dumps memory) and synchronises the
 asynchronous `continue` by appending an `echo <sentinel>` after it and
 reading gdb's output until the sentinel appears.
@@ -734,7 +734,7 @@ are the point.
 |-------|-----------|
 | Extract sources + build musl libc (`rv64gc`) | ~12 s |
 | Build busybox (static, against musl) | ~14 s |
-| Assemble initramfs + compile both benchmarks | ~3 s |
+| Assemble initramfs + compile the testcases | ~3 s |
 | Build Linux kernel 6.12 (`defconfig`, `Image` + `vmlinux`, `-j20`) | ~57 s |
 | Copy OpenSBI firmware | <1 s |
 | **Total** | **~87 s** |
@@ -745,19 +745,19 @@ are the point.
 * The **kernel is the long pole** — about two-thirds of the build. It is
   skipped entirely on reruns if `images/Image` already exists.
 
-### 6.2 Stage 1 detail — building the benchmark app
+### 6.2 Stage 1 detail — building the testcases
 
 The `/bin/philo` dining-philosophers app (181 lines of C) compiles in
-**~0.05 s** with `musl-gcc -O2 -static -pthread`; `/bin/bench` is the same.
-Both are a negligible part of the ~3 s initramfs/benchmark phase above — the
-cost of stage 1 is entirely the kernel and the C library, not the workloads.
+**~0.05 s** with `musl-gcc -O2 -static -pthread`; the other testcases are the
+same. They are a negligible part of the ~3 s initramfs phase above — the cost
+of stage 1 is entirely the kernel and the C library, not the workloads.
 
 ### 6.3 Stage 2 — boot under QEMU + capture the snapshot
 
-`qemu-snapshot.py --mode philo --smp 4` boots Linux on 4 harts under stock
-`qemu-system-riscv64`, runs `/bin/philo` to its `snapshot_barrier()`
-breakpoint, and dumps guest RAM + every hart's registers + CLINT/PLIC/UART
-state:
+`qemu-snapshot.py --test philo` boots Linux on 4 harts (philo's registry
+default) under stock `qemu-system-riscv64`, runs `/bin/philo` to its
+`snapshot_barrier()` breakpoint, and dumps guest RAM + every hart's registers
++ CLINT/PLIC/UART state:
 
 > **~1.25 s wall** for the whole capture (boot + barrier + dumps).
 
