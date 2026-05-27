@@ -46,5 +46,12 @@ class MemsetSequence(ChiSequence):
     dst_base = Param.Addr(0, "Destination base address")
     num_lines = Param.UInt32(0, "Number of cache lines to fill")
     line_size = Param.UInt32(64, "Bytes per cache line")
+    write_size = Param.UInt32(
+        0, "Bytes written per cache line; 0 means line_size"
+    )
     pipeline_depth = Param.UInt32(4, "In-flight write cap")
     fill_byte = Param.UInt32(0xAA, "Byte value to fill")
+    roi_stats = Param.Bool(False, "Reset/dump stats around the 80% ROI")
+    roi_participants = Param.UInt32(
+        1, "Number of memset drivers participating in ROI synchronization"
+    )
