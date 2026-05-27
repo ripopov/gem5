@@ -307,6 +307,8 @@ for i, drv in enumerate(system.cpu):
 
 root = Root(full_system=False, system=system)
 
+root.apply_config(args.param)
+
 m5.instantiate()
 
 exit_event = m5.simulate(args.abs_max_tick)

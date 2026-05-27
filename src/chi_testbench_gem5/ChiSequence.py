@@ -64,3 +64,6 @@ class MemsetSequence(ChiSequence):
     roi_participants = Param.UInt32(
         1, "Number of memset drivers participating in ROI synchronization"
     )
+    stats_quiesce_cycles = Param.Cycles(
+        0, "Cycles to wait after non-ROI traffic before resetting stats"
+    )

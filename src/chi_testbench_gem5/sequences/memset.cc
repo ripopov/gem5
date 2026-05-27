@@ -215,6 +215,14 @@ run_write_phase(ChiSeqDriver &drv, uint64_t dst_base, uint32_t first_line,
     }
 }
 
+void
+quiesce_before_stats_reset(ChiSeqDriver &drv, Cycles cycles)
+{
+    if (cycles != Cycles(0)) {
+        drv.wait_cycles(cycles);
+    }
+}
+
 } // anonymous namespace
 
 void
@@ -257,6 +265,7 @@ MemsetSequence::run(ChiSeqDriver &drv)
                 drv.name(), num_lines);
         run_write_phase(drv, dst_base, 0, num_lines, line_size, line_size,
                         depth, warmup_buffer, true);
+        quiesce_before_stats_reset(drv, _p.stats_quiesce_cycles);
         roi_coordinator.wait_for_warmup(drv, _p.roi_participants);
     }
 
@@ -272,6 +281,7 @@ MemsetSequence::run(ChiSeqDriver &drv)
         // until after the ROI dump for the same reason.
         run_write_phase(drv, dst_base, 0, excluded_lines, line_size,
                         write_size, depth, buffer, false);
+        quiesce_before_stats_reset(drv, _p.stats_quiesce_cycles);
         roi_coordinator.wait_for_start(drv, _p.roi_participants);
 
         run_write_phase(drv, dst_base, excluded_lines, roi_lines, line_size,

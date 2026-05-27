@@ -13,6 +13,7 @@ def build(args, planner):
     num_lines = 1024
     line_size = 64
     write_size = 63
+    stats_quiesce_cycles = 10000
     active_cores = list(args.active_cores)
     barrier = ChiGem5Barrier(expected=len(active_cores))
 
@@ -41,6 +42,7 @@ def build(args, planner):
                     warmup_l3=True,
                     roi_stats=True,
                     roi_participants=len(active_cores),
+                    stats_quiesce_cycles=stats_quiesce_cycles,
                 ),
             )
         )
