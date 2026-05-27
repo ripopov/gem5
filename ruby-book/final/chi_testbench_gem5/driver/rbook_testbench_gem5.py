@@ -144,8 +144,11 @@ system = System(
 )
 
 system.voltage_domain = VoltageDomain(voltage=args.sys_voltage)
+# This testbench has no real CPU-side clock island. Keep the drivers,
+# sequencers, controllers, network, and memory-side Ruby objects in one
+# clock domain so sequence timing is measured in Ruby cycles.
 system.clk_domain = SrcClockDomain(
-    clock=args.sys_clock, voltage_domain=system.voltage_domain
+    clock=args.ruby_clock, voltage_domain=system.voltage_domain
 )
 system.mem_mode = "timing"
 
@@ -198,9 +201,7 @@ system._mn_gen = _mn_gen_no_l1d
 Ruby.create_system(args, False, system)
 assert args.num_cpus == len(system.ruby._cpu_ports)
 
-system.ruby.clk_domain = SrcClockDomain(
-    clock=args.ruby_clock, voltage_domain=system.voltage_domain
-)
+system.ruby.clk_domain = system.clk_domain
 
 # Raise deadlock thresholds; testbench traffic is sparse by design.
 for i in range(args.num_cpus):
@@ -210,7 +211,7 @@ for i in range(args.num_cpus):
 # CPUSequencerWrapper.in_ports maps to the data sequencer (see
 # configs/ruby/CHI_config.py:457).
 for i, drv in enumerate(system.cpu):
-    drv.clk_domain = system.clk_domain
+    drv.clk_domain = system.ruby.clk_domain
     drv.port = system.ruby._cpu_ports[i].in_ports
 
 # --- Instantiate and run -----------------------------------------------------
