@@ -28,6 +28,7 @@ def build(args, planner):
                     write_size=write_size,
                     pipeline_depth=4,
                     fill_byte=(0xC0 + tile) & 0xFF,
+                    warmup_l3=True,
                     roi_stats=True,
                     roi_participants=args.num_cpus,
                 ),

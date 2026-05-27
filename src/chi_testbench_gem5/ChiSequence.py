@@ -51,6 +51,10 @@ class MemsetSequence(ChiSequence):
     )
     pipeline_depth = Param.UInt32(4, "In-flight write cap")
     fill_byte = Param.UInt32(0xAA, "Byte value to fill")
+    warmup_l3 = Param.Bool(
+        False,
+        "First fill the range with full-line stores to warm L3 only",
+    )
     roi_stats = Param.Bool(False, "Reset/dump stats around the 80% ROI")
     roi_participants = Param.UInt32(
         1, "Number of memset drivers participating in ROI synchronization"

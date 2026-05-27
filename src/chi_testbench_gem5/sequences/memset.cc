@@ -34,6 +34,7 @@ struct RoiRecord
 class MemsetRoiCoordinator
 {
   public:
+    void wait_for_warmup(ChiSeqDriver &drv, uint32_t participants);
     void wait_for_start(ChiSeqDriver &drv, uint32_t participants);
     void wait_for_end(ChiSeqDriver &drv, uint32_t participants,
                       uint64_t roi_bytes);
@@ -44,6 +45,7 @@ class MemsetRoiCoordinator
     void report() const;
 
     uint32_t expected = 0;
+    uint32_t warmup_arrivals = 0;
     uint32_t start_arrivals = 0;
     uint32_t end_arrivals = 0;
     Tick roi_start = 0;
@@ -77,6 +79,31 @@ MemsetRoiCoordinator::release_waiters()
         waiter->drv().schedule_xfer_wake();
     }
     waiters.clear();
+}
+
+void
+MemsetRoiCoordinator::wait_for_warmup(ChiSeqDriver &drv,
+                                      uint32_t participants)
+{
+    configure(participants);
+    warmup_arrivals++;
+
+    if (warmup_arrivals == expected) {
+        const Tick warmup_end = curTick();
+        cprintf("memset L3 warmup: dump stats at tick %llu\n",
+                (unsigned long long)warmup_end);
+        statistics::dump();
+        cprintf("memset L3 warmup: reset stats at tick %llu\n",
+                (unsigned long long)curTick());
+        statistics::reset();
+        release_waiters();
+        return;
+    }
+
+    panic_if(warmup_arrivals > expected,
+             "Memset L3 warmup barrier received too many arrivals");
+    waiters.push_back(&drv.thread());
+    drv.thread().yield_to_primary();
 }
 
 void
@@ -158,7 +185,8 @@ MemsetRoiCoordinator::report() const
 void
 run_write_phase(ChiSeqDriver &drv, uint64_t dst_base, uint32_t first_line,
                 uint32_t num_lines, uint32_t line_size, uint32_t write_size,
-                uint32_t depth, const std::vector<uint8_t> &buffer)
+                uint32_t depth, const std::vector<uint8_t> &buffer,
+                bool store_line)
 {
     uint32_t next_issue = 0;
     uint32_t retired = 0;
@@ -167,8 +195,12 @@ run_write_phase(ChiSeqDriver &drv, uint64_t dst_base, uint32_t first_line,
         while (next_issue < num_lines && drv.outstanding() < depth &&
                drv.request_ready()) {
             const uint64_t line = first_line + next_issue;
-            drv.async_write_req(dst_base + line * line_size, buffer.data(),
-                                write_size);
+            const uint64_t addr = dst_base + line * line_size;
+            if (store_line) {
+                drv.async_store_line_req(addr, buffer.data(), write_size);
+            } else {
+                drv.async_write_req(addr, buffer.data(), write_size);
+            }
             next_issue++;
         }
 
@@ -204,12 +236,23 @@ MemsetSequence::run(ChiSeqDriver &drv)
 
     std::vector<uint8_t> buffer(
         write_size, static_cast<uint8_t>(_p.fill_byte));
+    std::vector<uint8_t> warmup_buffer(
+        line_size, static_cast<uint8_t>(_p.fill_byte));
 
     DPRINTF(ChiTestbenchGem5,
             "%s memset: dst_base=%#llx num_lines=%u depth=%u "
             "line_size=%u write_size=%u\n",
             drv.name(), (unsigned long long)dst_base, num_lines, depth,
             line_size, write_size);
+
+    if (_p.warmup_l3) {
+        DPRINTF(ChiTestbenchGem5,
+                "%s memset L3 warmup: %u full-line stores\n",
+                drv.name(), num_lines);
+        run_write_phase(drv, dst_base, 0, num_lines, line_size, line_size,
+                        depth, warmup_buffer, true);
+        roi_coordinator.wait_for_warmup(drv, _p.roi_participants);
+    }
 
     const Tick t_start = curTick();
 
@@ -222,19 +265,19 @@ MemsetSequence::run(ChiSeqDriver &drv)
         // cannot leak into the ROI stats window. Cool-down is not issued
         // until after the ROI dump for the same reason.
         run_write_phase(drv, dst_base, 0, excluded_lines, line_size,
-                        write_size, depth, buffer);
+                        write_size, depth, buffer, false);
         roi_coordinator.wait_for_start(drv, _p.roi_participants);
 
         run_write_phase(drv, dst_base, excluded_lines, roi_lines, line_size,
-                        write_size, depth, buffer);
+                        write_size, depth, buffer, false);
         roi_coordinator.wait_for_end(
             drv, _p.roi_participants, (uint64_t)roi_lines * line_size);
 
         run_write_phase(drv, dst_base, cooldown_first, excluded_lines,
-                        line_size, write_size, depth, buffer);
+                        line_size, write_size, depth, buffer, false);
     } else {
         run_write_phase(drv, dst_base, 0, num_lines, line_size, write_size,
-                        depth, buffer);
+                        depth, buffer, false);
     }
 
     const Tick elapsed = curTick() - t_start;
