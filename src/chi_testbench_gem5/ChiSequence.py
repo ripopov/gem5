@@ -49,7 +49,12 @@ class MemsetSequence(ChiSequence):
     write_size = Param.UInt32(
         0, "Bytes written per cache line; 0 means line_size"
     )
-    pipeline_depth = Param.UInt32(4, "In-flight write cap")
+    num_outstanding_reqs = Param.UInt32(
+        4, "Maximum in-flight requests issued by this sequence"
+    )
+    pipeline_depth = Param.UInt32(
+        0, "Deprecated alias for num_outstanding_reqs"
+    )
     fill_byte = Param.UInt32(0xAA, "Byte value to fill")
     warmup_l3 = Param.Bool(
         False,

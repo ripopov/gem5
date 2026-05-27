@@ -65,6 +65,7 @@ class CHI_TileCacheController(CHI_config.Base_CHI_Cache_Controller):
         ruby_system,
         sequencer,
         mode,
+        num_outstanding_reqs,
         l2_size="256KiB",
         l2_assoc=8,
     ):
@@ -78,8 +79,8 @@ class CHI_TileCacheController(CHI_config.Base_CHI_Cache_Controller):
         self.enable_DCT = False
         self.prefetcher = NULL
         self.use_prefetcher = False
-        self.number_of_TBEs = 32
-        self.number_of_repl_TBEs = 16
+        self.number_of_TBEs = num_outstanding_reqs
+        self.number_of_repl_TBEs = num_outstanding_reqs
         self.number_of_snoop_TBEs = 16
         self.number_of_DVM_TBEs = 1
         self.number_of_DVM_snoop_TBEs = 1
@@ -154,7 +155,7 @@ class CHI_Tile(CHI_config.CHI_RNI_DMA):
         # order.
         router_list = list(range(16))
 
-    def __init__(self, ruby_system, mode):
+    def __init__(self, ruby_system, mode, num_outstanding_reqs):
         # Bypass CHI_RNI_DMA / CHI_RNI_Base __init__: they either
         # require a dma_port or hard-code CHI_DMAController. We want
         # our own configurable controller.
@@ -164,9 +165,10 @@ class CHI_Tile(CHI_config.CHI_RNI_DMA):
             version=CHI_config.Versions.getSeqId(),
             ruby_system=ruby_system,
             clk_domain=ruby_system.clk_domain,
+            max_outstanding_requests=num_outstanding_reqs,
         )
         self._cntrl = CHI_TileCacheController(
-            ruby_system, self._sequencer, mode
+            ruby_system, self._sequencer, mode, num_outstanding_reqs
         )
         self.cntrl = self._cntrl
         self.connectController(self._cntrl)
@@ -186,13 +188,15 @@ class CHI_Tile(CHI_config.CHI_RNI_DMA):
         self._cntrl.downstream_destinations = cntrls
 
     @classmethod
-    def make_generator(cls, mode):
+    def make_generator(cls, mode, num_outstanding_reqs):
         """
         Returns a callable compatible with the `system._rnf_gen` hook
         in `configs/ruby/CHI.py:125`.
         """
 
         def generate(options, ruby_system, cpus):
-            return [cls(ruby_system, mode) for _ in cpus]
+            return [
+                cls(ruby_system, mode, num_outstanding_reqs) for _ in cpus
+            ]
 
         return generate

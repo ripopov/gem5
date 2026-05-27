@@ -13,6 +13,7 @@ TIMESTAMP  = $(shell date +%Y%m%d-%H%M%S)
 #               rni    (Seq -> cache-less DMA ctrl  -> mesh)
 RN_MODE ?= rnf_l2
 ACTIVE_CORES ?= all
+NUM_OUTSTANDING_REQS ?= 4
 
 SCENARIOS := ping_pong memset
 
@@ -45,6 +46,7 @@ run-$(1):
 	    $$(DRIVER) \
 	    --scenario=$(1) \
 	    --active-cores=$$(ACTIVE_CORES) \
+	    --num-outstanding-reqs=$$(NUM_OUTSTANDING_REQS) \
 	    --rn-mode=$$(RN_MODE)
 	@ln -sfn $$(GEM5_ROOT)/m5out/rbook-tb-gem5-$(1)-$$(RN_MODE)-$$(TIMESTAMP) \
 	    m5out/last-$(1)-$$(RN_MODE)

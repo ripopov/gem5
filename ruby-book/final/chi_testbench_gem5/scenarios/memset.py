@@ -16,7 +16,16 @@ def build(args, planner):
     active_cores = list(args.active_cores)
     barrier = ChiGem5Barrier(expected=len(active_cores))
 
-    drivers = [ChiSeqDriver(tile_id=tile) for tile in range(args.num_cpus)]
+    drivers = [
+        ChiSeqDriver(
+            tile_id=tile,
+            sequence=MemsetSequence(
+                num_lines=0,
+                num_outstanding_reqs=args.num_outstanding_reqs,
+            ),
+        )
+        for tile in range(args.num_cpus)
+    ]
     for tile in active_cores:
         drivers[tile] = (
             ChiSeqDriver(
@@ -27,7 +36,7 @@ def build(args, planner):
                     num_lines=num_lines,
                     line_size=line_size,
                     write_size=write_size,
-                    pipeline_depth=4,
+                    num_outstanding_reqs=args.num_outstanding_reqs,
                     fill_byte=(0xC0 + tile) & 0xFF,
                     warmup_l3=True,
                     roi_stats=True,

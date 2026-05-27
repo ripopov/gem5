@@ -10,6 +10,7 @@ import m5
 from m5.objects import (
     ChiGem5Barrier,
     ChiSeqDriver,
+    MemsetSequence,
     PingPongSequence,
 )
 
@@ -57,5 +58,11 @@ def build(args, planner):
     )
     for tile in range(args.num_cpus):
         if drivers[tile] is None:
-            drivers[tile] = ChiSeqDriver(tile_id=tile)
+            drivers[tile] = ChiSeqDriver(
+                tile_id=tile,
+                sequence=MemsetSequence(
+                    num_lines=0,
+                    num_outstanding_reqs=args.num_outstanding_reqs,
+                ),
+            )
     return drivers

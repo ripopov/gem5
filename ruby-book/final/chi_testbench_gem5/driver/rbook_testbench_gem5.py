@@ -76,6 +76,12 @@ parser.add_argument(
     "traffic, or 'all'",
 )
 parser.add_argument(
+    "--num-outstanding-reqs",
+    type=int,
+    default=4,
+    help="Maximum outstanding traffic-generation requests per active tile",
+)
+parser.add_argument(
     "--deadlock-threshold",
     type=int,
     default=5_000_000,
@@ -114,6 +120,9 @@ parser.set_defaults(
 
 args = parser.parse_args()
 args.active_cores_spec = args.active_cores
+
+if args.num_outstanding_reqs <= 0:
+    m5.fatal("--num-outstanding-reqs must be greater than zero")
 
 
 # --- scenario resolution -----------------------------------------------------
@@ -251,7 +260,9 @@ system.cpu = drivers
 # (rni) or a coherent leaf cache (rnf_l2).
 from cfg_rn import CHI_Tile  # noqa: E402
 
-system._rnf_gen = CHI_Tile.make_generator(args.rn_mode)
+system._rnf_gen = CHI_Tile.make_generator(
+    args.rn_mode, args.num_outstanding_reqs
+)
 
 # Build the Misc Node (DVM coordinator) with no upstream L1Ds. The
 # stock CHI_MN.generate at configs/ruby/CHI_config.py:728 collects

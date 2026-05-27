@@ -223,7 +223,13 @@ MemsetSequence::run(ChiSeqDriver &drv)
     const uint32_t num_lines = _p.num_lines;
     const uint32_t line_size = _p.line_size;
     const uint32_t write_size = _p.write_size ? _p.write_size : line_size;
-    const uint32_t depth = _p.pipeline_depth ? _p.pipeline_depth : 1;
+    uint32_t depth = _p.num_outstanding_reqs;
+    if (depth == 0) {
+        depth = _p.pipeline_depth;
+    }
+    if (depth == 0) {
+        depth = 1;
+    }
     const uint64_t dst_base = _p.dst_base;
 
     if (num_lines == 0) {
