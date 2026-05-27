@@ -116,8 +116,7 @@ class ChiSeqDriver : public ClockedObject
      *
      * To acquire exclusive ownership without writing data, issue a
      * write() from a tile that doesn't hold the line — it produces a
-     * `CleanUnique` upgrade (or `ReadUnique` on a cold line). The
-     * `read_ex_walk` scenario demonstrates this pattern.
+     * `CleanUnique` upgrade (or `ReadUnique` on a cold line).
      */
     void read_exclusive(uint64_t addr, uint8_t *buf, uint32_t len);
     void write(uint64_t addr, const uint8_t *buf, uint32_t len);

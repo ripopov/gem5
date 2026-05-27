@@ -13,9 +13,7 @@ TIMESTAMP  = $(shell date +%Y%m%d-%H%M%S)
 #               rni    (Seq -> cache-less DMA ctrl  -> mesh)
 RN_MODE ?= rnf_l2
 
-SCENARIOS := smoke_read smoke_write smoke_opcode_mix \
-             ping_pong ping_pong_no_snf false_sharing \
-             memcpy memset opcode_walk read_ex_walk
+SCENARIOS := ping_pong memset
 
 .PHONY: all help run-all clean
 .PHONY: $(addprefix run-,$(SCENARIOS))

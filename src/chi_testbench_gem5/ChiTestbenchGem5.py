@@ -3,7 +3,7 @@
 
 from m5.objects.ChiSequence import (
     ChiSequence,
-    IdleSequence,
+    MemsetSequence,
 )
 from m5.objects.ClockedObject import ClockedObject
 from m5.params import *
@@ -46,8 +46,8 @@ class ChiGem5EventBus(SimObject):
 class ChiSeqDriver(ClockedObject):
     """Generic per-tile driver. The body of work is a polymorphic
     `ChiSequence` SimObject — see ChiSequence.py for the concrete
-    subclasses (MemcpySequence, PingPongSequence, …). Adding a new
-    sequence does not require touching this class.
+    subclasses. Adding a new sequence does not require touching this
+    class.
 
     ChiSeqDriver is a ClockedObject that sits at system.cpu[i]. It
     owns a RequestPort (`port`) wired to the RN-F sequencer's
@@ -65,7 +65,7 @@ class ChiSeqDriver(ClockedObject):
     system = Param.System(Parent.any, "System this driver is part of")
 
     sequence = Param.ChiSequence(
-        IdleSequence(), "Sequence body to run on this tile"
+        MemsetSequence(num_lines=0), "Sequence body to run on this tile"
     )
     tile_id = Param.UInt32(0, "Logical tile id")
 

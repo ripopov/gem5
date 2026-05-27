@@ -7,6 +7,7 @@
 
 #include <vector>
 
+#include "base/cprintf.hh"
 #include "base/trace.hh"
 #include "chi_testbench_gem5/driver.hh"
 #include "debug/ChiTestbenchGem5.hh"
@@ -74,8 +75,7 @@ MemsetSequence::run(ChiSeqDriver &drv)
 
     const Tick elapsed = curTick() - t_start;
     const uint64_t bytes = (uint64_t)num_lines * line_size;
-    DPRINTF(ChiTestbenchGem5,
-            "%s memset: %u lines (%llu bytes) in %llu ticks depth=%u\n",
+    cprintf("%s memset: %u lines (%llu bytes) in %llu ticks depth=%u\n",
             drv.name(), num_lines, (unsigned long long)bytes,
             (unsigned long long)elapsed, depth);
 }

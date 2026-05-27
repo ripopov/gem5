@@ -60,7 +60,7 @@ Options.addNoISAOptions(parser)
 
 parser.add_argument(
     "--scenario",
-    default="smoke_read",
+    default="memset",
     help="Name of the scenario module under scenarios/",
 )
 parser.add_argument(
@@ -84,8 +84,7 @@ parser.add_argument(
     "'rnf_l2': Seq -> coherent L2-sized leaf cache -> mesh; "
     "'rni': Seq -> cache-less DMA controller -> mesh. "
     "Neither mode instantiates the side router that CHI_RNF normally "
-    "adds. Scenarios that rely on RN-side cache state transitions "
-    "(opcode_walk, read_ex_walk) require 'rnf_l2'.",
+    "adds.",
 )
 
 if buildEnv["PROTOCOL"] == "MULTIPLE" and not any(
@@ -198,13 +197,6 @@ system._mn_gen = _mn_gen_no_l1d
 
 Ruby.create_system(args, False, system)
 assert args.num_cpus == len(system.ruby._cpu_ports)
-
-if args.scenario == "ping_pong_no_snf":
-    # Keep HNF data resident when ownership moves to an RNF. With the default
-    # CHI_HNF setting, dirty home data is deallocated on unique ownership
-    # transfer, which writes through to the SNF on every ping-pong handoff.
-    for hnf in system.ruby.hnf:
-        hnf.cntrl.dealloc_on_unique = False
 
 system.ruby.clk_domain = SrcClockDomain(
     clock=args.ruby_clock, voltage_domain=system.voltage_domain
