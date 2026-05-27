@@ -53,8 +53,8 @@ class ChiSeqDriver(ClockedObject):
     owns a RequestPort (`port`) wired to the RN-F sequencer's
     in_ports, and a Fiber on which the selected sequence runs.
     Blocking helpers (read/write/read_exclusive) suspend the fiber
-    until the CHI response arrives; non-blocking helpers (async_*)
-    let the sequence keep many requests in flight.
+    until the CHI response arrives; non-blocking helpers submit
+    requests and queue responses for ordered sequence-side polling.
     """
 
     type = "ChiSeqDriver"

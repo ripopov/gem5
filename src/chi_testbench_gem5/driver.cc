@@ -6,7 +6,9 @@
 #include "chi_testbench_gem5/driver.hh"
 
 #include <cstring>
+#include <vector>
 
+#include "base/amo.hh"
 #include "base/logging.hh"
 #include "base/trace.hh"
 #include "chi_testbench_gem5/sequences/base.hh"
@@ -20,6 +22,34 @@ namespace gem5
 namespace chi_gem5tb
 {
 
+namespace
+{
+
+class AtomicWriteOp : public AtomicOpFunctor
+{
+  public:
+    AtomicWriteOp(const uint8_t *src, uint32_t len)
+        : data(src, src + len)
+    {}
+
+    AtomicOpFunctor *
+    clone() override
+    {
+        return new AtomicWriteOp(*this);
+    }
+
+    void
+    operator()(uint8_t *p) override
+    {
+        std::memcpy(p, data.data(), data.size());
+    }
+
+  private:
+    std::vector<uint8_t> data;
+};
+
+} // anonymous namespace
+
 ChiSeqDriver::ChiSeqDriver(const Params &p)
     : ClockedObject(p),
       data_port(name() + ".port", *this),
@@ -27,9 +57,8 @@ ChiSeqDriver::ChiSeqDriver(const Params &p)
       _p(p),
       requestor_id(p.system->getRequestorId(this)),
       blocking_done(false),
-      next_handle(1),
+      outstanding_reqs(0),
       wait_mode(WaitMode::None),
-      wait_handle(0),
       retry_pkt(nullptr),
       kick_event(
           *this, [this] { kickoff(); }, name() + ".kickoff"),
@@ -89,13 +118,13 @@ ChiSeqDriver::on_wake()
 
 PacketPtr
 ChiSeqDriver::build_read_pkt(uint64_t addr, uint32_t len, MemCmd cmd,
-                             Handle handle, uint8_t *read_dst)
+                             bool blocking, uint8_t *read_dst)
 {
     auto req = std::make_shared<Request>(addr, len, /*flags*/ 0, requestor_id);
     auto *pkt = new Packet(req, cmd);
     pkt->dataDynamic(new uint8_t[len]);
     auto *ss = new DriverSenderState{};
-    ss->handle = handle;
+    ss->blocking = blocking;
     ss->read_dst = read_dst;
     ss->len = len;
     pkt->pushSenderState(ss);
@@ -104,7 +133,7 @@ ChiSeqDriver::build_read_pkt(uint64_t addr, uint32_t len, MemCmd cmd,
 
 PacketPtr
 ChiSeqDriver::build_write_pkt(uint64_t addr, const uint8_t *src, uint32_t len,
-                              Handle handle)
+                              bool blocking)
 {
     auto req = std::make_shared<Request>(addr, len, /*flags*/ 0, requestor_id);
     auto *pkt = new Packet(req, MemCmd::WriteReq);
@@ -112,7 +141,29 @@ ChiSeqDriver::build_write_pkt(uint64_t addr, const uint8_t *src, uint32_t len,
     std::memcpy(buf, src, len);
     pkt->dataDynamic(buf);
     auto *ss = new DriverSenderState{};
-    ss->handle = handle;
+    ss->blocking = blocking;
+    ss->read_dst = nullptr;
+    ss->len = len;
+    pkt->pushSenderState(ss);
+    return pkt;
+}
+
+PacketPtr
+ChiSeqDriver::build_atomic_pkt(uint64_t addr, const uint8_t *src,
+                               uint32_t len, bool return_data)
+{
+    auto req = std::make_shared<Request>(addr, len, /*flags*/ 0, requestor_id);
+    req->setAtomicOpFunctor(
+        AtomicOpFunctorPtr(new AtomicWriteOp(src, len)));
+    req->setFlags(return_data ? Request::ATOMIC_RETURN_OP :
+                                Request::ATOMIC_NO_RETURN_OP);
+
+    auto *pkt = new Packet(req, MemCmd::WriteReq);
+    auto *buf = new uint8_t[len];
+    std::memcpy(buf, src, len);
+    pkt->dataDynamic(buf);
+    auto *ss = new DriverSenderState{};
+    ss->blocking = false;
     ss->read_dst = nullptr;
     ss->len = len;
     pkt->pushSenderState(ss);
@@ -179,7 +230,7 @@ ChiSeqDriver::do_blocking(PacketPtr pkt)
 void
 ChiSeqDriver::read(uint64_t addr, uint8_t *buf, uint32_t len)
 {
-    do_blocking(build_read_pkt(addr, len, MemCmd::ReadReq, 0, buf));
+    do_blocking(build_read_pkt(addr, len, MemCmd::ReadReq, true, buf));
 }
 
 void
@@ -188,85 +239,95 @@ ChiSeqDriver::read_exclusive(uint64_t addr, uint8_t *buf, uint32_t len)
     // MemCmd::ReadExReq signals exclusive-intent load, which the
     // Ruby sequencer maps to a CHI ReadUnique on the wire — the same
     // opcode a core would emit for a load that plans to modify.
-    do_blocking(build_read_pkt(addr, len, MemCmd::ReadExReq, 0, buf));
+    do_blocking(build_read_pkt(addr, len, MemCmd::ReadExReq, true, buf));
 }
 
 void
 ChiSeqDriver::write(uint64_t addr, const uint8_t *buf, uint32_t len)
 {
-    do_blocking(build_write_pkt(addr, buf, len, 0));
+    do_blocking(build_write_pkt(addr, buf, len, true));
 }
 
 // ---------------------------------------------------------------------------
-// Non-blocking API
+// Non-blocking ordered request/response API
 // ---------------------------------------------------------------------------
 
-ChiSeqDriver::Handle
-ChiSeqDriver::do_async(MemCmd cmd, uint64_t addr, uint8_t *read_dst,
-                       const uint8_t *wdata, uint32_t len)
+bool
+ChiSeqDriver::request_ready() const
 {
-    const Handle h = next_handle++;
-    PacketPtr pkt = (cmd == MemCmd::WriteReq)
-                        ? build_write_pkt(addr, wdata, len, h)
-                        : build_read_pkt(addr, len, cmd, h, read_dst);
+    return retry_pkt == nullptr;
+}
 
-    inflight.emplace(h, InFlight{read_dst, len, false});
+void
+ChiSeqDriver::submit_async(PacketPtr pkt)
+{
+    outstanding_reqs++;
     submit(pkt);
-    return h;
-}
-
-ChiSeqDriver::Handle
-ChiSeqDriver::async_read(uint64_t addr, uint8_t *out, uint32_t len)
-{
-    return do_async(MemCmd::ReadReq, addr, out, nullptr, len);
-}
-
-ChiSeqDriver::Handle
-ChiSeqDriver::async_read_exclusive(uint64_t addr, uint8_t *out, uint32_t len)
-{
-    return do_async(MemCmd::ReadExReq, addr, out, nullptr, len);
-}
-
-ChiSeqDriver::Handle
-ChiSeqDriver::async_write(uint64_t addr, const uint8_t *buf, uint32_t len)
-{
-    return do_async(MemCmd::WriteReq, addr, nullptr, buf, len);
 }
 
 void
-ChiSeqDriver::resolve(Handle h)
+ChiSeqDriver::async_load_req(uint64_t addr, uint32_t len)
 {
-    auto it = inflight.find(h);
-    if (it == inflight.end()) {
-        panic("%s: resolve() on unknown handle %llu", name(),
-              (unsigned long long)h);
-    }
-    if (!it->second.completed) {
-        wait_mode = WaitMode::SpecificHandle;
-        wait_handle = h;
-        seq_thread.yield_to_primary();
-        wait_mode = WaitMode::None;
-        wait_handle = 0;
-    }
-    inflight.erase(h);
+    submit_async(build_read_pkt(addr, len, MemCmd::ReadReq, false, nullptr));
 }
 
 void
-ChiSeqDriver::resolve_all()
+ChiSeqDriver::async_store_req(uint64_t addr, const uint8_t *buf, uint32_t len)
 {
-    bool any_pending = false;
-    for (auto &kv : inflight) {
-        if (!kv.second.completed) {
-            any_pending = true;
-            break;
-        }
+    submit_async(build_write_pkt(addr, buf, len, false));
+}
+
+void
+ChiSeqDriver::async_store_line_req(uint64_t addr, const uint8_t *buf,
+                                   uint32_t len)
+{
+    async_store_req(addr, buf, len);
+}
+
+void
+ChiSeqDriver::async_read_req(uint64_t addr, uint32_t len)
+{
+    async_load_req(addr, len);
+}
+
+void
+ChiSeqDriver::async_read_exclusive_req(uint64_t addr, uint32_t len)
+{
+    submit_async(build_read_pkt(addr, len, MemCmd::ReadExReq, false,
+                                nullptr));
+}
+
+void
+ChiSeqDriver::async_write_req(uint64_t addr, const uint8_t *buf, uint32_t len)
+{
+    async_store_req(addr, buf, len);
+}
+
+void
+ChiSeqDriver::async_atomic_load_req(uint64_t addr, const uint8_t *buf,
+                                    uint32_t len)
+{
+    submit_async(build_atomic_pkt(addr, buf, len, true));
+}
+
+void
+ChiSeqDriver::async_atomic_store_req(uint64_t addr, const uint8_t *buf,
+                                     uint32_t len)
+{
+    submit_async(build_atomic_pkt(addr, buf, len, false));
+}
+
+std::unique_ptr<Packet>
+ChiSeqDriver::try_read_resp()
+{
+    if (response_queue.empty()) {
+        return nullptr;
     }
-    if (any_pending) {
-        wait_mode = WaitMode::All;
-        seq_thread.yield_to_primary();
-        wait_mode = WaitMode::None;
-    }
-    inflight.clear();
+
+    std::unique_ptr<Packet> pkt = std::move(response_queue.front());
+    response_queue.pop();
+    outstanding_reqs--;
+    return pkt;
 }
 
 // ---------------------------------------------------------------------------
@@ -307,7 +368,7 @@ ChiSeqDriver::handle_resp(PacketPtr pkt)
     auto *ss = dynamic_cast<DriverSenderState *>(pkt->popSenderState());
     panic_if(!ss, "%s: response missing DriverSenderState", name());
 
-    const Handle h = ss->handle;
+    const bool blocking = ss->blocking;
     uint8_t *dst = ss->read_dst;
     const uint32_t len = ss->len;
     const bool is_read = pkt->isRead();
@@ -323,34 +384,19 @@ ChiSeqDriver::handle_resp(PacketPtr pkt)
     if (is_read && dst) {
         std::memcpy(dst, pkt->getPtr<uint8_t>(), len);
     }
-    delete pkt;
 
     bool should_wake = false;
-    if (h == 0) {
+    if (blocking) {
         blocking_done = true;
         if (wait_mode == WaitMode::Blocking) {
             should_wake = true;
         }
     } else {
-        auto it = inflight.find(h);
-        panic_if(it == inflight.end(), "%s: response for unknown handle %llu",
-                 name(), (unsigned long long)h);
-        it->second.completed = true;
-        if (wait_mode == WaitMode::SpecificHandle && wait_handle == h) {
-            should_wake = true;
-        } else if (wait_mode == WaitMode::All) {
-            bool any_pending = false;
-            for (auto &kv : inflight) {
-                if (!kv.second.completed) {
-                    any_pending = true;
-                    break;
-                }
-            }
-            if (!any_pending) {
-                should_wake = true;
-            }
-        }
+        response_queue.emplace(pkt);
+        pkt = nullptr;
     }
+
+    delete pkt;
 
     if (should_wake) {
         seq_thread.run();

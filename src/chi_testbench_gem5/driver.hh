@@ -8,8 +8,8 @@
 
 #include <cstdint>
 #include <memory>
+#include <queue>
 #include <string>
-#include <unordered_map>
 
 #include "chi_testbench_gem5/seq_thread.hh"
 #include "mem/packet.hh"
@@ -46,16 +46,18 @@ class ChiSequence;
  *   - Blocking read/write construct a Packet, call sendTimingReq,
  *     yield the fiber; recvTimingResp copies read data into the
  *     caller's buffer and resumes the fiber.
- *   - Non-blocking async_* allocate a handle, register it in the
- *     inflight table, send the packet, and return; resolve(h) yields
- *     until that specific handle's response arrives.
+ *   - Non-blocking async_*_req helpers send a request and return.
+ *     Responses are queued in the same order recvTimingResp sees
+ *     them; try_read_resp() transfers Packet ownership to the
+ *     sequence.
  *
  * Fiber-side API used by sequences:
  *     void     read(addr, buf, len)
  *     void     read_exclusive(addr, buf, len)
  *     void     write(addr, buf, len)
- *     Handle   async_read / async_read_exclusive / async_write
- *     void     resolve(h) / resolve_all()
+ *     bool     request_ready()
+ *     void     async_*_req(...)
+ *     std::unique_ptr<Packet> try_read_resp()
  *     void     wait_ticks(t) / wait_cycles(c)
  *     uint32_t tile_id()
  */
@@ -63,8 +65,6 @@ class ChiSeqDriver : public ClockedObject
 {
   public:
     using Params = ChiSeqDriverParams;
-    using Handle = uint64_t;
-
     explicit ChiSeqDriver(const Params &p);
     ~ChiSeqDriver() override;
 
@@ -121,17 +121,26 @@ class ChiSeqDriver : public ClockedObject
     void read_exclusive(uint64_t addr, uint8_t *buf, uint32_t len);
     void write(uint64_t addr, const uint8_t *buf, uint32_t len);
 
-    // --- Non-blocking API ---
+    // --- Non-blocking ordered request/response API ---
 
-    Handle async_read(uint64_t addr, uint8_t *out, uint32_t len);
-    Handle async_read_exclusive(uint64_t addr, uint8_t *out, uint32_t len);
-    Handle async_write(uint64_t addr, const uint8_t *buf, uint32_t len);
-    void resolve(Handle h);
-    void resolve_all();
+    bool request_ready() const;
+    void async_load_req(uint64_t addr, uint32_t len);
+    void async_store_req(uint64_t addr, const uint8_t *buf, uint32_t len);
+    // Ruby CHI emits StoreLine when the ST size equals the block size.
+    void async_store_line_req(uint64_t addr, const uint8_t *buf,
+                              uint32_t len);
+    void async_read_req(uint64_t addr, uint32_t len);
+    void async_read_exclusive_req(uint64_t addr, uint32_t len);
+    void async_write_req(uint64_t addr, const uint8_t *buf, uint32_t len);
+    void async_atomic_load_req(uint64_t addr, const uint8_t *buf,
+                               uint32_t len);
+    void async_atomic_store_req(uint64_t addr, const uint8_t *buf,
+                                uint32_t len);
+    std::unique_ptr<Packet> try_read_resp();
     std::size_t
     outstanding() const
     {
-        return inflight.size();
+        return outstanding_reqs;
     }
 
     // --- Time / housekeeping ---
@@ -173,8 +182,6 @@ class ChiSeqDriver : public ClockedObject
     {
         None,           // fiber is currently running or in a non-packet wait
         Blocking,       // fiber is in a blocking read/write/read_exclusive
-        SpecificHandle, // fiber is in resolve(h)
-        All,            // fiber is in resolve_all()
     };
 
     class DataPort : public RequestPort
@@ -213,28 +220,24 @@ class ChiSeqDriver : public ClockedObject
     };
 
     /**
-     * Per-Packet sender state. handle == 0 means "blocking slot",
-     * handle > 0 is an async in-flight id (matches an InFlight entry).
+     * Per-Packet sender state. Blocking packets copy read data to the
+     * caller buffer and wake the fiber; async packets are transferred
+     * to response_queue for sequence-side consumption.
      */
     struct DriverSenderState : public Packet::SenderState
     {
-        Handle handle;
+        bool blocking;
         uint8_t *read_dst; // nullptr for writes
         uint32_t len;
     };
 
-    struct InFlight
-    {
-        uint8_t *read_dst; // caller's buffer for reads, nullptr for writes
-        uint32_t len;
-        bool completed;
-    };
-
     // Packet construction helpers.
     PacketPtr build_read_pkt(uint64_t addr, uint32_t len, MemCmd cmd,
-                             Handle handle, uint8_t *read_dst);
+                             bool blocking, uint8_t *read_dst);
     PacketPtr build_write_pkt(uint64_t addr, const uint8_t *src, uint32_t len,
-                              Handle handle);
+                              bool blocking);
+    PacketPtr build_atomic_pkt(uint64_t addr, const uint8_t *src,
+                               uint32_t len, bool return_data);
 
     // Send or queue for retry. Never blocks; always returns.
     void submit(PacketPtr pkt);
@@ -250,10 +253,8 @@ class ChiSeqDriver : public ClockedObject
     // Common blocking-path bookkeeping.
     void do_blocking(PacketPtr pkt);
 
-    // Common async-path bookkeeping. Allocates a handle, registers
-    // the InFlight entry, submits the packet.
-    Handle do_async(MemCmd cmd, uint64_t addr, uint8_t *data,
-                    const uint8_t *wdata, uint32_t len);
+    // Common async-path bookkeeping.
+    void submit_async(PacketPtr pkt);
 
     DataPort data_port;
     SeqThread seq_thread;
@@ -264,14 +265,14 @@ class ChiSeqDriver : public ClockedObject
     // Blocking slot.
     bool blocking_done;
 
-    // Async bookkeeping.
-    Handle next_handle;
-    std::unordered_map<Handle, InFlight> inflight;
+    // Async bookkeeping. Responses stay here until try_read_resp()
+    // transfers ownership to the sequence.
+    std::size_t outstanding_reqs;
+    std::queue<std::unique_ptr<Packet>> response_queue;
 
     // Current wait state (only meaningful when the fiber is suspended
     // on a packet-response reason — not for timer/latch waits).
     WaitMode wait_mode;
-    Handle wait_handle;
 
     // Retry slot (one-deep is sufficient: we only ever issue one
     // sendTimingReq before the next fiber yield).

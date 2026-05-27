@@ -29,16 +29,7 @@ MemsetSequence::run(ChiSeqDriver &drv)
         return;
     }
 
-    std::vector<std::vector<uint8_t>> buffers(
-        depth,
-        std::vector<uint8_t>(line_size, static_cast<uint8_t>(_p.fill_byte)));
-
-    struct Slot
-    {
-        ChiSeqDriver::Handle handle;
-        bool busy;
-    };
-    std::vector<Slot> slots(depth, {0, false});
+    std::vector<uint8_t> buffer(line_size, static_cast<uint8_t>(_p.fill_byte));
 
     DPRINTF(ChiTestbenchGem5,
             "%s memset: num_lines=%u depth=%u line_size=%u\n", drv.name(),
@@ -46,30 +37,24 @@ MemsetSequence::run(ChiSeqDriver &drv)
 
     const Tick t_start = curTick();
 
-    uint32_t next_issue = 0, retired = 0;
-    for (uint32_t s = 0; s < depth && next_issue < num_lines; s++) {
-        slots[s].handle = drv.async_write(dst_base + next_issue * line_size,
-                                          buffers[s].data(), line_size);
-        slots[s].busy = true;
-        next_issue++;
-    }
+    uint32_t next_issue = 0;
+    uint32_t retired = 0;
 
     while (retired < num_lines) {
-        for (uint32_t s = 0; s < depth; s++) {
-            if (!slots[s].busy) {
-                continue;
-            }
-            drv.resolve(slots[s].handle);
+        while (next_issue < num_lines && drv.outstanding() < depth &&
+               drv.request_ready()) {
+            drv.async_write_req(dst_base + next_issue * line_size,
+                                buffer.data(), line_size);
+            next_issue++;
+        }
+
+        if (auto resp = drv.try_read_resp()) {
             retired++;
-            if (next_issue < num_lines) {
-                slots[s].handle =
-                    drv.async_write(dst_base + next_issue * line_size,
-                                    buffers[s].data(), line_size);
-                next_issue++;
-            } else {
-                slots[s].busy = false;
-            }
-            break;
+            continue;
+        }
+
+        if (drv.outstanding() != 0) {
+            drv.wait_cycles(Cycles(1));
         }
     }
 

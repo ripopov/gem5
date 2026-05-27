@@ -22,10 +22,9 @@ class ChiSeqDriver;
  * startup() fires, it schedules a zero-delay event that calls
  * seq_thread->run(), which resumes the fiber's main(). The body of
  * main() looks up the registered sequence function by name and
- * invokes it; inside that function the sequence author calls the
- * driver's read()/write()/resolve() helpers, each of which
- * suspends the fiber via yield_to_primary() until the matching
- * event callback resumes it.
+ * invokes it; inside that function the sequence author can call the
+ * driver's blocking read()/write() helpers, or use async request
+ * helpers and poll try_read_resp() for ordered responses.
  *
  * Stack-switching is provided by `gem5::Fiber` (src/base/fiber.hh).
  */
