@@ -61,6 +61,7 @@ class CustomMesh(SimpleTopology):
         self,
         IntLink,
         link_latency,
+        link_bandwidth_factor,
         num_rows,
         num_columns,
         cross_links,
@@ -93,6 +94,7 @@ class CustomMesh(SimpleTopology):
                                 src_outport="East",
                                 dst_inport="West",
                                 latency=llat,
+                                bandwidth_factor=link_bandwidth_factor,
                                 weight=link_weights[0],
                                 supported_vnets=[v] if v is not None else [],
                             )
@@ -119,6 +121,7 @@ class CustomMesh(SimpleTopology):
                                 src_outport="West",
                                 dst_inport="East",
                                 latency=llat,
+                                bandwidth_factor=link_bandwidth_factor,
                                 weight=link_weights[1],
                                 supported_vnets=[v] if v is not None else [],
                             )
@@ -145,6 +148,7 @@ class CustomMesh(SimpleTopology):
                                 src_outport="North",
                                 dst_inport="South",
                                 latency=llat,
+                                bandwidth_factor=link_bandwidth_factor,
                                 weight=link_weights[2],
                                 supported_vnets=[v] if v is not None else [],
                             )
@@ -171,6 +175,7 @@ class CustomMesh(SimpleTopology):
                                 src_outport="South",
                                 dst_inport="North",
                                 latency=llat,
+                                bandwidth_factor=link_bandwidth_factor,
                                 weight=link_weights[3],
                                 supported_vnets=[v] if v is not None else [],
                             )
@@ -196,6 +201,7 @@ class CustomMesh(SimpleTopology):
                 src_node=node_router,
                 dst_node=mesh_router,
                 latency=self._router_link_latency,
+                bandwidth_factor=self._link_bandwidth_factor,
             )
         )
         self._link_count += 1
@@ -206,6 +212,7 @@ class CustomMesh(SimpleTopology):
                 src_node=mesh_router,
                 dst_node=node_router,
                 latency=self._router_link_latency,
+                bandwidth_factor=self._link_bandwidth_factor,
             )
         )
         self._link_count += 1
@@ -244,6 +251,7 @@ class CustomMesh(SimpleTopology):
                             ext_node=c,
                             int_node=router,
                             latency=self._node_link_latency,
+                            bandwidth_factor=self._link_bandwidth_factor,
                         )
                     )
                     self._link_count += 1
@@ -265,6 +273,7 @@ class CustomMesh(SimpleTopology):
                             ext_node=c,
                             int_node=router,
                             latency=self._node_link_latency,
+                            bandwidth_factor=self._link_bandwidth_factor,
                         )
                     )
                     self._link_count += 1
@@ -298,6 +307,9 @@ class CustomMesh(SimpleTopology):
             print("WARNING: router/node link latencies not provided")
             self._router_link_latency = options.link_latency
             self._node_link_latency = options.link_latency
+        self._link_bandwidth_factor = getattr(
+            options, "link_bandwidth_factor", 16
+        )
 
         # classify nodes into different types
         rnf_nodes = []
@@ -363,6 +375,7 @@ class CustomMesh(SimpleTopology):
         self._makeMesh(
             IntLink,
             self._router_link_latency,
+            self._link_bandwidth_factor,
             num_rows,
             num_cols,
             options.cross_links,
