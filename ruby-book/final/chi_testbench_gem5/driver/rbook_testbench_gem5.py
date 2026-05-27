@@ -70,6 +70,12 @@ parser.add_argument(
     help="Passed through to the scenario's build() function",
 )
 parser.add_argument(
+    "--active-cores",
+    default="all",
+    help="Comma-separated zero-based tile IDs that generate scenario "
+    "traffic, or 'all'",
+)
+parser.add_argument(
     "--deadlock-threshold",
     type=int,
     default=5_000_000,
@@ -107,9 +113,81 @@ parser.set_defaults(
 )
 
 args = parser.parse_args()
+args.active_cores_spec = args.active_cores
 
 
 # --- scenario resolution -----------------------------------------------------
+
+
+def _parse_active_cores(spec: str, num_cpus: int):
+    if spec.lower() == "all":
+        return list(range(num_cpus))
+
+    active = []
+    seen = set()
+    for raw_core in spec.split(","):
+        core = raw_core.strip()
+        if not core:
+            m5.fatal(f"Invalid --active-cores value '{spec}'")
+        try:
+            tile = int(core, 0)
+        except ValueError:
+            m5.fatal(f"Invalid --active-cores entry '{core}'")
+        if tile in seen:
+            m5.fatal(f"Duplicate --active-cores entry '{tile}'")
+        if tile < 0 or tile >= num_cpus:
+            m5.fatal(
+                f"--active-cores entry {tile} is outside "
+                f"[0, {num_cpus - 1}]"
+            )
+        seen.add(tile)
+        active.append(tile)
+
+    if not active:
+        m5.fatal("--active-cores must select at least one tile")
+    return active
+
+
+args.active_cores = _parse_active_cores(args.active_cores, args.num_cpus)
+
+
+def _option_was_provided(name: str):
+    return any(arg == name or arg.startswith(f"{name}=") for arg in sys.argv)
+
+
+def _read_chi_noc_params(chi_config: str):
+    if chi_config:
+        from ruby import CHI as _CHI
+
+        return _CHI.read_config_file(chi_config).NoC_Params
+
+    from ruby import CHI_config
+
+    return CHI_config.NoC_Params
+
+
+def _ensure_single_flit_garnet(args):
+    if args.network != "garnet":
+        return
+
+    params = _read_chi_noc_params(args.chi_config)
+    data_packet_bytes = params.data_width + params.cntrl_msg_size
+    required_bits = data_packet_bytes * 8
+
+    if args.link_width_bits >= required_bits:
+        return
+
+    if _option_was_provided("--link-width-bits"):
+        m5.fatal(
+            f"--link-width-bits={args.link_width_bits} is too small for "
+            f"one-flit CHI data packets; need at least {required_bits} "
+            f"bits ({data_packet_bytes} bytes)"
+        )
+
+    args.link_width_bits = required_bits
+
+
+_ensure_single_flit_garnet(args)
 
 
 def _load_scenario(name: str):

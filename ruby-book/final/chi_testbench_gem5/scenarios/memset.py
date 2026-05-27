@@ -1,6 +1,6 @@
 # Copyright (c) 2026 ripopov
 # SPDX-License-Identifier: BSD-3-Clause
-"""memset — all tiles write non-overlapping linear ranges."""
+"""memset — selected tiles write non-overlapping linear ranges."""
 
 from m5.objects import (
     ChiGem5Barrier,
@@ -13,11 +13,12 @@ def build(args, planner):
     num_lines = 1024
     line_size = 64
     write_size = 63
-    barrier = ChiGem5Barrier(expected=args.num_cpus)
+    active_cores = list(args.active_cores)
+    barrier = ChiGem5Barrier(expected=len(active_cores))
 
-    drivers = []
-    for tile in range(args.num_cpus):
-        drivers.append(
+    drivers = [ChiSeqDriver(tile_id=tile) for tile in range(args.num_cpus)]
+    for tile in active_cores:
+        drivers[tile] = (
             ChiSeqDriver(
                 tile_id=tile,
                 finish_barrier=barrier,
@@ -30,7 +31,7 @@ def build(args, planner):
                     fill_byte=(0xC0 + tile) & 0xFF,
                     warmup_l3=True,
                     roi_stats=True,
-                    roi_participants=args.num_cpus,
+                    roi_participants=len(active_cores),
                 ),
             )
         )

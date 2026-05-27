@@ -6,6 +6,7 @@ homed at HNF 7. The turn hand-off lives in byte 0 of that line, matching
 a CPU-style spin-on-shared-memory ping-pong test.
 """
 
+import m5
 from m5.objects import (
     ChiGem5Barrier,
     ChiSeqDriver,
@@ -15,12 +16,23 @@ from m5.objects import (
 
 def build(args, planner):
     line_addr = planner.address_for_hnf(hnf_idx=7, line_offset=0)
+    if args.active_cores_spec.lower() == "all":
+        active_cores = [0, args.num_cpus - 1]
+    else:
+        active_cores = list(args.active_cores)
+        if len(active_cores) != 2:
+            m5.fatal(
+                "--active-cores selects ping_pong endpoints and must "
+                "contain exactly two tile IDs"
+            )
+
     barrier = ChiGem5Barrier(expected=2)
     iterations = max(args.scenario_iterations, 100)
+    initiator_tile, responder_tile = active_cores
 
     drivers = [None] * args.num_cpus
-    drivers[0] = ChiSeqDriver(
-        tile_id=0,
+    drivers[initiator_tile] = ChiSeqDriver(
+        tile_id=initiator_tile,
         finish_barrier=barrier,
         sequence=PingPongSequence(
             line_addr=line_addr,
@@ -31,8 +43,8 @@ def build(args, planner):
             dump_roi_stats=True,
         ),
     )
-    drivers[15] = ChiSeqDriver(
-        tile_id=15,
+    drivers[responder_tile] = ChiSeqDriver(
+        tile_id=responder_tile,
         finish_barrier=barrier,
         sequence=PingPongSequence(
             line_addr=line_addr,

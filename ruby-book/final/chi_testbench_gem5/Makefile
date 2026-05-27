@@ -12,6 +12,7 @@ TIMESTAMP  = $(shell date +%Y%m%d-%H%M%S)
 # Valid values: rnf_l2 (Seq -> coherent L2 leaf cache -> mesh, default)
 #               rni    (Seq -> cache-less DMA ctrl  -> mesh)
 RN_MODE ?= rnf_l2
+ACTIVE_CORES ?= all
 
 SCENARIOS := ping_pong memset
 
@@ -43,6 +44,7 @@ run-$(1):
 	    -d $$(GEM5_ROOT)/m5out/rbook-tb-gem5-$(1)-$$(RN_MODE)-$$(TIMESTAMP) \
 	    $$(DRIVER) \
 	    --scenario=$(1) \
+	    --active-cores=$$(ACTIVE_CORES) \
 	    --rn-mode=$$(RN_MODE)
 	@ln -sfn $$(GEM5_ROOT)/m5out/rbook-tb-gem5-$(1)-$$(RN_MODE)-$$(TIMESTAMP) \
 	    m5out/last-$(1)-$$(RN_MODE)
