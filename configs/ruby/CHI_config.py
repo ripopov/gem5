@@ -339,6 +339,7 @@ class CHI_HNFController(Base_CHI_Cache_Controller):
         self.enable_DMT = True
         self.enable_DCT = True
         self.send_evictions = False
+        self.allow_retry_ack = False
         # MOESI / Mostly inclusive for shared / Exclusive for unique
         self.alloc_on_seq_acc = False
         self.alloc_on_seq_line_write = False

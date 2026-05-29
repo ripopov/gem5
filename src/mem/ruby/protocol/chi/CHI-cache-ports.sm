@@ -378,7 +378,12 @@ in_port(reqInPort, CHIRequestMsg, reqIn, rank=2,
       // DVM Sync and TLBIs from external sources will use txnId requests,
       // but they aren't implemented yet.
       assert(!in_msg.usesTxnId);
-      if (in_msg.allowRetry) {
+      if (allow_retry_ack == false) {
+        // No CHI retry: backpressure reqIn when the TBE table is full
+        // instead of sending a RetryAck.
+        trigger(Event:AllocRequestNoRetry, in_msg.addr,
+              getCacheEntry(in_msg.addr), getCurrentActiveTBE(in_msg.addr));
+      } else if (in_msg.allowRetry) {
         trigger(Event:AllocRequest, in_msg.addr,
               getCacheEntry(in_msg.addr), getCurrentActiveTBE(in_msg.addr));
       } else {
@@ -389,8 +394,18 @@ in_port(reqInPort, CHIRequestMsg, reqIn, rank=2,
   }
 }
 bool reqInPort_rsc_stall_handler() {
-  error("reqInPort must never stall\n");
-  return false;
+  if (allow_retry_ack) {
+    // In the default RetryAck flow, reqIn is always drained (full table is
+    // handled by sending a retry), so a resource stall here is a bug.
+    error("reqInPort must never stall\n");
+    return false;
+  }
+  // No-retry mode: the AllocRequestNoRetry transition reserves a TBE slot
+  // via check_allocate, so a full table stalls reqIn. Recycle the request
+  // and let network backpressure build up behind it.
+  DPRINTF(RubySlicc, "reqIn queue resource stall (no-retry mode)\n");
+  reqInPort.recycle(clockEdge(), cyclesToTicks(stall_recycle_lat));
+  return true;
 }
 
 

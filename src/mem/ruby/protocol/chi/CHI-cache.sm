@@ -175,6 +175,15 @@ machine(MachineType:Cache, "Cache coherency protocol") :
   // stall new requests to destinations with a pending retry
   bool throttle_req_on_retry := "True";
 
+  // When true (default), the controller uses the CHI RetryAck/PCrdGrant
+  // flow control: an incoming request that finds the TBE table full is
+  // accepted off reqIn and a RetryAck is returned to the requester.
+  // When false, the controller never sends RetryAck/PCrdGrant; instead a
+  // request that finds the table full creates a protocol resource stall on
+  // reqIn, so backpressure propagates back into the network. Model a
+  // fixed-size LLC reqIn buffer (e.g. 2) when using this mode.
+  bool allow_retry_ack := "True";
+
   // Use prefetcher
   bool use_prefetcher, default="false";
 
@@ -294,6 +303,7 @@ machine(MachineType:Cache, "Cache coherency protocol") :
     // request or snoop to the ready queue
     AllocRequest,           desc="Allocates a TBE for a request. Triggers a retry if table is full";
     AllocRequestWithCredit, desc="Allocates a TBE for a request. Always succeeds.";
+    AllocRequestNoRetry,    desc="Allocates a TBE for a request. Stalls (backpressures) reqIn if table is full; never retries";
     AllocSeqRequest,        desc="Allocates a TBE for a sequencer request. Stalls requests if table is full";
     AllocSeqDvmRequest,     desc="Allocates a TBE for a sequencer DVM request. Stalls requests if table is full";
     AllocPfRequest,         desc="Allocates a TBE for a prefetch request. Stalls requests if table is full";

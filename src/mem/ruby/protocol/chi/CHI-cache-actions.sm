@@ -93,6 +93,27 @@ action(AllocateTBE_Request_WithCredit, desc="") {
   reqInPort.dequeue(clockEdge());
 }
 
+action(AllocateTBE_Request_NoRetry, desc="") {
+  // No CHI retry support: behave like a sequencer/snoop allocation and
+  // create a protocol resource stall when the TBE table is full. The
+  // stalled request stays in reqIn so backpressure propagates into the
+  // network (model a small reqIn buffer for a realistic LLC).
+  check_allocate(storTBEs);
+
+  // reserve a slot for this request
+  storTBEs.incrementReserved();
+
+  // Move request to rdy queue
+  peek(reqInPort, CHIRequestMsg) {
+    enqueue(reqRdyOutPort, CHIRequestMsg, allocation_latency) {
+      assert(in_msg.addr == address);
+      assert(in_msg.is_local_pf == false);
+      out_msg := in_msg;
+    }
+  }
+  reqInPort.dequeue(clockEdge());
+}
+
 action(AllocateTBE_Snoop, desc="") {
   // No retry for snoop requests; just create resource stall
   check_allocate(storSnpTBEs);

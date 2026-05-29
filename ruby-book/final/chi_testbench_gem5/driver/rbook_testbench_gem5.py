@@ -82,6 +82,17 @@ parser.add_argument(
     help="Maximum outstanding traffic-generation requests per active tile",
 )
 parser.add_argument(
+    "--allow-retryack",
+    type=int,
+    choices=[0, 1],
+    default=1,
+    help="HNF/LLC request flow control. 1 (default): CHI "
+    "RetryAck/PCrdGrant flow control (a full TBE table accepts the "
+    "request and returns a RetryAck). 0: model an RTL LLC with no retry "
+    "support -- a full TBE table stalls reqIn so backpressure propagates "
+    "back into the network; reqIn is sized to 2 entries.",
+)
+parser.add_argument(
     "--deadlock-threshold",
     type=int,
     default=5_000_000,
@@ -291,6 +302,16 @@ Ruby.create_system(args, False, system)
 assert args.num_cpus == len(system.ruby._cpu_ports)
 
 system.ruby.clk_domain = system.clk_domain
+
+# HNF/LLC request flow control. With --allow-retryack=0 the home nodes
+# model an RTL LLC that lacks CHI RetryAck/PCrdGrant: a full TBE table
+# stalls reqIn (protocol resource stall) instead of retrying, and a small
+# reqIn buffer lets that backpressure propagate into the network. The
+# default (=1) keeps the stock infinite reqIn + RetryAck behavior.
+if args.allow_retryack == 0:
+    for hnf in system.ruby.hnf:
+        hnf._cntrl.allow_retry_ack = False
+        hnf._cntrl.reqIn.buffer_size = 2
 
 # Raise deadlock thresholds; testbench traffic is sparse by design.
 for i in range(args.num_cpus):
