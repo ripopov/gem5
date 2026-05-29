@@ -190,7 +190,9 @@ class CustomMesh(SimpleTopology):
         # Create a zero-latency router bridging node controllers
         # and the mesh router
         node_router = self._Router(
-            router_id=len(self._routers), latency=self.node_router_latency
+            router_id=len(self._routers),
+            latency=self.node_router_latency,
+            **self._routing_latency_kwargs,
         )
         self._routers.append(node_router)
 
@@ -294,6 +296,22 @@ class CustomMesh(SimpleTopology):
         self._ExtLink = ExtLink
         self._Router = Router
 
+        # SimpleNetwork (Switch) per-hop routing latencies, applied by the
+        # PerfectSwitch when enqueuing to its output buffers. These params
+        # only exist on the Switch router; garnet routers don't have them, so
+        # only forward them when running the simple network. Default to the
+        # router's own `latency` so behavior is unchanged unless overridden.
+        self._routing_latency_kwargs = {}
+        if options.network == "simple":
+            self._routing_latency_kwargs = dict(
+                int_routing_latency=getattr(
+                    options, "int_routing_latency", options.router_latency
+                ),
+                ext_routing_latency=getattr(
+                    options, "ext_routing_latency", options.router_latency
+                ),
+            )
+
         if options.network == "garnet":
             self.node_router_latency = getattr(
                 options, "node_router_latency", 1
@@ -363,7 +381,11 @@ class CustomMesh(SimpleTopology):
 
         # Create all mesh routers
         self._routers = [
-            Router(router_id=i, latency=options.router_latency)
+            Router(
+                router_id=i,
+                latency=options.router_latency,
+                **self._routing_latency_kwargs,
+            )
             for i in range(num_mesh_routers)
         ]
 

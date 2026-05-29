@@ -22,9 +22,15 @@ class NoC_Params(CHI_config.NoC_Params):
     num_rows = 4
     num_cols = 4
     router_latency = 4  # 1 clk input + 2 clk route + 1 clk output
-    router_link_latency = 4  # repeater delay between mesh routers
+
+    router_link_latency = 2  # repeater delay between mesh routers
     node_router_latency = 2  # intermediate mux router
+
     link_bandwidth_factor = 32  # SimpleNetwork bytes/cycle per link
+    # SimpleNetwork-only: PerfectSwitch per-hop routing latency (Cycles).
+    # int = switch-to-switch hops, ext = switch-to-controller hops.
+    int_routing_latency = router_latency
+    ext_routing_latency = router_latency + 2
 
 
 class CHI_RNF(CHI_config.CHI_RNF):
