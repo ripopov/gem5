@@ -24,7 +24,7 @@ class NoC_Params(CHI_config.NoC_Params):
     router_latency = 4  # 1 clk input + 2 clk route + 1 clk output
     router_link_latency = 4  # repeater delay between mesh routers
     node_router_latency = 2  # intermediate mux router
-    link_bandwidth_factor = 40  # SimpleNetwork bytes/cycle per link
+    link_bandwidth_factor = 32  # SimpleNetwork bytes/cycle per link
 
 
 class CHI_RNF(CHI_config.CHI_RNF):

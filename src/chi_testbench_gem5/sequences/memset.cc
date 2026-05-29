@@ -92,7 +92,7 @@ MemsetRoiCoordinator::wait_for_warmup(ChiSeqDriver &drv,
         const Tick warmup_end = curTick();
         cprintf("memset L3 warmup: dump stats at tick %llu\n",
                 (unsigned long long)warmup_end);
-        statistics::dump();
+        // statistics::dump();
         cprintf("memset L3 warmup: reset stats at tick %llu\n",
                 (unsigned long long)curTick());
         statistics::reset();
@@ -269,27 +269,38 @@ MemsetSequence::run(ChiSeqDriver &drv)
         roi_coordinator.wait_for_warmup(drv, _p.roi_participants);
     }
 
+    cprintf("memset L3 warmup: reset stats at tick %llu\n",
+        (unsigned long long)curTick());
+    statistics::reset();
+
     const Tick t_start = curTick();
 
     if (_p.roi_stats) {
-        const uint32_t excluded_lines = num_lines / 10;
-        const uint32_t roi_lines = num_lines - 2 * excluded_lines;
-        const uint32_t cooldown_first = excluded_lines + roi_lines;
+        const uint32_t ramp_up_lines = num_lines / 10;
+        const uint32_t ramp_down_lines = num_lines / 10;
+        const uint32_t roi_first = ramp_up_lines;
+        const uint32_t roi_lines =
+            num_lines - ramp_up_lines - ramp_down_lines;
+        const uint32_t ramp_down_first = roi_first + roi_lines;
+
+        cprintf("%s memset ROI split: ramp-up=%u ROI=%u "
+                "ramp-down=%u transactions\n",
+                drv.name(), ramp_up_lines, roi_lines, ramp_down_lines);
 
         // Drain warm-up before the reset so in-flight warm-up responses
-        // cannot leak into the ROI stats window. Cool-down is not issued
+        // cannot leak into the ROI stats window. Ramp-down is not issued
         // until after the ROI dump for the same reason.
-        run_write_phase(drv, dst_base, 0, excluded_lines, line_size,
+        run_write_phase(drv, dst_base, 0, ramp_up_lines, line_size,
                         write_size, depth, buffer, false);
         quiesce_before_stats_reset(drv, _p.stats_quiesce_cycles);
         roi_coordinator.wait_for_start(drv, _p.roi_participants);
 
-        run_write_phase(drv, dst_base, excluded_lines, roi_lines, line_size,
+        run_write_phase(drv, dst_base, roi_first, roi_lines, line_size,
                         write_size, depth, buffer, false);
         roi_coordinator.wait_for_end(
             drv, _p.roi_participants, (uint64_t)roi_lines * line_size);
 
-        run_write_phase(drv, dst_base, cooldown_first, excluded_lines,
+        run_write_phase(drv, dst_base, ramp_down_first, ramp_down_lines,
                         line_size, write_size, depth, buffer, false);
     } else {
         run_write_phase(drv, dst_base, 0, num_lines, line_size, write_size,
