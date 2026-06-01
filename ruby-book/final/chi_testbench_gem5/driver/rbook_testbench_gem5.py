@@ -133,6 +133,7 @@ parser.set_defaults(
     #   per_vnet_links           -> garnet (one mesh link per vnet)
     simple_physical_channels=True,
     per_vnet_links=True,
+    vcs_per_vnet=8,
 )
 
 args = parser.parse_args()

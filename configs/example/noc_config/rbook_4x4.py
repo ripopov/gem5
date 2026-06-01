@@ -22,6 +22,7 @@ class NoC_Params(CHI_config.NoC_Params):
     num_rows = 4
     num_cols = 4
     router_latency = 4  # 1 clk input + 2 clk route + 1 clk output
+    router_buffer_size = 8
 
     router_link_latency = 2  # repeater delay between mesh routers
     node_router_latency = 2  # intermediate mux router

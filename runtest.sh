@@ -39,5 +39,5 @@ mkdir -p "${TB_DIR}/m5out"
     "${DRIVER}" \
     --scenario=memset \
     --active-cores=0 \
-    --network=simple --simple-physical-channels \
+    --network=simple \
     --num-outstanding-reqs=32
