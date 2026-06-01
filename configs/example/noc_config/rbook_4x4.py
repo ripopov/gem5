@@ -26,7 +26,7 @@ class NoC_Params(CHI_config.NoC_Params):
     router_link_latency = 2  # repeater delay between mesh routers
     node_router_latency = 2  # intermediate mux router
 
-    link_bandwidth_factor = 32  # SimpleNetwork bytes/cycle per link
+    link_bandwidth_factor = 40  # SimpleNetwork bytes/cycle per link
     # SimpleNetwork-only: PerfectSwitch per-hop routing latency (Cycles).
     # int = switch-to-switch hops, ext = switch-to-controller hops.
     int_routing_latency = router_latency

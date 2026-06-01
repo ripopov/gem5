@@ -273,8 +273,6 @@ MemsetSequence::run(ChiSeqDriver &drv)
         (unsigned long long)curTick());
     statistics::reset();
 
-    const Tick t_start = curTick();
-
     if (_p.roi_stats) {
         const uint32_t ramp_up_lines = num_lines / 10;
         const uint32_t ramp_down_lines = num_lines / 10;
@@ -307,12 +305,6 @@ MemsetSequence::run(ChiSeqDriver &drv)
                         depth, buffer, false);
     }
 
-    const Tick elapsed = curTick() - t_start;
-    const uint64_t bytes = (uint64_t)num_lines * line_size;
-    cprintf("%s memset: %u lines (%llu counted bytes, %u-byte stores) "
-            "in %llu ticks depth=%u\n",
-            drv.name(), num_lines, (unsigned long long)bytes, write_size,
-            (unsigned long long)elapsed, depth);
 }
 
 } // namespace chi_gem5tb
