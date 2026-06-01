@@ -127,6 +127,12 @@ parser.set_defaults(
         _GEM5_CONFIGS, "example", "noc_config", "rbook_4x4.py"
     ),
     mem_size="512MiB",
+    # Dedicated per-vnet physical channels by default. Each is network-
+    # specific and ignored by the other network:
+    #   simple_physical_channels -> SimpleNetwork (one channel per vnet)
+    #   per_vnet_links           -> garnet (one mesh link per vnet)
+    simple_physical_channels=True,
+    per_vnet_links=True,
 )
 
 args = parser.parse_args()
