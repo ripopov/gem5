@@ -38,6 +38,6 @@ mkdir -p "${TB_DIR}/m5out"
     -d "${OUTDIR}" \
     "${DRIVER}" \
     --scenario=memset \
-    --active-cores=0 \
-    --network=garnet \
+    --active-cores=all \
+    --network=simple \
     --num-outstanding-reqs=32
