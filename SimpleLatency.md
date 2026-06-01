@@ -466,7 +466,189 @@ here.)
 
 ---
 
-### Appendix — key source references
+## Appendix A — Reproducing this analysis from traces
+
+Everything in §5–§9 (the histogram reconstruction, the max-latency victim, and the
+cycle-by-cycle table in §7) is derived mechanically from one trace file. This appendix
+documents the procedure end to end so the report is reproducible line-for-line.
+
+### A.1 Regenerate the trace
+
+One run with both debug flags writes an interleaved text trace. Per the repo rules, launch
+through the timeout wrapper and into a timestamped output dir:
+
+```sh
+./util/run_with_timeout.sh ./build/RISCV/gem5.opt \
+  --debug-flags=ProtocolTrace,RubyNetwork \
+  --debug-file=trace.gz \
+  -d m5out/simplelat-bw40-$(date +%Y%m%d-%H%M%S) \
+  ruby-book/final/chi_testbench_gem5/driver/rbook_testbench_gem5.py \
+  --scenario=memset --active-cores=0 \
+  --network=simple --simple-physical-channels \
+  --num-outstanding-reqs=32
+```
+
+`--debug-file=trace.gz` lands a gzip’d trace in the run dir. Decompress to a plain file
+before grepping — macOS `grep` treats the file as binary if any NUL bytes survive, so use
+`gunzip -c` then `grep -a` (treat as text):
+
+```sh
+gunzip -c m5out/simplelat-bw40-*/trace.gz > /tmp/bw40_trace.txt
+```
+
+### A.2 The two row formats
+
+`ProtocolTrace,RubyNetwork` produces **two interleaved row shapes**; the entire method is
+correlating them by address.
+
+**(a) ProtocolTrace** — one row per SLICC controller state transition, plus `Seq`
+begin/done that bracket the sequencer-visible latency:
+
+```
+   tick   version  Cache  <event>          <stateA>>stateB     [addr, line ...]
+11171500     0     Seq    Begin            >                   [0x1fc0, line 0x1fc0] ST
+11172500     0     Cache  SendReadUnique   BUSY_BLKD>BUSY_INTR [0x1fc0, line 0x1fc0]
+11206000    31     Cache  ReadUnique_PoC   UD>BUSY_BLKD        [0x1fc0, line 0x1fc0]
+11285500     0     Cache  CompData_UD_PD   BUSY_INTR>BUSY_BLKD [0x1fc0, line 0x1fc0]
+```
+
+`version` is the controller instance: **0 = rnf0**, **31 = Cache-31 = hnf15**. The tick is
+absolute simulator ticks (500 ticks = 1 cycle @ 2 GHz).
+
+**(b) RubyNetwork** — one row per network hop, tagged with the router it left:
+
+```
+tick: PerfectSwitch-<router>: Message: [CHIRequestMsg: addr = [0x1fc0,...] type = ReadUnique ...]
+```
+
+Consecutive `PerfectSwitch-N` timestamps for the same address are the per-hop arrivals;
+their deltas are the hop latencies (3000 ticks = 6 cy internal hop, 3500 = 7 cy external),
+and the router sequence is the literal route taken.
+
+### A.3 Gotcha: warm-up vs ROI copies of the same address
+
+Every address appears **twice** in the trace. The warm-up phase (`warmup_l3`) writes full
+64-byte lines as `WriteUniqueFull`/`NCBWrData` at ticks ~10⁵; the ROI does 63-byte
+**partial** writes on already-owned lines, which forces read-for-ownership and shows up as
+`SendReadUnique` at ticks ~11.17 M. A naïve `grep "0x1fc0,"` returns the warm-up
+`WriteUnique` lines first — always filter to the **ROI window** (below) and to the event
+you mean.
+
+### A.4 ROI window
+
+The sequence resets stats at ROI entry and dumps at ROI exit; both ticks are printed to
+stdout by `memset.cc` (`wait_for_start`/`wait_for_end`):
+
+```
+memset ROI: reset stats at tick 11171500
+memset ROI: dump stats at tick 12630000
+```
+
+So the ROI window is `[11171500, 12630000]`. A transaction counts toward
+`outTransLatHist.SendReadUnique` exactly when its completion lands in that window — the
+same rule the C++ histogram uses after `statistics::reset()`.
+
+### A.5 Step 1 — validate the method and pick the victim
+
+`analyze.py` parses **only ProtocolTrace rows for version 0** (rnf0), pairs each
+`SendReadUnique` (start) with its completing `CompData_UD_PD` (end = the 2nd/last data
+beat), keeps transactions completing in the ROI window, and (a) re-buckets them into the
+same 64-cycle buckets to **prove the parse matches `stats.txt`**, then (b) sorts to find
+the max:
+
+```python
+import re
+from collections import defaultdict
+ROI_START, ROI_END = 11171500, 12630000
+# tick  version  Cache  event  stateA>stateB  [addr,
+prot = re.compile(r'^\s*(\d+)\s+(\d+)\s+Cache\s+(\S+)\s+(\S+)\s+\[(0x[0-9a-f]+),')
+
+byaddr = defaultdict(list)
+for ln in open('/tmp/bw40_trace.txt', encoding='latin-1'):
+    m = prot.match(ln)
+    if not m or int(m.group(2)) != 0:      # version 0 = rnf0 only
+        continue
+    byaddr[m.group(5)].append((int(m.group(1)), m.group(3)))
+
+results = []
+for addr, evs in byaddr.items():
+    evs.sort()
+    sends = [t for t, e in evs if e == 'SendReadUnique']
+    comps = [t for t, e in evs if e == 'CompData_UD_PD']
+    for st in sends:
+        after = [c for c in comps if c >= st]
+        if len(after) >= 2 and ROI_START <= after[1] <= ROI_END:
+            results.append((after[1] - st, st, after[1], addr))   # ticks
+
+results.sort(reverse=True)
+lat = [r[0] // 500 for r in results]                              # ticks -> cycles
+print("ROI txns: %d  min %d  max %d  mean %.2f" %
+      (len(lat), min(lat), max(lat), sum(lat) / len(lat)))
+
+from collections import Counter
+buckets = Counter(min(c // 64, 4) for c in lat)                   # match 64-cy buckets
+print("buckets:", dict(sorted(buckets.items())))
+print("max:", results[0])                                        # (Δticks, start, end, addr)
+```
+
+Expected output for the bw=40 trace (matches `stats.txt` exactly):
+
+```
+ROI txns: 820  min 33  max 226  mean 108.75
+buckets: {0: 201, 1: 360, 2: 163, 3: 96}
+max: (113000, 11172500, 11285500, '0x1fc0')
+```
+
+The bucket vector `201/360/163/96` reproducing `outTransLatHist.SendReadUnique` is the
+proof that the trace parse is faithful — only then is the §7 deep-dive trustworthy.
+
+### A.6 Step 2 — build the cycle-by-cycle table for the victim
+
+With the winning address (`0x1fc0`) and its window (`11172500 … 11285500`), pull **both**
+views for that address in the ROI and read them in tick order:
+
+```sh
+# protocol-side timeline (drops PerfectSwitch rows), ROI only
+grep -a "0x1fc0," /tmp/bw40_trace.txt | grep -av PerfectSwitch \
+  | awk '$1 >= 11172000 && $1 <= 11286000'
+
+# network-side hop timeline
+grep -a "PerfectSwitch" /tmp/bw40_trace.txt | grep -a "0x1fc0," \
+  | awk -F: '$1 >= 11172000 && $1 <= 11286000'
+```
+
+Merge the two by tick. **Every row in the §7 table is a tick-delta between two adjacent
+events**, attributed to a category by which event pair brackets it:
+
+| bracketing events | category | parameter it should equal |
+|---|---|---|
+| `Seq Begin → SendReadUnique` | injection / enqueue | `request_latency = 1 cy` |
+| adjacent `PerfectSwitch-N` (internal) | NoC hop | `int_routing(4)+int_link(2) = 6 cy` |
+| adjacent `PerfectSwitch-N` (endpoint) | NoC hop | `ext_routing(6)+ext_link(1) = 7 cy` |
+| `TagArrayRead → DataArrayRead` | L3 tag access | `tagAccessLatency = 2 cy` |
+| `DataArrayRead → SendCompData` | L3 data access | `dataAccessLatency = 10 cy` |
+| consecutive data beats | beat spacing | `data_latency = 1 cy` |
+
+The **structural minimum** for each gap is the parameter value above; anything measured
+**beyond** it is queueing. That subtraction is exactly the "44 structural + ~N queueing"
+split in §7, and the per-hop excess on the return path (e.g. router 8 at +52 cy vs. the
+6-cy structural hop) is what §8 attributes to the incast funnel at router 0. Nothing in
+§7/§8 is modeled — it is the literal tick column with each gap labeled by the events on
+either side.
+
+### A.7 Files used
+
+* Trace: `m5out/simplelat-bw40-*/trace.gz` → `/tmp/bw40_trace.txt` (decompressed).
+* Scripts: `/tmp/analyze.py` (full version + top-10 + validation),
+  `/tmp/analyze2.py` (compact one-arg re-check).
+* Stats cross-check: `m5out/simplelat-bw40-*/stats.txt`
+  (`system.ruby.rnf0.cntrl.outTransLatHist.SendReadUnique`).
+* The `--num-outstanding-reqs=4` control run (§12) uses the same procedure on
+  `m5out/simplelat-oreq4-*/`.
+
+---
+
+## Appendix B — key source references
 * SimpleNetwork hop: `PerfectSwitch.cc:152-300`, `Throttle.cc:139-334`,
   `Switch.cc:86-134`, `MessageBuffer.cc:148-349`, `Network.cc:58-66,166-200`.
 * CHI ReadUnique: `CHI-cache-transitions.sm:277,1238,1477`,
