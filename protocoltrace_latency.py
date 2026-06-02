@@ -220,10 +220,12 @@ def write_stats(rows, path, roi_start_clk, roi_end_clk, start_event):
             fh.write("system.ruby.rnf%d.cntrl  %s\n" % (rnf, start_event))
             fh.write("  count   : %d\n" % len(rs))
             fh.write("  mean    : %.6f\n" % (sum(lats) / len(lats)))
-            fh.write("  min     : %s clk  (addr %s -> %s)\n"
-                     % (lo["LATENCY_CLK"], lo["ADDRESS"], _hnf_label(lo)))
-            fh.write("  max     : %s clk  (addr %s -> %s)\n"
-                     % (hi["LATENCY_CLK"], hi["ADDRESS"], _hnf_label(hi)))
+            fh.write("  min     : %s clk  (addr %s @%s -> %s)\n"
+                     % (lo["LATENCY_CLK"], lo["ADDRESS"],
+                        lo["START_CLK"], _hnf_label(lo)))
+            fh.write("  max     : %s clk  (addr %s @%s -> %s)\n"
+                     % (hi["LATENCY_CLK"], hi["ADDRESS"],
+                        hi["START_CLK"], _hnf_label(hi)))
             fh.write("\n")
 
 
