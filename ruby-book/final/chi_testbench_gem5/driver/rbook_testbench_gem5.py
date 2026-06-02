@@ -76,6 +76,13 @@ parser.add_argument(
     "traffic, or 'all'",
 )
 parser.add_argument(
+    "--operation",
+    choices=["store", "load"],
+    default="store",
+    help="memset ROI access type: 'store' (partial writes -> ReadUnique) "
+    "or 'load' (reads -> ReadShared)",
+)
+parser.add_argument(
     "--num-outstanding-reqs",
     type=int,
     default=4,

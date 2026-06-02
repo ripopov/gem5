@@ -182,11 +182,19 @@ MemsetRoiCoordinator::report() const
             sum_bw / expected);
 }
 
+// Access type issued by run_access_phase for each line.
+enum class AccessKind
+{
+    StoreLine,  // full-line store (L3 warm-up)
+    Store,      // partial store -> ReadUnique
+    Load,       // read         -> ReadShared
+};
+
 void
-run_write_phase(ChiSeqDriver &drv, uint64_t dst_base, uint32_t first_line,
-                uint32_t num_lines, uint32_t line_size, uint32_t write_size,
-                uint32_t depth, const std::vector<uint8_t> &buffer,
-                bool store_line)
+run_access_phase(ChiSeqDriver &drv, uint64_t dst_base, uint32_t first_line,
+                 uint32_t num_lines, uint32_t line_size, uint32_t access_size,
+                 uint32_t depth, const std::vector<uint8_t> &buffer,
+                 AccessKind kind)
 {
     uint32_t next_issue = 0;
     uint32_t retired = 0;
@@ -196,10 +204,16 @@ run_write_phase(ChiSeqDriver &drv, uint64_t dst_base, uint32_t first_line,
                drv.request_ready()) {
             const uint64_t line = first_line + next_issue;
             const uint64_t addr = dst_base + line * line_size;
-            if (store_line) {
-                drv.async_store_line_req(addr, buffer.data(), write_size);
-            } else {
-                drv.async_write_req(addr, buffer.data(), write_size);
+            switch (kind) {
+              case AccessKind::StoreLine:
+                drv.async_store_line_req(addr, buffer.data(), access_size);
+                break;
+              case AccessKind::Store:
+                drv.async_write_req(addr, buffer.data(), access_size);
+                break;
+              case AccessKind::Load:
+                drv.async_read_req(addr, access_size);
+                break;
             }
             next_issue++;
         }
@@ -240,9 +254,19 @@ MemsetSequence::run(ChiSeqDriver &drv)
     }
     const uint64_t dst_base = _p.dst_base;
 
+    // ROI access type: stores issue partial writes (-> ReadUnique), loads
+    // issue reads (-> ReadShared). Warm-up always uses full-line stores.
+    const bool do_load = _p.operation == "load";
+    const AccessKind roi_kind =
+        do_load ? AccessKind::Load : AccessKind::Store;
+
     if (num_lines == 0) {
         return;
     }
+
+    panic_if(_p.operation != "store" && _p.operation != "load",
+             "%s memset: operation='%s' must be 'store' or 'load'",
+             drv.name(), _p.operation);
 
     panic_if(write_size == 0 || write_size > line_size,
              "%s memset: write_size=%u must be in [1, line_size=%u]",
@@ -263,8 +287,8 @@ MemsetSequence::run(ChiSeqDriver &drv)
         DPRINTF(ChiTestbenchGem5,
                 "%s memset L3 warmup: %u full-line stores\n",
                 drv.name(), num_lines);
-        run_write_phase(drv, dst_base, 0, num_lines, line_size, line_size,
-                        depth, warmup_buffer, true);
+        run_access_phase(drv, dst_base, 0, num_lines, line_size, line_size,
+                         depth, warmup_buffer, AccessKind::StoreLine);
         quiesce_before_stats_reset(drv, _p.stats_quiesce_cycles);
         roi_coordinator.wait_for_warmup(drv, _p.roi_participants);
     }
@@ -288,21 +312,21 @@ MemsetSequence::run(ChiSeqDriver &drv)
         // Drain warm-up before the reset so in-flight warm-up responses
         // cannot leak into the ROI stats window. Ramp-down is not issued
         // until after the ROI dump for the same reason.
-        run_write_phase(drv, dst_base, 0, ramp_up_lines, line_size,
-                        write_size, depth, buffer, false);
+        run_access_phase(drv, dst_base, 0, ramp_up_lines, line_size,
+                         write_size, depth, buffer, roi_kind);
         quiesce_before_stats_reset(drv, _p.stats_quiesce_cycles);
         roi_coordinator.wait_for_start(drv, _p.roi_participants);
 
-        run_write_phase(drv, dst_base, roi_first, roi_lines, line_size,
-                        write_size, depth, buffer, false);
+        run_access_phase(drv, dst_base, roi_first, roi_lines, line_size,
+                         write_size, depth, buffer, roi_kind);
         roi_coordinator.wait_for_end(
             drv, _p.roi_participants, (uint64_t)roi_lines * line_size);
 
-        run_write_phase(drv, dst_base, ramp_down_first, ramp_down_lines,
-                        line_size, write_size, depth, buffer, false);
+        run_access_phase(drv, dst_base, ramp_down_first, ramp_down_lines,
+                         line_size, write_size, depth, buffer, roi_kind);
     } else {
-        run_write_phase(drv, dst_base, 0, num_lines, line_size, write_size,
-                        depth, buffer, false);
+        run_access_phase(drv, dst_base, 0, num_lines, line_size, write_size,
+                         depth, buffer, roi_kind);
     }
 
 }

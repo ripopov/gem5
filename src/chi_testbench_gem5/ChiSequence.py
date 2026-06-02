@@ -49,6 +49,11 @@ class MemsetSequence(ChiSequence):
     write_size = Param.UInt32(
         0, "Bytes written per cache line; 0 means line_size"
     )
+    operation = Param.String(
+        "store",
+        "ROI access type: 'store' (partial writes -> ReadUnique) or "
+        "'load' (reads -> ReadShared)",
+    )
     num_outstanding_reqs = Param.UInt32(
         4, "Maximum in-flight requests issued by this sequence"
     )

@@ -38,6 +38,7 @@ def build(args, planner):
                     line_size=line_size,
                     write_size=write_size,
                     num_outstanding_reqs=args.num_outstanding_reqs,
+                    operation=getattr(args, "operation", "store"),
                     fill_byte=(0xC0 + tile) & 0xFF,
                     warmup_l3=True,
                     roi_stats=True,
