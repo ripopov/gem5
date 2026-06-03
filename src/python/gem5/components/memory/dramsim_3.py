@@ -38,38 +38,60 @@ def config_ds3(mem_type: str, num_chnls: int) -> Tuple[str, str]:
 
     # TODO: We need a better solution to this. This hard-coding is not
     # an acceptable solution.
-    dramsim_3_dir = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)),
-        os.pardir,
-        os.pardir,
-        os.pardir,
-        "ext",
-        "dramsim3",
-        "DRAMsim3",
-    )
+    # ``__file__`` is not always defined for modules loaded by gem5's
+    # embedded importer, so fall back to a repository-root relative path
+    # (the same convention used by the DRAMSys component).
+    try:
+        module_dir = os.path.dirname(os.path.abspath(__file__))
+        dramsim_3_dir = os.path.join(
+            module_dir,
+            os.pardir,
+            os.pardir,
+            os.pardir,
+            "ext",
+            "dramsim3",
+            "DRAMsim3",
+        )
+    except NameError:
+        dramsim_3_dir = os.path.join("ext", "dramsim3", "DRAMsim3")
+
+    if not os.path.isdir(dramsim_3_dir):
+        dramsim_3_dir = os.path.join("ext", "dramsim3", "DRAMsim3")
 
     dramsim_3_mem_configs = os.path.join(dramsim_3_dir, "configs")
 
-    input_file = os.path.join(dramsim_3_mem_configs, mem_type + ".ini")
+    # ``mem_type`` may be either a bare config name resolved against the
+    # DRAMSim3 ``configs`` directory, or a direct path to an ``.ini`` file
+    # (which lets a tracked, repository-local config be used instead of one
+    # inside the external DRAMSim3 clone).
+    if os.path.isfile(mem_type):
+        input_file = mem_type
+    else:
+        input_file = os.path.join(dramsim_3_mem_configs, mem_type + ".ini")
 
-    # Run checks to ensure the `ext/DRAMsim3` directory is present, contains
-    # the configs directory, and the configuration file we require.
-    if not os.path.isdir(dramsim_3_dir):
-        raise Exception(
-            "The `ext/DRAMsim3` directory cannot be found.\n"
-            "Please navigate to `ext` and run:\n"
-            "git clone git@github.com:umd-memsys/DRAMsim3.git"
-        )
-    elif not os.path.isdir(dramsim_3_mem_configs):
-        raise Exception(
-            "The `ext/DRAMsim3/configs` directory cannot be found."
-        )
-    elif not os.path.isfile(input_file):
-        raise Exception(
-            "The configuration file '" + input_file + "' cannot  be found."
-        )
+        # Run checks to ensure the `ext/DRAMsim3` directory is present,
+        # contains the configs directory, and the configuration file we
+        # require.
+        if not os.path.isdir(dramsim_3_dir):
+            raise Exception(
+                "The `ext/DRAMsim3` directory cannot be found.\n"
+                "Please navigate to `ext` and run:\n"
+                "git clone git@github.com:umd-memsys/DRAMsim3.git"
+            )
+        elif not os.path.isdir(dramsim_3_mem_configs):
+            raise Exception(
+                "The `ext/DRAMsim3/configs` directory cannot be found."
+            )
+        elif not os.path.isfile(input_file):
+            raise Exception(
+                "The configuration file '" + input_file + "' cannot  be "
+                "found."
+            )
 
-    output_file = "/tmp/" + mem_type + "_chnls" + str(num_chnls) + ".ini"
+    config_basename = os.path.splitext(os.path.basename(input_file))[0]
+    output_file = (
+        "/tmp/" + config_basename + "_chnls" + str(num_chnls) + ".ini"
+    )
     new_config = open(output_file, "w")
     config.read(input_file)
     config.set("system", "channels", str(num_chnls))

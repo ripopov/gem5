@@ -195,8 +195,14 @@ DRAMsim3::recvTimingReq(PacketPtr pkt)
         return false;
 
     // if we cannot accept we need to send a retry once progress can
-    // be made
-    bool can_accept = nbrOutstanding() < wrapper.queueSize();
+    // be made. DRAMSim3 keeps separate read and write transaction queues,
+    // so the combined outstanding count is not sufficient: a write-heavy
+    // stream can fill the write queue while the combined count is still
+    // below the queue size. Consult the wrapper's per-queue acceptance as
+    // well so the gem5-side flow control matches DRAMSim3 and the
+    // enqueue-time assertion below always holds.
+    bool can_accept = nbrOutstanding() < wrapper.queueSize() &&
+        wrapper.canAccept(pkt->getAddr(), pkt->isWrite());
 
     // keep track of the transaction
     if (pkt->isRead()) {

@@ -24,11 +24,23 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-"""TrafficGen -> CHI RN-I -> HNF -> SNF -> DDR4 memory testbench.
+"""TrafficGen -> SystemXBar/NoCache -> DDR4 memory testbench.
 
-This script is intended to be launched from the gem5 repository root. The
-default gem5 memory backend uses a single 4 GiB DDR4-1866 x8 channel matched
-to the default DRAMSys DDR4 gem5-SE configuration.
+This script drives synthetic TrafficGen traffic directly into one of three
+memory backends configured for the same DDR4-2400 4Gb x8 single-channel,
+single-rank, 4GiB device-under-test:
+
+- ``gem5``     : gem5 native ``MemCtrl`` + a custom ``DDR4_2400_8x8_4GiB``
+                 ``DRAMInterface`` whose timing is taken from the DRAMSys
+                 reference memspec ``JEDEC_4Gb_DDR4-2400_8bit_A.json``.
+- ``dramsys``  : DRAMSys with the same JEDEC DDR4-2400 4Gb x8 memspec.
+- ``dramsim3`` : DRAMSim3 with the derived
+                 ``DDR4_4Gb_x8_2400_1rank_4GiB.ini`` config.
+
+All three backends expose a single 4GiB range, one channel, one rank, eight
+x8 devices, and DDR4-2400 (tCK = 0.833 ns) timing. See
+``DDR4-2400-4Gb-x8-single channel-single rank-4GiB-study.md`` for the full
+apples-to-apples requirements.
 """
 
 import argparse
@@ -39,13 +51,9 @@ import m5
 from m5.util.convert import toMemorySize
 
 from gem5.components.boards.test_board import TestBoard
-from gem5.components.cachehierarchies.chi.rni_cache_hierarchy import (
-    RNICacheHierarchy,
-)
-from gem5.components.memory.dram_interfaces.ddr4 import (
-    DDR4_2400_4x16,
-    DDR4_2400_8x8,
-)
+from gem5.components.cachehierarchies.classic.no_cache import NoCache
+from gem5.components.memory.dram_interfaces.ddr4 import DDR4_2400_8x8
+from gem5.components.memory.dramsim_3 import SingleChannel as DRAMSim3Single
 from gem5.components.memory.dramsys import DRAMSysMem
 from gem5.components.memory.memory import ChanneledMemory
 from gem5.components.processors.linear_generator import LinearGenerator
@@ -60,47 +68,76 @@ TRAFFIC_PATTERNS = {
     "random-mixed": ("random", None),
 }
 
+# DRAMSys reference memspec for this study (source of truth for timing):
+#   ext/dramsys/DRAMSys/configs/memspec/JEDEC_4Gb_DDR4-2400_8bit_A.json
+DRAMSYS_DDR4_2400_CONFIG = (
+    "ext/dramsys/gem5_configs/ddr4-2400-4gb-x8-gem5-se.json"
+)
 
-class DDR4_1866_8x8_4GiB(DDR4_2400_8x8):
+# DRAMSim3 derived config (channel_size=4096 -> one rank, CWL=16, tRTP=12).
+# Tracked in the gem5 tree so the comparison does not depend on a file inside
+# the external DRAMSim3 clone; loaded directly by path.
+DRAMSIM3_DDR4_2400_CONFIG = "ext/dramsim3/DDR4_4Gb_x8_2400_1rank_4GiB.ini"
+
+
+class DDR4_2400_8x8_4GiB(DDR4_2400_8x8):
+    """A single DDR4-2400 4Gb x8 channel: 1 rank, 8 devices, 4GiB.
+
+    Geometry and timing are taken from the DRAMSys reference memspec
+    ``JEDEC_4Gb_DDR4-2400_8bit_A.json`` (the study's source of truth) with
+    cycle counts converted to nanoseconds at tCK = 0.833 ns.
+
+    Notes on parameters that have no direct DRAMSys/JEDEC equivalent:
+
+    - ``tRTW`` (read-to-write bus turnaround) is a gem5-internal knob with no
+      single JEDEC cycle value; the DDR4-2400 base value (2 tCK = 1.666 ns)
+      is retained.
+    - ``tCS`` is the rank-to-rank switching delay; it is set from RTRS = 1
+      (0.833 ns) but does not affect this single-rank device.
     """
-    A single DDR4-1866 x64 channel using eight 4 Gbit x8 devices.
 
-    This mirrors the default DRAMSys gem5-SE DDR4 memspec:
-    JEDEC_4Gb_DDR4-1866_8bit_A.json.
-    """
+    # --- Geometry: DDR4-2400 4Gb x8, single rank, 4GiB ---
+    device_size = "512MiB"  # 4Gbit per device
+    device_bus_width = 8  # x8
+    devices_per_rank = 8  # 8 devices -> 64-bit channel
+    ranks_per_channel = 1  # single rank
+    burst_length = 8  # BL8 -> 64-byte burst
+    bank_groups_per_rank = 4
+    banks_per_rank = 16
+    device_rowbuffer_size = "1KiB"  # 1024 columns x8 = 1KiB/device
 
-    device_size = "512MiB"
-    ranks_per_channel = 1
+    # --- Timing converted from the DRAMSys reference at tCK = 0.833 ns ---
+    tCK = "0.833ns"
+    tBURST = "3.332ns"  # CCD_S = 4 (BL8 over x64)
+    tCCD_L = "4.998ns"  # CCD_L = 6
 
-    tCK = "1.072ns"
-    tBURST = "4.288ns"
-    tCCD_L = "5.36ns"
+    tCL = "13.328ns"  # CL / RL = 16
+    tRCD = "13.328ns"  # RCD = 16
+    tRP = "13.328ns"  # RP = 16
+    tRAS = "32.487ns"  # RAS = 39
 
-    tRCD = "13.936ns"
-    tCL = "13.936ns"
-    tRP = "13.936ns"
-    tRAS = "34.304ns"
+    tRRD = "3.332ns"  # RRD_S = 4
+    tRRD_L = "4.998ns"  # RRD_L = 6
+    tXAW = "21.658ns"  # FAW = 26
+    activation_limit = 4
 
-    tRRD = "4.288ns"
-    tRRD_L = "5.36ns"
-    tXAW = "23.584ns"
-    tRFC = "260.496ns"
+    tRFC = "259.896ns"  # RFC1 = 312
+    tREFI = "7796.88ns"  # REFI = 9360
 
-    tWR = "15.008ns"
-    tWTR = "5.36ns"
-    tRTP = "8.576ns"
-    tRTW = "2.144ns"
-    tCS = "2.144ns"
+    tWR = "14.994ns"  # WR = 18
+    tWTR = "2.499ns"  # WTR_S = 3
+    tWTR_L = "7.497ns"  # WTR_L = 9
+    tRTP = "9.996ns"  # RTP = 12
 
-    tREFI = "7.8us"
-    tXP = "8.576ns"
-    tXS = "270.144ns"
+    tXP = "6.664ns"  # XP = 8
+    tXS = "269.892ns"  # XS = 324
+
+    tRTW = "1.666ns"  # gem5-internal; no JEDEC equivalent
+    tCS = "0.833ns"  # RTRS = 1 (single rank: unused)
 
 
 DDR4_INTERFACES = {
-    "1866-x8-4gib": DDR4_1866_8x8_4GiB,
-    "2400-x16-4gib": DDR4_2400_4x16,
-    "2400-x8-16gib": DDR4_2400_8x8,
+    "2400-x8-4gib": DDR4_2400_8x8_4GiB,
 }
 
 
@@ -110,15 +147,15 @@ def _memory_size(value: str) -> int:
 
 def _parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run synthetic traffic through a cacheless CHI RN-I "
-        "hierarchy into either gem5 DDR4 memory or DRAMSys."
+        description="Run synthetic TrafficGen requests through NoCache into "
+        "a gem5, DRAMSys, or DRAMSim3 DDR4-2400 4Gb x8 backend."
     )
 
     parser.add_argument(
         "--memory-backend",
-        choices=["gem5", "dramsys"],
+        choices=["gem5", "dramsys", "dramsim3"],
         default="gem5",
-        help="Memory backend attached behind the CHI SNF.",
+        help="Memory backend attached behind the SystemXBar.",
     )
     parser.add_argument(
         "--traffic-pattern",
@@ -178,17 +215,41 @@ def _parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--gem5-ddr4-interface",
         choices=sorted(DDR4_INTERFACES),
-        default="1866-x8-4gib",
+        default="2400-x8-4gib",
         help="gem5 DDR4 interface used by the gem5 memory backend.",
     )
     parser.add_argument(
         "--dram-addr-mapping",
-        default=None,
-        help="Optional gem5 DRAMInterface address mapping override.",
+        default="RoCoRaBaCh",
+        help="gem5 DRAMInterface address mapping (default RoCoRaBaCh, which "
+        "interleaves banks at cache-line granularity to match DRAMSys and "
+        "DRAMSim3).",
+    )
+    parser.add_argument(
+        "--gem5-page-policy",
+        default="open",
+        help="gem5 DRAMInterface page management policy.",
+    )
+    parser.add_argument(
+        "--gem5-sched-policy",
+        default="frfcfs",
+        help="gem5 MemCtrl scheduling policy.",
+    )
+    parser.add_argument(
+        "--gem5-read-buffer-size",
+        type=int,
+        default=32,
+        help="gem5 MemCtrl read queue entries.",
+    )
+    parser.add_argument(
+        "--gem5-write-buffer-size",
+        type=int,
+        default=32,
+        help="gem5 MemCtrl write queue entries.",
     )
     parser.add_argument(
         "--dramsys-config",
-        default="ext/dramsys/gem5_configs/ddr4-gem5-se.json",
+        default=DRAMSYS_DDR4_2400_CONFIG,
         help="DRAMSys base JSON configuration.",
     )
     parser.add_argument(
@@ -197,9 +258,16 @@ def _parse_arguments() -> argparse.Namespace:
         help="Optional DRAMSys resource directory.",
     )
     parser.add_argument(
+        "--dramsim3-config",
+        default=DRAMSIM3_DDR4_2400_CONFIG,
+        help="DRAMSim3 config name under ext/dramsim3/DRAMsim3/configs "
+        "(without the .ini suffix).",
+    )
+    parser.add_argument(
         "--sys-clock",
-        default="3GHz",
-        help="Clock for the board, Ruby network, HNF, and SNF controllers.",
+        default="1.2GHz",
+        help="Clock for the board and SystemXBar (controller/requestor "
+        "domain). Default 1.2GHz matches the DDR4-2400 command clock.",
     )
     parser.add_argument(
         "--metadata-file",
@@ -243,13 +311,25 @@ def _validate_arguments(args: argparse.Namespace) -> None:
 
 def _make_memory(args: argparse.Namespace):
     if args.memory_backend == "gem5":
-        return ChanneledMemory(
+        memory = ChanneledMemory(
             DDR4_INTERFACES[args.gem5_ddr4_interface],
             num_channels=1,
             interleaving_size=args.cache_line_size,
             size=args.mem_size,
             addr_mapping=args.dram_addr_mapping,
         )
+        # Apply FR-FCFS open-page controller policy on every controller and
+        # the matching queue limits requested by the study.
+        for ctrl in memory.get_memory_controllers():
+            ctrl.mem_sched_policy = args.gem5_sched_policy
+        for dram in memory.get_mem_interfaces():
+            dram.page_policy = args.gem5_page_policy
+            dram.read_buffer_size = args.gem5_read_buffer_size
+            dram.write_buffer_size = args.gem5_write_buffer_size
+        return memory
+
+    if args.memory_backend == "dramsim3":
+        return DRAMSim3Single(args.dramsim3_config, args.mem_size)
 
     return DRAMSysMem(
         configuration=args.dramsys_config,
@@ -293,23 +373,41 @@ def _make_generator(args: argparse.Namespace):
 def _write_metadata(args: argparse.Namespace, simulator: Simulator) -> None:
     _, read_percent, max_addr = _traffic_parameters(args)
     metadata = {
-        "memory_backend": args.memory_backend,
+        "gem5_binary": str(getattr(m5.options, "binary", "")),
+        "config_script": __file__,
+        "backend": args.memory_backend,
+        "topology": "TrafficGen -> SystemXBar/NoCache -> memory",
         "traffic_pattern": args.traffic_pattern,
+        "read_percent": read_percent,
         "rate": args.rate,
         "duration": args.duration,
+        "warmup": "none",
         "data_limit_bytes": _memory_size(args.data_limit),
-        "num_generators": args.num_generators,
-        "cache_line_size": args.cache_line_size,
-        "mem_size": args.mem_size,
-        "mem_size_bytes": _memory_size(args.mem_size),
+        "num_requestors": args.num_generators,
+        "block_size": args.cache_line_size,
+        "memory_config_file": {
+            "gem5": f"DDR4_2400_8x8_4GiB ({args.dram_addr_mapping})",
+            "dramsys": args.dramsys_config,
+            "dramsim3": args.dramsim3_config,
+        }[args.memory_backend],
+        "memory_size": args.mem_size,
+        "memory_size_bytes": _memory_size(args.mem_size),
+        "memory_tCK": "0.833ns",
+        "traffic_address_range": max_addr - args.min_addr,
         "min_addr": args.min_addr,
         "max_addr": max_addr,
-        "read_percent": read_percent,
-        "sys_clock": args.sys_clock,
+        "random_seed": "TrafficGen default (deterministic)",
+        "controller_clock": args.sys_clock,
+        "requestor_clock": args.sys_clock,
+        "system_clock": args.sys_clock,
         "gem5_ddr4_interface": args.gem5_ddr4_interface,
+        "gem5_page_policy": args.gem5_page_policy,
+        "gem5_sched_policy": args.gem5_sched_policy,
+        "gem5_read_buffer_size": args.gem5_read_buffer_size,
+        "gem5_write_buffer_size": args.gem5_write_buffer_size,
         "dram_addr_mapping": args.dram_addr_mapping,
         "dramsys_config": args.dramsys_config,
-        "dramsys_resource_dir": args.dramsys_resource_dir,
+        "dramsim3_config": args.dramsim3_config,
         "final_tick": m5.curTick(),
         "exit_cause": simulator.get_last_exit_event_cause(),
         "exit_code": simulator.get_last_exit_event_code(),
@@ -330,7 +428,7 @@ def main() -> None:
         clk_freq=args.sys_clock,
         generator=generator,
         memory=memory,
-        cache_hierarchy=RNICacheHierarchy(),
+        cache_hierarchy=NoCache(),
     )
 
     simulator = Simulator(board=board)

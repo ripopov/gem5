@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="460" viewBox="0 0 760 460">
+<rect width="100%" height="100%" fill="#ffffff"/>
+<text x="380.0" y="24" text-anchor="middle" font-family="sans-serif" font-size="17">random-mixed: average latency (ns)</text>
+<line x1="88.0" y1="48" x2="88.0" y2="392" stroke="#e8e8e8"/>
+<text x="88.0" y="418" text-anchor="middle" font-family="sans-serif" font-size="11">0.0</text>
+<line x1="250.0" y1="48" x2="250.0" y2="392" stroke="#e8e8e8"/>
+<text x="250.0" y="418" text-anchor="middle" font-family="sans-serif" font-size="11">8.6</text>
+<line x1="412.0" y1="48" x2="412.0" y2="392" stroke="#e8e8e8"/>
+<text x="412.0" y="418" text-anchor="middle" font-family="sans-serif" font-size="11">17.2</text>
+<line x1="574.0" y1="48" x2="574.0" y2="392" stroke="#e8e8e8"/>
+<text x="574.0" y="418" text-anchor="middle" font-family="sans-serif" font-size="11">25.8</text>
+<line x1="736.0" y1="48" x2="736.0" y2="392" stroke="#e8e8e8"/>
+<text x="736.0" y="418" text-anchor="middle" font-family="sans-serif" font-size="11">34.4</text>
+<line x1="88" y1="392.0" x2="736" y2="392.0" stroke="#e8e8e8"/>
+<text x="80" y="396.0" text-anchor="end" font-family="sans-serif" font-size="11">0</text>
+<line x1="88" y1="306.0" x2="736" y2="306.0" stroke="#e8e8e8"/>
+<text x="80" y="310.0" text-anchor="end" font-family="sans-serif" font-size="11">55.97</text>
+<line x1="88" y1="220.0" x2="736" y2="220.0" stroke="#e8e8e8"/>
+<text x="80" y="224.0" text-anchor="end" font-family="sans-serif" font-size="11">111.9</text>
+<line x1="88" y1="134.0" x2="736" y2="134.0" stroke="#e8e8e8"/>
+<text x="80" y="138.0" text-anchor="end" font-family="sans-serif" font-size="11">167.9</text>
+<line x1="88" y1="48.0" x2="736" y2="48.0" stroke="#e8e8e8"/>
+<text x="80" y="52.0" text-anchor="end" font-family="sans-serif" font-size="11">223.9</text>
+<line x1="88" y1="392" x2="736" y2="392" stroke="#222"/>
+<line x1="88" y1="48" x2="88" y2="392" stroke="#222"/>
+<text x="412.0" y="448" text-anchor="middle" font-family="sans-serif" font-size="13">Offered bandwidth (GB/s)</text>
+<text x="20" y="220.0" text-anchor="middle" font-family="sans-serif" font-size="13" transform="rotate(-90 20 220.0)">Average latency (ns)</text>
+<polyline fill="none" stroke="#3f9f57" stroke-width="2.2" points="108.2,342.2 128.5,335.0 169.0,324.9 250.0,259.6 331.0,115.9 412.0,87.2 493.0,79.5 574.0,73.5 655.0,78.3 736.0,76.3"/>
+<circle cx="108.2" cy="342.2" r="3.5" fill="#3f9f57"/>
+<circle cx="128.5" cy="335.0" r="3.5" fill="#3f9f57"/>
+<circle cx="169.0" cy="324.9" r="3.5" fill="#3f9f57"/>
+<circle cx="250.0" cy="259.6" r="3.5" fill="#3f9f57"/>
+<circle cx="331.0" cy="115.9" r="3.5" fill="#3f9f57"/>
+<circle cx="412.0" cy="87.2" r="3.5" fill="#3f9f57"/>
+<circle cx="493.0" cy="79.5" r="3.5" fill="#3f9f57"/>
+<circle cx="574.0" cy="73.5" r="3.5" fill="#3f9f57"/>
+<circle cx="655.0" cy="78.3" r="3.5" fill="#3f9f57"/>
+<circle cx="736.0" cy="76.3" r="3.5" fill="#3f9f57"/>
+<line x1="104" y1="50" x2="128" y2="50" stroke="#3f9f57" stroke-width="2.2"/>
+<text x="134" y="54" font-family="sans-serif" font-size="12">dramsim3</text>
+<polyline fill="none" stroke="#b8423f" stroke-width="2.2" points="108.2,306.5 128.5,300.7 169.0,280.9 250.0,178.7 331.0,172.1 412.0,172.0 493.0,181.1 574.0,181.1 655.0,181.1 736.0,181.1"/>
+<circle cx="108.2" cy="306.5" r="3.5" fill="#b8423f"/>
+<circle cx="128.5" cy="300.7" r="3.5" fill="#b8423f"/>
+<circle cx="169.0" cy="280.9" r="3.5" fill="#b8423f"/>
+<circle cx="250.0" cy="178.7" r="3.5" fill="#b8423f"/>
+<circle cx="331.0" cy="172.1" r="3.5" fill="#b8423f"/>
+<circle cx="412.0" cy="172.0" r="3.5" fill="#b8423f"/>
+<circle cx="493.0" cy="181.1" r="3.5" fill="#b8423f"/>
+<circle cx="574.0" cy="181.1" r="3.5" fill="#b8423f"/>
+<circle cx="655.0" cy="181.1" r="3.5" fill="#b8423f"/>
+<circle cx="736.0" cy="181.1" r="3.5" fill="#b8423f"/>
+<line x1="234" y1="50" x2="258" y2="50" stroke="#b8423f" stroke-width="2.2"/>
+<text x="264" y="54" font-family="sans-serif" font-size="12">dramsys</text>
+<polyline fill="none" stroke="#2f6f9f" stroke-width="2.2" points="108.2,320.3 128.5,311.3 169.0,300.8 250.0,273.7 331.0,198.5 412.0,175.8 493.0,163.7 574.0,158.1 655.0,150.1 736.0,142.8"/>
+<circle cx="108.2" cy="320.3" r="3.5" fill="#2f6f9f"/>
+<circle cx="128.5" cy="311.3" r="3.5" fill="#2f6f9f"/>
+<circle cx="169.0" cy="300.8" r="3.5" fill="#2f6f9f"/>
+<circle cx="250.0" cy="273.7" r="3.5" fill="#2f6f9f"/>
+<circle cx="331.0" cy="198.5" r="3.5" fill="#2f6f9f"/>
+<circle cx="412.0" cy="175.8" r="3.5" fill="#2f6f9f"/>
+<circle cx="493.0" cy="163.7" r="3.5" fill="#2f6f9f"/>
+<circle cx="574.0" cy="158.1" r="3.5" fill="#2f6f9f"/>
+<circle cx="655.0" cy="150.1" r="3.5" fill="#2f6f9f"/>
+<circle cx="736.0" cy="142.8" r="3.5" fill="#2f6f9f"/>
+<line x1="364" y1="50" x2="388" y2="50" stroke="#2f6f9f" stroke-width="2.2"/>
+<text x="394" y="54" font-family="sans-serif" font-size="12">gem5</text>
+</svg>
