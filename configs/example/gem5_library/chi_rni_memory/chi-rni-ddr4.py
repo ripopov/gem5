@@ -24,12 +24,11 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-"""TrafficGen -> CHI RN-I -> HNF -> SNF -> memory testbench.
+"""TrafficGen -> CHI RN-I -> HNF -> SNF -> DDR4 memory testbench.
 
 This script is intended to be launched from the gem5 repository root. The
-gem5 memory backend uses a single DDR5 channel. The DRAMSys backend uses the
-JSON configuration passed with --dramsys-config; DRAMSys v5.3.1, the version
-currently verified by ext/dramsys/README, does not ship DDR5 DRAMSys models.
+default gem5 memory backend uses a single 4 GiB DDR4-1866 x8 channel matched
+to the default DRAMSys DDR4 gem5-SE configuration.
 """
 
 import argparse
@@ -43,10 +42,9 @@ from gem5.components.boards.test_board import TestBoard
 from gem5.components.cachehierarchies.chi.rni_cache_hierarchy import (
     RNICacheHierarchy,
 )
-from gem5.components.memory.dram_interfaces.ddr5 import (
-    DDR5_4400_4x8,
-    DDR5_6400_4x8,
-    DDR5_8400_4x8,
+from gem5.components.memory.dram_interfaces.ddr4 import (
+    DDR4_2400_4x16,
+    DDR4_2400_8x8,
 )
 from gem5.components.memory.dramsys import DRAMSysMem
 from gem5.components.memory.memory import ChanneledMemory
@@ -62,10 +60,47 @@ TRAFFIC_PATTERNS = {
     "random-mixed": ("random", None),
 }
 
-DDR5_INTERFACES = {
-    "4400": DDR5_4400_4x8,
-    "6400": DDR5_6400_4x8,
-    "8400": DDR5_8400_4x8,
+
+class DDR4_1866_8x8_4GiB(DDR4_2400_8x8):
+    """
+    A single DDR4-1866 x64 channel using eight 4 Gbit x8 devices.
+
+    This mirrors the default DRAMSys gem5-SE DDR4 memspec:
+    JEDEC_4Gb_DDR4-1866_8bit_A.json.
+    """
+
+    device_size = "512MiB"
+    ranks_per_channel = 1
+
+    tCK = "1.072ns"
+    tBURST = "4.288ns"
+    tCCD_L = "5.36ns"
+
+    tRCD = "13.936ns"
+    tCL = "13.936ns"
+    tRP = "13.936ns"
+    tRAS = "34.304ns"
+
+    tRRD = "4.288ns"
+    tRRD_L = "5.36ns"
+    tXAW = "23.584ns"
+    tRFC = "260.496ns"
+
+    tWR = "15.008ns"
+    tWTR = "5.36ns"
+    tRTP = "8.576ns"
+    tRTW = "2.144ns"
+    tCS = "2.144ns"
+
+    tREFI = "7.8us"
+    tXP = "8.576ns"
+    tXS = "270.144ns"
+
+
+DDR4_INTERFACES = {
+    "1866-x8-4gib": DDR4_1866_8x8_4GiB,
+    "2400-x16-4gib": DDR4_2400_4x16,
+    "2400-x8-16gib": DDR4_2400_8x8,
 }
 
 
@@ -76,7 +111,7 @@ def _memory_size(value: str) -> int:
 def _parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run synthetic traffic through a cacheless CHI RN-I "
-        "hierarchy into either gem5 DDR5 memory or DRAMSys."
+        "hierarchy into either gem5 DDR4 memory or DRAMSys."
     )
 
     parser.add_argument(
@@ -120,7 +155,7 @@ def _parse_arguments() -> argparse.Namespace:
     )
     parser.add_argument(
         "--mem-size",
-        default="2GiB",
+        default="4GiB",
         help="Address range exposed by the selected memory backend.",
     )
     parser.add_argument(
@@ -141,10 +176,10 @@ def _parse_arguments() -> argparse.Namespace:
         help="Read percentage for mixed traffic patterns.",
     )
     parser.add_argument(
-        "--ddr5-data-rate",
-        choices=sorted(DDR5_INTERFACES),
-        default="4400",
-        help="gem5 DDR5 interface data rate.",
+        "--gem5-ddr4-interface",
+        choices=sorted(DDR4_INTERFACES),
+        default="1866-x8-4gib",
+        help="gem5 DDR4 interface used by the gem5 memory backend.",
     )
     parser.add_argument(
         "--dram-addr-mapping",
@@ -209,7 +244,7 @@ def _validate_arguments(args: argparse.Namespace) -> None:
 def _make_memory(args: argparse.Namespace):
     if args.memory_backend == "gem5":
         return ChanneledMemory(
-            DDR5_INTERFACES[args.ddr5_data_rate],
+            DDR4_INTERFACES[args.gem5_ddr4_interface],
             num_channels=1,
             interleaving_size=args.cache_line_size,
             size=args.mem_size,
@@ -271,7 +306,7 @@ def _write_metadata(args: argparse.Namespace, simulator: Simulator) -> None:
         "max_addr": max_addr,
         "read_percent": read_percent,
         "sys_clock": args.sys_clock,
-        "ddr5_data_rate": args.ddr5_data_rate,
+        "gem5_ddr4_interface": args.gem5_ddr4_interface,
         "dram_addr_mapping": args.dram_addr_mapping,
         "dramsys_config": args.dramsys_config,
         "dramsys_resource_dir": args.dramsys_resource_dir,

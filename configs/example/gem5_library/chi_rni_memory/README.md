@@ -7,12 +7,12 @@ requests through a cacheless CHI RN-I path:
 TrafficGen -> CHI RN-I -> CHI HNF directory -> CHI SNF -> memory
 ```
 
-The config script supports gem5's internal single-channel DDR5 MemCtrl backend
-and the DRAMSys backend:
+The config script supports gem5's internal single-channel DDR4 MemCtrl backend
+and the DRAMSys DDR4 backend:
 
 ```sh
 build/RISCV/gem5.opt \
-    configs/example/gem5_library/chi_rni_memory/chi-rni-ddr5.py \
+    configs/example/gem5_library/chi_rni_memory/chi-rni-ddr4.py \
     --memory-backend gem5 \
     --traffic-pattern linear-read \
     --rate 8GiB/s
@@ -23,14 +23,14 @@ SVG plots, and a Markdown report:
 
 ```sh
 python3 util/chi_memory_sweep/run_chi_memory_sweep.py \
-    --outdir m5out/chi-rni-memory-sweep \
+    --outdir m5out/chi-rni-ddr4-memory-sweep \
     --duration 5us \
     --addr-range 256MiB \
     --mem-size 4GiB
 ```
 
-DRAMSys v5.3.1, the version currently verified by `ext/dramsys/README`, builds
-with gem5 but does not include DRAMSys DDR5 model source files. The default
-DRAMSys runs therefore use `ext/dramsys/gem5_configs/ddr4-gem5-se.json`.
-A DDR5-capable DRAMSys checkout and matching JSON can be supplied with
-`--dramsys-config` without changing the CHI testbench.
+The default gem5 backend uses a local DDR4-1866 x8 4 GiB DRAMInterface whose
+capacity and timing assumptions are aligned with
+`ext/dramsys/gem5_configs/ddr4-gem5-se.json`. Both backends expose the same
+4 GiB single-channel address range by default, use 64-byte traffic blocks, and
+can be swept over the same linear, random, read, write, and mixed workloads.

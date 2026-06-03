@@ -40,7 +40,7 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Optional
 
 CONFIG = Path(
-    "configs/example/gem5_library/chi_rni_memory/chi-rni-ddr5.py"
+    "configs/example/gem5_library/chi_rni_memory/chi-rni-ddr4.py"
 )
 
 DEFAULT_PATTERNS = [
@@ -373,8 +373,8 @@ def _run_one(
         str(args.cache_line_size),
         "--mixed-read-percent",
         str(args.mixed_read_percent),
-        "--ddr5-data-rate",
-        args.ddr5_data_rate,
+        "--gem5-ddr4-interface",
+        args.gem5_ddr4_interface,
         "--sys-clock",
         args.sys_clock,
         "--dramsys-config",
@@ -714,25 +714,23 @@ def _write_report(
         f"- traffic address range: `{args.addr_range}`",
         f"- cache line size: `{args.cache_line_size}` bytes",
         f"- generator count: `{args.num_generators}`",
-        f"- gem5 DDR5 data rate: `DDR5-{args.ddr5_data_rate}`",
+        f"- gem5 DDR4 interface: `{args.gem5_ddr4_interface}`",
         f"- DRAMSys config: `{args.dramsys_config}`",
         "",
         "## Caveats",
         "",
-        "The checked-out DRAMSys v5.3.1 tree builds successfully with gem5, "
-        "but it does not include DRAMSys DDR5 model source files. DRAMPower "
-        "and DRAMUtils contain DDR5 support, while this DRAMSys snapshot only "
-        "runs the supplied DDR3/DDR4/LPDDR4/HBM-style DRAMSys models. The "
-        "default DRAMSys backend therefore uses "
-        "`ext/dramsys/gem5_configs/ddr4-gem5-se.json`. A DDR5-capable "
-        "DRAMSys checkout and matching JSON can be passed with "
-        "`--dramsys-config` to keep the same sweep harness.",
+        "The default gem5 backend uses a local DDR4-1866 x8 4 GiB "
+        "DRAMInterface derived from gem5's DDR4 timing interface and matched "
+        "to the supplied DRAMSys gem5-SE DDR4 memspec. This keeps the "
+        "comparison on one memory channel, the same 4 GiB exposed address "
+        "range, the same cache line size, and comparable DDR4-1866 timing "
+        "assumptions.",
         "",
-        "The default runner uses a 4 GiB memory size because the supplied "
-        "DRAMSys DDR4 gem5-SE configuration is 4 GiB. The gem5 backend uses "
-        "the same exposed address range with the DDR5 timing interface, so "
-        "address range and traffic are matched even though the checked-out "
-        "DRAMSys model is not DDR5.",
+        "The gem5 and DRAMSys timing models are not identical: gem5's "
+        "DRAMInterface exposes a compact timing parameter set while DRAMSys "
+        "uses its controller, address mapping, checker, and DRAMPower/"
+        "DRAMUtils models. Treat the plots as backend-comparison data for "
+        "this testcase rather than as device-validation measurements.",
         "",
         "Generated statistics are synthetic microbenchmark results and should "
         "be interpreted as configuration-comparison data, not as validated "
@@ -795,6 +793,52 @@ def _write_report(
             f"{_format_number(_average(rows, 'wall_seconds'), 3)} | "
             f"{_format_number(avg_host_tick_rate, 3)} | "
             f"{_format_number(_average(rows, 'achieved_GBps'), 3)} |"
+        )
+
+    if "gem5" in backends and "dramsys" in backends:
+        gem5_rows = [
+            row
+            for row in results
+            if row["backend"] == "gem5" and row.get("success")
+        ]
+        dramsys_rows = [
+            row
+            for row in results
+            if row["backend"] == "dramsys" and row.get("success")
+        ]
+        gem5_wall = _average(gem5_rows, "wall_seconds")
+        dramsys_wall = _average(dramsys_rows, "wall_seconds")
+        if gem5_wall is not None and dramsys_wall is not None:
+            wall_overhead = (dramsys_wall / gem5_wall - 1.0) * 100.0
+            overhead_direction = "higher" if wall_overhead >= 0 else "lower"
+            lines += [
+                "",
+                "For these short synthetic runs, DRAMSys average wall "
+                f"runtime was {_format_number(abs(wall_overhead), 2)}% "
+                f"{overhead_direction} than the gem5 MemCtrl backend.",
+            ]
+
+    lines += [
+        "",
+        "## Memory Stat Summary",
+        "",
+        "| Backend | Runs | Avg gem5 DRAM bus util | Max gem5 peak MiB/s | "
+        "Avg DRAMSys AVG BW GB/s | Max DRAMSys MAX BW GB/s |",
+        "|---|---:|---:|---:|---:|---:|",
+    ]
+
+    for backend in backends:
+        rows = [
+            row
+            for row in results
+            if row["backend"] == backend and row.get("success")
+        ]
+        lines.append(
+            f"| {backend} | {len(rows)} | "
+            f"{_format_number(_average(rows, 'gem5_dram_bus_util'))} | "
+            f"{_format_number(_maximum(rows, 'gem5_dram_peak_MiBps'))} | "
+            f"{_format_number(_average(rows, 'dramsys_avg_bw_GBps'))} | "
+            f"{_format_number(_maximum(rows, 'dramsys_max_bw_GBps'))} |"
         )
 
     lines += [
@@ -893,7 +937,7 @@ def _parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--outdir",
         type=Path,
-        default=Path("m5out/chi-rni-memory-sweep"),
+        default=Path("m5out/chi-rni-ddr4-memory-sweep"),
     )
     parser.add_argument(
         "--backends",
@@ -917,7 +961,11 @@ def _parse_arguments() -> argparse.Namespace:
     parser.add_argument("--num-generators", type=int, default=1)
     parser.add_argument("--cache-line-size", type=int, default=64)
     parser.add_argument("--mixed-read-percent", type=int, default=50)
-    parser.add_argument("--ddr5-data-rate", default="4400")
+    parser.add_argument(
+        "--gem5-ddr4-interface",
+        default="1866-x8-4gib",
+        help="gem5 DDR4 interface name passed to the config script.",
+    )
     parser.add_argument("--dram-addr-mapping", default=None)
     parser.add_argument(
         "--dramsys-config",
