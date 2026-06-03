@@ -4,6 +4,16 @@
 
 Synthetic TrafficGen requestors drive a cacheless CHI RN-I hierarchy. The path is TrafficGen -> CHI RN-I -> CHI HNF directory -> CHI SNF -> memory backend. Each run changes the offered bandwidth while holding the address range, cache line size, clock, and traffic pattern fixed.
 
+## Measurement Methodology
+
+Offered bandwidth is the programmed request injection rate, not the measured memory throughput. The sweep runner passes each listed rate to TrafficGen. TrafficGen converts that rate into a packet period of `block_size / rate`; with the default 64-byte block size, higher offered rates simply schedule 64-byte requests closer together. This report uses one TrafficGen requestor, so the programmed requestor rate and aggregate offered rate are the same. With multiple requestors, aggregate offered load is the sum of the programmed requestor rates.
+
+The linear patterns issue cache-line-sized requests in increasing address order and wrap at the end of the configured traffic range. The random patterns select a block-aligned address within the same range for each request. Read-only, write-only, and mixed patterns use TrafficGen's read percentage knob; the mixed runs in this report use a 50 percent read mix.
+
+Achieved bandwidth is measured from completed TrafficGen responses. The runner sums TrafficGen `readBW` and `writeBW`, where those stats are `bytesRead / simSeconds` and `bytesWritten / simSeconds`. The byte counters increment when a timing response returns, so achieved bandwidth reflects completed work rather than merely attempted injection. DRAMSys `AVG BW` and `MAX BW` are recorded separately as backend-local memory statistics.
+
+Average latency is also response based. TrafficGen records the tick when an accepted request is sent and adds the send-to-response time to the read or write latency total when the response arrives. At rates below saturation, increasing offered bandwidth usually raises queueing delay and achieved bandwidth. Past saturation, the memory path cannot accept requests at the requested pace. TrafficGen then stalls on timing-request backpressure and waiting-response limits; that excess pressure appears in retry counts, retry ticks, and Ruby buffer occupancy rather than as an unlimited number of already-sent requests. The accepted request rate is clipped near the sustainable throughput of the CHI/memory path, so the plotted average latency tends to bend upward and then flatten instead of growing without bound as offered bandwidth continues to increase.
+
 ## Configuration
 
 - gem5 binary: `build/RISCV/gem5.opt`
