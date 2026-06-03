@@ -742,10 +742,15 @@ def _write_report(
 
     for plot in plots:
         rel_path = plot.relative_to(args.outdir)
-        lines.append(f"- [{rel_path}]({rel_path})")
+        caption = plot.stem.replace("-", " ").title()
+        lines += [
+            f"### {caption}",
+            "",
+            f"![{caption}]({rel_path.as_posix()})",
+            "",
+        ]
 
     lines += [
-        "",
         "## Raw Result Summary",
         "",
         "| Pattern | Backend | Peak achieved GB/s | Rate at peak | "
