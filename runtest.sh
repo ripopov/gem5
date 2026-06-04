@@ -34,7 +34,7 @@ mkdir -p "${TB_DIR}/m5out"
 
 # --per-vnet-links
 
-"${GEM5_BIN}" \
+time "${GEM5_BIN}" \
     -d "${OUTDIR}" --debug-flags=ProtocolTrace,RubyNetwork --debug-file=trace.gz \
     "${DRIVER}" \
     --scenario=memset \
