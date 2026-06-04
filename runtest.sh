@@ -11,6 +11,8 @@
 #   RN_MODE=rnf_l2|rni        per-tile request-node mode (default rnf_l2)
 #   ACTIVE_CORES=all|0,1,...  which tiles run the workload (default all)
 #   NUM_OUTSTANDING_REQS=N    request pipeline depth (default 4)
+#   NETWORK=garnet|simple     Ruby network model (default garnet); output
+#                             lands in m5out/rbook-tb-gem5-memset-<network>
 #
 # Usage: ./runtest.sh
 #        RN_MODE=rni ./runtest.sh
@@ -28,7 +30,8 @@ if [[ ! -x "${GEM5_BIN}" ]]; then
     exit 1
 fi
 
-OUTDIR="m5out/rbook-tb-gem5-memset"
+NETWORK="${NETWORK:-garnet}"
+OUTDIR="m5out/rbook-tb-gem5-memset-${NETWORK}"
 
 mkdir -p "${TB_DIR}/m5out"
 
@@ -39,5 +42,5 @@ time "${GEM5_BIN}" \
     "${DRIVER}" \
     --scenario=memset \
     --active-cores=all \
-    --network=garnet \
+    --network="${NETWORK}" \
     --num-outstanding-reqs=32

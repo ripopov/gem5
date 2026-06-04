@@ -36,6 +36,28 @@ class NoC_Params(CHI_config.NoC_Params):
     int_routing_latency = router_latency
     ext_routing_latency = router_latency + 2
 
+    # Model the mesh as four 2x2 clusters and add +5 cycles to every
+    # mesh link that crosses a cluster boundary. CustomMesh._makeMesh
+    # REPLACES router_link_latency with cross_link_latency on matched
+    # links (it is not additive), so set it to router_link_latency + 5.
+    # Entries are directed (src_router, dst_router) tuples; each physical
+    # link is two directed int-links, so both orderings are listed.
+    #
+    #   0  1 | 2  3       clusters: TL={0,1,4,5}   TR={2,3,6,7}
+    #   4  5 | 6  7                 BL={8,9,12,13} BR={10,11,14,15}
+    #   -----+-----
+    #   8  9 |10 11       boundary links cross col 1<->2 or row 1<->2
+    #  12 13 |14 15
+    cross_link_latency = router_link_latency + 5
+    cross_links = [
+        # vertical boundary: col 1 <-> col 2 (both directions)
+        (1, 2), (2, 1), (5, 6), (6, 5),
+        (9, 10), (10, 9), (13, 14), (14, 13),
+        # horizontal boundary: row 1 <-> row 2 (both directions)
+        (4, 8), (8, 4), (5, 9), (9, 5),
+        (6, 10), (10, 6), (7, 11), (11, 7),
+    ]
+
 
 class CHI_RNF(CHI_config.CHI_RNF):
     class NoC_Params(CHI_config.CHI_RNF.NoC_Params):
