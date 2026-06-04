@@ -1,8 +1,8 @@
 # SimpleNetwork Latency And Buffering
 
 This note describes the SimpleNetwork model used by the CHI testbench. It is
-not a transaction-latency report. Its only purpose is to show which buffers,
-latencies, and pipeline stages exist when running the 4x4 mesh with:
+not a transaction-latency report; its purpose is to show which buffers,
+latencies, and pipeline stages exist when the 4x4 mesh runs with:
 
 ```text
 --network=simple
@@ -15,8 +15,7 @@ not instantiate the extra CHI_RNF side router.
 
 ## Every latency parameter
 
-The values below are the ones that matter for SimpleNetwork timing in this
-testbench.
+These are the values that matter for SimpleNetwork timing in this testbench.
 
 ```text
 4x4 mesh routers
@@ -38,7 +37,7 @@ listed in `cross_links`. It is not added on top of `router_link_latency`.
 
 | Parameter | Value | Where it is used |
 | --- | ---: | --- |
-| `router_latency` | 4 cy | Base switch latency parameter. In this config it also supplies `int_routing_latency`. |
+| `router_latency` | 4 cy | Config knob; here it feeds `int_routing_latency` and, +2, `ext_routing_latency`. SimpleNetwork has no separate switch-latency stage. |
 | `int_routing_latency` | 4 cy | `PerfectSwitch` delay when routing to an internal router-to-router link. |
 | `ext_routing_latency` | 6 cy | `PerfectSwitch` delay when routing to a controller endpoint. |
 | `router_link_latency` | 2 cy | Normal directed mesh link delay, router to adjacent router. |
@@ -61,9 +60,8 @@ Derived structural costs for one hop:
 | Router to endpoint | `6 + 1 = 7 cy` | Source switch routing plus external link to controller. |
 | Endpoint to local router | protocol enqueue latency | Controller output buffers are directly used as switch input queues. |
 
-Protocol/controller enqueue latencies are separate from SimpleNetwork itself,
-but they are often the first delay before a message becomes visible to a
-switch:
+Protocol/controller enqueue latencies are separate from SimpleNetwork, but are
+usually the first delay before a message becomes visible to a switch:
 
 | CHI controller parameter | Value | Typical use |
 | --- | ---: | --- |
@@ -174,7 +172,7 @@ For a normal A to B mesh link:
 L = router_link_latency = 2
 A output buffer depth = 8
 B SimpleIntLink buffer depth = 3
-structural hop latency = 4 + 2 = 6 cycles
+structural hop latency = int_routing_latency + L = 4 + 2 = 6 cycles
 ```
 
 For a cross-cluster A to B mesh link:
@@ -183,7 +181,7 @@ For a cross-cluster A to B mesh link:
 L = cross_link_latency = 7
 A output buffer depth = 8
 B SimpleIntLink buffer depth = 8
-structural hop latency = 4 + 7 = 11 cycles
+structural hop latency = int_routing_latency + L = 4 + 7 = 11 cycles
 ```
 
 The link buffer occupies a slot immediately when `Throttle` enqueues the
