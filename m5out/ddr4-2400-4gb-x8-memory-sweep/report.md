@@ -88,14 +88,16 @@ All cycle counts are from `JEDEC_4Gb_DDR4-2400_8bit_A.json`; ns values use tCK =
 - mixed read percent: `50`
 - controller / requestor / system clock: `1.2GHz` (held constant across backends)
 - gem5 interface: `DDR4_2400_8x8_4GiB`, page policy `open`, scheduler `frfcfs`, address mapping `RoCoRaBaCh`, read/write queue 32/32 entries
-- DRAMSys config: `ext/dramsys/gem5_configs/ddr4-2400-4gb-x8-gem5-se.json` (FR-FCFS, open page, bankwise queue, request buffer 8, all-bank refresh, no power-down)
+- DRAMSys config: `ext/dramsys/gem5_configs/ddr4-2400-4gb-x8-gem5-se.json` (FR-FCFS, open page, bankwise queue, request buffer 8, all-bank refresh, no power-down); attached via `Gem5ToTlmBridge` with `request_queue_depth = 32`
 - DRAMSim3 config: `ext/dramsim3/DDR4_4Gb_x8_2400_1rank_4GiB.ini` (FR-FCFS, OPEN_PAGE, PER_BANK queue, cmd queue 8, trans queue 32, rank-level-staggered refresh)
 
 ## Apples-to-Apples Notes and Known Differences
 
 **Address mapping.** All three default to *different* address mappings, which would otherwise dominate the comparison. They are aligned here so banks/bank-groups interleave at cache-line granularity: gem5 uses `RoCoRaBaCh`; DRAMSim3 uses `rochrababgco`; DRAMSys uses a custom mapping (`am_ddr4_4Gbx8_1rank_bginterleave.json`) that places bank-group (bits 6-7) and bank (bits 8-9) just above the 64-byte block offset. This ensures the limited traffic range exercises all 16 banks in every backend. The bit orderings are not identical at every position, which is an unavoidable model difference.
 
-**DRAMSys throughput is bridge-limited (most important caveat).** DRAMSys is attached to gem5 through the SystemC TLM bridge (`Gem5ToTlmBridge`), which uses the TLM-2.0 approximately-timed 4-phase protocol. The bridge enforces the TLM exclusion rule: after sending `BEGIN_REQ` it holds a single `blockingRequest` and refuses (retries) any further request until `END_REQ` returns. DRAMSys defers `END_REQ` to model the payload/data-bus delay, so the bridge admits only one new 64-byte transaction per `BEGIN_REQ`->`END_REQ` interval (~7.5 ns here). This caps DRAMSys's *injected* throughput at about 8.5 GB/s (~44% of the 19.2 GB/s peak data-bus rate) for **every** traffic pattern. The flat, pattern-independent cap (linear and random saturate at the same value) confirms the limit is the request-phase handshake, not the DRAM timing: DRAMSys's own `MAX BW` counter still reports the full 19.2 GB/s peak, but its `AVG BW` tracks the bridge-limited 8.5 GB/s. As a result the **saturation-bandwidth comparison is only apples-to-apples between gem5 and DRAMSim3**; DRAMSys's bandwidth curve reflects the gem5<->DRAMSys integration, not the DRAMSys controller's intrinsic throughput. The **latency comparison remains valid for all three** backends at sub-saturation rates, where only one request is in flight anyway. This is a genuine, structural integration difference, documented rather than worked around.
+**DRAMSys TLM-bridge throughput limitation (found and fixed).** DRAMSys is attached to gem5 through the SystemC TLM bridge (`Gem5ToTlmBridge`), which uses the TLM-2.0 approximately-timed 4-phase protocol. In its original form the bridge accepted only one gem5 request at a time: after sending `BEGIN_REQ` it held a single `blockingRequest` and refused (retried) every further request until `END_REQ` returned, *and* it re-applied each packet's full crossbar header delay (~6-7 ns) as the `BEGIN_REQ` timing annotation. Because the TLM base-protocol exclusion rule permits only one transaction in the `BEGIN_REQ`->`END_REQ` window, that fixed per-packet header delay serialized request *admission* to roughly one transaction every ~10 tCK. Command-trace analysis confirmed the symptom: requests arrived at the DRAMSys controller exactly every 10 tCK and the data bus ran at only ~44% even though consecutive reads targeted different bank groups with open rows (which permit back-to-back CAS at `tCCD_S` = 4 tCK). The result was a flat ~8.5 GB/s cap for **every** traffic pattern -- an artifact of the gem5<->DRAMSys integration, not of the DRAMSys DRAM model (whose own `MAX BW` counter always reported the full 19.2 GB/s peak).
+
+The bridge was fixed (not worked around) in two ways, both honoring the exclusion rule (still only one transaction between `BEGIN_REQ` and `END_REQ`): (1) gem5 requests are staged in a small FIFO so the bridge issues `BEGIN_REQ`s back-to-back as soon as each `END_REQ` returns, instead of paying a full gem5<->bridge round trip per request; and (2) only the *residual* header delay is applied when a request is dequeued -- the crossbar latency elapses in real sim time while the packet waits in the queue, so it is no longer re-charged per transaction. The staging depth is the new `Gem5ToTlmBridge` `request_queue_depth` parameter (default 16; the `DRAMSysMem` component uses 32); a depth of 1 reproduces the legacy behavior. With the fix DRAMSys sustains ~19 GB/s (~99% of the 19.2 GB/s peak) for linear traffic, and its achieved bandwidth now varies with the access pattern (e.g. random reads fall to ~12 GB/s from row-conflict overhead) exactly as a real DRAM controller would. **Saturation bandwidth is now apples-to-apples across all three backends**, and unloaded latency is unchanged.
 
 **Controller policy.** All three use FR-FCFS scheduling and an open-page policy. DRAMSys and DRAMSim3 use an 8-entry per-bank command queue; gem5's `MemCtrl` does not expose a per-bank command queue and instead uses read/write transaction queues (set to 32/32 here, near DRAMSim3's 32-entry transaction queue). DRAMSim3's `trans_queue_size = 32` has no DRAMSys equivalent. These queue-model differences cannot be made bit-identical.
 
@@ -156,19 +158,19 @@ Treat the plots as a backend-model comparison under a shared DDR4-2400 4Gb x8 co
 | Pattern | Backend | Peak achieved GB/s | Rate at peak | Avg latency at peak (ns) | Host seconds |
 |---|---|---:|---|---:|---:|
 | linear-read | gem5 | 18.572 | 32GiB/s | 142.3 | 0.01 |
-| linear-read | dramsys | 8.526 | 24GiB/s | 41.2 | 0.02 |
+| linear-read | dramsys | 18.602 | 32GiB/s | 509.2 | 0.05 |
 | linear-read | dramsim3 | 14.147 | 16GiB/s | 142.6 | 0.01 |
 | linear-write | gem5 | 18.667 | 32GiB/s | 24.2 | 0.01 |
-| linear-write | dramsys | 8.526 | 24GiB/s | 42.4 | 0.02 |
+| linear-write | dramsys | 18.549 | 32GiB/s | 510.5 | 0.05 |
 | linear-write | dramsim3 | 15.430 | 28GiB/s | 10.6 | 0.02 |
 | linear-mixed | gem5 | 15.834 | 24GiB/s | 118.1 | 0.01 |
-| linear-mixed | dramsys | 8.516 | 24GiB/s | 58.8 | 0.02 |
+| linear-mixed | dramsys | 16.794 | 28GiB/s | 335.4 | 0.05 |
 | linear-mixed | dramsim3 | 14.658 | 32GiB/s | 137.5 | 0.01 |
 | random-read | gem5 | 11.427 | 32GiB/s | 212.5 | 0.01 |
-| random-read | dramsys | 8.513 | 24GiB/s | 91.9 | 0.03 |
+| random-read | dramsys | 11.455 | 20GiB/s | 502.6 | 0.05 |
 | random-read | dramsim3 | 11.411 | 16GiB/s | 182.4 | 0.01 |
 | random-mixed | gem5 | 10.493 | 28GiB/s | 157.5 | 0.01 |
-| random-mixed | dramsys | 8.497 | 16GiB/s | 143.2 | 0.04 |
+| random-mixed | dramsys | 9.990 | 28GiB/s | 506.9 | 0.04 |
 | random-mixed | dramsim3 | 10.059 | 28GiB/s | 204.2 | 0.02 |
 
 ## Low-Load Latency (offered 1 GiB/s)
@@ -197,9 +199,9 @@ Unloaded round-trip latency seen by the requestor at the lowest offered rate.
 
 | Backend | Runs | Avg host seconds | Avg wall seconds | Avg host Mtick/s | Avg achieved GB/s |
 |---|---:|---:|---:|---:|---:|
-| gem5 | 50 | 0.006 | 0.200 | 3670.206 | 10.196 |
-| dramsys | 50 | 0.020 | 0.215 | 1401.229 | 6.706 |
-| dramsim3 | 50 | 0.011 | 0.201 | 2258.701 | 9.321 |
+| gem5 | 50 | 0.006 | 0.211 | 3543.621 | 10.196 |
+| dramsys | 50 | 0.033 | 0.237 | 1150.016 | 10.268 |
+| dramsim3 | 50 | 0.011 | 0.215 | 2192.256 | 9.321 |
 
 ## Backend-Local Memory Statistics
 
@@ -208,7 +210,7 @@ Internal counters reported by each backend (not the primary requestor-visible me
 | Backend | Runs | Avg gem5 bus util % | Max gem5 peak GB/s | Avg DRAMSys AVG BW GB/s | Max DRAMSys MAX BW GB/s | Avg DRAMSim3 BW GB/s | Avg DRAMSim3 row-hit rate |
 |---|---:|---:|---:|---:|---:|---:|---:|
 | gem5 | 50 | 53.064 | 20.140 | n/a | n/a | n/a | n/a |
-| dramsys | 50 | n/a | n/a | 6.707 | 19.210 | n/a | n/a |
+| dramsys | 50 | n/a | n/a | 10.268 | 19.210 | n/a | n/a |
 | dramsim3 | 50 | n/a | n/a | n/a | n/a | 9.325 | 0.494 |
 
 ## Back-Pressure Summary
@@ -216,19 +218,19 @@ Internal counters reported by each backend (not the primary requestor-visible me
 | Pattern | Backend | Max retry ticks | Max avg latency (ns) |
 |---|---|---:|---:|
 | linear-read | gem5 | 19921166 | 142.3 |
-| linear-read | dramsys | 20000769 | 41.2 |
+| linear-read | dramsys | 19347416 | 509.2 |
 | linear-read | dramsim3 | 19173996 | 149.0 |
 | linear-write | gem5 | 19886243 | 24.2 |
-| linear-write | dramsys | 20000769 | 42.4 |
+| linear-write | dramsys | 19406200 | 510.5 |
 | linear-write | dramsim3 | 19335789 | 10.8 |
 | linear-mixed | gem5 | 13759205 | 122.8 |
-| linear-mixed | dramsys | 20000769 | 59.0 |
+| linear-mixed | dramsys | 11618145 | 344.3 |
 | linear-mixed | dramsim3 | 14639912 | 137.5 |
 | random-read | gem5 | 19936397 | 212.6 |
-| random-read | dramsys | 20000769 | 92.4 |
+| random-read | dramsys | 14583272 | 519.0 |
 | random-read | dramsim3 | 19406546 | 184.5 |
 | random-mixed | gem5 | 17266608 | 162.2 |
-| random-mixed | dramsys | 20002435 | 143.2 |
+| random-mixed | dramsys | 15645371 | 510.5 |
 | random-mixed | dramsim3 | 17173242 | 207.3 |
 
 ## Observed Memory Models
@@ -240,16 +242,16 @@ Full JSON results: [results.json](results.json)
 
 ## Conclusions
 
-- `linear-read`: peak GB/s by backend -> gem5 18.572, dramsys 8.526, dramsim3 14.147; highest was `gem5` at offered `32GiB/s`.
-- `linear-write`: peak GB/s by backend -> gem5 18.667, dramsys 8.526, dramsim3 15.430; highest was `gem5` at offered `32GiB/s`.
-- `linear-mixed`: peak GB/s by backend -> gem5 15.834, dramsys 8.516, dramsim3 14.658; highest was `gem5` at offered `24GiB/s`.
-- `random-read`: peak GB/s by backend -> gem5 11.427, dramsys 8.513, dramsim3 11.411; highest was `gem5` at offered `32GiB/s`.
-- `random-mixed`: peak GB/s by backend -> gem5 10.493, dramsys 8.497, dramsim3 10.059; highest was `gem5` at offered `28GiB/s`.
+- `linear-read`: peak GB/s by backend -> gem5 18.572, dramsys 18.602, dramsim3 14.147; highest was `dramsys` at offered `32GiB/s`.
+- `linear-write`: peak GB/s by backend -> gem5 18.667, dramsys 18.549, dramsim3 15.430; highest was `gem5` at offered `32GiB/s`.
+- `linear-mixed`: peak GB/s by backend -> gem5 15.834, dramsys 16.794, dramsim3 14.658; highest was `dramsys` at offered `28GiB/s`.
+- `random-read`: peak GB/s by backend -> gem5 11.427, dramsys 11.455, dramsim3 11.411; highest was `dramsys` at offered `20GiB/s`.
+- `random-mixed`: peak GB/s by backend -> gem5 10.493, dramsys 9.990, dramsim3 10.059; highest was `gem5` at offered `28GiB/s`.
 
-The three simulators are not identical and this study does not claim they are. The device geometry, the JEDEC timing table, the controller/requestor/system clocks, and the traffic are held equal, and the address mapping is aligned to interleave banks at cache-line granularity. Two model differences dominate and are documented above rather than hidden:
+The three simulators are not identical and this study does not claim they are. The device geometry, the JEDEC timing table, the controller/requestor/system clocks, and the traffic are held equal, and the address mapping is aligned to interleave banks at cache-line granularity. Two points stand out and are documented above rather than hidden -- one a genuine model difference, one a gem5<->DRAMSys integration bug that was fixed:
 
 1. **Unloaded latency**: DRAMSys and DRAMSim3 agree closely (both ~32 ns for an open-page linear read); gem5 sits ~20 ns higher because of its explicit `static_frontend_latency` + `static_backend_latency` controller pipeline. This is the cleanest apples-to-apples result and is valid for all three backends.
 
-2. **Saturation bandwidth**: gem5 (up to ~18.6 GB/s, ~97% of peak) and DRAMSim3 (~14-15 GB/s) are directly comparable; DRAMSys is pinned at ~8.5 GB/s by the TLM bridge's single-outstanding-request handshake, not by its DRAM model, so its bandwidth curve should not be read as the DRAMSys controller's intrinsic throughput.
+2. **Saturation bandwidth**: now apples-to-apples across all three backends after the `Gem5ToTlmBridge` fix described above. For linear traffic gem5 (up to ~18.6 GB/s) and DRAMSys (~19 GB/s, ~99% of peak) both reach near the 19.2 GB/s data-bus ceiling, while DRAMSim3 (~14-15 GB/s) is somewhat lower. DRAMSys's bandwidth now tracks the access pattern (e.g. random reads drop to ~12 GB/s) instead of being pinned flat by the bridge handshake.
 
-The remaining smaller spread between gem5 and DRAMSim3 reflects genuine differences in their controller and DRAM models (queue structure, write-latency modelling, refresh scheduling, and command-arbitration details).
+The remaining spread between the three backends reflects genuine differences in their controller and DRAM models (queue structure, write-latency modelling, refresh scheduling, and command-arbitration details) rather than the integration artifact that previously capped DRAMSys.

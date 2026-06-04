@@ -60,8 +60,10 @@
 #define __SYSTEMC_TLM_BRIDGE_GEM5_TO_TLM_HH__
 
 #include <functional>
+#include <queue>
 #include <string>
 #include <unordered_map>
+#include <utility>
 
 #include "mem/backdoor.hh"
 #include "mem/port.hh"
@@ -169,6 +171,37 @@ class Gem5ToTlmBridge : public Gem5ToTlmBridgeBase
     bool needToSendRequestRetry;
 
     /**
+     * Staging FIFO of gem5 packets that have been accepted from the gem5 side
+     * but whose BEGIN_REQ has not yet been issued on the TLM socket.
+     *
+     * The TLM base-protocol exclusion rule (IEEE1666) only permits a single
+     * transaction in the BEGIN_REQ -> END_REQ window on a socket at a time.
+     * The original bridge enforced this by refusing every gem5 request while
+     * one transaction was outstanding, which coupled request injection to the
+     * full gem5<->bridge round trip (xbar there and back plus a requestor
+     * re-issue) and capped throughput far below the TLM target's capability.
+     *
+     * Instead we accept gem5 requests into this queue and pump BEGIN_REQs into
+     * the socket back-to-back as soon as each END_REQ returns, without a gem5
+     * round trip per request. The exclusion rule is still honored (only one
+     * transaction is ever between BEGIN_REQ and END_REQ). The gem5 side is
+     * back-pressured only when this queue is full; the downstream TLM target
+     * continues to apply its own back-pressure by deferring END_REQ when its
+     * internal buffers fill.
+     *
+     * Each entry stores the packet together with the tick at which its
+     * BEGIN_REQ should become visible to the TLM target (the arrival tick plus
+     * the packet's annotated header delay). While the packet waits in the
+     * queue that header delay elapses in real sim time, so on dequeue only the
+     * residual delay is applied. This is what prevents the fixed per-packet
+     * header delay from re-serializing admission once requests are pipelined.
+     */
+    std::queue<std::pair<gem5::PacketPtr, gem5::Tick>> requestQueue;
+
+    /** Capacity of ``requestQueue`` (``request_queue_depth`` parameter). */
+    unsigned int requestQueueDepth;
+
+    /**
      * A response which has been asked to retry by gem5 and so is blocking
      * the response channel
      */
@@ -184,6 +217,18 @@ class Gem5ToTlmBridge : public Gem5ToTlmBridgeBase
 
   protected:
     void pec(tlm::tlm_generic_payload &trans, const tlm::tlm_phase &phase);
+
+    /**
+     * Drain the staging queue: while the request channel is free, pop the
+     * next gem5 packet and issue its BEGIN_REQ on the TLM socket.
+     */
+    void sendNextRequest();
+
+    /**
+     * Send a request retry to the gem5 side if one is pending and the staging
+     * queue has freed up space.
+     */
+    void checkAndSendRetry();
 
     gem5::MemBackdoorPtr getBackdoor(tlm::tlm_generic_payload &trans);
     gem5::AddrRangeMap<gem5::MemBackdoorPtr> backdoorMap;

@@ -68,11 +68,19 @@ class DRAMSysMem(AbstractMemorySystem):
         configuration: str,
         size: str,
         resource_directory: Optional[str] = None,
+        request_queue_depth: int = 32,
     ) -> None:
         """
         :param configuration: Path to the base configuration JSON for DRAMSys.
         :param size: Memory size of DRAMSys. Must match the size specified in JSON configuration.
         :param resource_directory: Path to the base resource directory for DRAMSys.
+        :param request_queue_depth: Depth of the ``Gem5ToTlmBridge`` request
+            staging queue. The TLM base-protocol exclusion rule only allows one
+            transaction between ``BEGIN_REQ`` and ``END_REQ`` at a time; staging
+            requests lets the bridge issue ``BEGIN_REQ``\\ s back-to-back so
+            multiple transactions pipeline into DRAMSys instead of injection
+            being serialized by the gem5<->bridge round trip. A depth of 1
+            reproduces the legacy single-outstanding-request behavior.
         """
         super().__init__()
 
@@ -88,7 +96,9 @@ class DRAMSysMem(AbstractMemorySystem):
         )
 
         self._size = toMemorySize(size)
-        self.bridge = Gem5ToTlmBridge32()
+        self.bridge = Gem5ToTlmBridge32(
+            request_queue_depth=request_queue_depth
+        )
         self.dramsys.tlm = self.bridge.tlm
         self.kernel = SystemC_Kernel()
 

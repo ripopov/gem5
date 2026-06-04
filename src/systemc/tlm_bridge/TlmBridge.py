@@ -45,6 +45,18 @@ class Gem5ToTlmBridgeBase(SystemC_ScModule):
         [], "Addresses served by this port's TLM side"
     )
 
+    # Depth of the bridge's request staging queue. The TLM base-protocol
+    # exclusion rule only allows one transaction between BEGIN_REQ and END_REQ
+    # at a time, but the original bridge additionally refused every gem5 request
+    # until END_REQ returned, coupling injection to the full gem5<->bridge round
+    # trip and throttling throughput. Staging up to this many gem5 requests lets
+    # the bridge issue BEGIN_REQs back-to-back (still one at a time on the
+    # socket) so multiple transactions can pipeline through the TLM target.
+    # A depth of 1 reproduces the original single-outstanding-request behavior.
+    request_queue_depth = Param.Unsigned(
+        16, "Depth of the bridge's gem5-side request staging queue"
+    )
+
 
 class TlmToGem5BridgeBase(SystemC_ScModule):
     type = "TlmToGem5BridgeBase"

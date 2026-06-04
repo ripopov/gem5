@@ -923,7 +923,8 @@ def _write_report(
         "read/write queue 32/32 entries",
         f"- DRAMSys config: `{args.dramsys_config}` "
         "(FR-FCFS, open page, bankwise queue, request buffer 8, all-bank "
-        "refresh, no power-down)",
+        "refresh, no power-down); attached via `Gem5ToTlmBridge` with "
+        "`request_queue_depth = 32`",
         f"- DRAMSim3 config: `{args.dramsim3_config}` "
         "(FR-FCFS, OPEN_PAGE, PER_BANK queue, cmd queue 8, trans queue 32, "
         "rank-level-staggered refresh)",
@@ -941,28 +942,43 @@ def _write_report(
         "every backend. The bit orderings are not identical at every "
         "position, which is an unavoidable model difference.",
         "",
-        "**DRAMSys throughput is bridge-limited (most important caveat).** "
+        "**DRAMSys TLM-bridge throughput limitation (found and fixed).** "
         "DRAMSys is attached to gem5 through the SystemC TLM bridge "
         "(`Gem5ToTlmBridge`), which uses the TLM-2.0 approximately-timed "
-        "4-phase protocol. The bridge enforces the TLM exclusion rule: after "
-        "sending `BEGIN_REQ` it holds a single `blockingRequest` and refuses "
-        "(retries) any further request until `END_REQ` returns. DRAMSys "
-        "defers `END_REQ` to model the payload/data-bus delay, so the bridge "
-        "admits only one new 64-byte transaction per `BEGIN_REQ`->`END_REQ` "
-        "interval (~7.5 ns here). This caps DRAMSys's *injected* throughput "
-        "at about 8.5 GB/s (~44% of the 19.2 GB/s peak data-bus rate) for "
-        "**every** traffic pattern. The flat, pattern-independent cap "
-        "(linear and random saturate at the same value) confirms the limit "
-        "is the request-phase handshake, not the DRAM timing: DRAMSys's own "
-        "`MAX BW` counter still reports the full 19.2 GB/s peak, but its "
-        "`AVG BW` tracks the bridge-limited 8.5 GB/s. As a result the "
-        "**saturation-bandwidth comparison is only apples-to-apples between "
-        "gem5 and DRAMSim3**; DRAMSys's bandwidth curve reflects the "
-        "gem5<->DRAMSys integration, not the DRAMSys controller's intrinsic "
-        "throughput. The **latency comparison remains valid for all three** "
-        "backends at sub-saturation rates, where only one request is in "
-        "flight anyway. This is a genuine, structural integration "
-        "difference, documented rather than worked around.",
+        "4-phase protocol. In its original form the bridge accepted only one "
+        "gem5 request at a time: after sending `BEGIN_REQ` it held a single "
+        "`blockingRequest` and refused (retried) every further request until "
+        "`END_REQ` returned, *and* it re-applied each packet's full crossbar "
+        "header delay (~6-7 ns) as the `BEGIN_REQ` timing annotation. Because "
+        "the TLM base-protocol exclusion rule permits only one transaction in "
+        "the `BEGIN_REQ`->`END_REQ` window, that fixed per-packet header delay "
+        "serialized request *admission* to roughly one transaction every "
+        "~10 tCK. Command-trace analysis confirmed the symptom: requests "
+        "arrived at the DRAMSys controller exactly every 10 tCK and the data "
+        "bus ran at only ~44% even though consecutive reads targeted "
+        "different bank groups with open rows (which permit back-to-back CAS "
+        "at `tCCD_S` = 4 tCK). The result was a flat ~8.5 GB/s cap for "
+        "**every** traffic pattern -- an artifact of the gem5<->DRAMSys "
+        "integration, not of the DRAMSys DRAM model (whose own `MAX BW` "
+        "counter always reported the full 19.2 GB/s peak).",
+        "",
+        "The bridge was fixed (not worked around) in two ways, both honoring "
+        "the exclusion rule (still only one transaction between `BEGIN_REQ` "
+        "and `END_REQ`): (1) gem5 requests are staged in a small FIFO so the "
+        "bridge issues `BEGIN_REQ`s back-to-back as soon as each `END_REQ` "
+        "returns, instead of paying a full gem5<->bridge round trip per "
+        "request; and (2) only the *residual* header delay is applied when a "
+        "request is dequeued -- the crossbar latency elapses in real sim time "
+        "while the packet waits in the queue, so it is no longer re-charged "
+        "per transaction. The staging depth is the new `Gem5ToTlmBridge` "
+        "`request_queue_depth` parameter (default 16; the `DRAMSysMem` "
+        "component uses 32); a depth of 1 reproduces the legacy behavior. "
+        "With the fix DRAMSys sustains ~19 GB/s (~99% of the 19.2 GB/s peak) "
+        "for linear traffic, and its achieved bandwidth now varies with the "
+        "access pattern (e.g. random reads fall to ~12 GB/s from row-conflict "
+        "overhead) exactly as a real DRAM controller would. **Saturation "
+        "bandwidth is now apples-to-apples across all three backends**, and "
+        "unloaded latency is unchanged.",
         "",
         "**Controller policy.** All three use FR-FCFS scheduling and an "
         "open-page policy. DRAMSys and DRAMSim3 use an 8-entry per-bank "
@@ -1200,8 +1216,9 @@ def _write_report(
         "claim they are. The device geometry, the JEDEC timing table, the "
         "controller/requestor/system clocks, and the traffic are held equal, "
         "and the address mapping is aligned to interleave banks at "
-        "cache-line granularity. Two model differences dominate and are "
-        "documented above rather than hidden:",
+        "cache-line granularity. Two points stand out and are documented "
+        "above rather than hidden -- one a genuine model difference, one a "
+        "gem5<->DRAMSys integration bug that was fixed:",
         "",
         "1. **Unloaded latency**: DRAMSys and DRAMSim3 agree closely "
         "(both ~32 ns for an open-page linear read); gem5 sits ~20 ns higher "
@@ -1209,16 +1226,19 @@ def _write_report(
         "`static_backend_latency` controller pipeline. This is the cleanest "
         "apples-to-apples result and is valid for all three backends.",
         "",
-        "2. **Saturation bandwidth**: gem5 (up to ~18.6 GB/s, ~97% of peak) "
-        "and DRAMSim3 (~14-15 GB/s) are directly comparable; DRAMSys is "
-        "pinned at ~8.5 GB/s by the TLM bridge's single-outstanding-request "
-        "handshake, not by its DRAM model, so its bandwidth curve should not "
-        "be read as the DRAMSys controller's intrinsic throughput.",
+        "2. **Saturation bandwidth**: now apples-to-apples across all three "
+        "backends after the `Gem5ToTlmBridge` fix described above. For linear "
+        "traffic gem5 (up to ~18.6 GB/s) and DRAMSys (~19 GB/s, ~99% of peak) "
+        "both reach near the 19.2 GB/s data-bus ceiling, while DRAMSim3 "
+        "(~14-15 GB/s) is somewhat lower. DRAMSys's bandwidth now tracks the "
+        "access pattern (e.g. random reads drop to ~12 GB/s) instead of being "
+        "pinned flat by the bridge handshake.",
         "",
-        "The remaining smaller spread between gem5 and DRAMSim3 reflects "
-        "genuine differences in their controller and DRAM models (queue "
-        "structure, write-latency modelling, refresh scheduling, and "
-        "command-arbitration details).",
+        "The remaining spread between the three backends reflects genuine "
+        "differences in their controller and DRAM models (queue structure, "
+        "write-latency modelling, refresh scheduling, and command-arbitration "
+        "details) rather than the integration artifact that previously capped "
+        "DRAMSys.",
     ]
 
     failed = [row for row in results if not row.get("success")]

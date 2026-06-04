@@ -227,11 +227,12 @@ Gem5ToTlmBridge<BITWIDTH>::pec(
         sc_assert(&trans == blockingRequest);
         blockingRequest = nullptr;
 
-        // Did another request arrive while blocked, schedule a retry.
-        if (needToSendRequestRetry) {
-            needToSendRequestRetry = false;
-            bridgeResponsePort.sendRetryReq();
-        }
+        // The request channel is free again. Immediately issue the next staged
+        // BEGIN_REQ (if any) without waiting for a gem5 round trip, and send a
+        // request retry if popping the queue freed space for a stalled gem5
+        // requestor. This is what decouples request injection from the
+        // gem5<->bridge round trip and lets multiple transactions pipeline.
+        sendNextRequest();
     }
     if (phase == tlm::BEGIN_RESP) {
         PacketPtr packet = packetMap[&trans];
@@ -387,83 +388,125 @@ Gem5ToTlmBridge<BITWIDTH>::recvTimingReq(PacketPtr packet)
     // required.
     sc_assert(!needToSendRequestRetry);
 
-    // Remember if a request comes in while we're blocked so that a retry
-    // can be sent to gem5.
-    if (blockingRequest) {
+    // The TLM base-protocol exclusion rule only allows one transaction in the
+    // BEGIN_REQ -> END_REQ window on the socket at a time. Rather than forcing
+    // the gem5 requestor to participate in that handshake (which serializes
+    // injection to one request per gem5<->bridge round trip), accept gem5
+    // requests into a local staging queue and feed BEGIN_REQs into the socket
+    // back-to-back from sendNextRequest(). The gem5 side is only back-pressured
+    // when the staging queue is full.
+    if (requestQueue.size() >= requestQueueDepth) {
         needToSendRequestRetry = true;
         return false;
     }
 
     /*
-     * NOTE: normal tlm is blocking here. But in our case we return false
-     * and tell gem5 when a retry can be done. This is the main difference
-     * in the protocol:
-     * if (requestInProgress)
-     * {
-     *     wait(endRequestEvent);
-     * }
-     * requestInProgress = trans;
-     */
-
-    // Prepare the transaction.
-    auto *trans = packet2payload(packet);
-
-    /*
      * Pay for annotated transport delays.
      *
-     * The header delay marks the point in time, when the packet first is seen
-     * by the transactor. This is the point in time when the transactor needs
-     * to send the BEGIN_REQ to the SystemC world.
+     * The header delay marks the point in time when the packet first is seen
+     * by the transactor, i.e. when its BEGIN_REQ should become visible to the
+     * SystemC world. Record that absolute tick now and clear the annotation;
+     * the residual delay (if any) is applied when the BEGIN_REQ is actually
+     * issued from sendNextRequest(). Because the packet may wait in the staging
+     * queue, that header delay generally elapses in real sim time before the
+     * BEGIN_REQ is sent, so it is not re-paid per request (which would
+     * re-serialize admission to one request per header-delay interval).
      *
      * NOTE: We drop the payload delay here. Normally, the receiver would be
      *       responsible for handling the payload delay. In this case, however,
      *       the receiver is a SystemC module and has no notion of the gem5
-     *       transport protocol and we cannot simply forward the
-     *       payload delay to the receiving module. Instead, we expect the
-     *       receiving SystemC module to model the payload delay by deferring
-     *       the END_REQ. This could lead to incorrect delays, if the XBar
-     *       payload delay is longer than the time the receiver needs to accept
-     *       the request (time between BEGIN_REQ and END_REQ).
-     *
-     * TODO: We could detect the case described above by remembering the
-     *       payload delay and comparing it to the time between BEGIN_REQ and
-     *       END_REQ. Then, a warning should be printed.
+     *       transport protocol and we cannot simply forward the payload delay
+     *       to the receiving module. Instead, we expect the receiving SystemC
+     *       module to model the payload delay by deferring the END_REQ.
      */
-    auto delay = sc_core::sc_time::from_value(packet->headerDelay);
-    // Reset the delays
+    gem5::Tick beginReqTick = curTick() + packet->headerDelay;
     packet->payloadDelay = 0;
     packet->headerDelay = 0;
 
-    // Starting TLM non-blocking sequence (AT) Refer to IEEE1666-2011 SystemC
-    // Standard Page 507 for a visualisation of the procedure.
-    tlm::tlm_phase phase = tlm::BEGIN_REQ;
-    tlm::tlm_sync_enum status;
-    status = socket->nb_transport_fw(*trans, phase, delay);
-    // Check returned value:
-    if (status == tlm::TLM_ACCEPTED) {
-        sc_assert(phase == tlm::BEGIN_REQ);
-        // Accepted but is now blocking until END_REQ (exclusion rule).
-        blockingRequest = trans;
-        packetMap.emplace(trans, packet);
-    } else if (status == tlm::TLM_UPDATED) {
-        // The Timing annotation must be honored:
-        sc_assert(phase == tlm::END_REQ || phase == tlm::BEGIN_RESP);
-        // Accepted but is now blocking until END_REQ (exclusion rule).
-        blockingRequest = trans;
-        packetMap.emplace(trans, packet);
-        auto cb = [this, trans, phase]() { pec(*trans, phase); };
-        auto event = new EventFunctionWrapper(
-                cb, "pec", true, getPriorityOfTlmPhase(phase));
-        system->schedule(event, curTick() + delay.value());
-    } else if (status == tlm::TLM_COMPLETED) {
-        // Transaction is over nothing has do be done.
-        sc_assert(phase == tlm::END_RESP);
-        if (trans->has_mm()) {
-            trans->release();
+    requestQueue.emplace(packet, beginReqTick);
+    sendNextRequest();
+    return true;
+}
+
+template <unsigned int BITWIDTH>
+void
+Gem5ToTlmBridge<BITWIDTH>::sendNextRequest()
+{
+    // Issue staged requests while the request channel is free. The exclusion
+    // rule is still honored: at most one transaction is between BEGIN_REQ and
+    // END_REQ at any time (tracked by blockingRequest). A TLM_COMPLETED
+    // transaction does not occupy the request channel, so we keep draining.
+    while (blockingRequest == nullptr && !requestQueue.empty()) {
+        PacketPtr packet = requestQueue.front().first;
+        gem5::Tick beginReqTick = requestQueue.front().second;
+        requestQueue.pop();
+
+        /*
+         * NOTE: normal tlm is blocking here. But in our case we stage the
+         * request and tell gem5 when a retry can be done. This is the main
+         * difference in the protocol:
+         * if (requestInProgress)
+         * {
+         *     wait(endRequestEvent);
+         * }
+         * requestInProgress = trans;
+         */
+
+        // Prepare the transaction.
+        auto *trans = packet2payload(packet);
+
+        // Apply only the residual header delay: the BEGIN_REQ should become
+        // visible at beginReqTick (arrival + header delay). Any time the
+        // packet spent waiting in the staging queue has already advanced the
+        // clock, so under load this residual is zero and BEGIN_REQs are issued
+        // back-to-back instead of one per header-delay interval.
+        sc_core::sc_time delay = (beginReqTick > curTick()) ?
+            sc_core::sc_time::from_value(beginReqTick - curTick()) :
+            sc_core::SC_ZERO_TIME;
+
+        // Starting TLM non-blocking sequence (AT) Refer to IEEE1666-2011
+        // SystemC Standard Page 507 for a visualisation of the procedure.
+        tlm::tlm_phase phase = tlm::BEGIN_REQ;
+        tlm::tlm_sync_enum status;
+        status = socket->nb_transport_fw(*trans, phase, delay);
+        // Check returned value:
+        if (status == tlm::TLM_ACCEPTED) {
+            sc_assert(phase == tlm::BEGIN_REQ);
+            // Accepted but is now blocking until END_REQ (exclusion rule).
+            blockingRequest = trans;
+            packetMap.emplace(trans, packet);
+        } else if (status == tlm::TLM_UPDATED) {
+            // The Timing annotation must be honored:
+            sc_assert(phase == tlm::END_REQ || phase == tlm::BEGIN_RESP);
+            // Accepted but is now blocking until END_REQ (exclusion rule).
+            blockingRequest = trans;
+            packetMap.emplace(trans, packet);
+            auto cb = [this, trans, phase]() { pec(*trans, phase); };
+            auto event = new EventFunctionWrapper(
+                    cb, "pec", true, getPriorityOfTlmPhase(phase));
+            system->schedule(event, curTick() + delay.value());
+        } else if (status == tlm::TLM_COMPLETED) {
+            // Transaction is over nothing has do be done.
+            sc_assert(phase == tlm::END_RESP);
+            if (trans->has_mm()) {
+                trans->release();
+            }
         }
     }
 
-    return true;
+    // Popping from the staging queue may have freed space for a request the
+    // gem5 side previously had to retry.
+    checkAndSendRetry();
+}
+
+template <unsigned int BITWIDTH>
+void
+Gem5ToTlmBridge<BITWIDTH>::checkAndSendRetry()
+{
+    if (needToSendRequestRetry && requestQueue.size() < requestQueueDepth) {
+        needToSendRequestRetry = false;
+        bridgeResponsePort.sendRetryReq();
+    }
 }
 
 template <unsigned int BITWIDTH>
@@ -593,7 +636,10 @@ Gem5ToTlmBridge<BITWIDTH>::Gem5ToTlmBridge(
     socket("tlm_socket"),
     wrapper(socket, std::string(name()) + ".tlm", InvalidPortID),
     system(params.system), blockingRequest(nullptr),
-    needToSendRequestRetry(false), blockingResponse(nullptr),
+    needToSendRequestRetry(false),
+    requestQueueDepth(params.request_queue_depth ?
+                      params.request_queue_depth : 1),
+    blockingResponse(nullptr),
     addrRanges(params.addr_ranges.begin(), params.addr_ranges.end())
 {
 }
