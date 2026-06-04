@@ -13,6 +13,8 @@
 #   NUM_OUTSTANDING_REQS=N    request pipeline depth (default 4)
 #   NETWORK=garnet|simple     Ruby network model (default garnet); output
 #                             lands in m5out/rbook-tb-gem5-memset-<network>
+#   DEBUG=1|0                 dump ProtocolTrace,RubyNetwork to trace.gz
+#                             (default 0; set 1 to enable the trace)
 #
 # Usage: ./runtest.sh
 #        RN_MODE=rni ./runtest.sh
@@ -35,10 +37,16 @@ OUTDIR="m5out/rbook-tb-gem5-memset-${NETWORK}"
 
 mkdir -p "${TB_DIR}/m5out"
 
+# Optional protocol/network trace dump (disabled by default; DEBUG=1 enables).
+DEBUG_ARGS=()
+if [[ "${DEBUG:-0}" != "0" ]]; then
+    DEBUG_ARGS=(--debug-flags=ProtocolTrace,RubyNetwork --debug-file=trace.gz)
+fi
+
 # --per-vnet-links
 
 time "${GEM5_BIN}" \
-    -d "${OUTDIR}" --debug-flags=ProtocolTrace,RubyNetwork --debug-file=trace.gz \
+    -d "${OUTDIR}" "${DEBUG_ARGS[@]}" \
     "${DRIVER}" \
     --scenario=memset \
     --active-cores=all \
