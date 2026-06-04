@@ -47,29 +47,29 @@ a main-memory node, and router 0 hosts the (idle) Misc Node.
 ```
         col 0      col 1      col 2      col 3
       +--------+ +--------+ +--------+ +--------+
-row 0 |   R0   |=|   R1   |=|   R2   |=|   R3   |
+row 0 |   R0   |=|   R1   |#|   R2   |=|   R3   |
       | T0 H0  | | T1 H1  | | T2 H2  | | T3 H3  |
       | MN SNF | |        | |        | |        |
       +--------+ +--------+ +--------+ +--------+
           ||         ||         ||         ||
       +--------+ +--------+ +--------+ +--------+
-row 1 |   R4   |=|   R5   |=|   R6   |=|   R7   |
+row 1 |   R4   |=|   R5   |#|   R6   |=|   R7   |
       | T4 H4  | | T5 H5  | | T6 H6  | | T7 H7  |
       +--------+ +--------+ +--------+ +--------+
-          ||         ||         ||         ||
+          ##         ##         ##         ##
       +--------+ +--------+ +--------+ +--------+
-row 2 |   R8   |=|   R9   |=|  R10   |=|  R11   |
+row 2 |   R8   |=|   R9   |#|  R10   |=|  R11   |
       | T8 H8  | | T9 H9  | |T10 H10 | |T11 H11 |
       +--------+ +--------+ +--------+ +--------+
           ||         ||         ||         ||
       +--------+ +--------+ +--------+ +--------+
-row 3 |  R12   |=|  R13   |=|  R14   |=|  R15   |
+row 3 |  R12   |=|  R13   |#|  R14   |=|  R15   |
       |T12 H12 | |T13 H13 | |T14 H14 | |T15 H15 |
       |        | |        | |        | | SNF    |
       +--------+ +--------+ +--------+ +--------+
 
-  ==  bidirectional inter-router mesh link (horizontal)
-  ||  bidirectional inter-router mesh link (vertical)
+  ==  ||  interior inter-router mesh link  (router_link_latency = 2 cy)
+  #   ##  link crossing a 2x2-cluster boundary  (cross_link_latency = 7 cy)
   Tn  = tile n (ChiSeqDriver + RubySequencer + CHI_TileCacheController)
   Hn  = HNF slice n (LLC + snoop filter / directory)
   MN  = Misc Node (DVM coordinator; idle in this testbench)
@@ -79,7 +79,10 @@ row 3 |  R12   |=|  R13   |=|  R14   |=|  R15   |
 Routing is deterministic **XY (dimension-order)**: a packet travels in the X
 dimension first, then Y. Link traversal weights `[1, 1, 2, 2]` (E, W, N, S)
 bias the order so that the network is deadlock-free across the four CHI virtual
-networks.
+networks. The mesh is additionally grouped into **four 2×2 clusters**; the eight
+links that cross a cluster boundary (marked `#` / `##` above) carry +5 cycles of
+extra latency to emulate a hierarchical / chiplet-style fabric — see the
+Network Configuration section for the exact link set and parameters.
 
 ### Node placement summary
 
@@ -254,15 +257,30 @@ gives each vnet eight virtual channels for head-of-line-blocking avoidance.
 | ----------------------------- | ----- | --------------------------------------------------------- |
 | `num_rows` × `num_cols`       | 4 × 4 | 16 routers                                                |
 | `router_latency`             | 4 cy  | Router pipeline (1 in + 2 route + 1 out)                  |
-| `router_link_latency`        | 2 cy  | Inter-router (hop-to-hop) link delay                      |
+| `router_link_latency`        | 2 cy  | Inter-router (hop-to-hop) link delay (interior links)     |
 | `node_router_latency`        | 2 cy  | Node-to-router external link delay                        |
 | `router_buffer_size`         | 8     | `SimpleNetwork` per-port buffer depth                     |
 | `link_bandwidth_factor`      | 40    | `SimpleNetwork` bytes/cycle per link                      |
+| `cross_link_latency`         | 7 cy  | Link delay for cluster-boundary links (replaces `router_link_latency`) |
+| `cross_links`                | 16    | Directed router pairs tagged as cluster-boundary links    |
 
 The `router_buffer_size` default is deliberately raised from gem5's stock value
 of 4 to **8**: the column-0 incast pattern (traffic converging on the memory
 controller at router 0) starves with shallow buffers, and 8 keeps the funnel
 fed up to the structural bandwidth ceiling.
+
+The mesh is also partitioned into **four 2×2 clusters**, and the eight
+bidirectional links that cross a cluster boundary carry **+5 cycles** of extra
+delay — emulating a hierarchical / chiplet-style fabric where inter-cluster hops
+cross a slower (e.g. die-to-die) edge. Those links are the column-1↔column-2
+crossings (`1–2`, `5–6`, `9–10`, `13–14`) and the row-1↔row-2 crossings
+(`4–8`, `5–9`, `6–10`, `7–11`); `cross_links` lists them as directed
+`(src, dst)` router pairs (both orderings, so 16 entries). `CustomMesh._makeMesh`
+([`configs/topologies/CustomMesh.py`](../../../configs/topologies/CustomMesh.py))
+*replaces* — does not add to — `router_link_latency` on a matched link, so
+`cross_link_latency` is set to `router_link_latency + 5 = 7`. The same set is
+applied identically by both network models and tags only inter-router fabric
+links, never the tile/HNF/SNF external links.
 
 ### Garnet single-flit sizing
 
@@ -282,8 +300,10 @@ For a 4×4 mesh:
 - External node-to-router links: one per attached controller (16 tiles +
   16 HNFs + 2 SNFs + 1 MN).
 
-With `per_vnet_links`, the 24 inter-router bidirectional links are replicated
-across the 4 vnets.
+Of the 24 inter-router bidirectional links, **8 cross a 2×2-cluster boundary**
+and run at 7 cy; the other 16 stay at 2 cy. With `per_vnet_links`, all 24 are
+replicated across the 4 vnets — 192 directed links total, of which 64 are the
+slowed boundary links.
 
 ---
 
