@@ -41,29 +41,6 @@ Pass the normal gem5 command line unchanged after the wrapper.
 ./util/run_with_timeout.sh ./build/RISCV/gem5.opt -d m5out/mesi-two-level-4cpu-$(date +%Y%m%d-%H%M%S) configs/example/ruby_random_test.py ...
 ```
 
-## Testing
-
-```sh
-# C++ unit tests (Google Test)
-scons build/RISCV/unittests.opt -j$(nproc)
-
-# Python unit tests (requires built gem5 binary)
-./build/RISCV/gem5.opt tests/run_pyunit.py
-
-# System-level tests (quick suite, several hours)
-cd tests && ./main.py run
-
-# Parallel system tests
-cd tests && ./main.py run -j 6
-
-# Rerun only failed tests
-cd tests && ./main.py rerun
-
-# Long/very-long suites
-cd tests && ./main.py run --length=long
-cd tests && ./main.py run --length=very-long
-```
-
 ## Code Style
 
 ### C++
@@ -143,3 +120,31 @@ gem5 uses a Linux kernel-style Kconfig system for build-time feature selection. 
 - `src/python/m5/` — Python runtime: parameter system (`params/`), SimObject metaclass, simulation control
 - `configs/` — Example simulation configuration scripts
 - `ext/` — Vendored external dependencies (pybind11, googletest, testlib, etc.)
+
+### CHI NoC Testbench (this branch)
+
+This branch studies the Network-on-Chip using a **CPU-less CHI 4×4 mesh testbench** (16 tiles) under `ruby-book/final/chi_testbench_gem5/`. It reuses the Chapter-17 CHI/SLICC stack verbatim and is built with `PROTOCOL=CHI` (`scons build/RISCV/gem5.opt PROTOCOL=CHI`).
+
+Both Ruby network models are supported via `--network`: **garnet** (default — detailed flit/router model; the driver auto-sizes `--link-width-bits` for single-flit CHI data packets and sets `per_vnet_links`) and **simple** (`SimpleNetwork`, with `simple_physical_channels` for one channel per vnet). Run the same scenarios against either to compare NoC behavior.
+
+**Per-tile wiring** (see `driver/cfg_rn.py`): there are no real CPUs. Each tile is
+
+```
+ChiSeqDriver --RequestPort--> RubySequencer -> CHI_TileCacheController -> mesh router
+```
+
+with **no L1 and no side router** — the controller connects directly to its mesh router via a single ExtLink. `ChiSeqDriver` is a `ClockedObject` that runs a Fiber-backed C++ traffic sequence. The controller is one `Base_CHI_Cache_Controller` parameterized by `--rn-mode`:
+- `rnf_l2` (default): coherent L2-sized leaf cache (ReadShared/ReadUnique/snoops).
+- `rni`: cache-less, DMA-like (ReadOnce/WriteNoSnp), nothing cached at the RN.
+
+**Driver entry** (`driver/rbook_testbench_gem5.py`): builds the `System`, loads a `--scenario` module, and swaps `CHI.create_system`'s request-node/Misc-node factories via the `system._rnf_gen` / `system._mn_gen` hooks. Defaults: 16 CPUs/L3s, 2 dirs, `CustomMesh` topology, `noc_config/rbook_4x4.py`, garnet network. Key flags: `--scenario`, `--active-cores`, `--operation` (store/load), `--num-outstanding-reqs`, `--allow-retryack` (HNF retry vs. backpressure), `--rn-mode`, `--network` (garnet/simple).
+
+**Running**: `make -C ruby-book/final/chi_testbench_gem5 run-memset|run-ping_pong|run-all` (pass `RN_MODE=rni|rnf_l2`). Each run writes a timestamped `m5out/` dir, consistent with the timeout-wrapper guidance above.
+
+| Path | Role |
+| --- | --- |
+| `ruby-book/final/chi_testbench_gem5/driver/rbook_testbench_gem5.py` | Top-level config: 4×4 CHI mesh, scenario dispatch, RN-mode wiring |
+| `.../driver/cfg_rn.py` | Per-tile CHI request-node wiring (`rni` / `rnf_l2`) |
+| `.../driver/address_planner.py` | HNF-interleaved cache-line address math |
+| `.../scenarios/{memset,ping_pong}.py` | Workload builders (one `ChiSeqDriver` per tile) |
+| `src/chi_testbench_gem5/` | C++ `ChiSeqDriver`, sequences (`sequences/`), fiber sync primitives (`sync/`) |
