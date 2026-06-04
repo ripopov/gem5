@@ -199,6 +199,28 @@ PerfectSwitch input -> A Switch.port_buffer
 buffer. If there is no slot, the message stays in the input buffer and the
 switch retries later. This is upstream backpressure.
 
+### The switch has no per-cycle crossbar limit
+
+The `PerfectSwitch` is "perfect": it models no internal crossbar or output
+write-port bandwidth. In one `wakeup()` (a single clock edge) it can move many
+messages into the same output buffer:
+
+- `operateMessageBuffer()` drains a single input with a
+  `while (buffer->isReady(current_time))` loop, so multiple ready messages from
+  the *same* input are popped in one wakeup.
+- `operateVnet()` iterates over *all* input ports for the vnet, so messages
+  from *several* inputs can be enqueued into the same output buffer in the same
+  cycle.
+
+The only gate is `areNSlotsAvailable(1)` on the target output buffer. Writes
+into one output buffer per cycle are therefore bounded solely by that buffer's
+free capacity (`router_buffer_size = 8`), not by any switch port. When the
+output buffer fills, the routing check returns `enough = false`, the switch
+`break`s out of that input and reschedules `+1` cycle.
+
+The real 1-message/cycle/vnet shaping is downstream at the `Throttle` draining
+the output port buffer onto the link, not at the switch itself.
+
 The link launch stage is:
 
 ```text
