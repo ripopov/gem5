@@ -125,6 +125,8 @@ gem5 uses a Linux kernel-style Kconfig system for build-time feature selection. 
 
 This branch studies the Network-on-Chip using a **CPU-less CHI 4×4 mesh testbench** (16 tiles) under `ruby-book/final/chi_testbench_gem5/`. It reuses the Chapter-17 CHI/SLICC stack verbatim and is built with `PROTOCOL=CHI` (`scons build/RISCV/gem5.opt PROTOCOL=CHI`).
 
+For an detailed description of the DUT (topology diagram, tile/HNF/SNF placement, address interleaving, vnets, network parameters, traffic engine, and transaction flow), see [`ruby-book/final/chi_testbench_gem5/NocUnderTest.md`](ruby-book/final/chi_testbench_gem5/NocUnderTest.md).
+
 Both Ruby network models are supported via `--network`: **garnet** (default — detailed flit/router model; the driver auto-sizes `--link-width-bits` for single-flit CHI data packets and sets `per_vnet_links`) and **simple** (`SimpleNetwork`, with `simple_physical_channels` for one channel per vnet). Run the same scenarios against either to compare NoC behavior.
 
 **Per-tile wiring** (see `driver/cfg_rn.py`): there are no real CPUs. Each tile is
