@@ -89,6 +89,13 @@ parser.add_argument(
     help="Maximum outstanding traffic-generation requests per active tile",
 )
 parser.add_argument(
+    "--cl-stride",
+    type=int,
+    default=1,
+    help="memset address stride in cache lines (1 = dense; 16 with 16 "
+    "HNFs homes every access on a single HNF/LLC)",
+)
+parser.add_argument(
     "--allow-retryack",
     type=int,
     choices=[0, 1],

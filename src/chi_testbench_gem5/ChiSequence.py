@@ -46,6 +46,11 @@ class MemsetSequence(ChiSequence):
     dst_base = Param.Addr(0, "Destination base address")
     num_lines = Param.UInt32(0, "Number of cache lines to fill")
     line_size = Param.UInt32(64, "Bytes per cache line")
+    cl_stride = Param.UInt32(
+        1,
+        "Address stride in cache lines (1 = dense; 16 with 16 HNFs "
+        "homes every access on one HNF)",
+    )
     write_size = Param.UInt32(
         0, "Bytes written per cache line; 0 means line_size"
     )

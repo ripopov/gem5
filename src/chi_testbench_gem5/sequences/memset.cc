@@ -193,8 +193,8 @@ enum class AccessKind
 void
 run_access_phase(ChiSeqDriver &drv, uint64_t dst_base, uint32_t first_line,
                  uint32_t num_lines, uint32_t line_size, uint32_t access_size,
-                 uint32_t depth, const std::vector<uint8_t> &buffer,
-                 AccessKind kind)
+                 uint32_t cl_stride, uint32_t depth,
+                 const std::vector<uint8_t> &buffer, AccessKind kind)
 {
     uint32_t next_issue = 0;
     uint32_t retired = 0;
@@ -203,7 +203,8 @@ run_access_phase(ChiSeqDriver &drv, uint64_t dst_base, uint32_t first_line,
         while (next_issue < num_lines && drv.outstanding() < depth &&
                drv.request_ready()) {
             const uint64_t line = first_line + next_issue;
-            const uint64_t addr = dst_base + line * line_size;
+            const uint64_t addr =
+                dst_base + (uint64_t)line * cl_stride * line_size;
             switch (kind) {
               case AccessKind::StoreLine:
                 drv.async_store_line_req(addr, buffer.data(), access_size);
@@ -245,6 +246,7 @@ MemsetSequence::run(ChiSeqDriver &drv)
     const uint32_t num_lines = _p.num_lines;
     const uint32_t line_size = _p.line_size;
     const uint32_t write_size = _p.write_size ? _p.write_size : line_size;
+    const uint32_t cl_stride = _p.cl_stride ? _p.cl_stride : 1;
     uint32_t depth = _p.num_outstanding_reqs;
     if (depth == 0) {
         depth = _p.pipeline_depth;
@@ -288,7 +290,8 @@ MemsetSequence::run(ChiSeqDriver &drv)
                 "%s memset L3 warmup: %u full-line stores\n",
                 drv.name(), num_lines);
         run_access_phase(drv, dst_base, 0, num_lines, line_size, line_size,
-                         depth, warmup_buffer, AccessKind::StoreLine);
+                         cl_stride, depth, warmup_buffer,
+                         AccessKind::StoreLine);
         quiesce_before_stats_reset(drv, _p.stats_quiesce_cycles);
         roi_coordinator.wait_for_warmup(drv, _p.roi_participants);
     }
@@ -313,20 +316,21 @@ MemsetSequence::run(ChiSeqDriver &drv)
         // cannot leak into the ROI stats window. Ramp-down is not issued
         // until after the ROI dump for the same reason.
         run_access_phase(drv, dst_base, 0, ramp_up_lines, line_size,
-                         write_size, depth, buffer, roi_kind);
+                         write_size, cl_stride, depth, buffer, roi_kind);
         quiesce_before_stats_reset(drv, _p.stats_quiesce_cycles);
         roi_coordinator.wait_for_start(drv, _p.roi_participants);
 
         run_access_phase(drv, dst_base, roi_first, roi_lines, line_size,
-                         write_size, depth, buffer, roi_kind);
+                         write_size, cl_stride, depth, buffer, roi_kind);
         roi_coordinator.wait_for_end(
             drv, _p.roi_participants, (uint64_t)roi_lines * line_size);
 
         run_access_phase(drv, dst_base, ramp_down_first, ramp_down_lines,
-                         line_size, write_size, depth, buffer, roi_kind);
+                         line_size, write_size, cl_stride, depth, buffer,
+                         roi_kind);
     } else {
         run_access_phase(drv, dst_base, 0, num_lines, line_size, write_size,
-                         depth, buffer, roi_kind);
+                         cl_stride, depth, buffer, roi_kind);
     }
 
 }

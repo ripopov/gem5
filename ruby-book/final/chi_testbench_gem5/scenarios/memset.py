@@ -14,6 +14,7 @@ def build(args, planner):
     line_size = 64
     write_size = 63
     stats_quiesce_cycles = 10000
+    cl_stride = getattr(args, "cl_stride", 1)
     active_cores = list(args.active_cores)
     barrier = ChiGem5Barrier(expected=len(active_cores))
 
@@ -33,9 +34,10 @@ def build(args, planner):
                 tile_id=tile,
                 finish_barrier=barrier,
                 sequence=MemsetSequence(
-                    dst_base=tile * num_lines * line_size,
+                    dst_base=tile * num_lines * cl_stride * line_size,
                     num_lines=num_lines,
                     line_size=line_size,
+                    cl_stride=cl_stride,
                     write_size=write_size,
                     num_outstanding_reqs=args.num_outstanding_reqs,
                     operation=getattr(args, "operation", "store"),
