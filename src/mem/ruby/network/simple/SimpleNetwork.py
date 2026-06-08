@@ -128,7 +128,7 @@ class Switch(BasicRouter):
     )
 
     def setup_buffers(self, network):
-        def vnet_buffer_size(vnet):
+        def vnet_buffer_size(vnet, buffer_size):
             """
             Gets the size of the message buffers associated to a vnet
             If physical_vnets_channels is set we just multiply the size of the
@@ -136,32 +136,56 @@ class Switch(BasicRouter):
             channels per vnet.
             """
             if len(network.physical_vnets_channels) == 0:
-                return network.buffer_size
+                return buffer_size
             else:
-                return (
-                    network.buffer_size * network.physical_vnets_channels[vnet]
-                )
+                return buffer_size * network.physical_vnets_channels[vnet]
+
+        def ext_vnet_buffer_size(vnet):
+            if network.buffer_size == 0:
+                return 0
+
+            buffer_size = max(
+                network.buffer_size, int(self.ext_routing_latency) + 1
+            )
+            return vnet_buffer_size(vnet, buffer_size)
 
         if len(self.port_buffers) > 0:
             fatal("User should not manually set routers' port_buffers")
 
         router_buffers = []
-        # Add message buffers to routers at the end of each
-        # unidirectional internal link
-        for link in network.int_links:
-            if link.dst_node == self:
-                for i in range(int(network.number_of_virtual_networks)):
-                    router_buffers.append(
-                        SwitchPortBuffer(buffer_size=vnet_buffer_size(i))
-                    )
 
-        # Add message buffers to routers for each external link connection
+        # These buffers are the Switch-local queues between PerfectSwitch and
+        # Throttle. They are consumed sequentially by Switch::addOutPort(), so
+        # their order must match Topology::createLinks()'s addOutPort order.
+        #
+        # Topology numbers endpoint-output nodes below router nodes and scans
+        # destinations in numeric order. Therefore, for a given router source,
+        # external output links are connected before internal output links.
+        # Keep external buffers first so the larger ext_routing_latency-sized
+        # buffers are consumed by external ports only.
         for link in network.ext_links:
             # Routers can only be int_nodes on ext_links
             if link.int_node == self:
                 for i in range(int(network.number_of_virtual_networks)):
                     router_buffers.append(
-                        SwitchPortBuffer(buffer_size=vnet_buffer_size(i))
+                        SwitchPortBuffer(buffer_size=ext_vnet_buffer_size(i))
+                    )
+
+        # Internal links use the normal network buffer size. This preserves the
+        # existing allocation condition based on dst_node. The buffers are still
+        # consumed as output-port queues by Switch::addOutPort(); in the
+        # bidirectional mesh topologies used here, each router has matching
+        # incoming/outgoing internal-link counts, so the existing count/order
+        # remains valid while external buffers above get distinct sizing.
+        for link in network.int_links:
+            if link.dst_node == self:
+                for i in range(int(network.number_of_virtual_networks)):
+                    router_buffers.append(
+                        SwitchPortBuffer(
+                            buffer_size=vnet_buffer_size(
+                                i, network.buffer_size
+                            )
+                        )
                     )
 
         self.port_buffers = router_buffers
