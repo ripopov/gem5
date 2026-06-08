@@ -48,6 +48,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstdint>
 #include <functional>
 #include <iostream>
 #include <string>
@@ -164,6 +165,33 @@ class MessageBuffer : public SimObject
 
     int getIncomingLink() const { return m_input_link_id; }
     int getVnet() const { return m_vnet_id; }
+
+    struct TraceState
+    {
+        uint64_t currentSize = 0;
+        uint64_t occupiedSlots = 0;
+        uint64_t stalledMessages = 0;
+        uint64_t deferredMessages = 0;
+        uint64_t capacity = 0;
+        uint64_t unbounded = 0;
+        uint64_t maxDequeueRate = 0;
+        uint64_t totalEnqueued = 0;
+        uint64_t totalDequeued = 0;
+        uint64_t notAvailableCount = 0;
+        uint64_t stallCount = 0;
+        uint64_t stallTicks = 0;
+        uint64_t bufferedMessagesStat = 0;
+        uint64_t dequeuesThisCycle = 0;
+        uint64_t vnet = 0;
+        uint64_t incomingLink = 0;
+        uint64_t routingPriority = 0;
+        uint64_t strictFifo = 0;
+        uint64_t allowZeroLatency = 0;
+        uint64_t randomization = 0;
+        uint64_t headReadyTick = 0;
+    };
+
+    TraceState traceState() const;
 
     Port &
     getPort(const std::string &, PortID idx=InvalidPortID) override

@@ -47,6 +47,7 @@
 #include "base/random.hh"
 #include "base/stl_helpers.hh"
 #include "debug/RubyQueue.hh"
+#include "sim/fst_trace/fst_trace.hh"
 #include "sim/transaction_trace/ftr_trace.hh"
 
 namespace gem5
@@ -142,6 +143,44 @@ MessageBuffer::getSize(Tick curTime)
     }
 
     return m_size_last_time_size_checked;
+}
+
+MessageBuffer::TraceState
+MessageBuffer::traceState() const
+{
+    uint64_t deferred_messages = 0;
+    for (const auto &entry : m_deferred_msg_map) {
+        deferred_messages += entry.second.size();
+    }
+
+    const uint64_t current_size = m_prio_heap.size();
+    const uint64_t stalled_messages = m_stall_map_size;
+
+    TraceState state;
+    state.currentSize = current_size;
+    state.occupiedSlots = current_size + stalled_messages;
+    state.stalledMessages = stalled_messages;
+    state.deferredMessages = deferred_messages;
+    state.capacity = m_max_size;
+    state.unbounded = m_max_size == 0 ? 1 : 0;
+    state.maxDequeueRate = m_max_dequeue_rate;
+    state.totalEnqueued = m_msg_counter;
+    state.totalDequeued = static_cast<uint64_t>(m_msg_count.value());
+    state.notAvailableCount = static_cast<uint64_t>(m_not_avail_count.value());
+    state.stallCount = static_cast<uint64_t>(m_stall_count.value());
+    state.stallTicks = static_cast<uint64_t>(m_stall_time.value());
+    state.bufferedMessagesStat = static_cast<uint64_t>(m_buf_msgs.value());
+    state.dequeuesThisCycle = m_dequeues_this_cy;
+    state.vnet = m_vnet_id;
+    state.incomingLink = m_input_link_id;
+    state.routingPriority = m_routing_priority;
+    state.strictFifo = m_strict_fifo ? 1 : 0;
+    state.allowZeroLatency = m_allow_zero_latency ? 1 : 0;
+    state.randomization = static_cast<uint64_t>(m_randomization);
+    state.headReadyTick =
+        m_prio_heap.empty() ? 0 : m_prio_heap.front()->getLastEnqueueTime();
+
+    return state;
 }
 
 bool
@@ -300,6 +339,7 @@ MessageBuffer::enqueue(MsgPtr message, Tick current_time, Tick delta,
                         {{"occupancy", uint64_t(m_prio_heap.size())},
                          {"vnet", uint64_t(message->getVnet())}});
     }
+    FstTrace::recordMessageBufferPush(this, current_time);
 
     DPRINTF(RubyQueue, "Enqueue arrival_time: %lld, Message: %s\n",
             arrival_time, *(message.get()));
@@ -351,6 +391,7 @@ MessageBuffer::dequeue(Tick current_time, bool decrement_messages)
         // number of message in the queue.
         m_buf_msgs--;
     }
+    FstTrace::recordMessageBufferPop(this, current_time);
 
     // if a dequeue callback was requested, call it now
     if (m_dequeue_callback) {

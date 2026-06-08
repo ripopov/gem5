@@ -29,7 +29,6 @@
 #include <fstapi.h>
 
 #include <cstdlib>
-#include <cstring>
 #include <iostream>
 #include <map>
 #include <sstream>
@@ -73,31 +72,22 @@ struct CallbackState
         changes;
 };
 
-struct VarInfo
-{
-    fstHandle handle;
-    enum fstVarType type;
-    std::string fullName;
-};
-
 struct TraceData
 {
     std::unordered_set<std::string> scopes;
     std::unordered_map<std::string, fstHandle> eventHandles;
     std::unordered_map<std::string, fstHandle> integerHandles;
-    std::unordered_map<std::string, fstHandle> realHandles;
     std::unordered_map<fstHandle, std::vector<uint64_t>> changeTimes;
     std::unordered_map<fstHandle,
                        std::vector<std::pair<uint64_t, std::string>>>
         changes;
-    std::vector<std::pair<uint64_t, uint32_t>> dumpActivityChanges;
 };
 
 [[noreturn]] void
 usage()
 {
     std::cerr << "usage: verify_fst_trace "
-                 "<events|traffic|stats|dump> <trace.fst>"
+                 "<message-buffers|dump> <trace.fst>"
               << std::endl;
     std::exit(1);
 }
@@ -117,39 +107,6 @@ formatTimes(const std::vector<uint64_t> &times)
 
     out << "]";
     return out.str();
-}
-
-std::string
-formatTimedValues(const std::vector<std::pair<uint64_t, uint64_t>> &values)
-{
-    std::ostringstream out;
-    out << "[";
-
-    for (size_t idx = 0; idx < values.size(); ++idx) {
-        if (idx != 0) {
-            out << ", ";
-        }
-        out << "(" << values[idx].first << ", " << values[idx].second << ")";
-    }
-
-    out << "]";
-    return out.str();
-}
-
-uint64_t
-parseUnsignedValue(const std::string &value)
-{
-    require(!value.empty(), "encountered empty FST value");
-
-    bool binary = true;
-    for (char ch : value) {
-        if (ch != '0' && ch != '1') {
-            binary = false;
-            break;
-        }
-    }
-
-    return std::stoull(value, nullptr, binary ? 2 : 10);
 }
 
 TraceData
@@ -190,11 +147,6 @@ loadTrace(const char *trace_path)
                         trace.integerHandles.emplace(std::move(full_name),
                                                      hier->u.var.handle);
                         break;
-                    case FST_VT_VCD_REAL:
-                    case FST_VT_VCD_REAL_PARAMETER:
-                        trace.realHandles.emplace(std::move(full_name),
-                                                  hier->u.var.handle);
-                        break;
                     default:
                         break;
                 }
@@ -227,196 +179,128 @@ loadTrace(const char *trace_path)
         }
     }
 
-    const uint32_t dump_changes =
-        fstReaderGetNumberDumpActivityChanges(reader);
-    for (uint32_t idx = 0; idx < dump_changes; ++idx) {
-        trace.dumpActivityChanges.emplace_back(
-            fstReaderGetDumpActivityChangeTime(reader, idx),
-            fstReaderGetDumpActivityChangeValue(reader, idx));
-    }
-
     fstReaderClose(reader);
     return trace;
 }
 
-void
-requireEventTimes(const TraceData &trace, const std::string &event_name,
-                  const std::vector<uint64_t> &expected_times)
+bool
+endsWith(const std::string &str, const std::string &suffix)
 {
-    auto handle_it = trace.eventHandles.find(event_name);
-    require(handle_it != trace.eventHandles.end(),
-            "missing event signal: " + event_name);
-
-    auto times_it = trace.changeTimes.find(handle_it->second);
-    const auto &times = times_it != trace.changeTimes.end()
-                            ? times_it->second
-                            : std::vector<uint64_t>{};
-    require(times == expected_times, "unexpected timestamps for " +
-                                         event_name + ": got " +
-                                         formatTimes(times) + ", expected " +
-                                         formatTimes(expected_times));
+    return str.size() >= suffix.size() &&
+           str.compare(str.size() - suffix.size(), suffix.size(), suffix) == 0;
 }
 
 void
-requireClockValues(
-    const TraceData &trace, const std::string &signal_name,
-    const std::vector<std::pair<uint64_t, uint64_t>> &expected_values)
+requireEventSignal(const TraceData &trace, const std::string &signal_name)
 {
-    auto handle_it = trace.integerHandles.find(signal_name);
-    require(handle_it != trace.integerHandles.end(),
-            "missing clock signal: " + signal_name);
+    require(trace.eventHandles.count(signal_name) == 1,
+            "missing event signal: " + signal_name);
+}
 
-    auto changes_it = trace.changes.find(handle_it->second);
-    const auto &changes =
-        changes_it != trace.changes.end()
-            ? changes_it->second
-            : std::vector<std::pair<uint64_t, std::string>>{};
+void
+requireIntegerSignal(const TraceData &trace, const std::string &signal_name)
+{
+    require(trace.integerHandles.count(signal_name) == 1,
+            "missing integer signal: " + signal_name);
+}
 
-    std::vector<std::pair<uint64_t, uint64_t>> observed_values;
-    observed_values.reserve(changes.size());
-    for (const auto &[time, value] : changes) {
-        observed_values.emplace_back(time, parseUnsignedValue(value));
+void
+verifyMessageBuffers(const TraceData &trace)
+{
+    const std::string controller = "system.ruby.hnf00.cntrl.reqIn";
+    const std::string int_link = "system.ruby.network.int_links000.buffers0";
+    const std::string src_alias =
+        "system.ruby.network.routers00."
+        "out_East_to_routers01_int_links000.buffers0";
+    const std::string dst_alias =
+        "system.ruby.network.routers01."
+        "in_West_from_routers00_int_links000.buffers0";
+
+    requireEventSignal(trace, controller + ".push");
+    requireEventSignal(trace, controller + ".pop");
+    requireIntegerSignal(trace, controller + ".current_size");
+    requireIntegerSignal(trace, controller + ".capacity");
+    requireIntegerSignal(trace, controller + ".total_enqueued");
+    requireIntegerSignal(trace, controller + ".total_dequeued");
+    requireIntegerSignal(trace, controller + ".not_available_count");
+    requireIntegerSignal(trace, controller + ".buffered_messages_stat");
+
+    requireEventSignal(trace, int_link + ".push");
+    requireEventSignal(trace, int_link + ".pop");
+    requireIntegerSignal(trace, int_link + ".current_size");
+    requireIntegerSignal(trace, int_link + ".occupied_slots");
+    requireIntegerSignal(trace, int_link + ".capacity");
+    requireIntegerSignal(trace, int_link + ".max_dequeue_rate");
+
+    requireEventSignal(trace, src_alias + ".push");
+    requireEventSignal(trace, src_alias + ".pop");
+    requireIntegerSignal(trace, src_alias + ".current_size");
+    requireEventSignal(trace, dst_alias + ".push");
+    requireEventSignal(trace, dst_alias + ".pop");
+    requireIntegerSignal(trace, dst_alias + ".current_size");
+    requireIntegerSignal(trace, dst_alias + ".capacity");
+
+    require(trace.eventHandles.at(src_alias + ".push") ==
+                trace.eventHandles.at(int_link + ".push"),
+            "source-router int-link push alias does not share the base "
+            "handle");
+    require(trace.eventHandles.at(dst_alias + ".pop") ==
+                trace.eventHandles.at(int_link + ".pop"),
+            "destination-router int-link pop alias does not share the base "
+            "handle");
+    require(trace.integerHandles.at(src_alias + ".current_size") ==
+                trace.integerHandles.at(int_link + ".current_size"),
+            "source-router int-link current_size alias does not share the "
+            "base handle");
+    require(trace.integerHandles.at(dst_alias + ".capacity") ==
+                trace.integerHandles.at(int_link + ".capacity"),
+            "destination-router int-link capacity alias does not share the "
+            "base handle");
+
+    size_t message_buffer_push_signals = 0;
+    size_t message_buffer_integer_signals = 0;
+    size_t push_signals_with_changes = 0;
+    size_t pop_signals_with_changes = 0;
+
+    for (const auto &[name, handle] : trace.eventHandles) {
+        if (endsWith(name, ".push")) {
+            ++message_buffer_push_signals;
+            auto changes_it = trace.changeTimes.find(handle);
+            if (changes_it != trace.changeTimes.end() &&
+                !changes_it->second.empty()) {
+                ++push_signals_with_changes;
+            }
+        } else if (endsWith(name, ".pop")) {
+            auto changes_it = trace.changeTimes.find(handle);
+            if (changes_it != trace.changeTimes.end() &&
+                !changes_it->second.empty()) {
+                ++pop_signals_with_changes;
+            }
+        }
     }
 
-    require(observed_values == expected_values,
-            "unexpected values for " + signal_name + ": got " +
-                formatTimedValues(observed_values) + ", expected " +
-                formatTimedValues(expected_values));
-}
+    for (const auto &entry : trace.integerHandles) {
+        if (entry.first.find(".current_size") != std::string::npos ||
+            entry.first.find(".capacity") != std::string::npos ||
+            entry.first.find(".total_enqueued") != std::string::npos) {
+            ++message_buffer_integer_signals;
+        }
+    }
 
-void
-verifyStage1Events(const TraceData &trace)
-{
-    require(trace.scopes.count("clocks") == 1, "missing clocks scope");
-    require(trace.scopes.count("goodbye") == 1, "missing goodbye scope");
-    require(trace.scopes.count("hello") == 1, "missing hello scope");
-    require(trace.scopes.count("root") == 1, "missing root scope");
-    require(trace.scopes.count("trace") == 1, "missing trace scope");
+    require(message_buffer_push_signals > 0,
+            "no MessageBuffer push signals found");
+    require(message_buffer_integer_signals > 0,
+            "no MessageBuffer integer state signals found");
+    require(push_signals_with_changes > 0,
+            "no MessageBuffer push signal has value changes");
+    require(pop_signals_with_changes > 0,
+            "no MessageBuffer pop signal has value changes");
 
-    requireEventTimes(trace, "hello.hello_event_wrapped_function_event", {1});
-    requireEventTimes(trace, "goodbye.goodbye_event_wrapped_function_event",
-                      {18});
-
-    require(trace.dumpActivityChanges.size() == 2,
-            "unexpected dump activity change count");
-    require(trace.dumpActivityChanges[0] ==
-                std::make_pair<uint64_t, uint32_t>(1, 0),
-            "unexpected blackout start transition");
-    require(trace.dumpActivityChanges[1] ==
-                std::make_pair<uint64_t, uint32_t>(2, 1),
-            "unexpected blackout end transition");
-
-    std::cout << "FST trace verified: hello=1 goodbye=18 blackout=1->2"
+    std::cout << "FST MessageBuffer trace verified: "
+              << message_buffer_push_signals << " push signals, "
+              << message_buffer_integer_signals
+              << " integer state signals, aliases under routers00/routers01"
               << std::endl;
-}
-
-void
-verifyTraffic(const TraceData &trace)
-{
-    require(trace.scopes.count("board") == 1, "missing board scope");
-    require(trace.scopes.count("board.cache_hierarchy") == 1,
-            "missing board.cache_hierarchy scope");
-    require(trace.scopes.count("board.memory") == 1,
-            "missing board.memory scope");
-    require(trace.scopes.count("board.memory.mem_ctrl") == 1,
-            "missing board.memory.mem_ctrl scope");
-    require(trace.scopes.count("board.memory.mem_ctrl.dram") == 1,
-            "missing board.memory.mem_ctrl.dram scope");
-    require(trace.scopes.count("board.processor") == 1,
-            "missing board.processor scope");
-    require(trace.scopes.count("board.processor.cores") == 1,
-            "missing board.processor.cores scope");
-    require(trace.scopes.count("board.processor.cores.generator") == 1,
-            "missing traffic generator scope");
-    require(trace.scopes.count("clocks") == 1, "missing clocks scope");
-    require(trace.scopes.count("root") == 1, "missing root scope");
-    require(trace.scopes.count("trace") == 1, "missing trace scope");
-
-    requireEventTimes(
-        trace,
-        "board.processor.cores.generator.updateEvent_wrapped_function_event",
-        {3725, 7450, 11175, 14900, 1000000});
-    requireEventTimes(
-        trace, "board.memory.mem_ctrl.nextReqEvent_wrapped_function_event",
-        {3725, 3725, 7450, 8332, 11175, 13332, 14900, 18332});
-    requireEventTimes(
-        trace, "board.memory.mem_ctrl.respondEvent_wrapped_function_event",
-        {45812, 50812, 55812, 60812});
-    requireEventTimes(trace,
-                      "board.processor.cores.generator.noProgressEvent_"
-                      "wrapped_function_event",
-                      {});
-    // After event ownership migration, crossbar layer and packet queue
-    // events are also traced, producing additional clock counter entries.
-    requireClockValues(
-        trace, "clocks.clk_3003_mhz",
-        {{3725, 11},   {4329, 13},   {7450, 22},   {7992, 24},
-         {8332, 25},   {11175, 33},  {11655, 35},  {13332, 40},
-         {14900, 44},  {15318, 46},  {18332, 55},  {45812, 137},
-         {50812, 152}, {55812, 167}, {60812, 182}, {68747, 206},
-         {69597, 209}, {73685, 221}, {74592, 224}, {78623, 236},
-         {79587, 239}, {83561, 250}, {84249, 253}, {1000000, 3003}});
-
-    require(trace.dumpActivityChanges.empty(),
-            "traffic trace unexpectedly toggled dump activity");
-
-    std::cout << "FST traffic trace verified: updates=5 nextReq=8 "
-                 "respond=4 clk_3003_mhz=3003"
-              << std::endl;
-}
-
-void
-verifyStats(const TraceData &trace)
-{
-    // Verify the stats scope exists
-    require(trace.scopes.count("stats") == 1, "missing stats scope");
-
-    // Verify at least some real-valued stat signals exist
-    require(!trace.realHandles.empty(),
-            "no real-valued stat signals found in FST trace");
-
-    // Count how many stat signals are under the stats scope
-    size_t stat_signal_count = 0;
-    for (const auto &[name, handle] : trace.realHandles) {
-        if (name.substr(0, 6) == "stats.") {
-            ++stat_signal_count;
-        }
-    }
-    require(stat_signal_count > 0,
-            "no stat signals found under the 'stats' scope");
-
-    // Verify that stat signals have value changes (sampling happened)
-    size_t signals_with_changes = 0;
-    for (const auto &[name, handle] : trace.realHandles) {
-        if (name.substr(0, 6) != "stats.") {
-            continue;
-        }
-        auto changes_it = trace.changeTimes.find(handle);
-        if (changes_it != trace.changeTimes.end() &&
-            !changes_it->second.empty()) {
-            ++signals_with_changes;
-        }
-    }
-    require(signals_with_changes > 0,
-            "no stat signals have any value changes (sampling may not "
-            "have fired)");
-
-    // Check that simSeconds or simTicks exists (root stats)
-    bool found_sim_stat = false;
-    for (const auto &[name, handle] : trace.realHandles) {
-        if (name.find("simSeconds") != std::string::npos ||
-            name.find("simTicks") != std::string::npos ||
-            name.find("simFreq") != std::string::npos) {
-            found_sim_stat = true;
-            break;
-        }
-    }
-    require(found_sim_stat, "could not find any root sim stats "
-                            "(simSeconds/simTicks/simFreq) in FST trace");
-
-    std::cout << "FST stat trace verified: " << stat_signal_count
-              << " stat signals, " << signals_with_changes
-              << " with value changes" << std::endl;
 }
 
 void
@@ -472,25 +356,6 @@ dumpTrace(const TraceData &trace)
         }
         std::cout << "]\n";
     }
-
-    std::cout << "Reals:\n";
-    std::map<std::string, fstHandle> sorted_reals(trace.realHandles.begin(),
-                                                  trace.realHandles.end());
-    for (const auto &[name, handle] : sorted_reals) {
-        auto changes_it = trace.changes.find(handle);
-        std::cout << "  " << name;
-        if (changes_it != trace.changes.end()) {
-            std::cout << " [" << changes_it->second.size() << " changes]";
-        } else {
-            std::cout << " [no changes]";
-        }
-        std::cout << "\n";
-    }
-
-    std::cout << "Dump activity changes:\n";
-    for (const auto &[time, value] : trace.dumpActivityChanges) {
-        std::cout << "  " << time << " -> " << value << "\n";
-    }
 }
 
 } // anonymous namespace
@@ -505,12 +370,8 @@ main(int argc, char **argv)
     const std::string mode = argv[1];
     const TraceData trace = loadTrace(argv[2]);
 
-    if (mode == "events") {
-        verifyStage1Events(trace);
-    } else if (mode == "traffic") {
-        verifyTraffic(trace);
-    } else if (mode == "stats") {
-        verifyStats(trace);
+    if (mode == "message-buffers") {
+        verifyMessageBuffers(trace);
     } else if (mode == "dump") {
         dumpTrace(trace);
     } else {

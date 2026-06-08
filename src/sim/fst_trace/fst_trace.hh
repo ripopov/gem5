@@ -31,26 +31,21 @@
 
 #include <fstapi.h>
 
-#include <map>
 #include <mutex>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
 #include "params/FstTrace.hh"
-#include "sim/eventq.hh"
 #include "sim/sim_object.hh"
 
 namespace gem5
 {
 
-class Event;
-
-namespace statistics
+namespace ruby
 {
-class Group;
-class Info;
-} // namespace statistics
+class MessageBuffer;
+} // namespace ruby
 
 class FstTrace : public SimObject
 {
@@ -63,97 +58,75 @@ class FstTrace : public SimObject
     void init() override;
     void startup() override;
 
-    void setDumpActive(bool enable);
-
-    static void dispatchTrampoline(const Event *event, void *arg);
+    static void recordMessageBufferPush(const ruby::MessageBuffer *buffer,
+                                        Tick tick);
+    static void recordMessageBufferPop(const ruby::MessageBuffer *buffer,
+                                       Tick tick);
 
   private:
     fstWriterContext *fstCtx = nullptr;
 
     std::vector<const SimObject *> simObjects;
-    std::vector<EventQueue *> hookedQueues;
-    struct ClockSignal
-    {
-        Tick period = 0;
-        uint64_t mhz = 0;
-        fstHandle handle = 0;
-        std::string signalName;
-    };
-
-    std::vector<ClockSignal> clockSignals;
-    std::unordered_map<const SimObject *, std::vector<const Event *>>
-        ownerEventMap;
-    std::unordered_map<const Event *, fstHandle> eventHandleMap;
-
     std::mutex writerMutex;
 
     std::string resolvedTracePath;
     Tick lastWrittenTick = 0;
     bool hasWrittenTime = false;
-    bool dumpActive = true;
-    bool hooksInstalled = false;
 
     void closeTrace();
-    void collectClockSignals();
-    void collectOwnedEvents();
+    void collectMessageBuffersAndAliases();
     void emitHierarchy();
-    void installHooks();
     void emitTimeChangeLocked(Tick tick);
-    void recordDispatch(const Event *event, Tick tick);
 
-    // --- Stage 2: Periodic stat sampling ---
-
-    enum class StatKind
+    struct MessageBufferSignals
     {
-        Scalar,
-        VectorElem,
-        VectorTotal,
-        DistMean,
-        DistSamples,
-        SparseHistSamples,
+        fstHandle push = 0;
+        fstHandle pop = 0;
+        fstHandle currentSize = 0;
+        fstHandle occupiedSlots = 0;
+        fstHandle stalledMessages = 0;
+        fstHandle deferredMessages = 0;
+        fstHandle capacity = 0;
+        fstHandle unbounded = 0;
+        fstHandle maxDequeueRate = 0;
+        fstHandle totalEnqueued = 0;
+        fstHandle totalDequeued = 0;
+        fstHandle notAvailableCount = 0;
+        fstHandle stallCount = 0;
+        fstHandle stallTicks = 0;
+        fstHandle bufferedMessagesStat = 0;
+        fstHandle dequeuesThisCycle = 0;
+        fstHandle vnet = 0;
+        fstHandle incomingLink = 0;
+        fstHandle routingPriority = 0;
+        fstHandle strictFifo = 0;
+        fstHandle allowZeroLatency = 0;
+        fstHandle randomization = 0;
+        fstHandle headReadyTick = 0;
     };
 
-    struct StatEntry
+    struct MessageBufferAlias
     {
-        fstHandle handle = 0;
-        const statistics::Info *info = nullptr;
-        StatKind kind = StatKind::Scalar;
-        size_t index = 0;
+        std::string linkScope;
+        std::string bufferScope;
+        const ruby::MessageBuffer *buffer = nullptr;
     };
 
-    // Intermediate tree node built during Pass 1. Dot-separated stat
-    // names are split into a trie of ScopeNode children so that each
-    // component becomes an FST scope and only the leaf carries signals.
-    struct PendingSignal
-    {
-        const statistics::Info *info;
-        StatKind kind;
-        size_t index;
-        std::string signalName;
-    };
+    std::vector<const ruby::MessageBuffer *> messageBuffers;
+    std::unordered_map<const ruby::MessageBuffer *, MessageBufferSignals>
+        messageBufferSignalMap;
+    std::unordered_map<std::string, std::vector<MessageBufferAlias>>
+        messageBufferAliasesByRouter;
 
-    struct ScopeNode
-    {
-        std::map<std::string, ScopeNode> children;
-        std::vector<PendingSignal> signals;
-    };
-
-    EventFunctionWrapper sampleStatsEvent;
-    Tick statSamplePeriod = 0;
-
-    std::vector<StatEntry> statEntries;
-    std::vector<double> lastValues;
-    std::vector<bool> hasEmitted;
-
-    void createStatHierarchy();
-    void collectStatGroup(const statistics::Group *group,
-                          const std::string &scopePrefix, ScopeNode &node);
-    void collectStatSignals(const statistics::Info *info,
-                            const std::string &scopePrefix, ScopeNode &node);
-    void emitScopeNode(ScopeNode &node);
-    void sampleStats();
-    void prepareStatsRecursive(statistics::Group *group);
-    double readStatValue(const StatEntry &entry) const;
+    MessageBufferSignals
+    createMessageBufferSignals(const ruby::MessageBuffer *buffer);
+    void createMessageBufferAliasSignals(const MessageBufferSignals &target);
+    void emitMessageBufferAliasesForScope(const std::string &scope);
+    void emitInitialMessageBufferStates();
+    void emitMessageBufferStateLocked(const ruby::MessageBuffer *buffer,
+                                      const MessageBufferSignals &signals);
+    void recordMessageBufferEvent(const ruby::MessageBuffer *buffer, Tick tick,
+                                  bool is_push);
 };
 
 } // namespace gem5

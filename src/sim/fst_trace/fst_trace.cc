@@ -30,18 +30,15 @@
 
 #include <algorithm>
 #include <cctype>
-#include <map>
 #include <string_view>
 #include <utility>
 
 #include "base/logging.hh"
 #include "base/output.hh"
-#include "base/stats/group.hh"
-#include "base/stats/info.hh"
 #include "debug/FstTrace.hh"
-#include "sim/clocked_object.hh"
-#include "sim/eventq.hh"
-#include "sim/root.hh"
+#include "mem/ruby/network/BasicRouter.hh"
+#include "mem/ruby/network/MessageBuffer.hh"
+#include "mem/ruby/network/simple/SimpleLink.hh"
 #include "sim/sim_exit.hh"
 
 namespace gem5
@@ -84,12 +81,13 @@ sanitizeSignalName(std::string_view raw_name)
     return sanitized;
 }
 
-uint64_t
-clockPeriodToMHz(Tick period)
+std::string
+lastScopeComponent(std::string_view name)
 {
-    fatal_if(period == 0, "FST trace encountered a zero-length clock period");
-
-    return (sim_clock::Frequency / period) / 1000000;
+    const auto dot = name.find_last_of('.');
+    const auto leaf =
+        dot == std::string_view::npos ? name : name.substr(dot + 1);
+    return sanitizeSignalName(leaf);
 }
 
 enum fstWriterPackType
@@ -113,11 +111,7 @@ parseCompression(const std::string &compression)
 } // anonymous namespace
 
 FstTrace::FstTrace(const Params &p)
-    : SimObject(p),
-      dumpActive(p.start_active),
-      sampleStatsEvent(
-          *this, [this] { sampleStats(); }, name()),
-      statSamplePeriod(p.stat_sample_period)
+    : SimObject(p)
 {
     registerExitCallback([this]() { closeTrace(); });
 }
@@ -136,6 +130,8 @@ FstTrace::init()
               [](const SimObject *lhs, const SimObject *rhs) {
                   return lhs->name() < rhs->name();
               });
+
+    collectMessageBuffersAndAliases();
 }
 
 void
@@ -143,9 +139,9 @@ FstTrace::startup()
 {
     fatal_if(activeTrace && activeTrace != this,
              "Only one FstTrace SimObject can be active at a time");
-
-    collectClockSignals();
-    collectOwnedEvents();
+    fatal_if(messageBuffers.empty(),
+             "FstTrace %s did not find any Ruby MessageBuffer SimObjects",
+             name().c_str());
 
     resolvedTracePath = simout.resolve(params().trace_file);
     fstCtx = fstWriterCreate(resolvedTracePath.c_str(), 1);
@@ -154,83 +150,36 @@ FstTrace::startup()
 
     fstWriterSetPackType(fstCtx, parseCompression(params().compression));
     fstWriterSetTimescale(fstCtx, params().timescale);
-    fstWriterSetVersion(fstCtx, "gem5 FstTrace");
+    fstWriterSetVersion(fstCtx, "gem5 Ruby MessageBuffer FST Trace");
 
     emitHierarchy();
+    activeTrace = this;
+    emitInitialMessageBufferStates();
 
-    if (statSamplePeriod > 0) {
-        createStatHierarchy();
-        lastValues.resize(statEntries.size(), 0.0);
-        hasEmitted.resize(statEntries.size(), false);
-    }
-
-    installHooks();
-
-    if (!dumpActive) {
-        std::lock_guard<std::mutex> lock(writerMutex);
-        emitTimeChangeLocked(curTick());
-        fstWriterEmitDumpActive(fstCtx, 0);
-    }
-
-    if (statSamplePeriod > 0) {
-        schedule(sampleStatsEvent, curTick() + statSamplePeriod);
-    }
-
-    DPRINTF(FstTrace,
-            "Tracing %zu static events and %zu stat signals "
-            "into %s\n",
-            eventHandleMap.size(), statEntries.size(),
-            resolvedTracePath.c_str());
+    DPRINTF(FstTrace, "Tracing %zu Ruby MessageBuffers into %s\n",
+            messageBufferSignalMap.size(), resolvedTracePath.c_str());
 }
 
 void
-FstTrace::setDumpActive(bool enable)
+FstTrace::recordMessageBufferPush(const ruby::MessageBuffer *buffer, Tick tick)
 {
-    std::lock_guard<std::mutex> lock(writerMutex);
-
-    if (enable == dumpActive) {
-        return;
-    }
-
-    dumpActive = enable;
-    if (!fstCtx) {
-        return;
-    }
-
-    emitTimeChangeLocked(curTick());
-    fstWriterEmitDumpActive(fstCtx, enable ? 1 : 0);
-
-    // On re-enable, clear hasEmitted so the next stat sample emits all
-    // values unconditionally. Waveform viewers treat blackout exit as
-    // unknown state, so we must re-establish all signal values.
-    if (enable) {
-        std::fill(hasEmitted.begin(), hasEmitted.end(), false);
+    if (activeTrace) {
+        activeTrace->recordMessageBufferEvent(buffer, tick, true);
     }
 }
 
 void
-FstTrace::dispatchTrampoline(const Event *event, void *arg)
+FstTrace::recordMessageBufferPop(const ruby::MessageBuffer *buffer, Tick tick)
 {
-    auto *self = static_cast<FstTrace *>(arg);
-    self->recordDispatch(event, curTick());
+    if (activeTrace) {
+        activeTrace->recordMessageBufferEvent(buffer, tick, false);
+    }
 }
 
 void
 FstTrace::closeTrace()
 {
     std::lock_guard<std::mutex> lock(writerMutex);
-
-    if (hooksInstalled) {
-        for (auto *eventq : hookedQueues) {
-            if (eventq->dispatchHook == &FstTrace::dispatchTrampoline &&
-                eventq->dispatchHookArg == this) {
-                eventq->dispatchHook = nullptr;
-                eventq->dispatchHookArg = nullptr;
-            }
-        }
-        hookedQueues.clear();
-        hooksInstalled = false;
-    }
 
     if (activeTrace == this) {
         activeTrace = nullptr;
@@ -243,61 +192,91 @@ FstTrace::closeTrace()
 }
 
 void
-FstTrace::collectClockSignals()
+FstTrace::collectMessageBuffersAndAliases()
 {
-    clockSignals.clear();
+    messageBuffers.clear();
+    messageBufferAliasesByRouter.clear();
 
-    std::map<uint64_t, Tick> period_by_mhz;
     for (const auto *sim_object : simObjects) {
-        auto *clocked = dynamic_cast<const ClockedObject *>(sim_object);
-        if (!clocked) {
+        if (auto *buffer =
+                dynamic_cast<const ruby::MessageBuffer *>(sim_object)) {
+            messageBuffers.push_back(buffer);
             continue;
         }
 
-        const Tick period = clocked->clockPeriod();
-        const uint64_t mhz = clockPeriodToMHz(period);
-        period_by_mhz.emplace(mhz, period);
-    }
-
-    for (const auto &[mhz, period] : period_by_mhz) {
-        ClockSignal clock_signal;
-        clock_signal.period = period;
-        clock_signal.mhz = mhz;
-        clock_signal.signalName = "clk_" + std::to_string(mhz) + "_mhz";
-        clockSignals.push_back(std::move(clock_signal));
-    }
-}
-
-void
-FstTrace::collectOwnedEvents()
-{
-    ownerEventMap.clear();
-    eventHandleMap.clear();
-
-    for (const auto *event : Event::getAllEvents()) {
-        const auto *owner = Event::lookupStaticOwner(event);
-        if (!owner) {
+        auto *link = dynamic_cast<const ruby::SimpleIntLink *>(sim_object);
+        if (!link) {
             continue;
         }
 
-        ownerEventMap[owner].push_back(event);
+        const auto &p = link->params();
+        const std::string link_name = lastScopeComponent(link->name());
+        const std::string src_name = p.src_node->name();
+        const std::string dst_name = p.dst_node->name();
+        const std::string src_leaf = lastScopeComponent(src_name);
+        const std::string dst_leaf = lastScopeComponent(dst_name);
+        const std::string src_port = p.src_outport.empty()
+                                         ? "unknown"
+                                         : sanitizeSignalName(p.src_outport);
+        const std::string dst_port = p.dst_inport.empty()
+                                         ? "unknown"
+                                         : sanitizeSignalName(p.dst_inport);
+
+        for (const auto *buffer : link->m_buffers) {
+            const std::string buffer_name = lastScopeComponent(buffer->name());
+            messageBufferAliasesByRouter[src_name].push_back({
+                "out_" + src_port + "_to_" + dst_leaf + "_" + link_name,
+                buffer_name,
+                buffer,
+            });
+            messageBufferAliasesByRouter[dst_name].push_back({
+                "in_" + dst_port + "_from_" + src_leaf + "_" + link_name,
+                buffer_name,
+                buffer,
+            });
+        }
     }
 
-    for (auto &[owner, events] : ownerEventMap) {
-        std::sort(events.begin(), events.end(),
-                  [](const Event *lhs, const Event *rhs) {
-                      return lhs->name() < rhs->name();
-                  });
+    for (auto &[router, aliases] : messageBufferAliasesByRouter) {
+        std::sort(
+            aliases.begin(), aliases.end(),
+            [](const MessageBufferAlias &lhs, const MessageBufferAlias &rhs) {
+                if (lhs.linkScope != rhs.linkScope) {
+                    return lhs.linkScope < rhs.linkScope;
+                }
+                return lhs.bufferScope < rhs.bufferScope;
+            });
     }
 }
 
 void
 FstTrace::emitHierarchy()
 {
+    struct ScopeEntry
+    {
+        std::string scope;
+        const ruby::MessageBuffer *buffer = nullptr;
+    };
+
+    std::vector<ScopeEntry> entries;
+    entries.reserve(
+        messageBuffers.size() + messageBufferAliasesByRouter.size());
+    for (const auto *buffer : messageBuffers) {
+        entries.push_back({buffer->name(), buffer});
+    }
+    for (const auto &entry : messageBufferAliasesByRouter) {
+        entries.push_back({entry.first, nullptr});
+    }
+
+    std::sort(entries.begin(), entries.end(),
+              [](const ScopeEntry &lhs, const ScopeEntry &rhs) {
+                  return lhs.scope < rhs.scope;
+              });
+
     std::vector<std::string> current_scope;
 
-    for (const auto *sim_object : simObjects) {
-        const auto scope = splitScopePath(sim_object->name());
+    for (const auto &entry : entries) {
+        const auto scope = splitScopePath(entry.scope);
         size_t common_depth = 0;
 
         while (common_depth < current_scope.size() &&
@@ -317,62 +296,241 @@ FstTrace::emitHierarchy()
             current_scope.push_back(scope[idx]);
         }
 
-        auto owner_it = ownerEventMap.find(sim_object);
-        if (owner_it == ownerEventMap.end()) {
-            continue;
+        if (entry.buffer) {
+            messageBufferSignalMap.emplace(
+                entry.buffer, createMessageBufferSignals(entry.buffer));
         }
 
-        for (const auto *event : owner_it->second) {
-            auto signal_name = sanitizeSignalName(event->name());
-            fstHandle handle =
-                fstWriterCreateVar(fstCtx, FST_VT_VCD_EVENT, FST_VD_IMPLICIT,
-                                   1, signal_name.c_str(), 0);
-            fatal_if(handle == 0, "Failed to create FST variable for %s",
-                     event->name().c_str());
-            eventHandleMap.emplace(event, handle);
-        }
+        emitMessageBufferAliasesForScope(entry.scope);
     }
 
     while (!current_scope.empty()) {
         fstWriterSetUpscope(fstCtx);
         current_scope.pop_back();
     }
+}
 
-    fstWriterSetScope(fstCtx, FST_ST_VCD_MODULE, "clocks", nullptr);
-    for (auto &clock_signal : clockSignals) {
-        clock_signal.handle =
-            fstWriterCreateVar(fstCtx, FST_VT_VCD_INTEGER, FST_VD_IMPLICIT, 64,
-                               clock_signal.signalName.c_str(), 0);
-        fatal_if(clock_signal.handle == 0,
-                 "Failed to create FST clock variable for %s",
-                 clock_signal.signalName.c_str());
-    }
-    fstWriterSetUpscope(fstCtx);
+FstTrace::MessageBufferSignals
+FstTrace::createMessageBufferSignals(const ruby::MessageBuffer *buffer)
+{
+    MessageBufferSignals signals;
+
+    signals.push = fstWriterCreateVar(fstCtx, FST_VT_VCD_EVENT,
+                                      FST_VD_IMPLICIT, 1, "push", 0);
+    signals.pop = fstWriterCreateVar(fstCtx, FST_VT_VCD_EVENT, FST_VD_IMPLICIT,
+                                     1, "pop", 0);
+    signals.currentSize = fstWriterCreateVar(
+        fstCtx, FST_VT_VCD_INTEGER, FST_VD_IMPLICIT, 32, "current_size", 0);
+    signals.occupiedSlots = fstWriterCreateVar(
+        fstCtx, FST_VT_VCD_INTEGER, FST_VD_IMPLICIT, 32, "occupied_slots", 0);
+    signals.stalledMessages =
+        fstWriterCreateVar(fstCtx, FST_VT_VCD_INTEGER, FST_VD_IMPLICIT, 32,
+                           "stalled_messages", 0);
+    signals.deferredMessages =
+        fstWriterCreateVar(fstCtx, FST_VT_VCD_INTEGER, FST_VD_IMPLICIT, 32,
+                           "deferred_messages", 0);
+    signals.capacity = fstWriterCreateVar(fstCtx, FST_VT_VCD_INTEGER,
+                                          FST_VD_IMPLICIT, 32, "capacity", 0);
+    signals.unbounded = fstWriterCreateVar(fstCtx, FST_VT_VCD_INTEGER,
+                                           FST_VD_IMPLICIT, 1, "unbounded", 0);
+    signals.maxDequeueRate =
+        fstWriterCreateVar(fstCtx, FST_VT_VCD_INTEGER, FST_VD_IMPLICIT, 32,
+                           "max_dequeue_rate", 0);
+    signals.totalEnqueued = fstWriterCreateVar(
+        fstCtx, FST_VT_VCD_INTEGER, FST_VD_IMPLICIT, 64, "total_enqueued", 0);
+    signals.totalDequeued = fstWriterCreateVar(
+        fstCtx, FST_VT_VCD_INTEGER, FST_VD_IMPLICIT, 64, "total_dequeued", 0);
+    signals.notAvailableCount =
+        fstWriterCreateVar(fstCtx, FST_VT_VCD_INTEGER, FST_VD_IMPLICIT, 64,
+                           "not_available_count", 0);
+    signals.stallCount = fstWriterCreateVar(
+        fstCtx, FST_VT_VCD_INTEGER, FST_VD_IMPLICIT, 64, "stall_count", 0);
+    signals.stallTicks = fstWriterCreateVar(
+        fstCtx, FST_VT_VCD_INTEGER, FST_VD_IMPLICIT, 64, "stall_ticks", 0);
+    signals.bufferedMessagesStat =
+        fstWriterCreateVar(fstCtx, FST_VT_VCD_INTEGER, FST_VD_IMPLICIT, 32,
+                           "buffered_messages_stat", 0);
+    signals.dequeuesThisCycle =
+        fstWriterCreateVar(fstCtx, FST_VT_VCD_INTEGER, FST_VD_IMPLICIT, 32,
+                           "dequeues_this_cycle", 0);
+    signals.vnet = fstWriterCreateVar(fstCtx, FST_VT_VCD_INTEGER,
+                                      FST_VD_IMPLICIT, 32, "vnet", 0);
+    signals.incomingLink = fstWriterCreateVar(
+        fstCtx, FST_VT_VCD_INTEGER, FST_VD_IMPLICIT, 32, "incoming_link", 0);
+    signals.routingPriority =
+        fstWriterCreateVar(fstCtx, FST_VT_VCD_INTEGER, FST_VD_IMPLICIT, 32,
+                           "routing_priority", 0);
+    signals.strictFifo = fstWriterCreateVar(
+        fstCtx, FST_VT_VCD_INTEGER, FST_VD_IMPLICIT, 1, "strict_fifo", 0);
+    signals.allowZeroLatency =
+        fstWriterCreateVar(fstCtx, FST_VT_VCD_INTEGER, FST_VD_IMPLICIT, 1,
+                           "allow_zero_latency", 0);
+    signals.randomization = fstWriterCreateVar(
+        fstCtx, FST_VT_VCD_INTEGER, FST_VD_IMPLICIT, 32, "randomization", 0);
+    signals.headReadyTick = fstWriterCreateVar(
+        fstCtx, FST_VT_VCD_INTEGER, FST_VD_IMPLICIT, 64, "head_ready_tick", 0);
+
+    fatal_if(signals.push == 0 || signals.pop == 0 ||
+                 signals.currentSize == 0 || signals.capacity == 0 ||
+                 signals.totalEnqueued == 0 || signals.totalDequeued == 0,
+             "Failed to create MessageBuffer trace variables for %s",
+             buffer->name().c_str());
+    return signals;
 }
 
 void
-FstTrace::installHooks()
+FstTrace::createMessageBufferAliasSignals(const MessageBufferSignals &target)
 {
-    fatal_if(mainEventQueue.empty(),
-             "FstTrace %s did not find any main event queues", name().c_str());
+    fstWriterCreateVar(fstCtx, FST_VT_VCD_EVENT, FST_VD_IMPLICIT, 1, "push",
+                       target.push);
+    fstWriterCreateVar(fstCtx, FST_VT_VCD_EVENT, FST_VD_IMPLICIT, 1, "pop",
+                       target.pop);
+    fstWriterCreateVar(fstCtx, FST_VT_VCD_INTEGER, FST_VD_IMPLICIT, 32,
+                       "current_size", target.currentSize);
+    fstWriterCreateVar(fstCtx, FST_VT_VCD_INTEGER, FST_VD_IMPLICIT, 32,
+                       "occupied_slots", target.occupiedSlots);
+    fstWriterCreateVar(fstCtx, FST_VT_VCD_INTEGER, FST_VD_IMPLICIT, 32,
+                       "stalled_messages", target.stalledMessages);
+    fstWriterCreateVar(fstCtx, FST_VT_VCD_INTEGER, FST_VD_IMPLICIT, 32,
+                       "deferred_messages", target.deferredMessages);
+    fstWriterCreateVar(fstCtx, FST_VT_VCD_INTEGER, FST_VD_IMPLICIT, 32,
+                       "capacity", target.capacity);
+    fstWriterCreateVar(fstCtx, FST_VT_VCD_INTEGER, FST_VD_IMPLICIT, 1,
+                       "unbounded", target.unbounded);
+    fstWriterCreateVar(fstCtx, FST_VT_VCD_INTEGER, FST_VD_IMPLICIT, 32,
+                       "max_dequeue_rate", target.maxDequeueRate);
+    fstWriterCreateVar(fstCtx, FST_VT_VCD_INTEGER, FST_VD_IMPLICIT, 64,
+                       "total_enqueued", target.totalEnqueued);
+    fstWriterCreateVar(fstCtx, FST_VT_VCD_INTEGER, FST_VD_IMPLICIT, 64,
+                       "total_dequeued", target.totalDequeued);
+    fstWriterCreateVar(fstCtx, FST_VT_VCD_INTEGER, FST_VD_IMPLICIT, 64,
+                       "not_available_count", target.notAvailableCount);
+    fstWriterCreateVar(fstCtx, FST_VT_VCD_INTEGER, FST_VD_IMPLICIT, 64,
+                       "stall_count", target.stallCount);
+    fstWriterCreateVar(fstCtx, FST_VT_VCD_INTEGER, FST_VD_IMPLICIT, 64,
+                       "stall_ticks", target.stallTicks);
+    fstWriterCreateVar(fstCtx, FST_VT_VCD_INTEGER, FST_VD_IMPLICIT, 32,
+                       "buffered_messages_stat", target.bufferedMessagesStat);
+    fstWriterCreateVar(fstCtx, FST_VT_VCD_INTEGER, FST_VD_IMPLICIT, 32,
+                       "dequeues_this_cycle", target.dequeuesThisCycle);
+    fstWriterCreateVar(fstCtx, FST_VT_VCD_INTEGER, FST_VD_IMPLICIT, 32, "vnet",
+                       target.vnet);
+    fstWriterCreateVar(fstCtx, FST_VT_VCD_INTEGER, FST_VD_IMPLICIT, 32,
+                       "incoming_link", target.incomingLink);
+    fstWriterCreateVar(fstCtx, FST_VT_VCD_INTEGER, FST_VD_IMPLICIT, 32,
+                       "routing_priority", target.routingPriority);
+    fstWriterCreateVar(fstCtx, FST_VT_VCD_INTEGER, FST_VD_IMPLICIT, 1,
+                       "strict_fifo", target.strictFifo);
+    fstWriterCreateVar(fstCtx, FST_VT_VCD_INTEGER, FST_VD_IMPLICIT, 1,
+                       "allow_zero_latency", target.allowZeroLatency);
+    fstWriterCreateVar(fstCtx, FST_VT_VCD_INTEGER, FST_VD_IMPLICIT, 32,
+                       "randomization", target.randomization);
+    fstWriterCreateVar(fstCtx, FST_VT_VCD_INTEGER, FST_VD_IMPLICIT, 64,
+                       "head_ready_tick", target.headReadyTick);
+}
 
-    for (auto *eventq : mainEventQueue) {
-        if (!eventq) {
-            continue;
-        }
-
-        fatal_if(eventq->dispatchHook &&
-                     eventq->dispatchHook != &FstTrace::dispatchTrampoline,
-                 "Event queue %s already has an incompatible dispatch hook",
-                 eventq->name().c_str());
-
-        eventq->dispatchHook = &FstTrace::dispatchTrampoline;
-        eventq->dispatchHookArg = this;
-        hookedQueues.push_back(eventq);
+void
+FstTrace::emitMessageBufferAliasesForScope(const std::string &scope)
+{
+    auto alias_it = messageBufferAliasesByRouter.find(scope);
+    if (alias_it == messageBufferAliasesByRouter.end()) {
+        return;
     }
 
-    hooksInstalled = true;
-    activeTrace = this;
+    for (const auto &alias : alias_it->second) {
+        auto signal_it = messageBufferSignalMap.find(alias.buffer);
+        fatal_if(signal_it == messageBufferSignalMap.end(),
+                 "Missing MessageBuffer trace handles for alias %s.%s",
+                 alias.linkScope.c_str(), alias.bufferScope.c_str());
+
+        fstWriterSetScope(fstCtx, FST_ST_VCD_MODULE, alias.linkScope.c_str(),
+                          nullptr);
+        fstWriterSetScope(fstCtx, FST_ST_VCD_MODULE, alias.bufferScope.c_str(),
+                          nullptr);
+        createMessageBufferAliasSignals(signal_it->second);
+        fstWriterSetUpscope(fstCtx);
+        fstWriterSetUpscope(fstCtx);
+    }
+}
+
+void
+FstTrace::emitInitialMessageBufferStates()
+{
+    emitTimeChangeLocked(curTick());
+    for (const auto *buffer : messageBuffers) {
+        auto handle_it = messageBufferSignalMap.find(buffer);
+        fatal_if(handle_it == messageBufferSignalMap.end(),
+                 "Missing MessageBuffer trace handles for %s",
+                 buffer->name().c_str());
+        emitMessageBufferStateLocked(buffer, handle_it->second);
+    }
+}
+
+void
+FstTrace::emitMessageBufferStateLocked(const ruby::MessageBuffer *buffer,
+                                       const MessageBufferSignals &signals)
+{
+    const auto state = buffer->traceState();
+
+    fstWriterEmitValueChange64(fstCtx, signals.currentSize, 32,
+                               state.currentSize);
+    fstWriterEmitValueChange64(fstCtx, signals.occupiedSlots, 32,
+                               state.occupiedSlots);
+    fstWriterEmitValueChange64(fstCtx, signals.stalledMessages, 32,
+                               state.stalledMessages);
+    fstWriterEmitValueChange64(fstCtx, signals.deferredMessages, 32,
+                               state.deferredMessages);
+    fstWriterEmitValueChange64(fstCtx, signals.capacity, 32, state.capacity);
+    fstWriterEmitValueChange64(fstCtx, signals.unbounded, 1, state.unbounded);
+    fstWriterEmitValueChange64(fstCtx, signals.maxDequeueRate, 32,
+                               state.maxDequeueRate);
+    fstWriterEmitValueChange64(fstCtx, signals.totalEnqueued, 64,
+                               state.totalEnqueued);
+    fstWriterEmitValueChange64(fstCtx, signals.totalDequeued, 64,
+                               state.totalDequeued);
+    fstWriterEmitValueChange64(fstCtx, signals.notAvailableCount, 64,
+                               state.notAvailableCount);
+    fstWriterEmitValueChange64(fstCtx, signals.stallCount, 64,
+                               state.stallCount);
+    fstWriterEmitValueChange64(fstCtx, signals.stallTicks, 64,
+                               state.stallTicks);
+    fstWriterEmitValueChange64(fstCtx, signals.bufferedMessagesStat, 32,
+                               state.bufferedMessagesStat);
+    fstWriterEmitValueChange64(fstCtx, signals.dequeuesThisCycle, 32,
+                               state.dequeuesThisCycle);
+    fstWriterEmitValueChange64(fstCtx, signals.vnet, 32, state.vnet);
+    fstWriterEmitValueChange64(fstCtx, signals.incomingLink, 32,
+                               state.incomingLink);
+    fstWriterEmitValueChange64(fstCtx, signals.routingPriority, 32,
+                               state.routingPriority);
+    fstWriterEmitValueChange64(fstCtx, signals.strictFifo, 1,
+                               state.strictFifo);
+    fstWriterEmitValueChange64(fstCtx, signals.allowZeroLatency, 1,
+                               state.allowZeroLatency);
+    fstWriterEmitValueChange64(fstCtx, signals.randomization, 32,
+                               state.randomization);
+    fstWriterEmitValueChange64(fstCtx, signals.headReadyTick, 64,
+                               state.headReadyTick);
+}
+
+void
+FstTrace::recordMessageBufferEvent(const ruby::MessageBuffer *buffer,
+                                   Tick tick, bool is_push)
+{
+    std::lock_guard<std::mutex> lock(writerMutex);
+    if (!fstCtx) {
+        return;
+    }
+
+    auto handle_it = messageBufferSignalMap.find(buffer);
+    if (handle_it == messageBufferSignalMap.end()) {
+        return;
+    }
+
+    emitTimeChangeLocked(tick);
+    fstWriterEmitValueChange(
+        fstCtx, is_push ? handle_it->second.push : handle_it->second.pop, "1");
+    emitMessageBufferStateLocked(buffer, handle_it->second);
 }
 
 void
@@ -380,258 +538,8 @@ FstTrace::emitTimeChangeLocked(Tick tick)
 {
     if (!hasWrittenTime || tick != lastWrittenTick) {
         fstWriterEmitTimeChange(fstCtx, tick);
-        for (const auto &clock_signal : clockSignals) {
-            fstWriterEmitValueChange64(fstCtx, clock_signal.handle, 64,
-                                       tick / clock_signal.period);
-        }
         lastWrittenTick = tick;
         hasWrittenTime = true;
-    }
-}
-
-void
-FstTrace::recordDispatch(const Event *event, Tick tick)
-{
-    if (!dumpActive || !Event::lookupStaticOwner(event)) {
-        return;
-    }
-
-    std::lock_guard<std::mutex> lock(writerMutex);
-    if (!fstCtx || !dumpActive) {
-        return;
-    }
-
-    auto handle_it = eventHandleMap.find(event);
-    if (handle_it == eventHandleMap.end()) {
-        return;
-    }
-
-    emitTimeChangeLocked(tick);
-    fstWriterEmitValueChange(fstCtx, handle_it->second, "1");
-}
-
-// --- Stage 2: Periodic stat sampling ---
-//
-// Two-pass approach to build the FST stat hierarchy:
-//
-// Pass 1 (collectStatGroup / collectStatSignals): Walk the Group tree
-// and build an in-memory trie (ScopeNode). Each dot-separated component
-// in a stat's relative name becomes a trie edge, so stats from merged
-// groups (e.g. "Cache_Controller.BUSY_BLKD.Load") produce intermediate
-// scope nodes rather than flat signal names with underscores.
-//
-// Pass 2 (emitScopeNode): Walk the trie depth-first, emitting FST
-// scopes for interior nodes and FST_VT_VCD_REAL variables for leaves.
-
-void
-FstTrace::createStatHierarchy()
-{
-    ScopeNode root;
-    collectStatGroup(Root::root(), "", root);
-
-    fstWriterSetScope(fstCtx, FST_ST_VCD_MODULE, "stats", nullptr);
-    emitScopeNode(root);
-    fstWriterSetUpscope(fstCtx);
-
-    DPRINTF(FstTrace, "Created %zu stat signals in FST hierarchy\n",
-            statEntries.size());
-}
-
-void
-FstTrace::collectStatGroup(const statistics::Group *group,
-                           const std::string &scopePrefix, ScopeNode &node)
-{
-    for (auto *info : group->getStats()) {
-        collectStatSignals(info, scopePrefix, node);
-    }
-
-    for (const auto &[child_name, child] : group->getStatGroups()) {
-        std::string childPrefix = scopePrefix.empty()
-                                      ? child_name + "."
-                                      : scopePrefix + child_name + ".";
-        collectStatGroup(child, childPrefix, node.children[child_name]);
-    }
-}
-
-void
-FstTrace::collectStatSignals(const statistics::Info *info,
-                             const std::string &scopePrefix, ScopeNode &node)
-{
-    // Compute the stat name relative to the current group scope.
-    // New-style stats have info->name = "system.ruby.foo" matching
-    // the group prefix "system.ruby." — strip the prefix.
-    // Old-style stats (e.g. SLICC profiler) have info->name =
-    // "Cache_Controller.ActionStalledOnHazard" with NO prefix at all —
-    // use the entire name as-is so dots become scope nodes.
-    std::string relName;
-    if (!scopePrefix.empty() && info->name.size() > scopePrefix.size() &&
-        info->name.compare(0, scopePrefix.size(), scopePrefix) == 0) {
-        relName = info->name.substr(scopePrefix.size());
-    } else {
-        relName = info->name;
-    }
-
-    // Split relName by dots to find the target ScopeNode. All
-    // components except the last become intermediate scope nodes;
-    // the last becomes the signal leaf name.
-    ScopeNode *target = &node;
-    std::string remaining = relName;
-    while (true) {
-        auto dot = remaining.find('.');
-        if (dot == std::string::npos) {
-            break;
-        }
-        target = &target->children[remaining.substr(0, dot)];
-        remaining = remaining.substr(dot + 1);
-    }
-    std::string leaf = sanitizeSignalName(remaining);
-
-    // Dispatch on Info subclass to create PendingSignal entries
-    if (auto *si = dynamic_cast<const statistics::ScalarInfo *>(info)) {
-        (void)si;
-        target->signals.push_back({info, StatKind::Scalar, 0, leaf});
-    }
-    // FormulaInfo before VectorInfo (FormulaInfo inherits VectorInfo)
-    else if (auto *fi = dynamic_cast<const statistics::FormulaInfo *>(info)) {
-        for (size_t i = 0; i < fi->size(); ++i) {
-            std::string ename =
-                fi->subnames.size() > i && !fi->subnames[i].empty()
-                    ? sanitizeSignalName(fi->subnames[i])
-                    : leaf + "_" + std::to_string(i);
-            target->signals.push_back({info, StatKind::VectorElem, i, ename});
-        }
-        target->signals.push_back(
-            {info, StatKind::VectorTotal, 0, leaf + "_total"});
-    } else if (auto *vi = dynamic_cast<const statistics::VectorInfo *>(info)) {
-        for (size_t i = 0; i < vi->size(); ++i) {
-            std::string ename =
-                vi->subnames.size() > i && !vi->subnames[i].empty()
-                    ? sanitizeSignalName(vi->subnames[i])
-                    : leaf + "_" + std::to_string(i);
-            target->signals.push_back({info, StatKind::VectorElem, i, ename});
-        }
-        target->signals.push_back(
-            {info, StatKind::VectorTotal, 0, leaf + "_total"});
-    } else if (auto *di = dynamic_cast<const statistics::DistInfo *>(info)) {
-        (void)di;
-        target->signals.push_back(
-            {info, StatKind::DistMean, 0, leaf + "_mean"});
-        target->signals.push_back(
-            {info, StatKind::DistSamples, 0, leaf + "_samples"});
-    } else if (auto *shi =
-                   dynamic_cast<const statistics::SparseHistInfo *>(info)) {
-        (void)shi;
-        target->signals.push_back(
-            {info, StatKind::SparseHistSamples, 0, leaf + "_samples"});
-    }
-}
-
-void
-FstTrace::emitScopeNode(ScopeNode &node)
-{
-    // Emit signals at this level
-    for (auto &sig : node.signals) {
-        fstHandle h =
-            fstWriterCreateVar(fstCtx, FST_VT_VCD_REAL, FST_VD_OUTPUT, 64,
-                               sig.signalName.c_str(), 0);
-        fatal_if(h == 0, "Failed to create FST stat signal '%s'",
-                 sig.signalName.c_str());
-        statEntries.push_back({h, sig.info, sig.kind, sig.index});
-    }
-
-    // Recurse into child scopes (std::map keeps them sorted)
-    for (auto &[child_name, child] : node.children) {
-        fstWriterSetScope(fstCtx, FST_ST_VCD_MODULE, child_name.c_str(),
-                          nullptr);
-        emitScopeNode(child);
-        fstWriterSetUpscope(fstCtx);
-    }
-}
-
-void
-FstTrace::sampleStats()
-{
-    {
-        std::lock_guard<std::mutex> lock(writerMutex);
-
-        // Skip sampling during blackout regions. Stat value changes
-        // inside FST blackout would be silently discarded by viewers.
-        if (!dumpActive || !fstCtx) {
-            schedule(sampleStatsEvent, curTick() + statSamplePeriod);
-            return;
-        }
-
-        // Recursively prepare all stats (formulas, averages recompute).
-        // preDumpStats() walks child groups but does NOT call prepare()
-        // on individual Info objects — we must do that ourselves.
-        Root::root()->preDumpStats();
-        prepareStatsRecursive(Root::root());
-
-        emitTimeChangeLocked(curTick());
-
-        for (size_t i = 0; i < statEntries.size(); ++i) {
-            double val = readStatValue(statEntries[i]);
-
-            // Use hasEmitted flag instead of NaN sentinel. NaN != NaN
-            // is always true in IEEE 754, which would defeat delta
-            // compression if we used NaN as the initial "no value" marker.
-            if (!hasEmitted[i] || val != lastValues[i]) {
-                // Emit as raw double bytes for FST_VT_VCD_REAL signals
-                fstWriterEmitValueChange(fstCtx, statEntries[i].handle, &val);
-                lastValues[i] = val;
-                hasEmitted[i] = true;
-            }
-        }
-    }
-
-    schedule(sampleStatsEvent, curTick() + statSamplePeriod);
-}
-
-void
-FstTrace::prepareStatsRecursive(statistics::Group *group)
-{
-    for (auto *info : group->getStats()) {
-        info->prepare();
-    }
-
-    for (auto &[child_name, child] : group->getStatGroups()) {
-        prepareStatsRecursive(child);
-    }
-}
-
-double
-FstTrace::readStatValue(const StatEntry &entry) const
-{
-    switch (entry.kind) {
-        case StatKind::Scalar: {
-            auto *si = static_cast<const statistics::ScalarInfo *>(entry.info);
-            return si->result();
-        }
-        case StatKind::VectorElem: {
-            auto *vi = static_cast<const statistics::VectorInfo *>(entry.info);
-            const auto &res = vi->result();
-            return entry.index < res.size() ? res[entry.index] : 0.0;
-        }
-        case StatKind::VectorTotal: {
-            auto *vi = static_cast<const statistics::VectorInfo *>(entry.info);
-            return vi->total();
-        }
-        case StatKind::DistMean: {
-            auto *di = static_cast<const statistics::DistInfo *>(entry.info);
-            return di->data.samples > 0 ? di->data.sum / di->data.samples
-                                        : 0.0;
-        }
-        case StatKind::DistSamples: {
-            auto *di = static_cast<const statistics::DistInfo *>(entry.info);
-            return static_cast<double>(di->data.samples);
-        }
-        case StatKind::SparseHistSamples: {
-            auto *shi =
-                static_cast<const statistics::SparseHistInfo *>(entry.info);
-            return static_cast<double>(shi->data.samples);
-        }
-        default:
-            return 0.0;
     }
 }
 

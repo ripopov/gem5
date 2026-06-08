@@ -14,6 +14,13 @@ TIMESTAMP  = $(shell date +%Y%m%d-%H%M%S)
 RN_MODE ?= rnf_l2
 ACTIVE_CORES ?= all
 NUM_OUTSTANDING_REQS ?= 4
+NETWORK ?= garnet
+MESSAGE_BUFFER_VCD ?= 0
+EXTRA_ARGS ?=
+
+ifeq ($(MESSAGE_BUFFER_VCD),1)
+MESSAGE_BUFFER_VCD_ARGS := --message-buffer-vcd
+endif
 
 SCENARIOS := ping_pong memset
 
@@ -45,9 +52,12 @@ run-$(1):
 	    -d $$(GEM5_ROOT)/m5out/rbook-tb-gem5-$(1)-$$(RN_MODE)-$$(TIMESTAMP) \
 	    $$(DRIVER) \
 	    --scenario=$(1) \
+	    --network=$$(NETWORK) \
 	    --active-cores=$$(ACTIVE_CORES) \
 	    --num-outstanding-reqs=$$(NUM_OUTSTANDING_REQS) \
-	    --rn-mode=$$(RN_MODE)
+	    --rn-mode=$$(RN_MODE) \
+	    $$(MESSAGE_BUFFER_VCD_ARGS) \
+	    $$(EXTRA_ARGS)
 	@ln -sfn $$(GEM5_ROOT)/m5out/rbook-tb-gem5-$(1)-$$(RN_MODE)-$$(TIMESTAMP) \
 	    m5out/last-$(1)-$$(RN_MODE)
 endef

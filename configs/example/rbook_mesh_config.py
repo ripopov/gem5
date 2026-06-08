@@ -48,7 +48,7 @@ parser.add_argument(
 parser.add_argument(
     "--wave-trace",
     action="store_true",
-    help="Enable FST waveform tracing (disabled by default)",
+    help="Enable Ruby MessageBuffer FST waveform tracing (disabled by default)",
 )
 # ---------------------------------------------------------------------------
 # Defaults below come from the hotspot-heavy single-thread bottleneck sweep
@@ -235,11 +235,7 @@ if args.trace_output is not None:
 
 root = Root(full_system=False, system=system)
 if args.wave_trace:
-    root.trace = FstTrace(
-        trace_file="trace.fst",
-        start_active=True,
-        stat_sample_period=5000000,  # ~10,000 CPU cycles at 2GHz
-    )
+    root.trace = FstTrace(trace_file="message_buffers.fst")
 m5.instantiate()
 exit_event = m5.simulate()
 

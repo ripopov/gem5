@@ -24,6 +24,7 @@ import m5
 from m5.defines import buildEnv
 from m5.objects import (
     AddrRange,
+    FstTrace,
     Root,
     SrcClockDomain,
     System,
@@ -128,6 +129,18 @@ parser.add_argument(
     "'rni': Seq -> cache-less DMA controller -> mesh. "
     "Neither mode instantiates the side router that CHI_RNF normally "
     "adds.",
+)
+parser.add_argument(
+    "--message-buffer-vcd",
+    action="store_true",
+    help="Dump Ruby MessageBuffer enqueue/dequeue waveforms to an FST file "
+    "using VCD signal types.",
+)
+parser.add_argument(
+    "--message-buffer-vcd-file",
+    default="message_buffers.fst",
+    help="Output file for --message-buffer-vcd, relative to the gem5 "
+    "output directory unless absolute.",
 )
 
 if buildEnv["PROTOCOL"] == "MULTIPLE" and not any(
@@ -354,6 +367,10 @@ for i, drv in enumerate(system.cpu):
 # --- Instantiate and run -----------------------------------------------------
 
 root = Root(full_system=False, system=system)
+if args.message_buffer_vcd:
+    root.message_buffer_vcd = FstTrace(
+        trace_file=args.message_buffer_vcd_file,
+    )
 
 root.apply_config(args.param)
 

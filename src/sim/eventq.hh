@@ -297,8 +297,6 @@ class Event : public EventBase, public Serializable
     Tick whenScheduled; //!< time scheduled
 #endif
 
-    static std::vector<Event *> allEvents;
-
     void
     setWhen(Tick when, EventQueue *q)
     {
@@ -401,15 +399,6 @@ class Event : public EventBase, public Serializable
     /** @} */
 
   public:
-    static const std::vector<Event *> &
-    getAllEvents()
-    {
-        return allEvents;
-    }
-
-    static const SimObject *lookupStaticOwner(const Event *event);
-
-  public:
 
     /*
      * Event constructor
@@ -430,7 +419,6 @@ class Event : public EventBase, public Serializable
         whenCreated = curTick();
         whenScheduled = 0;
 #endif
-        allEvents.push_back(this);
     }
 
     Event(const SimObject &owner, Priority p = Default_Pri, Flags f = 0);
@@ -755,9 +743,6 @@ class EventQueue
      * @ingroup api_eventq
      */
     EventQueue(const std::string &n);
-
-    void (*dispatchHook)(const Event *, void *) = nullptr;
-    void *dispatchHookArg = nullptr;
 
     /**
      * @ingroup api_eventq
@@ -1119,8 +1104,6 @@ public:
       : MemberEventWrapper(owner, *object, del, p)
   {}
 
-  [[deprecated("Pass owning SimObject as first argument "
-               "for FST traceability")]]
   MemberEventWrapper(CLASS *object, bool del = false, Priority p = Default_Pri)
       : MemberEventWrapper{*object, del, p}
   {}
@@ -1144,8 +1127,6 @@ public:
       gem5_assert(mObject);
   }
 
-  [[deprecated("Pass owning SimObject as first argument "
-               "for FST traceability")]]
   MemberEventWrapper(CLASS &object, bool del = false, Priority p = Default_Pri)
       : Event(p), Named(object.name() + ".wrapped_event"), mObject(&object)
   {
@@ -1192,8 +1173,6 @@ class EventFunctionWrapper : public Event
         }
     }
 
-    [[deprecated("Pass owning SimObject as first argument "
-                 "for FST traceability")]]
     EventFunctionWrapper(const std::function<void(void)> &callback,
                          const std::string &name, bool del = false,
                          Priority p = Default_Pri)

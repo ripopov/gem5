@@ -30,7 +30,6 @@
 #include <gtest/gtest.h>
 #include <unistd.h>
 
-#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <string>
@@ -62,51 +61,55 @@ class FstTraceRoundTripTest : public ::testing::Test
     }
 };
 
-TEST_F(FstTraceRoundTripTest, HierarchyAndEventMarkersRoundTrip)
+TEST_F(FstTraceRoundTripTest, MessageBufferSignalsRoundTrip)
 {
     fstWriterContext *writer = fstWriterCreate(fstPath.c_str(), 1);
     ASSERT_NE(writer, nullptr);
 
     fstWriterSetTimescale(writer, -12);
-    fstWriterSetScope(writer, FST_ST_VCD_MODULE, "root", nullptr);
-    fstWriterSetScope(writer, FST_ST_VCD_MODULE, "tester", nullptr);
-    fstHandle event =
-        fstWriterCreateVar(writer, FST_VT_VCD_EVENT, FST_VD_IMPLICIT, 1,
-                           "setStats_wrapped_function_event", 0);
-    ASSERT_NE(event, 0u);
-    fstWriterSetUpscope(writer);
-    fstWriterSetUpscope(writer);
+    fstWriterSetScope(writer, FST_ST_VCD_MODULE, "system", nullptr);
+    fstWriterSetScope(writer, FST_ST_VCD_MODULE, "ruby", nullptr);
+    fstWriterSetScope(writer, FST_ST_VCD_MODULE, "hnf00", nullptr);
+    fstWriterSetScope(writer, FST_ST_VCD_MODULE, "cntrl", nullptr);
+    fstWriterSetScope(writer, FST_ST_VCD_MODULE, "reqIn", nullptr);
+
+    fstHandle push = fstWriterCreateVar(writer, FST_VT_VCD_EVENT,
+                                        FST_VD_IMPLICIT, 1, "push", 0);
+    fstHandle pop = fstWriterCreateVar(writer, FST_VT_VCD_EVENT,
+                                       FST_VD_IMPLICIT, 1, "pop", 0);
+    fstHandle current_size =
+        fstWriterCreateVar(writer, FST_VT_VCD_INTEGER, FST_VD_IMPLICIT, 32,
+                           "current_size", 0);
+    ASSERT_NE(push, 0u);
+    ASSERT_NE(pop, 0u);
+    ASSERT_NE(current_size, 0u);
 
     fstWriterEmitTimeChange(writer, 10);
-    fstWriterEmitValueChange(writer, event, "1");
+    fstWriterEmitValueChange(writer, push, "1");
+    fstWriterEmitValueChange64(writer, current_size, 32, 1);
     fstWriterEmitTimeChange(writer, 20);
-    fstWriterEmitValueChange(writer, event, "1");
-    fstWriterEmitTimeChange(writer, 30);
+    fstWriterEmitValueChange(writer, pop, "1");
+    fstWriterEmitValueChange64(writer, current_size, 32, 0);
     fstWriterClose(writer);
 
     fstReaderContext *reader = fstReaderOpen(fstPath.c_str());
     ASSERT_NE(reader, nullptr);
 
-    EXPECT_EQ(fstReaderGetScopeCount(reader), 2u);
-    EXPECT_EQ(fstReaderGetVarCount(reader), 1u);
-    EXPECT_EQ(fstReaderGetStartTime(reader), 10u);
-    EXPECT_EQ(fstReaderGetEndTime(reader), 30u);
+    std::vector<unsigned char> var_types;
+    std::vector<std::string> var_names;
+    while (auto *hier = fstReaderIterateHier(reader)) {
+        if (hier->htyp == FST_HT_VAR) {
+            var_types.push_back(hier->u.var.typ);
+            var_names.emplace_back(hier->u.var.name);
+        }
+    }
 
-    struct fstHier *hier = fstReaderIterateHier(reader);
-    ASSERT_NE(hier, nullptr);
-    EXPECT_EQ(hier->htyp, FST_HT_SCOPE);
-    EXPECT_STREQ(hier->u.scope.name, "root");
-
-    hier = fstReaderIterateHier(reader);
-    ASSERT_NE(hier, nullptr);
-    EXPECT_EQ(hier->htyp, FST_HT_SCOPE);
-    EXPECT_STREQ(hier->u.scope.name, "tester");
-
-    hier = fstReaderIterateHier(reader);
-    ASSERT_NE(hier, nullptr);
-    EXPECT_EQ(hier->htyp, FST_HT_VAR);
-    EXPECT_EQ(hier->u.var.typ, FST_VT_VCD_EVENT);
-    EXPECT_STREQ(hier->u.var.name, "setStats_wrapped_function_event");
+    EXPECT_EQ(var_names,
+              (std::vector<std::string>{"push", "pop", "current_size"}));
+    ASSERT_EQ(var_types.size(), 3u);
+    EXPECT_EQ(var_types[0], FST_VT_VCD_EVENT);
+    EXPECT_EQ(var_types[1], FST_VT_VCD_EVENT);
+    EXPECT_EQ(var_types[2], FST_VT_VCD_INTEGER);
 
     fstReaderSetFacProcessMaskAll(reader);
     std::vector<uint64_t> change_times;
@@ -118,240 +121,62 @@ TEST_F(FstTraceRoundTripTest, HierarchyAndEventMarkersRoundTrip)
         },
         &change_times, nullptr);
 
-    EXPECT_EQ(change_times, (std::vector<uint64_t>{10, 20}));
+    EXPECT_EQ(change_times, (std::vector<uint64_t>{10, 10, 20, 20}));
     fstReaderClose(reader);
 }
 
-TEST_F(FstTraceRoundTripTest, BlackoutRegionsRoundTrip)
+TEST_F(FstTraceRoundTripTest, AliasedVariablesRoundTrip)
 {
     fstWriterContext *writer = fstWriterCreate(fstPath.c_str(), 1);
     ASSERT_NE(writer, nullptr);
 
-    fstHandle event = fstWriterCreateVar(writer, FST_VT_VCD_EVENT,
-                                         FST_VD_IMPLICIT, 1, "event", 0);
-    ASSERT_NE(event, 0u);
-
-    fstWriterEmitTimeChange(writer, 5);
-    fstWriterEmitValueChange(writer, event, "1");
-    fstWriterEmitTimeChange(writer, 10);
-    fstWriterEmitDumpActive(writer, 0);
-    fstWriterEmitTimeChange(writer, 20);
-    fstWriterEmitDumpActive(writer, 1);
-    fstWriterEmitTimeChange(writer, 25);
-    fstWriterEmitValueChange(writer, event, "1");
-    fstWriterEmitTimeChange(writer, 30);
-    fstWriterClose(writer);
-
-    fstReaderContext *reader = fstReaderOpen(fstPath.c_str());
-    ASSERT_NE(reader, nullptr);
-
-    EXPECT_EQ(fstReaderGetNumberDumpActivityChanges(reader), 2u);
-    EXPECT_EQ(fstReaderGetDumpActivityChangeTime(reader, 0), 10u);
-    EXPECT_EQ(fstReaderGetDumpActivityChangeValue(reader, 0), 0u);
-    EXPECT_EQ(fstReaderGetDumpActivityChangeTime(reader, 1), 20u);
-    EXPECT_EQ(fstReaderGetDumpActivityChangeValue(reader, 1), 1u);
-
-    fstReaderClose(reader);
-}
-
-TEST_F(FstTraceRoundTripTest, RealValuedSignalRoundTrip)
-{
-    fstWriterContext *writer = fstWriterCreate(fstPath.c_str(), 1);
-    ASSERT_NE(writer, nullptr);
-
-    fstWriterSetTimescale(writer, -12);
-    fstWriterSetScope(writer, FST_ST_VCD_MODULE, "stats", nullptr);
-    fstHandle sig = fstWriterCreateVar(writer, FST_VT_VCD_REAL, FST_VD_OUTPUT,
-                                       64, "numCycles", 0);
-    ASSERT_NE(sig, 0u);
+    fstWriterSetScope(writer, FST_ST_VCD_MODULE, "system", nullptr);
+    fstWriterSetScope(writer, FST_ST_VCD_MODULE, "ruby", nullptr);
+    fstWriterSetScope(writer, FST_ST_VCD_MODULE, "network", nullptr);
+    fstWriterSetScope(writer, FST_ST_VCD_MODULE, "int_links000", nullptr);
+    fstWriterSetScope(writer, FST_ST_VCD_MODULE, "buffers0", nullptr);
+    fstHandle original = fstWriterCreateVar(
+        writer, FST_VT_VCD_INTEGER, FST_VD_IMPLICIT, 32, "current_size", 0);
+    ASSERT_NE(original, 0u);
+    fstWriterSetUpscope(writer);
     fstWriterSetUpscope(writer);
 
-    double val1 = 42.5;
-    double val2 = 1234567.89;
-    double val3 = 0.0;
+    fstWriterSetScope(writer, FST_ST_VCD_MODULE, "routers00", nullptr);
+    fstWriterSetScope(writer, FST_ST_VCD_MODULE,
+                      "out_East_to_routers01_int_links000", nullptr);
+    fstWriterSetScope(writer, FST_ST_VCD_MODULE, "buffers0", nullptr);
+    fstHandle alias =
+        fstWriterCreateVar(writer, FST_VT_VCD_INTEGER, FST_VD_IMPLICIT, 32,
+                           "current_size", original);
+    ASSERT_EQ(alias, original);
+    fstWriterSetUpscope(writer);
+    fstWriterSetUpscope(writer);
+    fstWriterSetUpscope(writer);
+    fstWriterSetUpscope(writer);
+    fstWriterSetUpscope(writer);
+    fstWriterSetUpscope(writer);
 
-    fstWriterEmitTimeChange(writer, 100);
-    fstWriterEmitValueChange(writer, sig, &val1);
-    fstWriterEmitTimeChange(writer, 200);
-    fstWriterEmitValueChange(writer, sig, &val2);
-    fstWriterEmitTimeChange(writer, 300);
-    fstWriterEmitValueChange(writer, sig, &val3);
+    fstWriterEmitTimeChange(writer, 10);
+    fstWriterEmitValueChange64(writer, original, 32, 7);
     fstWriterClose(writer);
 
     fstReaderContext *reader = fstReaderOpen(fstPath.c_str());
     ASSERT_NE(reader, nullptr);
 
-    EXPECT_EQ(fstReaderGetStartTime(reader), 100u);
-    EXPECT_EQ(fstReaderGetEndTime(reader), 300u);
-
-    // Verify hierarchy
-    struct fstHier *hier = fstReaderIterateHier(reader);
-    ASSERT_NE(hier, nullptr);
-    EXPECT_EQ(hier->htyp, FST_HT_SCOPE);
-    EXPECT_STREQ(hier->u.scope.name, "stats");
-
-    hier = fstReaderIterateHier(reader);
-    ASSERT_NE(hier, nullptr);
-    EXPECT_EQ(hier->htyp, FST_HT_VAR);
-    EXPECT_EQ(hier->u.var.typ, FST_VT_VCD_REAL);
-    EXPECT_STREQ(hier->u.var.name, "numCycles");
-
-    // Read back values
-    struct RealChange
-    {
-        uint64_t time;
-        double value;
-    };
-    std::vector<RealChange> changes;
-
-    fstReaderSetFacProcessMaskAll(reader);
-    fstReaderIterBlocks(
-        reader,
-        [](void *data, uint64_t time, fstHandle, const unsigned char *value) {
-            auto *out = static_cast<std::vector<RealChange> *>(data);
-            // FST reader passes real values as ASCII strings
-            double v =
-                std::strtod(reinterpret_cast<const char *>(value), nullptr);
-            out->push_back({time, v});
-        },
-        &changes, nullptr);
-
-    ASSERT_EQ(changes.size(), 3u);
-    EXPECT_EQ(changes[0].time, 100u);
-    EXPECT_DOUBLE_EQ(changes[0].value, 42.5);
-    EXPECT_EQ(changes[1].time, 200u);
-    EXPECT_DOUBLE_EQ(changes[1].value, 1234567.89);
-    EXPECT_EQ(changes[2].time, 300u);
-    EXPECT_DOUBLE_EQ(changes[2].value, 0.0);
-
-    fstReaderClose(reader);
-}
-
-TEST_F(FstTraceRoundTripTest, RealValuedDeltaOnlyEncoding)
-{
-    // Verify that emitting the same double value at two different times
-    // still produces two value change records (FST stores all emitted
-    // changes — delta-only is an optimization in our writer code, not
-    // in the FST format itself). This test validates the round-trip
-    // behavior that our delta logic depends on.
-    fstWriterContext *writer = fstWriterCreate(fstPath.c_str(), 1);
-    ASSERT_NE(writer, nullptr);
-
-    fstHandle sig = fstWriterCreateVar(writer, FST_VT_VCD_REAL, FST_VD_OUTPUT,
-                                       64, "counter", 0);
-    ASSERT_NE(sig, 0u);
-
-    double val = 100.0;
-    fstWriterEmitTimeChange(writer, 1000);
-    fstWriterEmitValueChange(writer, sig, &val);
-    fstWriterEmitTimeChange(writer, 2000);
-    fstWriterEmitValueChange(writer, sig, &val); // same value
-    fstWriterEmitTimeChange(writer, 3000);
-    double new_val = 200.0;
-    fstWriterEmitValueChange(writer, sig, &new_val); // changed
-    fstWriterClose(writer);
-
-    fstReaderContext *reader = fstReaderOpen(fstPath.c_str());
-    ASSERT_NE(reader, nullptr);
-
-    struct RealChange
-    {
-        uint64_t time;
-        double value;
-    };
-    std::vector<RealChange> changes;
-
-    fstReaderSetFacProcessMaskAll(reader);
-    fstReaderIterBlocks(
-        reader,
-        [](void *data, uint64_t time, fstHandle, const unsigned char *value) {
-            auto *out = static_cast<std::vector<RealChange> *>(data);
-            double v =
-                std::strtod(reinterpret_cast<const char *>(value), nullptr);
-            out->push_back({time, v});
-        },
-        &changes, nullptr);
-
-    // FST stores all explicitly emitted changes
-    ASSERT_EQ(changes.size(), 3u);
-    EXPECT_DOUBLE_EQ(changes[0].value, 100.0);
-    EXPECT_DOUBLE_EQ(changes[1].value, 100.0);
-    EXPECT_DOUBLE_EQ(changes[2].value, 200.0);
-
-    fstReaderClose(reader);
-}
-
-TEST_F(FstTraceRoundTripTest, StatScopeHierarchyRoundTrip)
-{
-    fstWriterContext *writer = fstWriterCreate(fstPath.c_str(), 1);
-    ASSERT_NE(writer, nullptr);
-
-    fstWriterSetTimescale(writer, -12);
-
-    // Build a hierarchy like the stat sampling would produce:
-    // stats / system / cpu0 / {numCycles, numInsts}
-    // stats / system / mem_ctrl / {bytesRead, bytesRead_mean}
-    fstWriterSetScope(writer, FST_ST_VCD_MODULE, "stats", nullptr);
-    fstWriterSetScope(writer, FST_ST_VCD_MODULE, "system", nullptr);
-
-    fstWriterSetScope(writer, FST_ST_VCD_MODULE, "cpu0", nullptr);
-    fstHandle numCycles = fstWriterCreateVar(
-        writer, FST_VT_VCD_REAL, FST_VD_OUTPUT, 64, "numCycles", 0);
-    fstHandle numInsts = fstWriterCreateVar(writer, FST_VT_VCD_REAL,
-                                            FST_VD_OUTPUT, 64, "numInsts", 0);
-    ASSERT_NE(numCycles, 0u);
-    ASSERT_NE(numInsts, 0u);
-    fstWriterSetUpscope(writer); // cpu0
-
-    fstWriterSetScope(writer, FST_ST_VCD_MODULE, "mem_ctrl", nullptr);
-    fstHandle bytesRead = fstWriterCreateVar(
-        writer, FST_VT_VCD_REAL, FST_VD_OUTPUT, 64, "bytesRead", 0);
-    fstHandle bytesReadMean = fstWriterCreateVar(
-        writer, FST_VT_VCD_REAL, FST_VD_OUTPUT, 64, "bytesRead_mean", 0);
-    ASSERT_NE(bytesRead, 0u);
-    ASSERT_NE(bytesReadMean, 0u);
-    fstWriterSetUpscope(writer); // mem_ctrl
-
-    fstWriterSetUpscope(writer); // system
-    fstWriterSetUpscope(writer); // stats
-
-    // Emit some values
-    double cycles = 1000.0;
-    double insts = 500.0;
-    double bytes = 4096.0;
-    double mean = 64.0;
-
-    fstWriterEmitTimeChange(writer, 50000);
-    fstWriterEmitValueChange(writer, numCycles, &cycles);
-    fstWriterEmitValueChange(writer, numInsts, &insts);
-    fstWriterEmitValueChange(writer, bytesRead, &bytes);
-    fstWriterEmitValueChange(writer, bytesReadMean, &mean);
-    fstWriterClose(writer);
-
-    // Read back and verify hierarchy
-    fstReaderContext *reader = fstReaderOpen(fstPath.c_str());
-    ASSERT_NE(reader, nullptr);
-
-    EXPECT_EQ(fstReaderGetScopeCount(reader),
-              4u); // stats, system, cpu0, mem_ctrl
-    EXPECT_EQ(fstReaderGetVarCount(reader), 4u);
-
-    std::vector<std::string> scope_names;
-    std::vector<std::string> var_names;
-
+    std::vector<std::string> vars;
+    std::vector<fstHandle> handles;
     while (auto *hier = fstReaderIterateHier(reader)) {
-        if (hier->htyp == FST_HT_SCOPE) {
-            scope_names.emplace_back(hier->u.scope.name);
-        } else if (hier->htyp == FST_HT_VAR) {
-            var_names.emplace_back(hier->u.var.name);
+        if (hier->htyp == FST_HT_VAR) {
+            vars.emplace_back(hier->u.var.name);
+            handles.push_back(hier->u.var.handle);
         }
     }
 
-    EXPECT_EQ(scope_names, (std::vector<std::string>{"stats", "system", "cpu0",
-                                                     "mem_ctrl"}));
-    EXPECT_EQ(var_names,
-              (std::vector<std::string>{"numCycles", "numInsts", "bytesRead",
-                                        "bytesRead_mean"}));
+    ASSERT_EQ(vars.size(), 2u);
+    EXPECT_EQ(vars,
+              (std::vector<std::string>{"current_size", "current_size"}));
+    ASSERT_EQ(handles.size(), 2u);
+    EXPECT_EQ(handles[0], handles[1]);
 
     fstReaderClose(reader);
 }
