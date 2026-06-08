@@ -1024,6 +1024,10 @@ for variant_path in variant_paths:
     ext_dir = Dir('#ext').abspath
     variant_ext = os.path.join(variant_path, 'ext')
     for root, dirs, files in os.walk(ext_dir):
+        dirs[:] = [
+            d for d in dirs
+            if not os.path.isdir(os.path.join(root, d, '.git'))
+        ]
         if 'SConscript' in files:
             build_dir = os.path.relpath(root, ext_dir)
             SConscript(os.path.join(root, 'SConscript'),

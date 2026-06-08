@@ -110,6 +110,64 @@ python3 util/trafficgen_memory_sweep/run_trafficgen_memory_sweep.py
 
 Outputs land in `m5out/ddr4-2400-4gb-x8-memory-sweep/` by default.
 
+## DDR5-4800 native gem5 vs Ramulator2
+
+`trafficgen-ddr5.py` compares a native gem5 `MemCtrl`/`DRAMInterface`
+backend with Ramulator2 v2.1 through the same no-cache TrafficGen path. The
+device under test is one DDR5 DIMM-equivalent aggregate: two independent
+32-bit channels, one rank per channel, four x8 16Gb devices per rank, BL16,
+and 8 bank groups x 4 banks per rank.
+
+### Clone and build Ramulator2
+
+```sh
+git clone --branch v2.1 --depth 1 \
+    https://github.com/CMU-SAFARI/ramulator2.git \
+    ext/ramulator2/ramulator2
+
+cmake -S ext/ramulator2/ramulator2 \
+    -B ext/ramulator2/ramulator2/build \
+    -DRAMULATOR_PYTHON_BINDINGS=OFF
+
+cmake --build ext/ramulator2/ramulator2/build -j"$(nproc)"
+scons build/RISCV/gem5.opt -j"$(nproc)"
+```
+
+SCons auto-detects `ext/ramulator2/ramulator2/libramulator.so`. If the shared
+library is absent, gem5 builds without the Ramulator2 SimObject.
+
+### Run one DDR5 test
+
+```sh
+build/RISCV/gem5.opt \
+    -d m5out/ddr5-gem5-linear-read \
+    configs/example/gem5_library/trafficgen_memory/trafficgen-ddr5.py \
+    --memory-backend gem5 \
+    --traffic-pattern linear-read \
+    --rate 16GiB/s
+
+build/RISCV/gem5.opt \
+    -d m5out/ddr5-ramulator-probe-stream \
+    configs/example/gem5_library/trafficgen_memory/trafficgen-ddr5.py \
+    --memory-backend ramulator \
+    --traffic-pattern probe-stream-read \
+    --rate 32GiB/s
+```
+
+`--memory-backend` accepts `gem5` or `ramulator`. The `probe-stream-*`
+patterns use a DRAM-aware stream generator and a separate single-outstanding
+random-read probe generator to build latency-bandwidth curves.
+
+### Regenerate the DDR5 report
+
+```sh
+python3 util/trafficgen_memory_sweep/run_trafficgen_ddr5_sweep.py
+```
+
+The default run writes `report.md`, `results.csv`, `results.json`, per-run
+stats, Ramulator2 stats, and SVG plots under
+`m5out/ddr5-4800-gem5-ramulator-sweep/`.
+
 ## Build dependencies
 
 gem5 must be built with both DRAMSys and DRAMSim3 support. See
