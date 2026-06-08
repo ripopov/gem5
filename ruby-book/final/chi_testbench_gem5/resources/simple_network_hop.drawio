@@ -1,114 +1,352 @@
-<mxfile host="Electron" modified="2026-06-05T00:00:00.000Z" agent="draw.io" version="29.7.9">
+<mxfile host="Electron" agent="draw.io">
   <diagram name="SimpleNetwork Hop" id="simple-network-hop">
-    <mxGraphModel dx="1500" dy="1000" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1560" pageHeight="890" math="0" shadow="0" background="#ffffff">
+    <mxGraphModel dx="1724" dy="1029" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1560" pageHeight="890" background="#ffffff" math="0" shadow="0">
       <root>
-        <mxCell id="0"/>
-        <mxCell id="1" parent="0"/>
-        <mxCell id="title" value="&lt;b&gt;SimpleNetwork — one detailed hop (Router A → Router B)&lt;/b&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=18;fontColor=#000000;" vertex="1" parent="1"><mxGeometry x="20" y="10" width="1520" height="30" as="geometry"/></mxCell>
-        <mxCell id="subtitle" value="Where storage lives (MessageBuffers = FIFO slots) and where latency is applied (PerfectSwitch routing latency, Throttle link latency). Routing/bandwidth logic shown as clouds." style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=11;fontColor=#555555;" vertex="1" parent="1"><mxGeometry x="20" y="40" width="1520" height="20" as="geometry"/></mxCell>
-        <mxCell id="ctrl" value="&lt;b&gt;Controller&lt;/b&gt;&lt;br&gt;(network endpoint)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=1.6;fontSize=11;align=center;verticalAlign=top;fontColor=#000000;arcSize=6;" vertex="1" parent="1"><mxGeometry x="30" y="150" width="205" height="300" as="geometry"/></mxCell>
-        <mxCell id="ctrl_out" value="&lt;b&gt;MessageBuffer&lt;/b&gt;&lt;br&gt;&lt;font style=&#x27;font-size:9px&#x27;&gt;Controller Output → Network&lt;br&gt;&lt;i&gt;Controller::m_toNetQueues[vnets]&lt;/i&gt;&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e3f2fb;strokeColor=#6c8ebf;strokeWidth=1.6;fontSize=10;align=center;verticalAlign=top;fontColor=#000000;arcSize=6;" vertex="1" parent="1"><mxGeometry x="46" y="200" width="173" height="92" as="geometry"/></mxCell>
-        <mxCell id="ctrl_out_s0" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#7ea6e0;strokeColor=#6c8ebf;strokeWidth=1;" vertex="1" parent="1"><mxGeometry x="54.5" y="258.0" width="22" height="22" as="geometry"/></mxCell>
-        <mxCell id="ctrl_out_s1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#7ea6e0;strokeColor=#6c8ebf;strokeWidth=1;" vertex="1" parent="1"><mxGeometry x="81.5" y="258.0" width="22" height="22" as="geometry"/></mxCell>
-        <mxCell id="ctrl_out_s2" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;strokeWidth=1;" vertex="1" parent="1"><mxGeometry x="108.5" y="258.0" width="22" height="22" as="geometry"/></mxCell>
-        <mxCell id="ctrl_out_s3" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;strokeWidth=1;" vertex="1" parent="1"><mxGeometry x="135.5" y="258.0" width="22" height="22" as="geometry"/></mxCell>
-        <mxCell id="ctrl_out_sd" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;strokeWidth=1;dashed=1;dashPattern=4 3;" vertex="1" parent="1"><mxGeometry x="162.5" y="258.0" width="22" height="22" as="geometry"/></mxCell>
-        <mxCell id="ctrl_out_inf" value="&lt;b&gt;∞&lt;/b&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=22;fontColor=#6c8ebf;" vertex="1" parent="1"><mxGeometry x="182.5" y="252" width="34" height="34" as="geometry"/></mxCell>
-        <mxCell id="ctrl_out_cap" value="unbounded (∞) · no backpressure" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=9;fontColor=#555555;" vertex="1" parent="1"><mxGeometry x="46" y="293" width="173" height="16" as="geometry"/></mxCell>
-        <mxCell id="ctrl_in" value="&lt;b&gt;MessageBuffer&lt;/b&gt;&lt;br&gt;&lt;font style=&#x27;font-size:9px&#x27;&gt;Controller Input ← Network&lt;br&gt;&lt;i&gt;Controller::m_fromNetQueues[vnets]&lt;/i&gt;&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e3f2fb;strokeColor=#6c8ebf;strokeWidth=1.6;fontSize=10;align=center;verticalAlign=top;fontColor=#000000;arcSize=6;" vertex="1" parent="1"><mxGeometry x="46" y="320" width="173" height="92" as="geometry"/></mxCell>
-        <mxCell id="ctrl_in_s0" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#7ea6e0;strokeColor=#6c8ebf;strokeWidth=1;" vertex="1" parent="1"><mxGeometry x="68.0" y="378.0" width="22" height="22" as="geometry"/></mxCell>
-        <mxCell id="ctrl_in_s1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;strokeWidth=1;" vertex="1" parent="1"><mxGeometry x="95.0" y="378.0" width="22" height="22" as="geometry"/></mxCell>
-        <mxCell id="ctrl_in_s2" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;strokeWidth=1;" vertex="1" parent="1"><mxGeometry x="122.0" y="378.0" width="22" height="22" as="geometry"/></mxCell>
-        <mxCell id="ctrl_in_sd" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;strokeWidth=1;dashed=1;dashPattern=4 3;" vertex="1" parent="1"><mxGeometry x="149.0" y="378.0" width="22" height="22" as="geometry"/></mxCell>
-        <mxCell id="ctrl_in_inf" value="&lt;b&gt;∞&lt;/b&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=22;fontColor=#6c8ebf;" vertex="1" parent="1"><mxGeometry x="169.0" y="372" width="34" height="34" as="geometry"/></mxCell>
-        <mxCell id="ctrl_in_cap" value="unbounded (∞) · no backpressure" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=9;fontColor=#555555;" vertex="1" parent="1"><mxGeometry x="46" y="413" width="173" height="16" as="geometry"/></mxCell>
-        <mxCell id="routerA" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f6f0fb;strokeColor=#9673a6;strokeWidth=2.2;fontSize=11;align=center;verticalAlign=top;fontColor=#000000;arcSize=6;" vertex="1" parent="1"><mxGeometry x="285" y="90" width="905" height="625" as="geometry"/></mxCell>
-        <mxCell id="routerA_lbl" value="Router A  &amp;#8212;  SimpleNetwork &lt;b&gt;Switch&lt;/b&gt; (BasicRouter)" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=13;fontColor=#000000;" vertex="1" parent="1"><mxGeometry x="297" y="98" width="881" height="22" as="geometry"/></mxCell>
-        <mxCell id="routerA_sub" value="one PerfectSwitch + one Throttle &amp; one port buffer per (output port × vnet) · diagram shows a single vnet" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=10;fontColor=#6a4f86;" vertex="1" parent="1"><mxGeometry x="297" y="120" width="881" height="18" as="geometry"/></mxCell>
-        <mxCell id="port_in_hdr" value="&lt;b&gt;&amp;#9660; INPUT from controller&lt;/b&gt;" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=10;fontColor=#6a4f86;" vertex="1" parent="1"><mxGeometry x="303" y="150" width="230" height="16" as="geometry"/></mxCell>
-        <mxCell id="port_in_mesh_hdr" value="&lt;b&gt;&amp;#9660; INPUT from other router&lt;/b&gt;" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=10;fontColor=#6a4f86;" vertex="1" parent="1"><mxGeometry x="303" y="502" width="230" height="16" as="geometry"/></mxCell>
-        <mxCell id="other_in_src" value="&lt;b&gt;other mesh&lt;br&gt;router&lt;/b&gt;&lt;br&gt;&lt;font style=&#x27;font-size:8px&#x27;&gt;output link&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#9b9b9b;strokeWidth=1.3;fontSize=9;align=center;verticalAlign=middle;fontColor=#666666;arcSize=6;dashed=1;dashPattern=5 4;" vertex="1" parent="1"><mxGeometry x="195" y="555" width="75" height="70" as="geometry"/></mxCell>
-        <mxCell id="inA_neigh" value="&lt;b&gt;MessageBuffer&lt;/b&gt;&lt;br&gt;&lt;font style=&#x27;font-size:9px&#x27;&gt;A Router Input ← Other Router&lt;br&gt;&lt;i&gt;SimpleIntLink::m_buffers[vnets]&lt;/i&gt;&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=1.6;fontSize=10;align=center;verticalAlign=top;fontColor=#000000;arcSize=6;" vertex="1" parent="1"><mxGeometry x="395" y="528" width="215" height="115" as="geometry"/></mxCell>
-        <mxCell id="inA_neigh_s0" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#7ea6e0;strokeColor=#6c8ebf;strokeWidth=1;" vertex="1" parent="1"><mxGeometry x="424.0" y="609.0" width="22" height="22" as="geometry"/></mxCell>
-        <mxCell id="inA_neigh_s1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#7ea6e0;strokeColor=#6c8ebf;strokeWidth=1;" vertex="1" parent="1"><mxGeometry x="451.0" y="609.0" width="22" height="22" as="geometry"/></mxCell>
-        <mxCell id="inA_neigh_s2" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#7ea6e0;strokeColor=#6c8ebf;strokeWidth=1;" vertex="1" parent="1"><mxGeometry x="478.0" y="609.0" width="22" height="22" as="geometry"/></mxCell>
-        <mxCell id="inA_neigh_s3" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#7ea6e0;strokeColor=#6c8ebf;strokeWidth=1;" vertex="1" parent="1"><mxGeometry x="505.0" y="609.0" width="22" height="22" as="geometry"/></mxCell>
-        <mxCell id="inA_neigh_s4" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;strokeWidth=1;" vertex="1" parent="1"><mxGeometry x="532.0" y="609.0" width="22" height="22" as="geometry"/></mxCell>
-        <mxCell id="inA_neigh_s5" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;strokeWidth=1;" vertex="1" parent="1"><mxGeometry x="559.0" y="609.0" width="22" height="22" as="geometry"/></mxCell>
-        <mxCell id="inA_neigh_cap" value="bounded FIFO (link buffer)" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=9;fontColor=#555555;" vertex="1" parent="1"><mxGeometry x="395" y="644" width="215" height="16" as="geometry"/></mxCell>
-        <mxCell id="ps" value="&lt;b&gt;PerfectSwitch&lt;/b&gt;&lt;br&gt;&lt;font style=&#x27;font-size:9px&#x27;&gt;routing logic · &lt;b&gt;no storage&lt;/b&gt;&lt;br&gt;&lt;br&gt;for each ready input msg:&lt;br&gt;• route() → output port(s)&lt;br&gt;• check areNSlotsAvailable(1)&lt;br&gt;  on output buffer (backpressure)&lt;br&gt;• enqueue into output buffer&lt;br&gt;&lt;br&gt;&lt;b&gt;no crossbar bw limit:&lt;/b&gt;&lt;br&gt;many msgs/cycle into one&lt;br&gt;output buffer (bounded only&lt;br&gt;by its free slots)&lt;/font&gt;" style="shape=cloud;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;strokeWidth=1.6;fontSize=11;align=center;verticalAlign=middle;" vertex="1" parent="1"><mxGeometry x="635" y="240" width="205" height="360" as="geometry"/></mxCell>
-        <mxCell id="outA_B" value="&lt;b&gt;MessageBuffer&lt;/b&gt;&lt;br&gt;&lt;font style=&#x27;font-size:9px&#x27;&gt;A Router Output → B Router&lt;br&gt;&lt;i&gt;Switch::port_buffers[directions × vnets]&lt;/i&gt;&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=1.6;fontSize=10;align=center;verticalAlign=top;fontColor=#000000;arcSize=6;" vertex="1" parent="1"><mxGeometry x="865" y="215" width="215" height="120" as="geometry"/></mxCell>
-        <mxCell id="outA_B_s0" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#7ea6e0;strokeColor=#6c8ebf;strokeWidth=1;" vertex="1" parent="1"><mxGeometry x="894.0" y="301.0" width="22" height="22" as="geometry"/></mxCell>
-        <mxCell id="outA_B_s1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#7ea6e0;strokeColor=#6c8ebf;strokeWidth=1;" vertex="1" parent="1"><mxGeometry x="921.0" y="301.0" width="22" height="22" as="geometry"/></mxCell>
-        <mxCell id="outA_B_s2" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#7ea6e0;strokeColor=#6c8ebf;strokeWidth=1;" vertex="1" parent="1"><mxGeometry x="948.0" y="301.0" width="22" height="22" as="geometry"/></mxCell>
-        <mxCell id="outA_B_s3" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#7ea6e0;strokeColor=#6c8ebf;strokeWidth=1;" vertex="1" parent="1"><mxGeometry x="975.0" y="301.0" width="22" height="22" as="geometry"/></mxCell>
-        <mxCell id="outA_B_s4" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;strokeWidth=1;" vertex="1" parent="1"><mxGeometry x="1002.0" y="301.0" width="22" height="22" as="geometry"/></mxCell>
-        <mxCell id="outA_B_s5" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;strokeWidth=1;" vertex="1" parent="1"><mxGeometry x="1029.0" y="301.0" width="22" height="22" as="geometry"/></mxCell>
-        <mxCell id="outA_B_cap" value="bounded FIFO (router_buffer_size)" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=9;fontColor=#555555;" vertex="1" parent="1"><mxGeometry x="865" y="336" width="215" height="16" as="geometry"/></mxCell>
-        <mxCell id="thr_B" value="&lt;b&gt;Throttle&lt;/b&gt;&lt;br&gt;A→B&lt;br&gt;&lt;font style=&#x27;font-size:9px&#x27;&gt;bw = link_bandwidth_factor&lt;br&gt;1 msg/cy/vnet&lt;br&gt;needs free downstream slot&lt;/font&gt;" style="shape=cloud;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=1.6;fontSize=10;align=center;verticalAlign=middle;" vertex="1" parent="1"><mxGeometry x="1090" y="225" width="95" height="95" as="geometry"/></mxCell>
-        <mxCell id="outA_other" value="&lt;b&gt;MessageBuffer&lt;/b&gt;&lt;br&gt;&lt;font style=&#x27;font-size:9px&#x27;&gt;A Router Output → Other Router&lt;br&gt;&lt;i&gt;Switch::port_buffers[directions × vnets]&lt;/i&gt;&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=1.6;fontSize=10;align=center;verticalAlign=top;fontColor=#000000;arcSize=6;" vertex="1" parent="1"><mxGeometry x="865" y="430" width="215" height="120" as="geometry"/></mxCell>
-        <mxCell id="outA_other_s0" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#7ea6e0;strokeColor=#6c8ebf;strokeWidth=1;" vertex="1" parent="1"><mxGeometry x="894.0" y="516.0" width="22" height="22" as="geometry"/></mxCell>
-        <mxCell id="outA_other_s1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#7ea6e0;strokeColor=#6c8ebf;strokeWidth=1;" vertex="1" parent="1"><mxGeometry x="921.0" y="516.0" width="22" height="22" as="geometry"/></mxCell>
-        <mxCell id="outA_other_s2" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#7ea6e0;strokeColor=#6c8ebf;strokeWidth=1;" vertex="1" parent="1"><mxGeometry x="948.0" y="516.0" width="22" height="22" as="geometry"/></mxCell>
-        <mxCell id="outA_other_s3" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;strokeWidth=1;" vertex="1" parent="1"><mxGeometry x="975.0" y="516.0" width="22" height="22" as="geometry"/></mxCell>
-        <mxCell id="outA_other_s4" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;strokeWidth=1;" vertex="1" parent="1"><mxGeometry x="1002.0" y="516.0" width="22" height="22" as="geometry"/></mxCell>
-        <mxCell id="outA_other_s5" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;strokeWidth=1;" vertex="1" parent="1"><mxGeometry x="1029.0" y="516.0" width="22" height="22" as="geometry"/></mxCell>
-        <mxCell id="outA_other_cap" value="bounded FIFO (router_buffer_size)" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=9;fontColor=#555555;" vertex="1" parent="1"><mxGeometry x="865" y="551" width="215" height="16" as="geometry"/></mxCell>
-        <mxCell id="thr_other" value="&lt;b&gt;Throttle&lt;/b&gt;&lt;br&gt;A→other&lt;br&gt;&lt;font style=&#x27;font-size:8px&#x27;&gt;same per-output gate&lt;br&gt;needs free dst slot&lt;/font&gt;" style="shape=cloud;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=1.6;fontSize=10;align=center;verticalAlign=middle;" vertex="1" parent="1"><mxGeometry x="1090" y="440" width="95" height="95" as="geometry"/></mxCell>
-        <mxCell id="other_out_sink" value="&lt;b&gt;other mesh&lt;br&gt;router&lt;/b&gt;&lt;br&gt;&lt;font style=&#x27;font-size:8px&#x27;&gt;input link&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#9b9b9b;strokeWidth=1.3;fontSize=9;align=center;verticalAlign=middle;fontColor=#666666;arcSize=6;dashed=1;dashPattern=5 4;" vertex="1" parent="1"><mxGeometry x="1210" y="452" width="60" height="72" as="geometry"/></mxCell>
-        <mxCell id="port_out_hdr" value="&lt;b&gt;&amp;#9650; OUTPUT to controller (local port)&lt;/b&gt;" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=10;fontColor=#6a4f86;" vertex="1" parent="1"><mxGeometry x="395" y="278" width="250" height="16" as="geometry"/></mxCell>
-        <mxCell id="outA_rnf" value="&lt;b&gt;MessageBuffer&lt;/b&gt;&lt;br&gt;&lt;font style=&#x27;font-size:9px&#x27;&gt;A Router Output → Controller&lt;br&gt;&lt;i&gt;Switch::port_buffers[directions × vnets]&lt;/i&gt;&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=1.6;fontSize=10;align=center;verticalAlign=top;fontColor=#000000;arcSize=6;" vertex="1" parent="1"><mxGeometry x="395" y="300" width="215" height="120" as="geometry"/></mxCell>
-        <mxCell id="outA_rnf_s0" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#7ea6e0;strokeColor=#6c8ebf;strokeWidth=1;" vertex="1" parent="1"><mxGeometry x="424.0" y="386.0" width="22" height="22" as="geometry"/></mxCell>
-        <mxCell id="outA_rnf_s1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#7ea6e0;strokeColor=#6c8ebf;strokeWidth=1;" vertex="1" parent="1"><mxGeometry x="451.0" y="386.0" width="22" height="22" as="geometry"/></mxCell>
-        <mxCell id="outA_rnf_s2" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;strokeWidth=1;" vertex="1" parent="1"><mxGeometry x="478.0" y="386.0" width="22" height="22" as="geometry"/></mxCell>
-        <mxCell id="outA_rnf_s3" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;strokeWidth=1;" vertex="1" parent="1"><mxGeometry x="505.0" y="386.0" width="22" height="22" as="geometry"/></mxCell>
-        <mxCell id="outA_rnf_s4" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;strokeWidth=1;" vertex="1" parent="1"><mxGeometry x="532.0" y="386.0" width="22" height="22" as="geometry"/></mxCell>
-        <mxCell id="outA_rnf_s5" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;strokeWidth=1;" vertex="1" parent="1"><mxGeometry x="559.0" y="386.0" width="22" height="22" as="geometry"/></mxCell>
-        <mxCell id="outA_rnf_cap" value="bounded FIFO (router_buffer_size)" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=9;fontColor=#555555;" vertex="1" parent="1"><mxGeometry x="395" y="421" width="215" height="16" as="geometry"/></mxCell>
-        <mxCell id="thr_rnf" value="&lt;b&gt;Throttle&lt;/b&gt;&lt;br&gt;A→Controller" style="shape=cloud;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=1.6;fontSize=9;align=center;verticalAlign=middle;" vertex="1" parent="1"><mxGeometry x="290" y="320" width="95" height="80" as="geometry"/></mxCell>
-        <mxCell id="routerB" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#faf6fd;strokeColor=#b39ddb;strokeWidth=2.2;fontSize=11;align=center;verticalAlign=top;fontColor=#000000;arcSize=6;" vertex="1" parent="1"><mxGeometry x="1275" y="175" width="260" height="300" as="geometry"/></mxCell>
-        <mxCell id="routerB_lbl" value="Router B" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=13;fontColor=#000000;" vertex="1" parent="1"><mxGeometry x="1287" y="183" width="236" height="20" as="geometry"/></mxCell>
-        <mxCell id="routerB_sub" value="only the single&lt;br&gt;A→B input shown" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=9;fontColor=#7a6a9a;" vertex="1" parent="1"><mxGeometry x="1287" y="203" width="236" height="30" as="geometry"/></mxCell>
-        <mxCell id="inB_AB" value="&lt;b&gt;MessageBuffer&lt;/b&gt;&lt;br&gt;&lt;font style=&#x27;font-size:9px&#x27;&gt;B Router Input ← A Router&lt;br&gt;&lt;i&gt;SimpleIntLink::m_buffers[vnets]&lt;/i&gt;&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=1.6;fontSize=10;align=center;verticalAlign=top;fontColor=#000000;arcSize=6;" vertex="1" parent="1"><mxGeometry x="1300" y="240" width="210" height="120" as="geometry"/></mxCell>
-        <mxCell id="inB_AB_s0" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#7ea6e0;strokeColor=#6c8ebf;strokeWidth=1;" vertex="1" parent="1"><mxGeometry x="1367.0" y="326.0" width="22" height="22" as="geometry"/></mxCell>
-        <mxCell id="inB_AB_s1" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#7ea6e0;strokeColor=#6c8ebf;strokeWidth=1;" vertex="1" parent="1"><mxGeometry x="1394.0" y="326.0" width="22" height="22" as="geometry"/></mxCell>
-        <mxCell id="inB_AB_s2" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;strokeWidth=1;" vertex="1" parent="1"><mxGeometry x="1421.0" y="326.0" width="22" height="22" as="geometry"/></mxCell>
-        <mxCell id="inB_AB_cap" value="bounded FIFO (link buffer)" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=9;fontColor=#555555;" vertex="1" parent="1"><mxGeometry x="1300" y="361" width="210" height="16" as="geometry"/></mxCell>
-        <mxCell id="psB" value="&lt;b&gt;PerfectSwitch B&lt;/b&gt;&lt;br&gt;&lt;font style=&#x27;font-size:8px&#x27;&gt;consumes ready msg&lt;/font&gt;" style="shape=cloud;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;strokeWidth=1.6;fontSize=10;align=center;verticalAlign=middle;" vertex="1" parent="1"><mxGeometry x="1325" y="400" width="160" height="60" as="geometry"/></mxCell>
-        <mxCell id="e_extin" style="endArrow=classic;html=1;strokeWidth=1.8;strokeColor=#2a7f3f;rounded=1;exitX=1;exitY=0.3;exitDx=0;exitDy=0;" edge="1" parent="1" source="ctrl_out"><mxGeometry relative="1" as="geometry"><mxPoint x="660" y="420" as="targetPoint"/><Array as="points"><mxPoint x="250" y="225"/><mxPoint x="628" y="225"/><mxPoint x="628" y="420"/></Array></mxGeometry></mxCell>
-        <mxCell id="e_extin_l" value="Switch A reads controller output buffer directly (shared as switch input; no buffer, no latency)" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=#ffffff;fontSize=8;fontColor=#2a7f3f;" vertex="1" connectable="0" parent="1"><mxGeometry x="286" y="203" width="330" height="18" as="geometry"/></mxCell>
-        <mxCell id="e_in_neigh" style="endArrow=classic;html=1;strokeWidth=1.8;strokeColor=#333333;rounded=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;" edge="1" parent="1" source="inA_neigh"><mxGeometry relative="1" as="geometry"><mxPoint x="662" y="470" as="targetPoint"/><Array as="points"><mxPoint x="645" y="585"/><mxPoint x="645" y="470"/></Array></mxGeometry></mxCell>
-        <mxCell id="e_in_neigh_l" value="isReady()" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=9;fontColor=#444444;labelBackgroundColor=none;" vertex="1" connectable="0" parent="e_in_neigh"><mxGeometry x="0" relative="1" as="geometry"><mxPoint x="-14" y="-12" as="offset"/></mxGeometry></mxCell>
-        <mxCell id="stub_in" style="endArrow=classic;html=1;strokeWidth=1.8;strokeColor=#9b9b9b;dashed=1;dashPattern=6 4;rounded=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="other_in_src" target="inA_neigh"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell>
-        <mxCell id="e_ob_B" style="endArrow=classic;html=1;strokeWidth=1.8;strokeColor=#9673a6;rounded=1;edgeStyle=orthogonalEdgeStyle;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" target="outA_B"><mxGeometry relative="1" as="geometry"><mxPoint x="812" y="391" as="sourcePoint"/></mxGeometry></mxCell>
-        <mxCell id="e_ob_B_l" value="ready after routing latency&lt;br&gt;(int_routing_latency)" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=9;fontColor=#9673a6;labelBackgroundColor=none;" vertex="1" connectable="0" parent="e_ob_B"><mxGeometry x="0" relative="1" as="geometry"><mxPoint x="0" y="-40" as="offset"/></mxGeometry></mxCell>
-        <mxCell id="e_tb_B" style="endArrow=classic;html=1;strokeWidth=1.8;strokeColor=#333333;rounded=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="outA_B" target="thr_B"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell>
-        <mxCell id="e_link" style="endArrow=classic;html=1;strokeWidth=2.2;strokeColor=#b85450;rounded=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.27;entryDx=0;entryDy=0;" edge="1" parent="1" source="thr_B" target="inB_AB"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell>
-        <mxCell id="e_link_l" value="ready after link latency&lt;br&gt;(link_latency)" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=10;fontColor=#b85450;labelBackgroundColor=none;" vertex="1" connectable="0" parent="e_link"><mxGeometry x="0" relative="1" as="geometry"><mxPoint x="0" y="-26" as="offset"/></mxGeometry></mxCell>
-        <mxCell id="e_bps" style="endArrow=classic;html=1;strokeWidth=1.8;strokeColor=#333333;rounded=1;exitX=0.286;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="inB_AB"><mxGeometry relative="1" as="geometry"><mxPoint x="1360" y="433" as="targetPoint"/></mxGeometry></mxCell>
-        <mxCell id="e_ob_other" style="endArrow=classic;html=1;strokeWidth=1.8;strokeColor=#9673a6;rounded=1;edgeStyle=orthogonalEdgeStyle;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" target="outA_other"><mxGeometry relative="1" as="geometry"><mxPoint x="816" y="449" as="sourcePoint"/></mxGeometry></mxCell>
-        <mxCell id="e_tb_other" style="endArrow=classic;html=1;strokeWidth=1.8;strokeColor=#333333;rounded=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="outA_other" target="thr_other"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell>
-        <mxCell id="stub_out_other" style="endArrow=classic;html=1;strokeWidth=2.0;strokeColor=#b85450;dashed=1;dashPattern=6 4;rounded=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="thr_other" target="other_out_sink"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell>
-        <mxCell id="e_ob_rnf" style="endArrow=classic;html=1;strokeWidth=1.8;strokeColor=#9673a6;rounded=1;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" target="outA_rnf"><mxGeometry relative="1" as="geometry"><mxPoint x="655" y="438" as="sourcePoint"/><Array as="points"><mxPoint x="616" y="438"/><mxPoint x="616" y="360"/></Array></mxGeometry></mxCell>
-        <mxCell id="e_ob_rnf_l" value="ext_routing_latency" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=9;fontColor=#9673a6;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="e_ob_rnf"><mxGeometry x="0" relative="1" as="geometry"><mxPoint x="-150" y="78" as="offset"/></mxGeometry></mxCell>
-        <mxCell id="e_tb_rnf" style="endArrow=classic;html=1;strokeWidth=1.8;strokeColor=#333333;rounded=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="outA_rnf" target="thr_rnf"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell>
-        <mxCell id="e_thr_ctrlin" style="endArrow=classic;html=1;strokeWidth=1.8;strokeColor=#2a7f3f;rounded=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="thr_rnf" target="ctrl_in"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell>
-        <mxCell id="e_thr_ctrlin_l" value="ExtLink out&lt;br&gt;(node_link_latency)" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=9;fontColor=#2a7f3f;labelBackgroundColor=#ffffff;" vertex="1" connectable="0" parent="e_thr_ctrlin"><mxGeometry x="0" relative="1" as="geometry"><mxPoint x="0" y="-30" as="offset"/></mxGeometry></mxCell>
-        <mxCell id="legend" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fbfbfb;strokeColor=#cccccc;strokeWidth=1.2;fontSize=11;align=center;verticalAlign=top;fontColor=#000000;arcSize=6;" vertex="1" parent="1"><mxGeometry x="285" y="733" width="905" height="127" as="geometry"/></mxCell>
-        <mxCell id="legend_t" value="&lt;b&gt;Legend&lt;/b&gt;" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=10;fontColor=#555555;" vertex="1" parent="1"><mxGeometry x="295" y="737" width="880" height="16" as="geometry"/></mxCell>
-        <mxCell id="lg1_k" value="" style="rounded=1;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=1.4;" vertex="1" parent="1"><mxGeometry x="300" y="761" width="34" height="22" as="geometry"/></mxCell>
-        <mxCell id="lg1_s0" value="" style="rounded=0;html=1;fillColor=#7ea6e0;strokeColor=#6c8ebf;strokeWidth=0.8;" vertex="1" parent="1"><mxGeometry x="304" y="767" width="9" height="10" as="geometry"/></mxCell>
-        <mxCell id="lg1_s1" value="" style="rounded=0;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;strokeWidth=0.8;" vertex="1" parent="1"><mxGeometry x="315" y="767" width="9" height="10" as="geometry"/></mxCell>
-        <mxCell id="lg1_t" value="&lt;b&gt;Bounded MessageBuffer&lt;/b&gt; (router) &amp;#8212; fixed N slots; enforces backpressure via areNSlotsAvailable()" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=10;fontColor=#000000;" vertex="1" parent="1"><mxGeometry x="346" y="755" width="560" height="34" as="geometry"/></mxCell>
-        <mxCell id="lg2_k" value="" style="rounded=1;html=1;fillColor=#e3f2fb;strokeColor=#6c8ebf;strokeWidth=1.4;" vertex="1" parent="1"><mxGeometry x="300" y="788" width="34" height="22" as="geometry"/></mxCell>
-        <mxCell id="lg2_s0" value="" style="rounded=0;html=1;fillColor=#7ea6e0;strokeColor=#6c8ebf;strokeWidth=0.8;" vertex="1" parent="1"><mxGeometry x="304" y="794" width="9" height="10" as="geometry"/></mxCell>
-        <mxCell id="lg2_sd" value="" style="rounded=0;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;strokeWidth=0.8;dashed=1;dashPattern=3 2;" vertex="1" parent="1"><mxGeometry x="315" y="794" width="9" height="10" as="geometry"/></mxCell>
-        <mxCell id="lg2_inf" value="&lt;b&gt;∞&lt;/b&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=15;fontColor=#6c8ebf;" vertex="1" parent="1"><mxGeometry x="324" y="782" width="16" height="34" as="geometry"/></mxCell>
-        <mxCell id="lg2_t" value="&lt;b&gt;Unbounded MessageBuffer&lt;/b&gt; (controller endpoint) &amp;#8212; slots trail off to ∞; no backpressure" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=10;fontColor=#000000;" vertex="1" parent="1"><mxGeometry x="346" y="782" width="560" height="34" as="geometry"/></mxCell>
-        <mxCell id="lg3_k" value="" style="shape=cloud;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;strokeWidth=1.6;fontSize=11;align=center;verticalAlign=middle;" vertex="1" parent="1"><mxGeometry x="300" y="811" width="38" height="30" as="geometry"/></mxCell>
-        <mxCell id="lg3_t" value="&lt;b&gt;PerfectSwitch&lt;/b&gt; &amp;#8212; routing logic, no storage; applies routing latency on enqueue to the output buffer" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=10;fontColor=#000000;" vertex="1" parent="1"><mxGeometry x="346" y="809" width="560" height="34" as="geometry"/></mxCell>
-        <mxCell id="lg4_k" value="" style="shape=cloud;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=1.6;fontSize=11;align=center;verticalAlign=middle;" vertex="1" parent="1"><mxGeometry x="300" y="838" width="38" height="30" as="geometry"/></mxCell>
-        <mxCell id="lg4_t" value="&lt;b&gt;Throttle&lt;/b&gt; &amp;#8212; per-output bandwidth + link-latency gate; applies link latency L on enqueue to the downstream buffer" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=10;fontColor=#000000;" vertex="1" parent="1"><mxGeometry x="346" y="836" width="560" height="34" as="geometry"/></mxCell>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=18;fontColor=#000000;" value="&lt;b&gt;SimpleNetwork — one detailed hop (Router A → Router B)&lt;/b&gt;" vertex="1">
+          <mxGeometry height="30" width="1520" x="20" y="10" as="geometry" />
+        </mxCell>
+        <mxCell id="subtitle" parent="1" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=11;fontColor=#555555;" value="Where storage lives (MessageBuffers = FIFO slots) and where latency is applied (PerfectSwitch routing latency, Throttle link latency). Routing/bandwidth logic shown as clouds." vertex="1">
+          <mxGeometry height="20" width="1520" x="20" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="ctrl" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=1.6;fontSize=11;align=center;verticalAlign=top;fontColor=#000000;arcSize=6;" value="&lt;b&gt;Controller&lt;/b&gt;&lt;br&gt;(network endpoint)" vertex="1">
+          <mxGeometry height="300" width="205" x="30" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="ctrl_out" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e3f2fb;strokeColor=#6c8ebf;strokeWidth=1.6;fontSize=10;align=center;verticalAlign=top;fontColor=#000000;arcSize=6;" value="&lt;b&gt;MessageBuffer&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:9px&#39;&gt;Controller Output → Network&lt;br&gt;&lt;i&gt;Controller::m_toNetQueues[vnets]&lt;/i&gt;&lt;/font&gt;" vertex="1">
+          <mxGeometry height="92" width="173" x="46" y="200" as="geometry" />
+        </mxCell>
+        <mxCell id="ctrl_out_s0" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#7ea6e0;strokeColor=#6c8ebf;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="22" width="22" x="54.5" y="258" as="geometry" />
+        </mxCell>
+        <mxCell id="ctrl_out_s1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#7ea6e0;strokeColor=#6c8ebf;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="22" width="22" x="81.5" y="258" as="geometry" />
+        </mxCell>
+        <mxCell id="ctrl_out_s2" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="22" width="22" x="108.5" y="258" as="geometry" />
+        </mxCell>
+        <mxCell id="ctrl_out_s3" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="22" width="22" x="135.5" y="258" as="geometry" />
+        </mxCell>
+        <mxCell id="ctrl_out_sd" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;strokeWidth=1;dashed=1;dashPattern=4 3;" value="" vertex="1">
+          <mxGeometry height="22" width="22" x="162.5" y="258" as="geometry" />
+        </mxCell>
+        <mxCell id="ctrl_out_inf" parent="1" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=22;fontColor=#6c8ebf;" value="&lt;b&gt;∞&lt;/b&gt;" vertex="1">
+          <mxGeometry height="34" width="34" x="182.5" y="252" as="geometry" />
+        </mxCell>
+        <mxCell id="ctrl_out_cap" parent="1" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=9;fontColor=#555555;" value="unbounded (∞) · no backpressure" vertex="1">
+          <mxGeometry height="16" width="173" x="46" y="293" as="geometry" />
+        </mxCell>
+        <mxCell id="ctrl_in" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e3f2fb;strokeColor=#6c8ebf;strokeWidth=1.6;fontSize=10;align=center;verticalAlign=top;fontColor=#000000;arcSize=6;" value="&lt;b&gt;MessageBuffer&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:9px&#39;&gt;Controller Input ← Network&lt;br&gt;&lt;i&gt;Controller::m_fromNetQueues[vnets]&lt;/i&gt;&lt;/font&gt;" vertex="1">
+          <mxGeometry height="92" width="173" x="46" y="320" as="geometry" />
+        </mxCell>
+        <mxCell id="ctrl_in_s0" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#7ea6e0;strokeColor=#6c8ebf;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="22" width="22" x="68" y="378" as="geometry" />
+        </mxCell>
+        <mxCell id="ctrl_in_s1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="22" width="22" x="95" y="378" as="geometry" />
+        </mxCell>
+        <mxCell id="ctrl_in_s2" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="22" width="22" x="122" y="378" as="geometry" />
+        </mxCell>
+        <mxCell id="ctrl_in_sd" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;strokeWidth=1;dashed=1;dashPattern=4 3;" value="" vertex="1">
+          <mxGeometry height="22" width="22" x="149" y="378" as="geometry" />
+        </mxCell>
+        <mxCell id="ctrl_in_inf" parent="1" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=22;fontColor=#6c8ebf;" value="&lt;b&gt;∞&lt;/b&gt;" vertex="1">
+          <mxGeometry height="34" width="34" x="169" y="372" as="geometry" />
+        </mxCell>
+        <mxCell id="ctrl_in_cap" parent="1" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=9;fontColor=#555555;" value="unbounded (∞) · no backpressure" vertex="1">
+          <mxGeometry height="16" width="173" x="46" y="413" as="geometry" />
+        </mxCell>
+        <mxCell id="routerA" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f6f0fb;strokeColor=#9673a6;strokeWidth=2.2;fontSize=11;align=center;verticalAlign=top;fontColor=#000000;arcSize=6;" value="" vertex="1">
+          <mxGeometry height="625" width="905" x="289" y="91" as="geometry" />
+        </mxCell>
+        <mxCell id="routerA_lbl" parent="1" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=13;fontColor=#000000;" value="Router A  &amp;#8212;  SimpleNetwork &lt;b&gt;Switch&lt;/b&gt; (BasicRouter)" vertex="1">
+          <mxGeometry height="22" width="881" x="324" y="98" as="geometry" />
+        </mxCell>
+        <mxCell id="routerA_sub" parent="1" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=10;fontColor=#6a4f86;" value="one PerfectSwitch + one Throttle &amp; one port buffer per (output port × vnet) · diagram shows a single vnet" vertex="1">
+          <mxGeometry height="18" width="881" x="320" y="125" as="geometry" />
+        </mxCell>
+        <mxCell id="port_in_hdr" parent="1" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=10;fontColor=#6a4f86;" value="&lt;b&gt;&amp;#9660; INPUT from controller&lt;/b&gt;" vertex="1">
+          <mxGeometry height="16" width="230" x="395" y="183" as="geometry" />
+        </mxCell>
+        <mxCell id="other_in_src" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#9b9b9b;strokeWidth=1.3;fontSize=9;align=center;verticalAlign=middle;fontColor=#666666;arcSize=6;dashed=1;dashPattern=5 4;" value="&lt;b&gt;other mesh&lt;br&gt;router&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:8px&#39;&gt;output link&lt;/font&gt;" vertex="1">
+          <mxGeometry height="70" width="75" x="193" y="551" as="geometry" />
+        </mxCell>
+        <mxCell id="inA_neigh" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=1.6;fontSize=10;align=center;verticalAlign=top;fontColor=#000000;arcSize=6;" value="&lt;b&gt;MessageBuffer&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:9px&#39;&gt;A Router Input ← Other Router&lt;br&gt;&lt;i&gt;SimpleIntLink::m_buffers[vnets]&lt;/i&gt;&lt;/font&gt;" vertex="1">
+          <mxGeometry height="115" width="215" x="395" y="528" as="geometry" />
+        </mxCell>
+        <mxCell id="inA_neigh_s0" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#7ea6e0;strokeColor=#6c8ebf;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="22" width="22" x="424" y="609" as="geometry" />
+        </mxCell>
+        <mxCell id="inA_neigh_s1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#7ea6e0;strokeColor=#6c8ebf;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="22" width="22" x="451" y="609" as="geometry" />
+        </mxCell>
+        <mxCell id="inA_neigh_s2" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#7ea6e0;strokeColor=#6c8ebf;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="22" width="22" x="478" y="609" as="geometry" />
+        </mxCell>
+        <mxCell id="inA_neigh_s3" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#7ea6e0;strokeColor=#6c8ebf;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="22" width="22" x="505" y="609" as="geometry" />
+        </mxCell>
+        <mxCell id="inA_neigh_s4" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="22" width="22" x="532" y="609" as="geometry" />
+        </mxCell>
+        <mxCell id="inA_neigh_s5" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="22" width="22" x="559" y="609" as="geometry" />
+        </mxCell>
+        <mxCell id="inA_neigh_cap" parent="1" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=9;fontColor=#555555;" value="bounded FIFO (link buffer)" vertex="1">
+          <mxGeometry height="16" width="215" x="395" y="644" as="geometry" />
+        </mxCell>
+        <mxCell id="ps" parent="1" style="shape=cloud;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;strokeWidth=1.6;fontSize=11;align=center;verticalAlign=middle;" value="&lt;b&gt;PerfectSwitch&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:9px&#39;&gt;routing logic · &lt;b&gt;no storage&lt;/b&gt;&lt;br&gt;&lt;br&gt;for each ready input msg:&lt;br&gt;• route() → output port(s)&lt;br&gt;• check areNSlotsAvailable(1)&lt;br&gt;  on output buffer (backpressure)&lt;br&gt;• enqueue into output buffer&lt;br&gt;&lt;br&gt;&lt;b&gt;no crossbar bw limit:&lt;/b&gt;&lt;br&gt;many msgs/cycle into one&lt;br&gt;output buffer (bounded only&lt;br&gt;by its free slots)&lt;/font&gt;" vertex="1">
+          <mxGeometry height="360" width="205" x="635" y="240" as="geometry" />
+        </mxCell>
+        <mxCell id="outA_B" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=1.6;fontSize=10;align=center;verticalAlign=top;fontColor=#000000;arcSize=6;" value="&lt;b&gt;MessageBuffer&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:9px&#39;&gt;A Router Output → B Router&lt;br&gt;&lt;i&gt;Switch::port_buffers[directions × vnets]&lt;/i&gt;&lt;/font&gt;" vertex="1">
+          <mxGeometry height="120" width="215" x="865" y="215" as="geometry" />
+        </mxCell>
+        <mxCell id="outA_B_s0" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#7ea6e0;strokeColor=#6c8ebf;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="22" width="22" x="894" y="301" as="geometry" />
+        </mxCell>
+        <mxCell id="outA_B_s1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#7ea6e0;strokeColor=#6c8ebf;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="22" width="22" x="921" y="301" as="geometry" />
+        </mxCell>
+        <mxCell id="outA_B_s2" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#7ea6e0;strokeColor=#6c8ebf;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="22" width="22" x="948" y="301" as="geometry" />
+        </mxCell>
+        <mxCell id="outA_B_s3" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#7ea6e0;strokeColor=#6c8ebf;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="22" width="22" x="975" y="301" as="geometry" />
+        </mxCell>
+        <mxCell id="outA_B_s4" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="22" width="22" x="1002" y="301" as="geometry" />
+        </mxCell>
+        <mxCell id="outA_B_s5" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="22" width="22" x="1029" y="301" as="geometry" />
+        </mxCell>
+        <mxCell id="outA_B_cap" parent="1" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=9;fontColor=#555555;" value="bounded FIFO (router_buffer_size)" vertex="1">
+          <mxGeometry height="16" width="215" x="865" y="336" as="geometry" />
+        </mxCell>
+        <mxCell id="thr_B" parent="1" style="shape=cloud;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=1.6;fontSize=10;align=center;verticalAlign=middle;" value="&lt;b&gt;Throttle&lt;/b&gt;&lt;br&gt;A→B&lt;br&gt;&lt;font style=&#39;font-size:9px&#39;&gt;bw = link_bandwidth_factor&lt;br&gt;1 msg/cy/vnet&lt;br&gt;needs free downstream slot&lt;/font&gt;" vertex="1">
+          <mxGeometry height="95" width="166" x="1090" y="225" as="geometry" />
+        </mxCell>
+        <mxCell id="outA_other" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=1.6;fontSize=10;align=center;verticalAlign=top;fontColor=#000000;arcSize=6;" value="&lt;b&gt;MessageBuffer&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:9px&#39;&gt;A Router Output → Other Router&lt;br&gt;&lt;i&gt;Switch::port_buffers[directions × vnets]&lt;/i&gt;&lt;/font&gt;" vertex="1">
+          <mxGeometry height="120" width="215" x="865" y="430" as="geometry" />
+        </mxCell>
+        <mxCell id="outA_other_s0" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#7ea6e0;strokeColor=#6c8ebf;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="22" width="22" x="894" y="516" as="geometry" />
+        </mxCell>
+        <mxCell id="outA_other_s1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#7ea6e0;strokeColor=#6c8ebf;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="22" width="22" x="921" y="516" as="geometry" />
+        </mxCell>
+        <mxCell id="outA_other_s2" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#7ea6e0;strokeColor=#6c8ebf;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="22" width="22" x="948" y="516" as="geometry" />
+        </mxCell>
+        <mxCell id="outA_other_s3" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="22" width="22" x="975" y="516" as="geometry" />
+        </mxCell>
+        <mxCell id="outA_other_s4" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="22" width="22" x="1002" y="516" as="geometry" />
+        </mxCell>
+        <mxCell id="outA_other_s5" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="22" width="22" x="1029" y="516" as="geometry" />
+        </mxCell>
+        <mxCell id="outA_other_cap" parent="1" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=9;fontColor=#555555;" value="bounded FIFO (router_buffer_size)" vertex="1">
+          <mxGeometry height="16" width="215" x="865" y="551" as="geometry" />
+        </mxCell>
+        <mxCell id="thr_other" parent="1" style="shape=cloud;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=1.6;fontSize=10;align=center;verticalAlign=middle;" value="&lt;b&gt;Throttle&lt;/b&gt;&lt;br&gt;A→other" vertex="1">
+          <mxGeometry height="95" width="111" x="1103" y="475" as="geometry" />
+        </mxCell>
+        <mxCell id="other_out_sink" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#9b9b9b;strokeWidth=1.3;fontSize=9;align=center;verticalAlign=middle;fontColor=#666666;arcSize=6;dashed=1;dashPattern=5 4;" value="&lt;b&gt;other mesh&lt;br&gt;router&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:8px&#39;&gt;input link&lt;/font&gt;" vertex="1">
+          <mxGeometry height="72" width="60" x="1287" y="486.5" as="geometry" />
+        </mxCell>
+        <mxCell id="port_out_hdr" parent="1" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=10;fontColor=#6a4f86;" value="&lt;b&gt;&amp;#9650; OUTPUT to controller (local port)&lt;/b&gt;" vertex="1">
+          <mxGeometry height="16" width="250" x="395" y="278" as="geometry" />
+        </mxCell>
+        <mxCell id="outA_rnf" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=1.6;fontSize=10;align=center;verticalAlign=top;fontColor=#000000;arcSize=6;" value="&lt;b&gt;MessageBuffer&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:9px&#39;&gt;A Router Output → Controller&lt;br&gt;&lt;i&gt;Switch::port_buffers[directions × vnets]&lt;/i&gt;&lt;/font&gt;" vertex="1">
+          <mxGeometry height="120" width="205.5" x="392.5" y="301" as="geometry" />
+        </mxCell>
+        <mxCell id="outA_rnf_s0" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#7ea6e0;strokeColor=#6c8ebf;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="22" width="22" x="424" y="386" as="geometry" />
+        </mxCell>
+        <mxCell id="outA_rnf_s1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#7ea6e0;strokeColor=#6c8ebf;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="22" width="22" x="451" y="386" as="geometry" />
+        </mxCell>
+        <mxCell id="outA_rnf_s2" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="22" width="22" x="478" y="386" as="geometry" />
+        </mxCell>
+        <mxCell id="outA_rnf_s3" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="22" width="22" x="505" y="386" as="geometry" />
+        </mxCell>
+        <mxCell id="outA_rnf_s4" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="22" width="22" x="532" y="386" as="geometry" />
+        </mxCell>
+        <mxCell id="outA_rnf_s5" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="22" width="22" x="559" y="386" as="geometry" />
+        </mxCell>
+        <mxCell id="outA_rnf_cap" parent="1" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=9;fontColor=#555555;" value="bounded FIFO (router_buffer_size)" vertex="1">
+          <mxGeometry height="16" width="215" x="395" y="421" as="geometry" />
+        </mxCell>
+        <mxCell id="thr_rnf" parent="1" style="shape=cloud;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=1.6;fontSize=9;align=center;verticalAlign=middle;" value="&lt;b&gt;Throttle&lt;/b&gt;&lt;br&gt;A→Controller" vertex="1">
+          <mxGeometry height="80" width="95" x="284.5" y="321" as="geometry" />
+        </mxCell>
+        <mxCell id="routerB" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#faf6fd;strokeColor=#b39ddb;strokeWidth=2.2;fontSize=11;align=center;verticalAlign=top;fontColor=#000000;arcSize=6;" value="" vertex="1">
+          <mxGeometry height="300" width="260" x="1275" y="175" as="geometry" />
+        </mxCell>
+        <mxCell id="routerB_lbl" parent="1" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=13;fontColor=#000000;" value="Router B" vertex="1">
+          <mxGeometry height="20" width="236" x="1287" y="183" as="geometry" />
+        </mxCell>
+        <mxCell id="routerB_sub" parent="1" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=9;fontColor=#7a6a9a;" value="only the single&lt;br&gt;A→B input shown" vertex="1">
+          <mxGeometry height="30" width="236" x="1287" y="203" as="geometry" />
+        </mxCell>
+        <mxCell id="inB_AB" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=1.6;fontSize=10;align=center;verticalAlign=top;fontColor=#000000;arcSize=6;" value="&lt;b&gt;MessageBuffer&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:9px&#39;&gt;B Router Input ← A Router&lt;br&gt;&lt;i&gt;SimpleIntLink::m_buffers[vnets]&lt;/i&gt;&lt;/font&gt;" vertex="1">
+          <mxGeometry height="120" width="210" x="1300" y="240" as="geometry" />
+        </mxCell>
+        <mxCell id="inB_AB_s0" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#7ea6e0;strokeColor=#6c8ebf;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="22" width="22" x="1367" y="326" as="geometry" />
+        </mxCell>
+        <mxCell id="inB_AB_s1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#7ea6e0;strokeColor=#6c8ebf;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="22" width="22" x="1394" y="326" as="geometry" />
+        </mxCell>
+        <mxCell id="inB_AB_s2" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;strokeWidth=1;" value="" vertex="1">
+          <mxGeometry height="22" width="22" x="1421" y="326" as="geometry" />
+        </mxCell>
+        <mxCell id="inB_AB_cap" parent="1" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=9;fontColor=#555555;" value="bounded FIFO (link buffer)" vertex="1">
+          <mxGeometry height="16" width="210" x="1300" y="361" as="geometry" />
+        </mxCell>
+        <mxCell id="psB" parent="1" style="shape=cloud;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;strokeWidth=1.6;fontSize=10;align=center;verticalAlign=middle;" value="&lt;b&gt;PerfectSwitch B&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:8px&#39;&gt;consumes ready msg&lt;/font&gt;" vertex="1">
+          <mxGeometry height="60" width="160" x="1325" y="400" as="geometry" />
+        </mxCell>
+        <mxCell id="e_extin" edge="1" parent="1" source="ctrl_out" style="endArrow=classic;html=1;strokeWidth=1.8;strokeColor=#2a7f3f;rounded=1;exitX=1;exitY=0.3;exitDx=0;exitDy=0;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="250" y="225" />
+              <mxPoint x="628" y="225" />
+              <mxPoint x="628" y="420" />
+            </Array>
+            <mxPoint x="660" y="420" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_extin_l" connectable="0" parent="1" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=8;fontColor=#2a7f3f;" value="&lt;b&gt;Switch A reads controller output buffer directly (shared as switch input; no buffer, no latency)&lt;/b&gt;" vertex="1">
+          <mxGeometry height="18" width="330" x="313" y="207" as="geometry" />
+        </mxCell>
+        <mxCell id="e_in_neigh" edge="1" parent="1" source="inA_neigh" style="endArrow=classic;html=1;strokeWidth=1.8;strokeColor=#333333;rounded=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="645" y="585" />
+              <mxPoint x="645" y="470" />
+            </Array>
+            <mxPoint x="662" y="470" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_in_neigh_l" connectable="0" parent="e_in_neigh" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=9;fontColor=#444444;labelBackgroundColor=none;" value="isReady()" vertex="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="-14" y="-12" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="stub_in" edge="1" parent="1" source="other_in_src" style="endArrow=classic;html=1;strokeWidth=1.8;strokeColor=#9b9b9b;dashed=1;dashPattern=6 4;rounded=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="inA_neigh">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_ob_B" edge="1" parent="1" style="endArrow=classic;html=1;strokeWidth=1.8;strokeColor=#9673a6;rounded=1;edgeStyle=orthogonalEdgeStyle;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="outA_B">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="812" y="391" as="sourcePoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_ob_B_l" connectable="0" parent="e_ob_B" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=9;fontColor=#9673a6;labelBackgroundColor=none;" value="ready after routing latency&lt;br&gt;&lt;b&gt;(int_routing_latency)&lt;/b&gt;" vertex="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="134" y="-59" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_tb_B" edge="1" parent="1" source="outA_B" style="endArrow=classic;html=1;strokeWidth=1.8;strokeColor=#333333;rounded=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="thr_B">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_link" edge="1" parent="1" source="thr_B" style="endArrow=classic;html=1;strokeWidth=2.2;strokeColor=#b85450;rounded=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.27;entryDx=0;entryDy=0;" target="inB_AB">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_link_l" connectable="0" parent="e_link" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=10;fontColor=#b85450;labelBackgroundColor=none;" value="ready after link latency&lt;br&gt;&lt;b&gt;(link_latency)&lt;/b&gt;" vertex="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="162" y="28" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_bps" edge="1" parent="1" source="inB_AB" style="endArrow=classic;html=1;strokeWidth=1.8;strokeColor=#333333;rounded=1;exitX=0.286;exitY=1;exitDx=0;exitDy=0;">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1360" y="433" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_ob_other" edge="1" parent="1" style="endArrow=classic;html=1;strokeWidth=1.8;strokeColor=#9673a6;rounded=1;edgeStyle=orthogonalEdgeStyle;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="outA_other">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="816" y="449" as="sourcePoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_tb_other" edge="1" parent="1" source="outA_other" style="endArrow=classic;html=1;strokeWidth=1.8;strokeColor=#333333;rounded=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="thr_other">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="stub_out_other" edge="1" parent="1" source="thr_other" style="endArrow=classic;html=1;strokeWidth=2.0;strokeColor=#b85450;dashed=1;dashPattern=6 4;rounded=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="other_out_sink">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_ob_rnf" edge="1" parent="1" style="endArrow=classic;html=1;strokeWidth=1.8;strokeColor=#9673a6;rounded=1;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" target="outA_rnf">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="616" y="438" />
+              <mxPoint x="616" y="360" />
+            </Array>
+            <mxPoint x="655" y="438" as="sourcePoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_tb_rnf" edge="1" parent="1" source="outA_rnf" style="endArrow=classic;html=1;strokeWidth=1.8;strokeColor=#333333;rounded=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" target="thr_rnf">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_thr_ctrlin" edge="1" parent="1" source="thr_rnf" style="endArrow=classic;html=1;strokeWidth=1.8;strokeColor=#2a7f3f;rounded=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" target="ctrl_in">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="legend" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fbfbfb;strokeColor=#cccccc;strokeWidth=1.2;fontSize=11;align=center;verticalAlign=top;fontColor=#000000;arcSize=6;" value="" vertex="1">
+          <mxGeometry height="147" width="905" x="285" y="733" as="geometry" />
+        </mxCell>
+        <mxCell id="legend_t" parent="1" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=10;fontColor=#555555;" value="&lt;b&gt;Legend&lt;/b&gt;" vertex="1">
+          <mxGeometry height="16" width="880" x="295" y="737" as="geometry" />
+        </mxCell>
+        <mxCell id="lg1_k" parent="1" style="rounded=1;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=1.4;" value="" vertex="1">
+          <mxGeometry height="22" width="40" x="300" y="761" as="geometry" />
+        </mxCell>
+        <mxCell id="lg1_s0" parent="1" style="rounded=0;html=1;fillColor=#7ea6e0;strokeColor=#6c8ebf;strokeWidth=0.8;" value="" vertex="1">
+          <mxGeometry height="10" width="9" x="304" y="767" as="geometry" />
+        </mxCell>
+        <mxCell id="lg1_s1" parent="1" style="rounded=0;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;strokeWidth=0.8;" value="" vertex="1">
+          <mxGeometry height="10" width="9" x="315" y="767" as="geometry" />
+        </mxCell>
+        <mxCell id="lg1_t" parent="1" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=10;fontColor=#000000;" value="&lt;b&gt;Bounded MessageBuffer&lt;/b&gt; (router) &amp;#8212; fixed N slots; enforces backpressure via areNSlotsAvailable()" vertex="1">
+          <mxGeometry height="34" width="560" x="346" y="755" as="geometry" />
+        </mxCell>
+        <mxCell id="lg2_k" parent="1" style="rounded=1;html=1;fillColor=#e3f2fb;strokeColor=#6c8ebf;strokeWidth=1.4;" value="" vertex="1">
+          <mxGeometry height="22" width="39" x="300" y="788" as="geometry" />
+        </mxCell>
+        <mxCell id="lg2_s0" parent="1" style="rounded=0;html=1;fillColor=#7ea6e0;strokeColor=#6c8ebf;strokeWidth=0.8;" value="" vertex="1">
+          <mxGeometry height="10" width="9" x="304" y="794" as="geometry" />
+        </mxCell>
+        <mxCell id="lg2_sd" parent="1" style="rounded=0;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;strokeWidth=0.8;dashed=1;dashPattern=3 2;" value="" vertex="1">
+          <mxGeometry height="10" width="9" x="315" y="794" as="geometry" />
+        </mxCell>
+        <mxCell id="lg2_inf" parent="1" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=15;fontColor=#6c8ebf;" value="&lt;b&gt;∞&lt;/b&gt;" vertex="1">
+          <mxGeometry height="34" width="16" x="324" y="782" as="geometry" />
+        </mxCell>
+        <mxCell id="lg2_t" parent="1" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=10;fontColor=#000000;" value="&lt;b&gt;Unbounded MessageBuffer&lt;/b&gt; (controller endpoint) &amp;#8212; slots trail off to ∞; no backpressure" vertex="1">
+          <mxGeometry height="34" width="560" x="346" y="782" as="geometry" />
+        </mxCell>
+        <mxCell id="lg3_k" parent="1" style="shape=cloud;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;strokeWidth=1.6;fontSize=11;align=center;verticalAlign=middle;" value="" vertex="1">
+          <mxGeometry height="30" width="38" x="300" y="811" as="geometry" />
+        </mxCell>
+        <mxCell id="lg3_t" parent="1" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=10;fontColor=#000000;" value="&lt;b&gt;PerfectSwitch&lt;/b&gt; &amp;#8212; routing logic, no storage; applies routing latency on enqueue to the output buffer" vertex="1">
+          <mxGeometry height="34" width="560" x="346" y="809" as="geometry" />
+        </mxCell>
+        <mxCell id="lg4_k" parent="1" style="shape=cloud;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=1.6;fontSize=11;align=center;verticalAlign=middle;" value="" vertex="1">
+          <mxGeometry height="30" width="38" x="300" y="838" as="geometry" />
+        </mxCell>
+        <mxCell id="lg4_t" parent="1" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=10;fontColor=#000000;" value="&lt;b&gt;Throttle&lt;/b&gt; &amp;#8212; per-output bandwidth + link-latency gate; applies link latency L on enqueue to the downstream buffer" vertex="1">
+          <mxGeometry height="34" width="560" x="346" y="836" as="geometry" />
+        </mxCell>
+        <mxCell id="V_JkHH9Ctz50glyrXGDM-1" connectable="0" parent="1" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=9;fontColor=#9673a6;labelBackgroundColor=none;" value="ready after routing latency&lt;br&gt;&lt;b&gt;(ext_routing_latency)&lt;/b&gt;" vertex="1">
+          <mxGeometry x="500" y="361" as="geometry" />
+        </mxCell>
+        <mxCell id="V_JkHH9Ctz50glyrXGDM-2" connectable="0" parent="1" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=10;fontColor=#b85450;labelBackgroundColor=none;" value="ready after link latency&lt;br&gt;&lt;b&gt;(link_latency)&lt;/b&gt;" vertex="1">
+          <mxGeometry x="502.5" y="585.5" as="geometry" />
+        </mxCell>
       </root>
     </mxGraphModel>
   </diagram>
