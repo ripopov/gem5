@@ -42,6 +42,26 @@ class Ramulator2(AbstractMemory):
         "Ramulator2 Python DSL.",
     )
 
+    post_writes = Param.Bool(
+        True,
+        "Acknowledge writes to the requestor as soon as they are accepted "
+        "into Ramulator2's write buffer (gem5 MemCtrl-style posted writes), "
+        "instead of waiting for the DRAM-completion callback. This makes the "
+        "requestor-visible write back-pressure match the native gem5 "
+        "MemCtrl: the requestor is freed at enqueue and only stalls when the "
+        "write buffer is full. The write still drains to DRAM asynchronously. "
+        "Set to False for completion-gated writes (requestor blocked until "
+        "the write commits).",
+    )
+
+    write_frontend_latency = Param.Latency(
+        "10ns",
+        "Static latency added to a posted write acknowledgement. Mirrors the "
+        "native gem5 MemCtrl static_frontend_latency so posted writes on both "
+        "backends report the same low-load write response latency. Ignored "
+        "when post_writes is False.",
+    )
+
 
 add_citation(
     Ramulator2,

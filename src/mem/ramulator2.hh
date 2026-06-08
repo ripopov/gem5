@@ -32,6 +32,7 @@
 #include <deque>
 #include <unordered_map>
 
+#include "base/statistics.hh"
 #include "mem/abstract_mem.hh"
 #include "params/Ramulator2.hh"
 
@@ -74,6 +75,12 @@ class Ramulator2 : public AbstractMemory
     Ramulator::IFrontEnd* frontend;
     Ramulator::IMemorySystem* memorySystem;
 
+    // When true, writes are acknowledged to the requestor at write-buffer
+    // enqueue (gem5 MemCtrl-style posted writes) rather than on DRAM
+    // completion, so requestor-visible write back-pressure matches gem5.
+    const bool postWrites;
+    const Tick writeFrontendLatency;
+
     bool retryReq;
     bool retryResp;
     Tick startTick;
@@ -83,6 +90,13 @@ class Ramulator2 : public AbstractMemory
     unsigned int nbrOutstandingReads;
     unsigned int nbrOutstandingWrites;
 
+    // Enqueue tick of each in-flight write, kept per address so the
+    // DRAM-completion callback can recover the true enqueue-to-commit
+    // latency even when the requestor was already acknowledged (posted
+    // writes). This is the Ramulator2 analogue of gem5 MemCtrl's
+    // requestorWriteTotalLat (readyTime - entryTime).
+    std::unordered_map<Addr, std::deque<Tick>> writeEnqueueTicks;
+
     std::deque<PacketPtr> responseQueue;
 
     EventFunctionWrapper sendResponseEvent;
@@ -91,9 +105,21 @@ class Ramulator2 : public AbstractMemory
     std::unique_ptr<Packet> pendingDelete;
 
     unsigned int nbrOutstanding() const;
-    void accessAndRespond(PacketPtr pkt);
+    void accessAndRespond(PacketPtr pkt, Tick static_latency = 0);
+    void recordWriteCompletion(Addr addr);
     void sendResponse();
     void tick();
+
+    struct Ramulator2Stats : public statistics::Group
+    {
+        Ramulator2Stats(Ramulator2 &mem);
+        // Writes whose DRAM commit completion callback has fired.
+        statistics::Scalar writeCompletions;
+        // Summed enqueue-to-commit latency (Ticks) of completed writes.
+        statistics::Scalar totalWriteCompletionLatency;
+        // Mean enqueue-to-commit write latency (Ticks).
+        statistics::Formula avgWriteCompletionLatency;
+    } ramStats;
 
   public:
     typedef Ramulator2Params Params;

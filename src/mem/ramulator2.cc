@@ -29,6 +29,7 @@
 #include "mem/ramulator2.hh"
 
 #include <fstream>
+#include <functional>
 
 #include "base/callback.hh"
 #include "base/output.hh"
@@ -61,13 +62,16 @@ Ramulator2::Ramulator2(const Params& p) :
     ramulatorConfig(p.ramulator_config),
     frontend(nullptr),
     memorySystem(nullptr),
+    postWrites(p.post_writes),
+    writeFrontendLatency(p.write_frontend_latency),
     retryReq(false),
     retryResp(false),
     startTick(0),
     nbrOutstandingReads(0),
     nbrOutstandingWrites(0),
     sendResponseEvent([this]{ sendResponse(); }, name()),
-    tickEvent([this]{ tick(); }, name())
+    tickEvent([this]{ tick(); }, name()),
+    ramStats(*this)
 {
     registerExitCallback([this]() {
         if (!frontend || !memorySystem) {
@@ -164,6 +168,37 @@ Ramulator2::nbrOutstanding() const
         responseQueue.size();
 }
 
+Ramulator2::Ramulator2Stats::Ramulator2Stats(Ramulator2 &mem) :
+    statistics::Group(&mem),
+    ADD_STAT(writeCompletions, statistics::units::Count::get(),
+             "Writes whose DRAM-commit completion callback has fired"),
+    ADD_STAT(totalWriteCompletionLatency, statistics::units::Tick::get(),
+             "Total enqueue-to-commit latency of completed writes"),
+    ADD_STAT(avgWriteCompletionLatency,
+             statistics::units::Rate<statistics::units::Tick,
+                                      statistics::units::Count>::get(),
+             "Average enqueue-to-commit write latency",
+             totalWriteCompletionLatency / writeCompletions)
+{
+}
+
+void
+Ramulator2::recordWriteCompletion(Addr addr)
+{
+    auto it = writeEnqueueTicks.find(addr);
+    panic_if(it == writeEnqueueTicks.end(),
+             "No enqueue tick recorded for Ramulator2 write %#llx\n", addr);
+
+    Tick enqueued = it->second.front();
+    it->second.pop_front();
+    if (it->second.empty()) {
+        writeEnqueueTicks.erase(it);
+    }
+
+    ramStats.writeCompletions++;
+    ramStats.totalWriteCompletionLatency += curTick() - enqueued;
+}
+
 void
 Ramulator2::tick()
 {
@@ -248,30 +283,57 @@ Ramulator2::recvTimingReq(PacketPtr pkt)
             retryReq = true;
         }
     } else if (pkt->isWrite()) {
+        // Posted-write callback: bookkeeping only. The requestor was already
+        // acknowledged at enqueue (below), so completion just retires the
+        // in-flight write and lets a pending drain finish.
+        auto postedCallback = [this](Ramulator::Request& req) {
+            recordWriteCompletion(req.addr);
+            --nbrOutstandingWrites;
+            if (nbrOutstanding() == 0) {
+                signalDrainDone();
+            }
+        };
+        // Completion-gated callback: respond to the requestor only when the
+        // write actually commits to DRAM.
+        auto completionCallback = [this](Ramulator::Request& req) {
+            auto it = outstandingWrites.find(req.addr);
+            panic_if(it == outstandingWrites.end(),
+                     "No outstanding Ramulator2 write for %#llx\n",
+                     req.addr);
+
+            PacketPtr pkt = it->second.front();
+            it->second.pop_front();
+            if (it->second.empty()) {
+                outstandingWrites.erase(it);
+            }
+
+            recordWriteCompletion(req.addr);
+            --nbrOutstandingWrites;
+            accessAndRespond(pkt);
+        };
+
         enqueueSuccess = frontend->receive_external_requests(
             Ramulator::Request::Type::Write,
             pkt->getAddr(),
             0,
-            [this](Ramulator::Request& req) {
-                auto it = outstandingWrites.find(req.addr);
-                panic_if(it == outstandingWrites.end(),
-                         "No outstanding Ramulator2 write for %#llx\n",
-                         req.addr);
-
-                PacketPtr pkt = it->second.front();
-                it->second.pop_front();
-                if (it->second.empty()) {
-                    outstandingWrites.erase(it);
-                }
-
-                --nbrOutstandingWrites;
-                accessAndRespond(pkt);
-            },
+            postWrites ? std::function<void(Ramulator::Request&)>(
+                             postedCallback)
+                       : std::function<void(Ramulator::Request&)>(
+                             completionCallback),
             pkt->getSize());
 
         if (enqueueSuccess) {
-            outstandingWrites[pkt->getAddr()].push_back(pkt);
             ++nbrOutstandingWrites;
+            writeEnqueueTicks[pkt->getAddr()].push_back(curTick());
+            if (postWrites) {
+                // Acknowledge the write now (gem5 MemCtrl-style posted
+                // write); it drains to DRAM asynchronously. Back-pressure
+                // comes only from the write buffer being full, i.e. the
+                // enqueueSuccess == false path above, matching gem5.
+                accessAndRespond(pkt, writeFrontendLatency);
+            } else {
+                outstandingWrites[pkt->getAddr()].push_back(pkt);
+            }
         } else {
             retryReq = true;
         }
@@ -289,7 +351,7 @@ Ramulator2::recvRespRetry()
 }
 
 void
-Ramulator2::accessAndRespond(PacketPtr pkt)
+Ramulator2::accessAndRespond(PacketPtr pkt, Tick static_latency)
 {
     const bool needsResponse = pkt->needsResponse();
 
@@ -298,7 +360,7 @@ Ramulator2::accessAndRespond(PacketPtr pkt)
     if (needsResponse) {
         assert(pkt->isResponse());
 
-        Tick responseTick = curTick() + pkt->headerDelay +
+        Tick responseTick = curTick() + static_latency + pkt->headerDelay +
             pkt->payloadDelay;
         pkt->headerDelay = pkt->payloadDelay = 0;
 

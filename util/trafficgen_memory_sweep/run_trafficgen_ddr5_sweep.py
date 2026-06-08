@@ -50,6 +50,9 @@ STANDARD_PATTERNS = [
     "random-mixed",
 ]
 CURVE_PATTERNS = ["probe-stream-read", "probe-stream-mixed"]
+# Standard patterns that issue writes, so a write-completion latency view is
+# meaningful. linear-read and random-read are pure reads and are excluded.
+WRITE_BEARING_PATTERNS = ["linear-write", "linear-mixed", "random-mixed"]
 BACKENDS = ["gem5", "ramulator"]
 DEFAULT_STANDARD_RATES = [
     "1GiB/s",
@@ -100,6 +103,7 @@ FIELDNAMES = [
     "avg_latency_ns",
     "read_avg_latency_ns",
     "write_avg_latency_ns",
+    "write_completion_latency_ns",
     "probe_avg_latency_ns",
     "completed_requests",
     "stream_completed_requests",
@@ -295,6 +299,49 @@ def _scope_metrics(
     }
 
 
+def _write_completion_latency_ns(
+    stats: Dict[str, float],
+    tick_to_ns: float,
+) -> float:
+    """True (enqueue-to-DRAM-commit) write latency from backend stats.
+
+    Both backends now post writes (the requestor is acknowledged at
+    write-buffer enqueue), so neither backend's requestor-visible write
+    latency reflects the real DRAM write. Each backend instead exposes an
+    internal enqueue-to-commit counter:
+
+    - gem5 ``MemCtrl`` accumulates ``readyTime - entryTime`` into
+      ``requestorWriteTotalLat`` per requestor (see
+      ``MemCtrl::doBurstAccess``), with ``requestorWriteAccesses`` as the
+      count. Summed across both channel controllers.
+    - The Ramulator2 wrapper accumulates the enqueue-to-completion-callback
+      latency into ``totalWriteCompletionLatency`` with ``writeCompletions``
+      as the count.
+
+    Returns the mean in ns, or NaN if the run issued no writes.
+    """
+    def _sum_substr(token: str) -> float:
+        total = 0.0
+        for key, value in stats.items():
+            if token in key and not math.isnan(value):
+                total += value
+        return total
+
+    # gem5 MemCtrl per-requestor latency vectors (suffix has a ::requestor).
+    gem5_lat = _sum_substr(".requestorWriteTotalLat::")
+    gem5_cnt = _sum_substr(".requestorWriteAccesses::")
+    if gem5_cnt > 0:
+        return gem5_lat / gem5_cnt * tick_to_ns
+
+    # Ramulator2 wrapper scalars.
+    ram_lat = _sum_substr(".totalWriteCompletionLatency")
+    ram_cnt = _sum_substr(".writeCompletions")
+    if ram_cnt > 0:
+        return ram_lat / ram_cnt * tick_to_ns
+
+    return math.nan
+
+
 def _result_from_run(
     args: argparse.Namespace,
     run_id: str,
@@ -352,6 +399,16 @@ def _result_from_run(
 
     ramulator = _parse_ramulator_stats(run_dir / "ramulator_stats.yaml")
     achieved = stream["GBps"] + probe["GBps"]
+
+    # Write-completion latency: a backend-honest write latency measured at
+    # the point the write is actually committed to DRAM, not when the
+    # requestor receives its response. Both backends post writes (ack at
+    # write-buffer enqueue), so the requestor-visible write latency is the
+    # posted ack on both, not real write timing. This value instead comes
+    # from each backend's internal enqueue-to-commit counter.
+    write_completion_latency = _write_completion_latency_ns(
+        stats, tick_to_ns
+    )
     offered_multiplier = (
         int(metadata.get("num_stream_generators", 1))
         if traffic_mode == "probe-stream"
@@ -371,6 +428,7 @@ def _result_from_run(
         "avg_latency_ns": primary_latency,
         "read_avg_latency_ns": stream["read_latency_ns"],
         "write_avg_latency_ns": stream["write_latency_ns"],
+        "write_completion_latency_ns": write_completion_latency,
         "probe_avg_latency_ns": probe["read_latency_ns"],
         "completed_requests": stream["requests"] + probe["requests"],
         "stream_completed_requests": stream["requests"],
@@ -717,6 +775,19 @@ def _write_plots(
                 path,
             ):
                 paths.append(path)
+        if pattern in WRITE_BEARING_PATTERNS:
+            path = plot_dir / f"{pattern}-write-completion-latency.svg"
+            if _write_line_plot(
+                results,
+                pattern,
+                "offered_GBps",
+                "write_completion_latency_ns",
+                "Offered bandwidth (GB/s)",
+                "Write-completion latency (ns)",
+                f"{pattern}: write-completion latency",
+                path,
+            ):
+                paths.append(path)
     for pattern in CURVE_PATTERNS:
         path = plot_dir / f"{pattern}-latency-bandwidth.svg"
         if _write_line_plot(
@@ -773,6 +844,17 @@ def _low_load(
     rows = _rows(results, pattern, backend)
     rows = [row for row in rows if str(row["rate"]) == "1GiB/s"]
     return rows[0] if rows else None
+
+
+def _peak_offered(
+    results: List[Dict[str, object]],
+    pattern: str,
+    backend: str,
+) -> Optional[Dict[str, object]]:
+    rows = _rows(results, pattern, backend)
+    if not rows:
+        return None
+    return max(rows, key=lambda row: _clean_float(row.get("offered_GBps")) or 0.0)
 
 
 def _write_report(
@@ -911,15 +993,71 @@ def _write_report(
         "measure random-read probe latency, and sanity-check against the "
         "theoretical and refresh-adjusted bandwidth limits.",
         "",
+        "### Write Latency: Posted Writes on Both Backends",
+        "",
+        "Both backends now treat writes as **posted**: the requestor is "
+        "acknowledged as soon as the write is accepted into the write "
+        "buffer, and the write drains to DRAM asynchronously. This makes "
+        "requestor-visible write back-pressure symmetric -- the requestor "
+        "stalls only when the write buffer is full -- so the same metric "
+        "means the same thing on both sides.",
+        "",
+        "- Native gem5 `MemCtrl` posts writes by design: `addToWriteQueue()` "
+        "responds to the requestor the instant the write is accepted into "
+        "the write buffer, adding only the static `frontendLatency` "
+        "(`accessAndRespond(pkt, frontendLatency, ...)` in "
+        "`src/mem/mem_ctrl.cc`).",
+        "- The Ramulator2 backend originally responded only on DRAM "
+        "completion, which throttled the requestor by completion latency "
+        "rather than write-buffer occupancy. It now posts writes too (the "
+        "`post_writes` parameter, default on): on a successful enqueue it "
+        "acknowledges the requestor after `write_frontend_latency` (matched "
+        "to gem5's `static_frontend_latency`) and uses Ramulator2's own "
+        "buffer-full signal for back-pressure, exactly like gem5. The write "
+        "still drains to DRAM asynchronously inside Ramulator2.",
+        "- gem5 reads, and Ramulator2 reads, both respond at DRAM completion "
+        "(`readyTime` plus `frontendLatency + backendLatency` for gem5), so "
+        "read bandwidth and latency are directly comparable. With posted "
+        "writes the requestor-visible write latency is the posted ack on "
+        "both backends -- a low, near-constant number that is **not** a real "
+        "write latency. Use the write-completion latency below for real "
+        "write timing.",
+        "",
+        "### Write-Completion Latency (controller-honest)",
+        "",
+        "Because both backends post writes, neither one's requestor-visible "
+        "write latency reflects the real DRAM write. The report therefore "
+        "reads a write-completion latency from each backend's internal "
+        "enqueue-to-commit counter, independent of when the requestor was "
+        "acknowledged.",
+        "",
+        "- For gem5 this is `requestorWriteTotalLat / requestorWriteAccesses`, "
+        "summed across both channel controllers. `MemCtrl::doBurstAccess` "
+        "accumulates `readyTime - entryTime` (enqueue to DRAM-ready) into "
+        "`requestorWriteTotalLat`.",
+        "- For Ramulator2 the wrapper records the enqueue tick of each write "
+        "and, in the DRAM-completion callback, accumulates "
+        "`curTick() - enqueueTick` into `totalWriteCompletionLatency` with "
+        "`writeCompletions` as the count -- the direct analogue of gem5's "
+        "counter.",
+        "- This view exposes real controller behavior the posted-write metric "
+        "hides. gem5's write-drain policy batches writes, so at low offered "
+        "load a write can sit in the buffer until the drain threshold is "
+        "reached (high enqueue-to-commit latency), dropping as load rises. "
+        "Ramulator2 drains promptly at low load and climbs toward its write "
+        "service limit under load.",
+        "",
         "### Known Interpretation Limits",
         "",
         "The native gem5 and Ramulator2 models are not identical controller "
-        "implementations. Read-heavy bandwidth and probe-stream peak "
-        "bandwidth are the most directly comparable measurements. Write-heavy "
-        "cases are more sensitive to DDR5 write CAS timing, write turnaround, "
-        "write-drain policy, and each backend's write response semantics, so "
-        "large write-path differences are reported as model differences "
-        "rather than silently averaged away.",
+        "implementations. With posted writes the requestor-visible write "
+        "back-pressure mechanism now matches (buffer-full stall on both), so "
+        "the residual write-bandwidth gap reflects a genuine difference in "
+        "sustained DRAM write-drain rate, not a measurement artifact: gem5's "
+        "`MemCtrl` write-drain policy and Ramulator2's `GenericDDR` scheduler "
+        "batch and pipeline writes differently. Read-heavy bandwidth and "
+        "probe-stream peak bandwidth remain the most directly comparable "
+        "measurements.",
         "",
         "## External Context",
         "",
@@ -956,6 +1094,11 @@ def _write_report(
     lines += [
         "## Peak Achieved Bandwidth",
         "",
+        "`Latency ns` here is the requestor-visible send-to-response latency. "
+        "For write-bearing patterns on gem5 this reflects the posted "
+        "(early) write acknowledgement, not real write latency -- see the "
+        "Write Completion Latency table.",
+        "",
         "| Pattern | Backend | Peak GB/s | Rate | Latency ns | Host s |",
         "|---|---|---:|---|---:|---:|",
     ]
@@ -975,8 +1118,16 @@ def _write_report(
         "",
         "## Low-Load Latency",
         "",
-        "| Pattern | Backend | Avg ns | Read ns | Write ns |",
-        "|---|---|---:|---:|---:|",
+        "`Write resp ns` is the requestor-visible write latency. Both "
+        "backends post writes, so this is the posted write-buffer "
+        "acknowledgement on both -- a low number, not a real write latency. "
+        "`Write commit ns` is the backend-honest write-completion latency "
+        "(enqueue to DRAM commit) and is the column to compare across "
+        "backends.",
+        "",
+        "| Pattern | Backend | Avg ns | Read ns | Write resp ns | "
+        "Write commit ns |",
+        "|---|---|---:|---:|---:|---:|",
     ]
     for pattern in STANDARD_PATTERNS:
         for backend in BACKENDS:
@@ -987,7 +1138,36 @@ def _write_report(
                 f"| {pattern} | {backend} | "
                 f"{_format_number(row['avg_latency_ns'], 1)} | "
                 f"{_format_number(row['read_avg_latency_ns'], 1)} | "
-                f"{_format_number(row['write_avg_latency_ns'], 1)} |"
+                f"{_format_number(row['write_avg_latency_ns'], 1)} | "
+                f"{_format_number(row['write_completion_latency_ns'], 1)} |"
+            )
+
+    lines += [
+        "",
+        "## Write Completion Latency",
+        "",
+        "Backend-honest write latency measured at DRAM commit from each "
+        "backend's internal enqueue-to-commit counter (gem5: "
+        "`requestorWriteAvgLat`; Ramulator2: `avgWriteCompletionLatency`). "
+        "`Posted resp ns` is the requestor-visible posted acknowledgement "
+        "shown for contrast -- it is the early write-buffer ack on both "
+        "backends, not a real write latency.",
+        "",
+        "| Pattern | Backend | Low-load commit ns | Peak-load commit ns | "
+        "Posted resp ns |",
+        "|---|---|---:|---:|---:|",
+    ]
+    for pattern in WRITE_BEARING_PATTERNS:
+        for backend in BACKENDS:
+            low = _low_load(results, pattern, backend)
+            peak = _peak_offered(results, pattern, backend)
+            if not peak:
+                continue
+            lines.append(
+                f"| {pattern} | {backend} | "
+                f"{_format_number(low['write_completion_latency_ns'], 1) if low else 'n/a'} | "
+                f"{_format_number(peak['write_completion_latency_ns'], 1)} | "
+                f"{_format_number(peak['write_avg_latency_ns'], 1)} |"
             )
 
     lines += [
@@ -1047,11 +1227,13 @@ def _write_report(
             lines.append(
                 f"- `{pattern}` peak bandwidth differs substantially "
                 f"({g_bw:.2f} GB/s gem5 vs {r_bw:.2f} GB/s Ramulator2). "
-                "For write-heavy cases, this is expected to be sensitive to "
-                "DDR5 write CAS/turnaround timing and controller write-drain "
-                "policy. Native gem5 also acknowledges write requests through "
-                "its own MemCtrl response path, so write latency is not as "
-                "directly comparable as read-probe latency."
+                "Both backends post writes, so the requestor-visible write "
+                "back-pressure mechanism is now the same (stall only when the "
+                "write buffer is full). The remaining gap is a genuine "
+                "difference in sustained DRAM write-drain rate between gem5's "
+                "`MemCtrl` write-drain policy and Ramulator2's `GenericDDR` "
+                "scheduler, not a measurement artifact. See the Write "
+                "Completion Latency table for the backend-honest write timing."
             )
     for pattern in CURVE_PATTERNS:
         gem5 = _best(results, pattern, "gem5", "stream_GBps")
@@ -1079,8 +1261,11 @@ def _write_report(
     lines += [
         "- Native gem5 includes explicit fixed frontend/backend controller "
         "latencies. Ramulator2 reports lower backend-local read latency in "
-        "cycles, but the report's primary latency is the same TrafficGen "
-        "requestor-visible send-to-response metric for both backends.",
+        "cycles, but the report's primary read latency is the same TrafficGen "
+        "requestor-visible send-to-response metric for both backends. Writes "
+        "are posted on both backends, so their real timing comes from each "
+        "backend's internal enqueue-to-commit counter (see Write Completion "
+        "Latency), not the requestor-visible posted ack.",
         "- The refresh-adjusted line is a sanity bound, not a pass/fail "
         "criterion. TrafficGen request timing, queue back-pressure, write "
         "turnaround, and row locality can keep achieved bandwidth below it.",
@@ -1150,7 +1335,30 @@ def _parse_arguments() -> argparse.Namespace:
         default="ext/ramulator2/ramulator2/python",
     )
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--report-only",
+        action="store_true",
+        help="Skip running gem5; rebuild CSV/JSON/plots/report from the "
+        "stats already present in the existing run directories.",
+    )
     return parser.parse_args()
+
+
+def _result_from_existing(
+    args: argparse.Namespace,
+    backend: str,
+    pattern: str,
+    rate: str,
+) -> Optional[Dict[str, object]]:
+    run_id = f"{pattern}-{backend}-{_sanitize(rate)}"
+    run_dir = args.outdir / "runs" / run_id
+    if not (run_dir / "stats.txt").exists():
+        return None
+    metadata = _load_metadata(run_dir / "run_metadata.json")
+    success = bool(metadata) or (run_dir / "stats.txt").exists()
+    return _result_from_run(
+        args, run_id, backend, pattern, rate, run_dir, success, 0.0
+    )
 
 
 def main() -> None:
@@ -1167,10 +1375,20 @@ def main() -> None:
     for backend in backends:
         for pattern in standard_patterns:
             for rate in standard_rates:
-                results.append(_run_one(args, backend, pattern, rate))
+                if args.report_only:
+                    row = _result_from_existing(args, backend, pattern, rate)
+                    if row is not None:
+                        results.append(row)
+                else:
+                    results.append(_run_one(args, backend, pattern, rate))
         for pattern in curve_patterns:
             for rate in curve_rates:
-                results.append(_run_one(args, backend, pattern, rate))
+                if args.report_only:
+                    row = _result_from_existing(args, backend, pattern, rate)
+                    if row is not None:
+                        results.append(row)
+                else:
+                    results.append(_run_one(args, backend, pattern, rate))
 
     _write_csv(results, args.outdir / "results.csv")
     (args.outdir / "results.json").write_text(

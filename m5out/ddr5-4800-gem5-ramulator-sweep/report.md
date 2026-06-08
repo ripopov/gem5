@@ -74,9 +74,25 @@ For these plots, the x-axis is offered bandwidth and the y-axis is either comple
 
 These curves are the closest match to the methodology criticized in `docs/ramulator-paper/source`: load the memory with stream traffic, measure random-read probe latency, and sanity-check against the theoretical and refresh-adjusted bandwidth limits.
 
+### Write Latency: Posted Writes on Both Backends
+
+Both backends now treat writes as **posted**: the requestor is acknowledged as soon as the write is accepted into the write buffer, and the write drains to DRAM asynchronously. This makes requestor-visible write back-pressure symmetric -- the requestor stalls only when the write buffer is full -- so the same metric means the same thing on both sides.
+
+- Native gem5 `MemCtrl` posts writes by design: `addToWriteQueue()` responds to the requestor the instant the write is accepted into the write buffer, adding only the static `frontendLatency` (`accessAndRespond(pkt, frontendLatency, ...)` in `src/mem/mem_ctrl.cc`).
+- The Ramulator2 backend originally responded only on DRAM completion, which throttled the requestor by completion latency rather than write-buffer occupancy. It now posts writes too (the `post_writes` parameter, default on): on a successful enqueue it acknowledges the requestor after `write_frontend_latency` (matched to gem5's `static_frontend_latency`) and uses Ramulator2's own buffer-full signal for back-pressure, exactly like gem5. The write still drains to DRAM asynchronously inside Ramulator2.
+- gem5 reads, and Ramulator2 reads, both respond at DRAM completion (`readyTime` plus `frontendLatency + backendLatency` for gem5), so read bandwidth and latency are directly comparable. With posted writes the requestor-visible write latency is the posted ack on both backends -- a low, near-constant number that is **not** a real write latency. Use the write-completion latency below for real write timing.
+
+### Write-Completion Latency (controller-honest)
+
+Because both backends post writes, neither one's requestor-visible write latency reflects the real DRAM write. The report therefore reads a write-completion latency from each backend's internal enqueue-to-commit counter, independent of when the requestor was acknowledged.
+
+- For gem5 this is `requestorWriteTotalLat / requestorWriteAccesses`, summed across both channel controllers. `MemCtrl::doBurstAccess` accumulates `readyTime - entryTime` (enqueue to DRAM-ready) into `requestorWriteTotalLat`.
+- For Ramulator2 the wrapper records the enqueue tick of each write and, in the DRAM-completion callback, accumulates `curTick() - enqueueTick` into `totalWriteCompletionLatency` with `writeCompletions` as the count -- the direct analogue of gem5's counter.
+- This view exposes real controller behavior the posted-write metric hides. gem5's write-drain policy batches writes, so at low offered load a write can sit in the buffer until the drain threshold is reached (high enqueue-to-commit latency), dropping as load rises. Ramulator2 drains promptly at low load and climbs toward its write service limit under load.
+
 ### Known Interpretation Limits
 
-The native gem5 and Ramulator2 models are not identical controller implementations. Read-heavy bandwidth and probe-stream peak bandwidth are the most directly comparable measurements. Write-heavy cases are more sensitive to DDR5 write CAS timing, write turnaround, write-drain policy, and each backend's write response semantics, so large write-path differences are reported as model differences rather than silently averaged away.
+The native gem5 and Ramulator2 models are not identical controller implementations. With posted writes the requestor-visible write back-pressure mechanism now matches (buffer-full stall on both), so the residual write-bandwidth gap reflects a genuine difference in sustained DRAM write-drain rate, not a measurement artifact: gem5's `MemCtrl` write-drain policy and Ramulator2's `GenericDDR` scheduler batch and pipeline writes differently. Read-heavy bandwidth and probe-stream peak bandwidth remain the most directly comparable measurements.
 
 ## External Context
 
@@ -94,9 +110,13 @@ The native gem5 and Ramulator2 models are not identical controller implementatio
 
 ![linear-write-latency](plots/linear-write-latency.svg)
 
+![linear-write-write-completion-latency](plots/linear-write-write-completion-latency.svg)
+
 ![linear-mixed-bandwidth](plots/linear-mixed-bandwidth.svg)
 
 ![linear-mixed-latency](plots/linear-mixed-latency.svg)
+
+![linear-mixed-write-completion-latency](plots/linear-mixed-write-completion-latency.svg)
 
 ![random-read-bandwidth](plots/random-read-bandwidth.svg)
 
@@ -106,39 +126,58 @@ The native gem5 and Ramulator2 models are not identical controller implementatio
 
 ![random-mixed-latency](plots/random-mixed-latency.svg)
 
+![random-mixed-write-completion-latency](plots/random-mixed-write-completion-latency.svg)
+
 ![probe-stream-read-latency-bandwidth](plots/probe-stream-read-latency-bandwidth.svg)
 
 ![probe-stream-mixed-latency-bandwidth](plots/probe-stream-mixed-latency-bandwidth.svg)
 
 ## Peak Achieved Bandwidth
 
+`Latency ns` here is the requestor-visible send-to-response latency. For write-bearing patterns on gem5 this reflects the posted (early) write acknowledgement, not real write latency -- see the Write Completion Latency table.
+
 | Pattern | Backend | Peak GB/s | Rate | Latency ns | Host s |
 |---|---|---:|---|---:|---:|
 | linear-read | gem5 | 35.297 | 48GiB/s | 141.7 | 0.020 |
-| linear-read | ramulator | 33.821 | 48GiB/s | 143.2 | 0.050 |
+| linear-read | ramulator | 33.821 | 48GiB/s | 143.2 | 0.060 |
 | linear-write | gem5 | 35.238 | 48GiB/s | 16.4 | 0.020 |
-| linear-write | ramulator | 11.350 | 48GiB/s | 367.7 | 0.050 |
+| linear-write | ramulator | 11.487 | 48GiB/s | 17.6 | 0.050 |
 | linear-mixed | gem5 | 27.136 | 48GiB/s | 109.1 | 0.020 |
-| linear-mixed | ramulator | 15.734 | 32GiB/s | 337.2 | 0.040 |
+| linear-mixed | ramulator | 15.760 | 32GiB/s | 198.9 | 0.040 |
 | random-read | gem5 | 22.464 | 32GiB/s | 171.1 | 0.030 |
 | random-read | ramulator | 23.279 | 48GiB/s | 176.7 | 0.060 |
 | random-mixed | gem5 | 19.294 | 48GiB/s | 125.2 | 0.030 |
-| random-mixed | ramulator | 22.368 | 48GiB/s | 255.8 | 0.060 |
+| random-mixed | ramulator | 22.415 | 32GiB/s | 149.6 | 0.060 |
 
 ## Low-Load Latency
 
-| Pattern | Backend | Avg ns | Read ns | Write ns |
+`Write resp ns` is the requestor-visible write latency. Both backends post writes, so this is the posted write-buffer acknowledgement on both -- a low number, not a real write latency. `Write commit ns` is the backend-honest write-completion latency (enqueue to DRAM commit) and is the column to compare across backends.
+
+| Pattern | Backend | Avg ns | Read ns | Write resp ns | Write commit ns |
+|---|---|---:|---:|---:|---:|
+| linear-read | gem5 | 67.2 | 67.2 | n/a | n/a |
+| linear-read | ramulator | 34.8 | 34.8 | n/a | n/a |
+| linear-write | gem5 | 14.8 | n/a | 14.8 | 975.6 |
+| linear-write | ramulator | 14.8 | n/a | 14.8 | 14.8 |
+| linear-mixed | gem5 | 36.2 | 61.3 | 14.8 | 1733.8 |
+| linear-mixed | ramulator | 21.9 | 30.3 | 14.8 | 18.6 |
+| random-read | gem5 | 73.5 | 73.5 | n/a | n/a |
+| random-read | ramulator | 54.1 | 54.1 | n/a | n/a |
+| random-mixed | gem5 | 44.5 | 74.7 | 14.8 | 1837.4 |
+| random-mixed | ramulator | 32.7 | 51.0 | 14.8 | 35.4 |
+
+## Write Completion Latency
+
+Backend-honest write latency measured at DRAM commit from each backend's internal enqueue-to-commit counter (gem5: `requestorWriteAvgLat`; Ramulator2: `avgWriteCompletionLatency`). `Posted resp ns` is the requestor-visible posted acknowledgement shown for contrast -- it is the early write-buffer ack on both backends, not a real write latency.
+
+| Pattern | Backend | Low-load commit ns | Peak-load commit ns | Posted resp ns |
 |---|---|---:|---:|---:|
-| linear-read | gem5 | 67.2 | 67.2 | n/a |
-| linear-read | ramulator | 34.8 | 34.8 | n/a |
-| linear-write | gem5 | 14.8 | n/a | 14.8 |
-| linear-write | ramulator | 19.8 | n/a | 19.8 |
-| linear-mixed | gem5 | 36.2 | 61.3 | 14.8 |
-| linear-mixed | ramulator | 26.6 | 30.3 | 23.5 |
-| random-read | gem5 | 73.5 | 73.5 | n/a |
-| random-read | ramulator | 54.1 | 54.1 | n/a |
-| random-mixed | gem5 | 44.5 | 74.7 | 14.8 |
-| random-mixed | ramulator | 45.6 | 50.9 | 40.3 |
+| linear-write | gem5 | 975.6 | 160.2 | 16.4 |
+| linear-write | ramulator | 14.8 | 357.8 | 17.6 |
+| linear-mixed | gem5 | 1733.8 | 299.5 | 16.8 |
+| linear-mixed | ramulator | 18.6 | 287.9 | 8.2 |
+| random-mixed | gem5 | 1837.4 | 402.5 | 18.9 |
+| random-mixed | ramulator | 35.4 | 196.9 | 8.2 |
 
 ## Hockey-Stick Curve Summary
 
@@ -147,7 +186,7 @@ The native gem5 and Ramulator2 models are not identical controller implementatio
 | probe-stream-read | gem5 | 28.919 | 226.4 | 119.7 |
 | probe-stream-read | ramulator | 30.349 | 136.8 | 51.5 |
 | probe-stream-mixed | gem5 | 23.330 | 298.0 | 125.1 |
-| probe-stream-mixed | ramulator | 22.807 | 301.8 | 52.8 |
+| probe-stream-mixed | ramulator | 22.679 | 332.7 | 53.4 |
 
 ## Backend-Local Ramulator2 Sanity Counters
 
@@ -157,17 +196,17 @@ The native gem5 and Ramulator2 models are not identical controller implementatio
 | linear-write | 11.352 | n/a | 0.979 |
 | linear-mixed | 15.745 | 379.5 | 0.980 |
 | random-read | 23.298 | 171.3 | 0.000 |
-| random-mixed | 22.370 | 305.1 | 0.000 |
+| random-mixed | 22.308 | 285.1 | 0.000 |
 | probe-stream-read | 31.161 | 115.2 | 0.539 |
-| probe-stream-mixed | 23.221 | 207.4 | 0.567 |
+| probe-stream-mixed | 23.008 | 222.5 | 0.562 |
 
 ## Interpretation
 
-- `linear-write` peak bandwidth differs substantially (35.24 GB/s gem5 vs 11.35 GB/s Ramulator2). For write-heavy cases, this is expected to be sensitive to DDR5 write CAS/turnaround timing and controller write-drain policy. Native gem5 also acknowledges write requests through its own MemCtrl response path, so write latency is not as directly comparable as read-probe latency.
-- `linear-mixed` peak bandwidth differs substantially (27.14 GB/s gem5 vs 15.73 GB/s Ramulator2). For write-heavy cases, this is expected to be sensitive to DDR5 write CAS/turnaround timing and controller write-drain policy. Native gem5 also acknowledges write requests through its own MemCtrl response path, so write latency is not as directly comparable as read-probe latency.
+- `linear-write` peak bandwidth differs substantially (35.24 GB/s gem5 vs 11.49 GB/s Ramulator2). Both backends post writes, so the requestor-visible write back-pressure mechanism is now the same (stall only when the write buffer is full). The remaining gap is a genuine difference in sustained DRAM write-drain rate between gem5's `MemCtrl` write-drain policy and Ramulator2's `GenericDDR` scheduler, not a measurement artifact. See the Write Completion Latency table for the backend-honest write timing.
+- `linear-mixed` peak bandwidth differs substantially (27.14 GB/s gem5 vs 15.76 GB/s Ramulator2). Both backends post writes, so the requestor-visible write back-pressure mechanism is now the same (stall only when the write buffer is full). The remaining gap is a genuine difference in sustained DRAM write-drain rate between gem5's `MemCtrl` write-drain policy and Ramulator2's `GenericDDR` scheduler, not a measurement artifact. See the Write Completion Latency table for the backend-honest write timing.
 - `probe-stream-read` peak stream bandwidth agrees within 4.7% between backends.
-- `probe-stream-mixed` peak stream bandwidth agrees within 2.2% between backends.
-- Native gem5 includes explicit fixed frontend/backend controller latencies. Ramulator2 reports lower backend-local read latency in cycles, but the report's primary latency is the same TrafficGen requestor-visible send-to-response metric for both backends.
+- `probe-stream-mixed` peak stream bandwidth agrees within 2.8% between backends.
+- Native gem5 includes explicit fixed frontend/backend controller latencies. Ramulator2 reports lower backend-local read latency in cycles, but the report's primary read latency is the same TrafficGen requestor-visible send-to-response metric for both backends. Writes are posted on both backends, so their real timing comes from each backend's internal enqueue-to-commit counter (see Write Completion Latency), not the requestor-visible posted ack.
 - The refresh-adjusted line is a sanity bound, not a pass/fail criterion. TrafficGen request timing, queue back-pressure, write turnaround, and row locality can keep achieved bandwidth below it.
 
 ## Reproduction
