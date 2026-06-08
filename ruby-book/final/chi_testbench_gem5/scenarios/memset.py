@@ -10,7 +10,7 @@ from m5.objects import (
 
 
 def build(args, planner):
-    num_lines = 1024
+    num_lines = getattr(args, "num_lines", 1024)
     line_size = 64
     write_size = 63
     stats_quiesce_cycles = 10000

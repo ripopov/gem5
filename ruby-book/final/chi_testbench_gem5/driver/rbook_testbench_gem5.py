@@ -96,6 +96,12 @@ parser.add_argument(
     "HNFs homes every access on a single HNF/LLC)",
 )
 parser.add_argument(
+    "--num-lines",
+    type=int,
+    default=1024,
+    help="memset number of cache lines streamed per active tile",
+)
+parser.add_argument(
     "--allow-retryack",
     type=int,
     choices=[0, 1],
