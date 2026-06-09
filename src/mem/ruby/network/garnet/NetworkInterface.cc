@@ -110,8 +110,9 @@ NetworkInterface::addOutPort(NetworkLink *out_link,
         // Reset VC Per VNET for input links already instantiated
         for (auto &iPort: inPorts) {
             NetworkLink *inNetLink = iPort->inNetLink();
+            CreditLink *outCreditLink = iPort->outCreditLink();
             inNetLink->setVcsPerVnet(m_vc_per_vnet);
-            credit_link->setVcsPerVnet(m_vc_per_vnet);
+            outCreditLink->setVcsPerVnet(m_vc_per_vnet);
         }
     } else {
         fatal_if(consumerVcs != m_vc_per_vnet,

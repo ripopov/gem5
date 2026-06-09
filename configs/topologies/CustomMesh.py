@@ -221,6 +221,26 @@ class CustomMesh(SimpleTopology):
 
         return node_router
 
+    def _addExtLink(self, ctrl, router):
+        vnets = (
+            list(range(self._num_vnets))
+            if self._per_vnet_links
+            else [None]
+        )
+
+        for vnet in vnets:
+            self._ext_links.append(
+                self._ExtLink(
+                    link_id=self._link_count,
+                    ext_node=ctrl,
+                    int_node=router,
+                    latency=self._node_link_latency,
+                    bandwidth_factor=self._link_bandwidth_factor,
+                    supported_vnets=[vnet] if vnet is not None else [],
+                )
+            )
+            self._link_count += 1
+
     def distributeNodes(self, node_placement_config, node_list):
         if len(node_list) == 0:
             return
@@ -247,16 +267,7 @@ class CustomMesh(SimpleTopology):
                 # connect all ctrls in the node to node_router
                 ctrls = node.getNetworkSideControllers()
                 for c in ctrls:
-                    self._ext_links.append(
-                        self._ExtLink(
-                            link_id=self._link_count,
-                            ext_node=c,
-                            int_node=router,
-                            latency=self._node_link_latency,
-                            bandwidth_factor=self._link_bandwidth_factor,
-                        )
-                    )
-                    self._link_count += 1
+                    self._addExtLink(c, router)
         else:
             # try to circulate all nodes to all routers, some routers may be
             # connected to zero or more than one node.
@@ -269,16 +280,7 @@ class CustomMesh(SimpleTopology):
                     router = self._createRNFRouter(router)
                 ctrls = node.getNetworkSideControllers()
                 for c in ctrls:
-                    self._ext_links.append(
-                        self._ExtLink(
-                            link_id=self._link_count,
-                            ext_node=c,
-                            int_node=router,
-                            latency=self._node_link_latency,
-                            bandwidth_factor=self._link_bandwidth_factor,
-                        )
-                    )
-                    self._link_count += 1
+                    self._addExtLink(c, router)
                 idx = (idx + 1) % len(router_idx_list)
 
     # --------------------------------------------------------------------------
@@ -328,6 +330,11 @@ class CustomMesh(SimpleTopology):
         self._link_bandwidth_factor = getattr(
             options, "link_bandwidth_factor", 16
         )
+        self._per_vnet_links = (
+            options.network == "garnet"
+            and getattr(options, "per_vnet_links", False)
+        )
+        self._num_vnets = int(network.number_of_virtual_networks)
 
         # classify nodes into different types
         rnf_nodes = []
@@ -402,8 +409,8 @@ class CustomMesh(SimpleTopology):
             num_cols,
             options.cross_links,
             options.cross_link_latency,
-            getattr(options, "per_vnet_links", False),
-            network.number_of_virtual_networks,
+            self._per_vnet_links,
+            self._num_vnets,
         )
 
         # Place CHI_RNF on the mesh
