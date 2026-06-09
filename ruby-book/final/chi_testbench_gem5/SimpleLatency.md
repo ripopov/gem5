@@ -347,6 +347,22 @@ rescale all SimpleNetwork link budgets globally. When physical channels are
 enabled, each vnet channel carries its own budget, so vnets do not share
 bandwidth in the `Throttle`.
 
+By default every vnet channel inherits the same `link_bandwidth_factor`
+(40 B/cy here), which over-provisions the control channels. The testbench
+therefore sets `physical_vnets_bandwidth` in `rbook_4x4.py` to give each CHI
+channel its own per-cycle budget, modeling one flit/cycle per channel:
+
+| vnet | CHI channel | budget | rationale |
+| ---: | --- | ---: | --- |
+| 0 | REQ | 8 B/cy | `control_msg_size`: one control flit/cycle |
+| 1 | SNP | 8 B/cy | `control_msg_size` |
+| 2 | RSP | 8 B/cy | `control_msg_size` |
+| 3 | DAT | 40 B/cy | `data_msg_size + control_msg_size`: one data flit/cycle |
+
+`physical_vnets_bandwidth` overrides `link_bandwidth_factor` per vnet and is
+only honored when `simple_physical_channels` is set. Leaving it empty falls
+back to the shared `link_bandwidth_factor` on every channel.
+
 ### The launch loop
 
 For each vnet/channel the `Throttle` repeats, while budget remains and the
