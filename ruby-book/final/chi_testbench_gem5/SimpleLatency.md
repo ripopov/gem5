@@ -101,6 +101,36 @@ This is why increasing `cross_link_latency` also increases the cross-link input
 buffer depth in SimpleNetwork. It does not increase the fixed 8-entry switch
 port buffer, and it does not increase link bandwidth.
 
+## How SimpleNetwork uses configured link latencies
+
+The CHI testbench starts with the `NoC_Params` values in
+`configs/example/noc_config/rbook_4x4.py`, falling back to
+`configs/ruby/CHI_config.py` defaults for parameters not overridden there. The
+`CustomMesh` topology then turns those values into per-link `latency` fields:
+
+- `router_link_latency` is used for normal directed `SimpleIntLink`s.
+- `cross_link_latency` replaces `router_link_latency` for directed links listed
+  in `cross_links`.
+- `node_link_latency` is used for each controller `SimpleExtLink`.
+
+In C++, all three arrive as `BasicLink::m_latency`. `SimpleNetwork` passes that
+latency to `Switch::addOutPort()`, which creates a `Throttle` for the directed
+output. The latency is applied when the `Throttle` enqueues the message into
+the downstream `MessageBuffer`:
+
+```text
+source switch output buffer -> Throttle -> downstream input buffer
+                                      enqueue delay = link latency
+```
+
+Internal router-to-router links use that downstream buffer as the destination
+router's input queue, so the link latency delays when the next router can route
+the message. External controller links are asymmetric in SimpleNetwork:
+`node_link_latency` is applied only on router-to-controller delivery. The
+controller-to-router direction directly registers the controller output queue as
+the switch input queue, so it has controller/protocol enqueue latency but no
+separate `node_link_latency` stage.
+
 ## How a single message hop works in SimpleNetwork
 
 ![Generic SimpleNetwork architecture diagram showing one detailed hop from Router A to Router B. Router A is a SimpleNetwork Switch (BasicRouter) holding one PerfectSwitch plus one Throttle and one port buffer per output-port-times-vnet. On the left, a controller (network endpoint) connects by a bidirectional ExtLink. Every MessageBuffer uses the same label style: the word MessageBuffer, then a direction line (Owner Input/Output arrow Peer), then the variable name with scope, then a FIFO slot row. Controller to switch is a single shared MessageBuffer labelled Controller Output arrow Network with variable Controller::m_toNetQueues[vnets]; this controller output buffer is registered directly as the switch input queue, so there is no router-side input buffer and no link latency on this direction, and the PerfectSwitch dequeues it directly. Switch to controller has two buffers separated by a Throttle: a switch output port buffer (A Router Output arrow Controller, Switch::port_buffers[directions x vnets]) drains through a Throttle (ExtLink out, node_link_latency) into the controller input MessageBuffer (Controller Input arrow Network, Controller::m_fromNetQueues[vnets], unbounded). Buffers are drawn as rectangles with filled/empty FIFO slots; bounded router buffers have a fixed number of slots, while unbounded controller endpoint queues trail off through a dashed open slot to an infinity symbol (no fixed capacity, no backpressure). Inside Router A, the buffered input is A Router Input arrow Other Router (SimpleIntLink::m_buffers[vnets], also the delayed link buffer); all inputs feed the PerfectSwitch, drawn as an orange cloud labelled routing logic, no storage: for each ready input msg it routes, checks areNSlotsAvailable(1) on the output buffer (backpressure), and enqueues into it with no crossbar bandwidth limit, so many msgs per cycle can enter one output buffer bounded only by its free slots. The PerfectSwitch writes into per-output-port buffers (Switch::port_buffers[directions x vnets]) and becomes ready only after the routing latency (int_routing_latency for internal links, ext_routing_latency for endpoint links). Router A shows an output port buffer A Router Output arrow B Router and another A Router Output arrow Other Router. Each output port buffer drains through its own Throttle, drawn as a red cloud (bandwidth = link_bandwidth_factor, 1 msg/cy/vnet, needs a free downstream slot). The Throttle A to B enqueues into Router B, and the message becomes ready only after the link_latency. Router B shows only the single B Router Input arrow A Router (SimpleIntLink::m_buffers[vnets], the delayed A to B link) feeding PerfectSwitch B. A legend explains bounded MessageBuffer (router) = fixed N slots enforcing backpressure via areNSlotsAvailable(), unbounded MessageBuffer (controller endpoint) = slots trailing off to infinity with no backpressure, PerfectSwitch = routing logic with no storage applying routing latency on enqueue to the output buffer, and Throttle = per-output bandwidth plus link-latency gate applying link latency on enqueue to the downstream buffer.](resources/simple_network_hop.svg)

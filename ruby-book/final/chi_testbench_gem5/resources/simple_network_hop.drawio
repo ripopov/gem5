@@ -59,7 +59,7 @@
           <mxGeometry height="16" width="173" x="46" y="413" as="geometry" />
         </mxCell>
         <mxCell id="routerA" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f6f0fb;strokeColor=#9673a6;strokeWidth=2.2;fontSize=11;align=center;verticalAlign=top;fontColor=#000000;arcSize=6;" value="" vertex="1">
-          <mxGeometry height="625" width="905" x="289" y="91" as="geometry" />
+          <mxGeometry height="625" width="905" x="292" y="90" as="geometry" />
         </mxCell>
         <mxCell id="routerA_lbl" parent="1" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=13;fontColor=#000000;" value="Router A  &amp;#8212;  SimpleNetwork &lt;b&gt;Switch&lt;/b&gt; (BasicRouter)" vertex="1">
           <mxGeometry height="22" width="881" x="324" y="98" as="geometry" />
@@ -67,11 +67,8 @@
         <mxCell id="routerA_sub" parent="1" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=10;fontColor=#6a4f86;" value="one PerfectSwitch + one Throttle &amp; one port buffer per (output port × vnet) · diagram shows a single vnet" vertex="1">
           <mxGeometry height="18" width="881" x="320" y="125" as="geometry" />
         </mxCell>
-        <mxCell id="port_in_hdr" parent="1" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=10;fontColor=#6a4f86;" value="&lt;b&gt;&amp;#9660; INPUT from controller&lt;/b&gt;" vertex="1">
-          <mxGeometry height="16" width="230" x="395" y="183" as="geometry" />
-        </mxCell>
         <mxCell id="other_in_src" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#9b9b9b;strokeWidth=1.3;fontSize=9;align=center;verticalAlign=middle;fontColor=#666666;arcSize=6;dashed=1;dashPattern=5 4;" value="&lt;b&gt;other mesh&lt;br&gt;router&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:8px&#39;&gt;output link&lt;/font&gt;" vertex="1">
-          <mxGeometry height="70" width="75" x="193" y="551" as="geometry" />
+          <mxGeometry height="70" width="75" x="138" y="551" as="geometry" />
         </mxCell>
         <mxCell id="inA_neigh" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=1.6;fontSize=10;align=center;verticalAlign=top;fontColor=#000000;arcSize=6;" value="&lt;b&gt;MessageBuffer&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:9px&#39;&gt;A Router Input ← Other Router&lt;br&gt;&lt;i&gt;SimpleIntLink::m_buffers[vnets]&lt;/i&gt;&lt;/font&gt;" vertex="1">
           <mxGeometry height="115" width="215" x="395" y="528" as="geometry" />
@@ -125,7 +122,7 @@
           <mxGeometry height="16" width="215" x="865" y="336" as="geometry" />
         </mxCell>
         <mxCell id="thr_B" parent="1" style="shape=cloud;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=1.6;fontSize=10;align=center;verticalAlign=middle;" value="&lt;b&gt;Throttle&lt;/b&gt;&lt;br&gt;A→B&lt;br&gt;&lt;font style=&#39;font-size:9px&#39;&gt;bw = link_bandwidth_factor&lt;br&gt;1 msg/cy/vnet&lt;br&gt;needs free downstream slot&lt;/font&gt;" vertex="1">
-          <mxGeometry height="95" width="166" x="1090" y="225" as="geometry" />
+          <mxGeometry height="95" width="166" x="1096" y="225" as="geometry" />
         </mxCell>
         <mxCell id="outA_other" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=1.6;fontSize=10;align=center;verticalAlign=top;fontColor=#000000;arcSize=6;" value="&lt;b&gt;MessageBuffer&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:9px&#39;&gt;A Router Output → Other Router&lt;br&gt;&lt;i&gt;Switch::port_buffers[directions × vnets]&lt;/i&gt;&lt;/font&gt;" vertex="1">
           <mxGeometry height="120" width="215" x="865" y="430" as="geometry" />
@@ -155,10 +152,7 @@
           <mxGeometry height="95" width="111" x="1103" y="475" as="geometry" />
         </mxCell>
         <mxCell id="other_out_sink" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#9b9b9b;strokeWidth=1.3;fontSize=9;align=center;verticalAlign=middle;fontColor=#666666;arcSize=6;dashed=1;dashPattern=5 4;" value="&lt;b&gt;other mesh&lt;br&gt;router&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:8px&#39;&gt;input link&lt;/font&gt;" vertex="1">
-          <mxGeometry height="72" width="60" x="1287" y="486.5" as="geometry" />
-        </mxCell>
-        <mxCell id="port_out_hdr" parent="1" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=10;fontColor=#6a4f86;" value="&lt;b&gt;&amp;#9650; OUTPUT to controller (local port)&lt;/b&gt;" vertex="1">
-          <mxGeometry height="16" width="250" x="395" y="278" as="geometry" />
+          <mxGeometry height="72" width="60" x="1377.93" y="486.5" as="geometry" />
         </mxCell>
         <mxCell id="outA_rnf" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=1.6;fontSize=10;align=center;verticalAlign=top;fontColor=#000000;arcSize=6;" value="&lt;b&gt;MessageBuffer&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:9px&#39;&gt;A Router Output → Controller&lt;br&gt;&lt;i&gt;Switch::port_buffers[directions × vnets]&lt;/i&gt;&lt;/font&gt;" vertex="1">
           <mxGeometry height="120" width="205.5" x="392.5" y="301" as="geometry" />
@@ -249,9 +243,9 @@
             <mxPoint x="812" y="391" as="sourcePoint" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="e_ob_B_l" connectable="0" parent="e_ob_B" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=9;fontColor=#9673a6;labelBackgroundColor=none;" value="ready after routing latency&lt;br&gt;&lt;b&gt;(int_routing_latency)&lt;/b&gt;" vertex="1">
+        <mxCell id="e_ob_B_l" connectable="0" parent="e_ob_B" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=9;fontColor=#9673a6;labelBackgroundColor=none;" value="ready after routing latency&lt;br&gt;&lt;b style=&quot;background-color: rgb(255, 255, 0);&quot;&gt;&lt;font style=&quot;font-size: 12px;&quot;&gt;(int_routing_latency)&lt;/font&gt;&lt;/b&gt;" vertex="1">
           <mxGeometry relative="1" as="geometry">
-            <mxPoint x="134" y="-59" as="offset" />
+            <mxPoint x="93" y="-55" as="offset" />
           </mxGeometry>
         </mxCell>
         <mxCell id="e_tb_B" edge="1" parent="1" source="outA_B" style="endArrow=classic;html=1;strokeWidth=1.8;strokeColor=#333333;rounded=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="thr_B">
@@ -260,9 +254,14 @@
         <mxCell id="e_link" edge="1" parent="1" source="thr_B" style="endArrow=classic;html=1;strokeWidth=2.2;strokeColor=#b85450;rounded=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.27;entryDx=0;entryDy=0;" target="inB_AB">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e_link_l" connectable="0" parent="e_link" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=10;fontColor=#b85450;labelBackgroundColor=none;" value="ready after link latency&lt;br&gt;&lt;b&gt;(link_latency)&lt;/b&gt;" vertex="1">
+        <mxCell id="e_link_l" connectable="0" parent="e_link" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=10;fontColor=#b85450;labelBackgroundColor=none;" value="&lt;b style=&quot;background-color: rgb(255, 255, 0);&quot;&gt;&lt;font style=&quot;font-size: 12px;&quot;&gt;(router_link_latency or&lt;/font&gt;&lt;/b&gt;&lt;div&gt;&lt;b style=&quot;background-color: rgb(255, 255, 0);&quot;&gt;&lt;font style=&quot;font-size: 12px;&quot;&gt;cross_link_latency)&lt;/font&gt;&lt;/b&gt;&lt;/div&gt;" vertex="1">
           <mxGeometry relative="1" as="geometry">
-            <mxPoint x="162" y="28" as="offset" />
+            <mxPoint x="24" y="37" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="cQbzy0LnBN5i7wnux7k0-5" connectable="0" parent="e_link" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=10;fontColor=#b85450;labelBackgroundColor=none;" value="&lt;b style=&quot;background-color: rgb(255, 255, 0);&quot;&gt;&lt;font style=&quot;font-size: 12px;&quot;&gt;(router_link_latency or&lt;/font&gt;&lt;/b&gt;&lt;div&gt;&lt;b style=&quot;background-color: rgb(255, 255, 0);&quot;&gt;&lt;font style=&quot;font-size: 12px;&quot;&gt;cross_link_latency)&lt;/font&gt;&lt;/b&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="15" y="277" as="offset" />
           </mxGeometry>
         </mxCell>
         <mxCell id="e_bps" edge="1" parent="1" source="inB_AB" style="endArrow=classic;html=1;strokeWidth=1.8;strokeColor=#333333;rounded=1;exitX=0.286;exitY=1;exitDx=0;exitDy=0;">
@@ -341,11 +340,23 @@
         <mxCell id="lg4_t" parent="1" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fillColor=none;fontSize=10;fontColor=#000000;" value="&lt;b&gt;Throttle&lt;/b&gt; &amp;#8212; per-output bandwidth + link-latency gate; applies link latency L on enqueue to the downstream buffer" vertex="1">
           <mxGeometry height="34" width="560" x="346" y="836" as="geometry" />
         </mxCell>
-        <mxCell id="V_JkHH9Ctz50glyrXGDM-1" connectable="0" parent="1" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=9;fontColor=#9673a6;labelBackgroundColor=none;" value="ready after routing latency&lt;br&gt;&lt;b&gt;(ext_routing_latency)&lt;/b&gt;" vertex="1">
-          <mxGeometry x="500" y="361" as="geometry" />
+        <mxCell id="V_JkHH9Ctz50glyrXGDM-1" connectable="0" parent="1" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=9;fontColor=#9673a6;labelBackgroundColor=none;" value="ready after routing latency&lt;br&gt;&lt;b style=&quot;background-color: rgb(255, 255, 0);&quot;&gt;&lt;font style=&quot;font-size: 12px;&quot;&gt;(ext_routing_latency)&lt;/font&gt;&lt;/b&gt;" vertex="1">
+          <mxGeometry x="527" y="361" as="geometry" />
         </mxCell>
-        <mxCell id="V_JkHH9Ctz50glyrXGDM-2" connectable="0" parent="1" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=10;fontColor=#b85450;labelBackgroundColor=none;" value="ready after link latency&lt;br&gt;&lt;b&gt;(link_latency)&lt;/b&gt;" vertex="1">
-          <mxGeometry x="502.5" y="585.5" as="geometry" />
+        <mxCell id="V_JkHH9Ctz50glyrXGDM-2" connectable="0" parent="1" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=10;fontColor=#b85450;labelBackgroundColor=none;" value="&lt;br&gt;&lt;b style=&quot;background-color: rgb(255, 255, 0);&quot;&gt;&lt;font style=&quot;font-size: 12px;&quot;&gt;(&lt;b style=&quot;font-size: 10px; background-color: rgb(255, 255, 0);&quot;&gt;&lt;font style=&quot;font-size: 12px;&quot;&gt;router_link_latency&lt;/font&gt;&lt;/b&gt;&amp;nbsp;or&lt;/font&gt;&lt;/b&gt;&lt;div&gt;&lt;b style=&quot;background-color: rgb(255, 255, 0);&quot;&gt;&lt;font style=&quot;font-size: 12px;&quot;&gt;cross_link_latency)&lt;/font&gt;&lt;/b&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry x="308.5" y="600" as="geometry" />
+        </mxCell>
+        <mxCell id="cQbzy0LnBN5i7wnux7k0-1" parent="1" style="text;whiteSpace=wrap;html=1;" value="&lt;span style=&quot;color: rgb(150, 115, 166); font-family: Helvetica; font-size: 9px; font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: 400; letter-spacing: normal; orphans: 2; text-align: center; text-indent: 0px; text-transform: none; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; white-space: nowrap; background-color: rgb(236, 236, 236); text-decoration-thickness: initial; text-decoration-style: initial; text-decoration-color: initial; display: inline !important; float: none;&quot;&gt;ready after routing latency&lt;/span&gt;&lt;br style=&quot;forced-color-adjust: none; color: rgb(150, 115, 166); font-family: Helvetica; font-size: 9px; font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: 400; letter-spacing: normal; orphans: 2; text-align: center; text-indent: 0px; text-transform: none; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; white-space: nowrap; background-color: rgb(236, 236, 236); text-decoration-thickness: initial; text-decoration-style: initial; text-decoration-color: initial;&quot;&gt;&lt;b data-mx-given-colors=&quot;{&amp;quot;background-color&amp;quot;:&amp;quot;rgb(255, 255, 0)&amp;quot;}&quot; style=&quot;forced-color-adjust: none; color: rgb(150, 115, 166); font-family: Helvetica; font-size: 9px; font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; letter-spacing: normal; orphans: 2; text-align: center; text-indent: 0px; text-transform: none; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; white-space: nowrap; text-decoration-thickness: initial; text-decoration-style: initial; text-decoration-color: initial; background-color: rgb(255, 255, 0);&quot;&gt;&lt;font style=&quot;forced-color-adjust: none; font-size: 12px;&quot;&gt;(int_routing_latency)&lt;/font&gt;&lt;/b&gt;" vertex="1">
+          <mxGeometry height="51" width="147" x="871.9956863839284" y="472.9957003348213" as="geometry" />
+        </mxCell>
+        <mxCell id="cQbzy0LnBN5i7wnux7k0-3" parent="1" style="text;whiteSpace=wrap;html=1;" value="&lt;b style=&quot;forced-color-adjust: none; color: rgb(184, 84, 80); font-family: Helvetica; font-size: 10px; font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; letter-spacing: normal; orphans: 2; text-align: center; text-indent: 0px; text-transform: none; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; white-space: nowrap; text-decoration-thickness: initial; text-decoration-style: initial; text-decoration-color: initial; background-color: rgb(255, 255, 0);&quot;&gt;&lt;font style=&quot;forced-color-adjust: none; font-size: 12px;&quot;&gt;node_link_latency&lt;/font&gt;&lt;/b&gt;" vertex="1">
+          <mxGeometry height="36" width="135" x="168.99586206896558" y="360.9992766702586" as="geometry" />
+        </mxCell>
+        <mxCell id="cQbzy0LnBN5i7wnux7k0-4" parent="1" style="text;whiteSpace=wrap;html=1;" value="&lt;b style=&quot;forced-color-adjust: none; font-family: Helvetica; font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; letter-spacing: normal; orphans: 2; text-indent: 0px; text-transform: none; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; white-space: nowrap; text-decoration-thickness: initial; text-decoration-style: initial; text-decoration-color: initial; color: rgb(184, 84, 80); font-size: 10px; text-align: center; background-color: rgb(255, 255, 0);&quot;&gt;&lt;font style=&quot;forced-color-adjust: none; font-size: 12px;&quot;&gt;0 latency !!&lt;/font&gt;&lt;/b&gt;" vertex="1">
+          <mxGeometry height="36" width="132" x="409.9958620689656" y="224.9972077047414" as="geometry" />
+        </mxCell>
+        <mxCell id="cQbzy0LnBN5i7wnux7k0-6" parent="1" style="rounded=1;whiteSpace=wrap;html=1;align=center;labelPosition=center;verticalLabelPosition=middle;verticalAlign=top;fillColor=none;dashed=1;" value="&lt;i&gt;Controller Interface&lt;/i&gt;" vertex="1">
+          <mxGeometry height="276" width="412" x="259" y="169" as="geometry" />
         </mxCell>
       </root>
     </mxGraphModel>
