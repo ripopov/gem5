@@ -133,7 +133,7 @@ separate `node_link_latency` stage.
 
 ## How a single message hop works in SimpleNetwork
 
-![Generic SimpleNetwork architecture diagram showing one detailed hop from Router A to Router B. Router A is a SimpleNetwork Switch (BasicRouter) holding one PerfectSwitch plus one Throttle and one port buffer per output-port-times-vnet. On the left, a controller (network endpoint) connects by a bidirectional ExtLink. Every MessageBuffer uses the same label style: the word MessageBuffer, then a direction line (Owner Input/Output arrow Peer), then the variable name with scope, then a FIFO slot row. Controller to switch is a single shared MessageBuffer labelled Controller Output arrow Network with variable Controller::m_toNetQueues[vnets]; this controller output buffer is registered directly as the switch input queue, so there is no router-side input buffer and no link latency on this direction, and the PerfectSwitch dequeues it directly. Switch to controller has two buffers separated by a Throttle: a switch output port buffer (A Router Output arrow Controller, Switch::port_buffers[directions x vnets]) drains through a Throttle (ExtLink out, node_link_latency) into the controller input MessageBuffer (Controller Input arrow Network, Controller::m_fromNetQueues[vnets], unbounded). Buffers are drawn as rectangles with filled/empty FIFO slots; bounded router buffers have a fixed number of slots, while unbounded controller endpoint queues trail off through a dashed open slot to an infinity symbol (no fixed capacity, no backpressure). Inside Router A, the buffered input is A Router Input arrow Other Router (SimpleIntLink::m_buffers[vnets], also the delayed link buffer); all inputs feed the PerfectSwitch, drawn as an orange cloud labelled routing logic, no storage: for each ready input msg it routes, checks areNSlotsAvailable(1) on the output buffer (backpressure), and enqueues into it with no crossbar bandwidth limit, so many msgs per cycle can enter one output buffer bounded only by its free slots. The PerfectSwitch writes into per-output-port buffers (Switch::port_buffers[directions x vnets]) and becomes ready only after the routing latency (int_routing_latency for internal links, ext_routing_latency for endpoint links). Router A shows an output port buffer A Router Output arrow B Router and another A Router Output arrow Other Router. Each output port buffer drains through its own Throttle, drawn as a red cloud (bandwidth = link_bandwidth_factor, 1 msg/cy/vnet, needs a free downstream slot). The Throttle A to B enqueues into Router B, and the message becomes ready only after the link_latency. Router B shows only the single B Router Input arrow A Router (SimpleIntLink::m_buffers[vnets], the delayed A to B link) feeding PerfectSwitch B. A legend explains bounded MessageBuffer (router) = fixed N slots enforcing backpressure via areNSlotsAvailable(), unbounded MessageBuffer (controller endpoint) = slots trailing off to infinity with no backpressure, PerfectSwitch = routing logic with no storage applying routing latency on enqueue to the output buffer, and Throttle = per-output bandwidth plus link-latency gate applying link latency on enqueue to the downstream buffer.](resources/simple_network_hop.svg)
+![Generic SimpleNetwork architecture diagram showing one detailed hop from Router A to Router B. Router A is a SimpleNetwork Switch (BasicRouter) holding one PerfectSwitch plus one Throttle and one port buffer per output-port-times-vnet. On the left, a controller (network endpoint) connects by a bidirectional ExtLink. Every MessageBuffer uses the same label style: the word MessageBuffer, then a direction line (Owner Input/Output arrow Peer), then the variable name with scope, then a FIFO slot row. Controller to switch is a single shared MessageBuffer labelled Controller Output arrow Network with variable Controller::m_toNetQueues[vnets]; this controller output buffer is registered directly as the switch input queue, so there is no router-side input buffer and no link latency on this direction, and the PerfectSwitch dequeues it directly. Switch to controller has two buffers separated by a Throttle: a switch output port buffer (A Router Output arrow Controller, Switch::port_buffers[directions x vnets]) drains through a Throttle (ExtLink out, node_link_latency) into the controller input MessageBuffer (Controller Input arrow Network, Controller::m_fromNetQueues[vnets], unbounded). Buffers are drawn as rectangles with filled/empty FIFO slots; bounded router buffers have a fixed number of slots, while unbounded controller endpoint queues trail off through a dashed open slot to an infinity symbol (no fixed capacity, no backpressure). Inside Router A, the buffered input is A Router Input arrow Other Router (SimpleIntLink::m_buffers[vnets], also the delayed link buffer); all inputs feed the PerfectSwitch, drawn as an orange cloud labelled routing logic, no storage: for each ready input msg it routes, checks areNSlotsAvailable(1) on the output buffer (backpressure), and enqueues into it with no crossbar bandwidth limit, so many msgs per cycle can enter one output buffer bounded only by its free slots. The PerfectSwitch writes into per-output-port buffers (Switch::port_buffers[directions x vnets]) and becomes ready only after the routing latency (int_routing_latency for internal links, ext_routing_latency for endpoint links). Router A shows an output port buffer A Router Output arrow B Router and another A Router Output arrow Other Router. Each output port buffer drains through its own Throttle, drawn as a red cloud (byte budget = link_bandwidth_factor, admits while budget and slots remain). The Throttle A to B enqueues into Router B, and the message becomes ready only after the link_latency. Router B shows only the single B Router Input arrow A Router (SimpleIntLink::m_buffers[vnets], the delayed A to B link) feeding PerfectSwitch B. A legend explains bounded MessageBuffer (router) = fixed N slots enforcing backpressure via areNSlotsAvailable(), unbounded MessageBuffer (controller endpoint) = slots trailing off to infinity with no backpressure, PerfectSwitch = routing logic with no storage applying routing latency on enqueue to the output buffer, and Throttle = per-output bandwidth plus link-latency gate applying link latency on enqueue to the downstream buffer.](resources/simple_network_hop.svg)
 
 SimpleNetwork models each directed switch output as two buffers separated by a
 `Throttle`. The first buffer belongs to the source switch output port. The
@@ -169,7 +169,7 @@ One directed internal link, one vnet: A → B
 │ ┌──────────────────────────────────────────────────────────────────────┐   │
 │ │ LOGIC: Throttle A→B                                                  │   │
 │ │ require one free B link/input-buffer slot                            │   │
-│ │ bandwidth = 40 B/cycle; launch = 1 msg/cycle per vnet                │   │
+│ │ byte budget = 40 B/cycle; launch while budget and slots remain       │   │
 │ └──────────────────────────────────────────────────────────────────────┘   │
 ╰────────────────────────────────────────────────────────────────────────────╯
                                     │ enqueue delay = link latency L
@@ -250,8 +250,9 @@ free capacity (`router_buffer_size = 8`), not by any switch port. When the
 output buffer fills, the routing check returns `enough = false`, the switch
 `break`s out of that input and reschedules `+1` cycle.
 
-The real 1-message/cycle/vnet shaping is downstream at the `Throttle` draining
-the output port buffer onto the link, not at the switch itself.
+The real shaping is downstream at the `Throttle` draining the output port
+buffer onto the link: it is byte-budget limited, and it also requires a free
+downstream slot.
 
 The link launch stage is:
 
@@ -317,8 +318,104 @@ configuration:
 ```
 
 It does not change the 8-entry source switch port buffer and it does not change
-the 1-message/cycle per-vnet launch rate. If the destination drains more slowly
-than the source offers traffic, the queues eventually fill and sustainable
-throughput falls to the downstream drain rate. Extra latency only increases how
-many messages can be resident in the delayed link buffer before that
-backpressure reaches the source.
+the throttle byte budget. If the destination drains more slowly than the source
+offers traffic, the queues eventually fill and sustainable throughput falls to
+the downstream drain rate. Extra latency only increases how many messages can be
+resident in the delayed link buffer before that backpressure reaches the source.
+
+## Throttle bandwidth: how `link_bandwidth_factor` works
+
+Latency decides *when* a message becomes visible at the next buffer.
+`link_bandwidth_factor` sets the `Throttle` byte budget used to admit messages
+onto a directed output link. The two are independent: raising the factor never
+reduces hop latency, and raising latency never changes the throttle budget.
+
+### The byte budget
+
+Every cycle the `Throttle` for a directed output is given a fresh byte budget
+(`src/mem/ruby/network/simple/Throttle.cc`):
+
+```text
+per-cycle budget (bytes) = link_bandwidth_factor
+cost of a message (bytes) = its wire size
+```
+
+Internally, `Throttle` compares `endpoint_bandwidth * link_bandwidth_factor`
+against `message_size_bytes * 1000`; the default `endpoint_bandwidth = 1000`
+makes `link_bandwidth_factor` equal to bytes per cycle, while other values
+rescale all SimpleNetwork link budgets globally. When physical channels are
+enabled, each vnet channel carries its own budget, so vnets do not share
+bandwidth in the `Throttle`.
+
+### The launch loop
+
+For each vnet/channel the `Throttle` repeats, while budget remains and the
+downstream buffer has a free slot:
+
+```text
+1. If not mid-message, take the head message, record its byte cost, and
+   immediately move it: dequeue from the output port buffer and enqueue into
+   the downstream link buffer with delay = link_latency.
+2. spent = min(remaining_cost, remaining_budget)
+   subtract spent from both the message's remaining cost and the budget.
+```
+
+Three consequences follow from the loop structure:
+
+- A whole message is launched the instant it reaches the head, *as long as any
+  budget is left* — the budget gate is checked before the message cost, not
+  after. The message itself leaves in that cycle (subject only to
+  `link_latency`); the byte accounting only governs when the *next* message may
+  be admitted.
+- A message's unpaid cost (`units_remaining`) persists across cycles. While it
+  is non-zero the loop refuses to fetch a new message, so the link stays busy
+  paying off the debt.
+- The downstream buffer can still be the limiting factor. The throttle can only
+  admit a message if `out->areNSlotsAvailable(1)` is true; the downstream link
+  buffer's own dequeue rate may therefore cap sustained throughput below the
+  byte budget.
+
+### One example: two 15 B messages on a 20 B/cycle link
+
+Assume one vnet/channel, a per-cycle byte budget of 20 B, two ready messages of
+15 B each, and at least two free downstream slots:
+
+```text
+cycle N:
+  budget = 20 B
+
+  msg0 is admitted and forwarded immediately
+    spent = min(15, 20) = 15 B
+    budget = 5 B
+    debt = 0
+
+  budget is still > 0, so msg1 is also admitted and forwarded immediately
+    spent = min(15, 5) = 5 B
+    budget = 0
+    debt = 10 B
+
+cycle N+1:
+  budget = 20 B
+
+  msg1 debt is paid before any new message can be fetched
+    spent = min(10, 20) = 10 B
+    budget = 10 B
+    debt = 0
+
+  if another message is ready and the downstream buffer has a slot, it can now
+  be admitted in this same cycle using the remaining 10 B budget
+```
+
+This example captures the important behavior:
+
+- The throttle is byte-budgeted, not message-count limited.
+- A message is admitted whenever any budget remains, even if the whole message
+  does not fit in the remaining budget.
+- The admitted message is forwarded immediately with `link_latency`; the
+  unpaid byte cost becomes `units_remaining` debt.
+- Debt is paid before the next message on that vnet/channel can be fetched.
+
+If the throttle has continuous backlog and the downstream buffer never blocks,
+this debt mechanism makes the long-run admission rate converge to the configured
+byte budget. In the full SimpleNetwork path, sustained throughput can still be
+lower if the downstream buffer's slots or dequeue rate become the bottleneck.
