@@ -279,6 +279,9 @@ def init_network(options, network, InterfaceClass):
             network.physical_vnets_channels = [1] * int(
                 network.number_of_virtual_networks
             )
+            network.physical_vnets_bandwidth = getattr(
+                options, "physical_vnets_bandwidth", []
+            )
         network.setup_buffers()
 
     if InterfaceClass != None:

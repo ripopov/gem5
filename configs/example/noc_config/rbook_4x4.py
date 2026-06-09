@@ -32,6 +32,19 @@ class NoC_Params(CHI_config.NoC_Params):
     node_router_latency = 2  # intermediate mux router
 
     link_bandwidth_factor = 40  # SimpleNetwork bytes/cycle per link
+    # Per-vnet SimpleNetwork bandwidth (bytes/cycle): one flit/cycle per
+    # CHI channel. vnets 0=REQ 1=SNP 2=RSP 3=DAT (see configs/ruby/CHI.py).
+    # REQ/SNP/RSP move one cntrl_msg_size control flit/cycle; DAT moves one
+    # data_width+cntrl_msg_size data flit/cycle. Overrides
+    # link_bandwidth_factor for SimpleNetwork; requires
+    # simple_physical_channels (set in the driver). Ignored by garnet.
+    physical_vnets_bandwidth = [
+        CHI_config.NoC_Params.cntrl_msg_size,  # REQ
+        CHI_config.NoC_Params.cntrl_msg_size,  # SNP
+        CHI_config.NoC_Params.cntrl_msg_size,  # RSP
+        CHI_config.NoC_Params.data_width
+        + CHI_config.NoC_Params.cntrl_msg_size,  # DAT
+    ]
     # SimpleNetwork-only: PerfectSwitch per-hop routing latency (Cycles).
     # int = switch-to-switch hops, ext = switch-to-controller hops.
     int_routing_latency = router_latency
