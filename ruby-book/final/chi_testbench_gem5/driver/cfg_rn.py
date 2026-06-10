@@ -45,6 +45,7 @@ from __future__ import annotations
 
 from ruby import CHI_config
 
+from m5.util.convert import toMemorySize
 from m5.objects import (
     NULL,
     RubyCache,
@@ -112,6 +113,13 @@ class CHI_TileCacheController(CHI_config.Base_CHI_Cache_Controller):
         elif mode == "rnf_l2":
             # Mirrors CHI_L1Controller param shape (leaf cache with
             # coherence), but with L2-class sizing/latency.
+            # Near-fully-associative: drive the cache down to 2 sets
+            # (one index bit) -- the minimum CacheMemory allows, since
+            # it asserts num_sets > 1.  num_sets = (size/assoc)/64B, so
+            # assoc = (lines / 2) yields 2 sets regardless of l2_size.
+            line_bytes = 64
+            num_lines = toMemorySize(l2_size) // line_bytes
+            l2_assoc = num_lines // 2
             self.cache = RubyCache(
                 size=l2_size,
                 assoc=l2_assoc,
