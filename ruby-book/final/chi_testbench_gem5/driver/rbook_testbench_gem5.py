@@ -97,6 +97,14 @@ parser.add_argument(
     "HNFs homes every access on a single HNF/LLC)",
 )
 parser.add_argument(
+    "--cl-start-offset",
+    type=int,
+    default=0,
+    help="memset start offset in cache lines added to the base address "
+    "(shifts the home HNF; with --cl-stride 16 and 16 HNFs, "
+    "--cl-start-offset N homes every access on HNF-N)",
+)
+parser.add_argument(
     "--num-lines",
     type=int,
     default=1024,
