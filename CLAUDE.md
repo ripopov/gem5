@@ -14,13 +14,13 @@ gem5 uses **SCons** as its build system. Build output goes to `build/<ISA>/`.
 
 ```sh
 # Build optimized RISC-V gem5 (debug symbols + tracing enabled)
-scons build/RISCV/gem5.opt -j$(nproc)
+scons --ignore-style build/RISCV/gem5.opt -j$(nproc)
 
 # Debug build (no optimization, full debug symbols, tracing)
-scons build/RISCV/gem5.debug -j$(nproc)
+scons --ignore-style build/RISCV/gem5.debug -j$(nproc)
 
 # Fast build (max optimization, no debug/tracing, NDEBUG)
-scons build/RISCV/gem5.fast -j$(nproc)
+scons --ignore-style build/RISCV/gem5.fast -j$(nproc)
 ```
 
 Build variants: `.debug` (-O0, debug+tracing), `.opt` (-O3, debug+tracing), `.fast` (-O3, no debug/tracing).
@@ -123,7 +123,7 @@ gem5 uses a Linux kernel-style Kconfig system for build-time feature selection. 
 
 ### CHI NoC Testbench (this branch)
 
-This branch studies the Network-on-Chip using a **CPU-less CHI 4×4 mesh testbench** (16 tiles) under `ruby-book/final/chi_testbench_gem5/`. It reuses the Chapter-17 CHI/SLICC stack verbatim and is built with `PROTOCOL=CHI` (`scons build/RISCV/gem5.opt PROTOCOL=CHI`).
+This branch studies the Network-on-Chip using a **CPU-less CHI 4×4 mesh testbench** (16 tiles) under `ruby-book/final/chi_testbench_gem5/`. It reuses the Chapter-17 CHI/SLICC stack verbatim and is built with `PROTOCOL=CHI` (`scons --ignore-style build/RISCV/gem5.opt PROTOCOL=CHI`).
 
 For an detailed description of the DUT (topology diagram, tile/HNF/SNF placement, address interleaving, vnets, network parameters, traffic engine, and transaction flow), see [`ruby-book/final/chi_testbench_gem5/NocUnderTest.md`](ruby-book/final/chi_testbench_gem5/NocUnderTest.md).
 
