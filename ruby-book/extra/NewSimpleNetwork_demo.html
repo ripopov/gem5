@@ -8,6 +8,7 @@
   :root {
     --bg:#10141b; --panel:#171d28; --panel2:#1b2230; --line:#2e3a52;
     --txt:#cfd8e6; --dim:#8a93a6; --acc:#ffd54f; --red:#ff6b6b;
+    --txstall:#ff79c6;  /* credit-wait (TX-side) stalls; --red = RX inactive */
     --n:#c792ea; --e:#ff8a50; --s:#6ea8ff; --w:#53d8d8;
   }
   * { box-sizing:border-box; }
@@ -74,6 +75,7 @@
   #log .c { color:var(--dim); margin-right:6px; }
   #log .send { color:#9fb4d0; } #log .grant { color:var(--acc); }
   #log .deliver { color:#7adf9e; } #log .stall { color:var(--red); }
+  #log .cstall { color:var(--txstall); }
   #log .hol { color:#c792ea; } #log .info { color:var(--dim); }
   #err { display:none; background:#5a2330; border:1px solid var(--red); color:#fff;
          padding:8px 12px; border-radius:6px; margin:8px 16px; }
@@ -124,7 +126,11 @@
       (filled = available at sender; moving back = returning over
       t_creditReturn) · slot row on a wire into the XP = that input's CLB ·
       slot row inside the XP at an output = staging · slot row inside a peer =
-      its RX CLB · yellow flash = arbiter grant · red = stalled ·
+      its RX CLB · yellow flash = arbiter grant ·
+      <span style="color:var(--txstall)">pink</span> = TX-side stall (waiting
+      for a link credit: producer, link driver, 0cr) ·
+      <span style="color:var(--red)">red</span> = RX not consuming
+      (frozen / scripted stall) ·
       each wire is tagged with its latencies: t_link (forward, grey) and
       t_cr = t_creditReturn (gold); t_pipe inside the XP
     </div>
@@ -288,7 +294,7 @@ class XP {
         this.linkCreditStallCycles++;
         if (!out.stalled)
           sim.note(now, `${this.id}→${out.name}: link driver stalled — ` +
-                   `no credit on ${out.link.label}`, 'stall');
+                   `no credit on ${out.link.label}`, 'cstall');
         out.stalled = true;
       }
     }
@@ -360,7 +366,7 @@ class Producer {
       this.creditStallCycles++;
       if (!this.stalled)
         sim.note(now, `${this.id}: stalled — no credit on ${this.link.label}`,
-                 'stall');
+                 'cstall');
       this.stalled = true;
     }
   }
@@ -604,6 +610,9 @@ root.Engine = Engine;
 const E = globalThis.Engine;
 const $ = s => document.querySelector(s);
 const PCOLOR = { N: '#c792ea', E: '#ff8a50', S: '#6ea8ff', W: '#53d8d8' };
+// stall color coding: pink = waiting for a link credit (TX side),
+// red = receiver not consuming (frozen / scripted RX stall)
+const C_TXSTALL = '#ff79c6', C_RXSTALL = '#ff6b6b';
 const W = 900, H = 640;
 
 let cfg = E.defaultCfg();
@@ -921,7 +930,7 @@ function updateStats() {
     inj += pr.injected; del += sk.delivered;
     rate += E.windowRate(sk, 50);
     const flags =
-      (pr.stalled ? ' <span style="color:#ff6b6b">TX!</span>' : '') +
+      (pr.stalled ? ' <span style="color:#ff79c6">TX!</span>' : '') +
       (!sk.isActive(sim.cycle) ? ' <span style="color:#ff6b6b">RX⛔</span>' : '');
     rows += `<tr><td><span class="sw" style="background:${PCOLOR[P]}"></span>` +
       `${E.PEER_NAMES[P]}${flags}</td>` +
@@ -1031,7 +1040,7 @@ function drawLinkDynamics(l, T) {
       else { vctx.strokeStyle = '#7a6a2c'; vctx.lineWidth = 1.1; vctx.stroke(); }
     }
     if (l.credits === 0) {
-      vctx.fillStyle = '#ff6b6b';
+      vctx.fillStyle = C_TXSTALL;
       vctx.font = '10px Menlo, monospace';
       vctx.fillText('0cr', g.x1 + ux * 14 + nx * 28 - 8,
                     g.y1 + uy * 14 + ny * 28 + 3);
@@ -1088,7 +1097,7 @@ function drawStaging(x) {
     const depth = Math.min(x.stagingDepth, 3);
     for (let i = 0; i < depth; i++) {
       const [sx, sy] = stagingSlotPos(l, i);
-      vctx.strokeStyle = out.stalled ? '#ff6b6b' : '#56627d';
+      vctx.strokeStyle = out.stalled ? C_TXSTALL : '#56627d';
       vctx.lineWidth = 1;
       rr(sx - 6, sy - 6, 12, 12, 2.5);
       vctx.stroke();
@@ -1100,13 +1109,16 @@ function drawStaging(x) {
   }
 }
 function drawNode(n) {
-  let stalled = false;
+  let txStalled = false, rxStalled = false;
   if (n.type === 'peer') {
-    stalled = n.ref.producer.stalled || !n.ref.sink.isActive(sim.cycle);
+    txStalled = n.ref.producer.stalled;
+    rxStalled = !n.ref.sink.isActive(sim.cycle);
   }
   vctx.fillStyle = '#1b2230';
-  vctx.strokeStyle = stalled ? '#ff6b6b' : '#3d4961';
-  vctx.lineWidth = stalled ? 2 : 1.4;
+  // RX (root cause) wins over TX (backpressure symptom) on the border
+  vctx.strokeStyle = rxStalled ? C_RXSTALL
+                   : txStalled ? C_TXSTALL : '#3d4961';
+  vctx.lineWidth = txStalled || rxStalled ? 2 : 1.4;
   rr(n.x, n.y, n.w, n.h, 8);
   vctx.fill();
   vctx.stroke();
@@ -1132,15 +1144,14 @@ function drawNode(n) {
     vctx.font = '600 12px Menlo, monospace';
     vctx.fillText(n.label, n.x + 24, n.y + 17);
     vctx.font = '11px Menlo, monospace';
-    vctx.fillStyle = producer.stalled ? '#ff6b6b' : '#8a93a6';
+    vctx.fillStyle = producer.stalled ? C_TXSTALL : '#8a93a6';
     vctx.fillText(`TX ${producer.injected}${producer.stalled ? ' stall' : ''}`,
                   n.x + 8, n.y + 36);
     if (producer.pending)
       msgSquare(n.x + 8 + vctx.measureText(
         `TX ${producer.injected}${producer.stalled ? ' stall' : ''}`).width + 11,
         n.y + 32, producer.pending.flow, 9);
-    const rxStalled = !sink.isActive(sim.cycle);
-    vctx.fillStyle = rxStalled ? '#ff6b6b' : '#8a93a6';
+    vctx.fillStyle = rxStalled ? C_RXSTALL : '#8a93a6';
     vctx.fillText(`RX ${sink.delivered}${rxStalled ? ' STALL' : ''}` +
       (sink.delivered ? ` · ${sink.avgLatency.toFixed(1)}cy` : ''),
       n.x + 8, n.y + 52);
