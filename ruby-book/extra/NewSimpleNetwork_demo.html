@@ -1,0 +1,1235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NewSimpleNetwork — Credited XP NoC, Live Demo</title>
+<style>
+  :root {
+    --bg:#10141b; --panel:#171d28; --panel2:#1b2230; --line:#2e3a52;
+    --txt:#cfd8e6; --dim:#8a93a6; --acc:#ffd54f; --red:#ff6b6b;
+    --cyan:#53d8d8; --orange:#ff8a50; --blue:#6ea8ff;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--txt);
+         font:14px/1.45 "SF Mono", Menlo, Consolas, monospace; }
+  header { padding:10px 16px 0; }
+  h1 { font-size:17px; margin:0 0 2px; color:#fff; font-weight:600; }
+  h1 .sub { color:var(--dim); font-weight:400; font-size:12px; margin-left:8px; }
+  #tabs { display:flex; gap:6px; margin:10px 0; flex-wrap:wrap; }
+  .tab { background:var(--panel); border:1px solid var(--line); color:var(--txt);
+         padding:6px 12px; border-radius:6px; cursor:pointer; font:inherit; font-size:13px; }
+  .tab.active { background:#2a3550; border-color:var(--acc); color:#fff; }
+  main { display:flex; gap:12px; padding:0 16px; align-items:flex-start; flex-wrap:wrap; }
+  #stage { flex:1 1 640px; min-width:560px; }
+  canvas#view { width:100%; background:var(--panel); border:1px solid var(--line);
+                border-radius:8px; display:block; }
+  #blurb { background:var(--panel); border:1px solid var(--line); border-radius:8px;
+           padding:10px 14px; margin-top:10px; color:var(--txt); font-size:13px; }
+  #blurb b { color:var(--acc); }
+  #legend { margin-top:8px; color:var(--dim); font-size:12px; }
+  #legend span.sw { display:inline-block; width:10px; height:10px; border-radius:2px;
+                    margin:0 4px -1px 10px; }
+  aside { flex:0 0 360px; display:flex; flex-direction:column; gap:10px; }
+  .box { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:10px 12px; }
+  .box h3 { margin:0 0 8px; font-size:12px; color:var(--dim); text-transform:uppercase;
+            letter-spacing:.06em; font-weight:600; }
+  #controls .row { display:flex; gap:8px; align-items:center; margin-bottom:8px; flex-wrap:wrap; }
+  button.ctl { background:var(--panel2); color:var(--txt); border:1px solid var(--line);
+               border-radius:6px; padding:6px 12px; font:inherit; font-size:13px; cursor:pointer; }
+  button.ctl:hover { border-color:var(--acc); }
+  button.ctl.primary { background:#2a3550; color:#fff; }
+  button.ctl.on { background:#5a2330; border-color:var(--red); color:#fff; }
+  #cycleNum { color:var(--acc); font-size:15px; margin-left:auto; }
+  input[type=range] { accent-color:var(--acc); }
+  .param { display:flex; align-items:center; gap:8px; margin:5px 0; font-size:12.5px; }
+  .param label { flex:1; color:var(--txt); }
+  .param .val { width:28px; text-align:right; color:var(--acc); }
+  #stats table { width:100%; border-collapse:collapse; font-size:12.5px; }
+  #stats td { padding:2px 0; }
+  #stats td:last-child { text-align:right; color:#fff; }
+  canvas#chart { width:100%; background:var(--panel2); border-radius:6px; display:block; }
+  #log { height:170px; overflow-y:auto; font-size:11.5px; line-height:1.5;
+         background:var(--panel2); border-radius:6px; padding:6px 8px; }
+  #log .c { color:var(--dim); margin-right:6px; }
+  #log .send { color:#9fb4d0; } #log .grant { color:var(--acc); }
+  #log .deliver { color:var(--cyan); } #log .stall { color:var(--red); }
+  #log .hol { color:#c792ea; } #log .info { color:var(--dim); }
+  #err { display:none; background:#5a2330; border:1px solid var(--red); color:#fff;
+         padding:8px 12px; border-radius:6px; margin:8px 16px; }
+  footer { padding:8px 16px 16px; color:var(--dim); font-size:11.5px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>NewSimpleNetwork — Credited XP NoC <span class="sub">live companion to
+      NewSimpleNetwork.md / CreditedLinkBuffer.md</span></h1>
+  <div id="tabs"></div>
+</header>
+<div id="err"></div>
+<main>
+  <div id="stage">
+    <canvas id="view"></canvas>
+    <div id="blurb"></div>
+    <div id="legend">
+      <b>Legend:</b>
+      <span class="sw" style="background:var(--cyan)"></span>message
+      <span class="sw" style="background:var(--orange)"></span>flow A
+      <span class="sw" style="background:var(--blue)"></span>flow B
+      <span class="sw" style="background:var(--acc);border-radius:50%"></span>credit
+      (filled = available at sender; moving back = returning over t_creditReturn) ·
+      slot row at a link's end = input CLB · slot row before an output port =
+      staging (1–3 deep) · yellow flash = arbiter grant (credit returns to
+      upstream at grant) · red = stalled
+    </div>
+  </div>
+  <aside>
+    <div class="box" id="controls">
+      <div class="row">
+        <button class="ctl primary" id="btn-play">▶ Play</button>
+        <button class="ctl" id="btn-step">Step</button>
+        <button class="ctl" id="btn-step10">+10</button>
+        <button class="ctl" id="btn-reset">Reset</button>
+        <span id="cycleNum">cycle 0</span>
+      </div>
+      <div class="row">
+        <label style="font-size:12px;color:var(--dim)">speed</label>
+        <input type="range" id="speed" min="1" max="40" step="1" value="6" style="flex:1">
+        <span id="speedVal" style="font-size:12px;color:var(--dim)">6 cy/s</span>
+      </div>
+      <div id="actions" class="row"></div>
+    </div>
+    <div class="box"><h3>Parameters <span style="text-transform:none;color:#5a657a">(change ⇒ reset)</span></h3>
+      <div id="params"></div></div>
+    <div class="box"><h3>Stats</h3><div id="stats"></div></div>
+    <div class="box"><h3 id="chartTitle">Chart</h3><canvas id="chart"></canvas></div>
+    <div class="box"><h3>Event log</h3><div id="log"></div></div>
+  </aside>
+</main>
+<footer>
+  Cycle-accurate to the spec: credit spent at <i>send</i>, returned at arbiter
+  <i>grant</i> (departure to staging) + t_creditReturn; dwell ≥ 1 cycle;
+  RTT_min = t_link + 1 + t_creditReturn; throughput = min(1, credits/RTT_min).
+  Single shareable file — engine has no DOM dependency and is unit-testable.
+</footer>
+
+<script>
+/*ENGINE-BEGIN*/
+'use strict';
+(function (root) {
+const Engine = {};
+let msgSeq = 0;
+
+class Message {
+  constructor(flow, dest) {
+    this.id = msgSeq++;
+    this.flow = flow;        // 'M' | 'A' | 'B'  (display class)
+    this.dest = dest;        // routing tag
+    this.bornAt = -1;
+    this.deliveredAt = -1;
+  }
+}
+
+// A credited point-to-point channel: producer-side credit pool + forward wire
+// + receiver-side CLB storage. maxCredits == 0 => flow control DISABLED
+// (today's SimpleNetwork behaviour: infinite, instantaneous).
+class Link {
+  constructor(id, o) {
+    this.id = id;
+    this.label = o.label || id;
+    this.tLink = Math.max(1, o.tLink ?? 2);     // forward wire delay (P6: >=1)
+    this.tCR = Math.max(0, o.tCR ?? 1);         // credit return latency
+    this.maxCredits = o.credits ?? 3;
+    this.credits = this.maxCredits;
+    this.inFlight = [];      // {msg, sentAt, arriveAt} FIFO by arriveAt
+    this.crInFlight = [];    // {sentAt, arriveAt} returning credits
+    this.clb = [];           // {msg, arrivedAt} receiver buffer, arrival order
+    this.sends = 0; this.grants = 0; this.creditReturns = 0;
+    this.geom = null;        // set by scenario layout
+  }
+  get credited() { return this.maxCredits > 0; }
+  hasCredit() { return !this.credited || this.credits > 0; }
+  send(msg, now) {
+    if (this.credited) {
+      if (this.credits <= 0) throw new Error('send without credit on ' + this.id);
+      this.credits--;
+    }
+    this.sends++;
+    this.inFlight.push({ msg, sentAt: now, arriveAt: now + this.tLink });
+  }
+  applyArrivals(now) {
+    while (this.inFlight.length && this.inFlight[0].arriveAt <= now) {
+      const e = this.inFlight.shift();
+      this.clb.push({ msg: e.msg, arrivedAt: e.arriveAt });
+    }
+  }
+  applyCreditReturns(now) {
+    while (this.crInFlight.length && this.crInFlight[0].arriveAt <= now) {
+      this.crInFlight.shift();
+      this.credits++; this.creditReturns++;
+      if (this.credits > this.maxCredits)
+        throw new Error('credit overflow on ' + this.id);
+    }
+  }
+  // dwell >= 1: an entry that arrived at cycle a is grantable from a+1 on
+  oldestEligible(now, pred) {
+    for (let i = 0; i < this.clb.length; i++) {
+      const e = this.clb[i];
+      if (e.arrivedAt < now && (!pred || pred(e.msg))) return i;
+    }
+    return -1;
+  }
+  headEligible(now, pred) {
+    if (!this.clb.length) return -1;
+    const e = this.clb[0];
+    return (e.arrivedAt < now && (!pred || pred(e.msg))) ? 0 : -1;
+  }
+  grantAt(i, now) {           // departure: OOO remove + schedule credit return
+    const e = this.clb.splice(i, 1)[0];
+    this.grants++;
+    if (this.credited)
+      this.crInFlight.push({ sentAt: now, arriveAt: now + this.tCR });
+    return e.msg;
+  }
+  checkInvariant() {
+    if (!this.credited) return;
+    const held = this.credits + this.inFlight.length + this.clb.length +
+                 this.crInFlight.length;
+    if (held !== this.maxCredits || this.credits < 0)
+      throw new Error(`credit conservation violated on ${this.id}: ` +
+                      `${held} != ${this.maxCredits}`);
+  }
+}
+
+// XP crosspoint: per-output arbiter (head-only or oldest-eligible/HoL-elim)
+// granting into a finite staging buffer; credit-gated link driver sends
+// <= 1 msg per output per cycle. One grant per input per cycle (1 read port).
+class XP {
+  constructor(id, o) {
+    this.id = id;
+    this.tPipe = Math.max(0, o.tPipe ?? 1);
+    this.hol = o.hol ?? true;
+    this.stagingDepth = Math.max(1, o.stagingDepth ?? 2);
+    this.inputs = [];
+    this.outputs = [];   // {name, link, route, staging:[{msg,sendableAt}], stalled}
+    this.grantsTotal = 0; this.holSkips = 0;
+    this.linkCreditStallCycles = 0; this.stagingFullStallCycles = 0;
+    this.headBlockedCycles = 0;
+  }
+  addInput(link) { this.inputs.push(link); }
+  addOutput(name, link, route) {
+    this.outputs.push({ name, link, route: route || (() => true),
+                        staging: [], stalled: false });
+  }
+  linkDrive(now, sim) {
+    for (const out of this.outputs) {
+      if (!out.staging.length || out.staging[0].sendableAt > now) {
+        out.stalled = false; continue;
+      }
+      if (out.link.hasCredit()) {
+        const e = out.staging.shift();
+        out.link.send(e.msg, now);
+        out.stalled = false;
+        sim.note(now, `${this.id}: msg#${e.msg.id} sent on ${out.link.label}` +
+          ` (credits left: ${out.link.credited ? out.link.credits : '∞'})`, 'send');
+      } else {
+        this.linkCreditStallCycles++;
+        if (!out.stalled)
+          sim.note(now, `${this.id}.${out.name}: link driver stalled — ` +
+                   `no credit on ${out.link.label}`, 'stall');
+        out.stalled = true;
+      }
+    }
+  }
+  arbitrate(now, sim) {
+    const used = new Set();
+    for (const out of this.outputs) {
+      if (out.staging.length >= this.stagingDepth) {
+        if (this.inputs.some(l => !used.has(l) &&
+            l.oldestEligible(now, m => out.route(m)) >= 0))
+          this.stagingFullStallCycles++;
+        continue;
+      }
+      let best = null;
+      for (const l of this.inputs) {
+        if (used.has(l)) continue;
+        const i = this.hol ? l.oldestEligible(now, m => out.route(m))
+                           : l.headEligible(now, m => out.route(m));
+        if (i < 0) continue;
+        const e = l.clb[i];
+        if (!best || e.arrivedAt < best.e.arrivedAt ||
+            (e.arrivedAt === best.e.arrivedAt && e.msg.id < best.e.msg.id))
+          best = { l, i, e };
+      }
+      if (best) {
+        if (best.i > 0) {
+          this.holSkips++;
+          sim.note(now, `${this.id}: HoL skip — msg#${best.e.msg.id} granted ` +
+                   `past ${best.i} older blocked msg(s)`, 'hol');
+        }
+        used.add(best.l);
+        const msg = best.l.grantAt(best.i, now);
+        out.staging.push({ msg, sendableAt: now + this.tPipe });
+        this.grantsTotal++;
+        sim.flash(best.l, out.link);
+        sim.note(now, `${this.id}: GRANT msg#${msg.id} → ${out.name} staging; ` +
+          `credit of ${best.l.label} returns at cycle ${now + best.l.tCR}`, 'grant');
+      }
+    }
+    // head blocked while younger msgs to other outputs wait behind it
+    for (const l of this.inputs) {
+      if (used.has(l) || !l.clb.length) continue;
+      const h = l.clb[0];
+      if (h.arrivedAt < now &&
+          l.clb.some((e, j) => j > 0 && e.msg.dest !== h.msg.dest))
+        this.headBlockedCycles++;
+    }
+  }
+}
+
+class Producer {
+  constructor(id, o) {
+    this.id = id; this.link = null;
+    this.gen = o.gen;            // (now) => Message | null
+    this.pending = null;
+    this.injected = 0; this.creditStallCycles = 0; this.stalled = false;
+  }
+  step(now, sim) {
+    if (!this.pending) { const m = this.gen(now, this); if (m) this.pending = m; }
+    if (!this.pending) { this.stalled = false; return; }
+    if (this.link.hasCredit()) {
+      const m = this.pending; this.pending = null;
+      m.bornAt = now; this.injected++;
+      this.link.send(m, now);
+      this.stalled = false;
+      const tag = m.flow !== 'M' ? ` [${m.flow}→${m.dest}]` : '';
+      sim.note(now, `${this.id}: inject msg#${m.id}${tag} (credit spent, ` +
+        `${this.link.credited ? this.link.credits : '∞'} left)`, 'send');
+    } else {
+      this.creditStallCycles++;
+      if (!this.stalled)
+        sim.note(now, `${this.id}: stalled — no credit on ${this.link.label}`,
+                 'stall');
+      this.stalled = true;
+    }
+  }
+}
+
+class Sink {
+  constructor(id, o = {}) {
+    this.id = id; this.input = null;
+    this.activeFn = o.active || (() => true);
+    this.forceStall = false;
+    this.delivered = 0; this.latencySum = 0;
+    this.hist = [];
+  }
+  isActive(now) { return !this.forceStall && this.activeFn(now); }
+  step(now, sim) {
+    if (!this.isActive(now)) return;
+    const i = this.input.oldestEligible(now, null);
+    if (i >= 0) {
+      const msg = this.input.grantAt(i, now);
+      msg.deliveredAt = now;
+      this.delivered++; this.latencySum += now - msg.bornAt;
+      sim.flash(this.input, null);
+      sim.note(now, `${this.id}: consume msg#${msg.id} ` +
+               `(latency ${now - msg.bornAt} cy)`, 'deliver');
+    }
+  }
+  get avgLatency() { return this.delivered ? this.latencySum / this.delivered : 0; }
+}
+
+class Sim {
+  constructor() {
+    this.cycle = 0;
+    this.links = []; this.xps = []; this.producers = []; this.sinks = [];
+    this.hooks = [];
+    this.logs = []; this._logSeq = 0; this.maxLog = 400;
+    this.flashes = [];
+    this.series = {}; this.sampleSpec = []; this.chart = null;
+    this.layout = { nodes: [] };
+    this.handles = {};
+    this.statsFn = () => [];
+  }
+  addLink(id, o) { const l = new Link(id, o); this.links.push(l); return l; }
+  addXP(id, o) { const x = new XP(id, o); this.xps.push(x); return x; }
+  addProducer(id, o) { const p = new Producer(id, o); this.producers.push(p); return p; }
+  addSink(id, o) { const s = new Sink(id, o); this.sinks.push(s); return s; }
+  note(cycle, text, kind) {
+    this.logs.push({ seq: this._logSeq++, cycle, text, kind: kind || 'info' });
+    if (this.logs.length > this.maxLog)
+      this.logs.splice(0, this.logs.length - this.maxLog);
+  }
+  flash(fromLink, toLink) {
+    this.flashes.push({ cycle: this.cycle,
+                        from: fromLink ? fromLink.id : null,
+                        to: toLink ? toLink.id : null });
+  }
+  step() {
+    this.cycle++;
+    const now = this.cycle;
+    this.flashes = this.flashes.filter(f => f.cycle === now); // drop stale
+    // Phase A: events due this edge — credit returns first (P7), then arrivals
+    for (const l of this.links) { l.applyCreditReturns(now); l.applyArrivals(now); }
+    // Phase B: sinks consume (their grant = departure => credit return)
+    for (const s of this.sinks) s.step(now, this);
+    // Phase C: link drivers send from staging (frees staging slots first so
+    // the arbiter can refill them this same cycle — intra-XP, same clock domain)
+    for (const x of this.xps) x.linkDrive(now, this);
+    // Phase D: XP arbiters grant CLB -> staging (upstream credit returns here)
+    for (const x of this.xps) x.arbitrate(now, this);
+    // Phase E: producers inject
+    for (const p of this.producers) p.step(now, this);
+    for (const h of this.hooks) h(now, this);
+    for (const l of this.links) l.checkInvariant();
+    for (const sp of this.sampleSpec) {
+      const arr = this.series[sp.label] || (this.series[sp.label] = []);
+      arr.push(sp.get(this));
+      if (arr.length > 460) arr.shift();
+    }
+    for (const s of this.sinks) {
+      s.hist.push(s.delivered);
+      if (s.hist.length > 600) s.hist.shift();
+    }
+  }
+  totalInjected() { return this.producers.reduce((a, p) => a + p.injected, 0); }
+  totalDelivered() { return this.sinks.reduce((a, s) => a + s.delivered, 0); }
+  inTransit() {
+    let n = 0;
+    for (const l of this.links) n += l.inFlight.length + l.clb.length;
+    for (const x of this.xps)
+      for (const o of x.outputs) n += o.staging.length;
+    return n;
+  }
+}
+
+function rttMin(l) { return l.tLink + 1 + l.tCR; }
+function windowRate(sink, w) {
+  const h = sink.hist;
+  if (h.length < 2) return 0;
+  const n = Math.min(w, h.length - 1);
+  return (h[h.length - 1] - h[h.length - 1 - n]) / n;
+}
+function genEvery(gap, mk) {
+  let next = 1;
+  return (now) => { if (now >= next) { next = now + gap; return mk(now); } return null; };
+}
+function genAlways(mk) { return () => mk(); }
+// pattern: array of factories cycled per generated message, e.g. [A,B,B]
+function genPattern(pat) { let i = 0; return () => pat[i++ % pat.length](); }
+function burst(on, off, phase = 0) {
+  return (now) => ((now + phase) % (on + off)) < on;
+}
+
+// ---- layout helpers (pure data; renderer-side) ----
+function nodeDef(id, type, ref, x, y, w, h, label) {
+  return { id, type, ref, x, y, w, h, label: label || id };
+}
+function port(n, side, t = 0.5) {
+  switch (side) {
+    case 'left':   return [n.x, n.y + n.h * t];
+    case 'right':  return [n.x + n.w, n.y + n.h * t];
+    case 'top':    return [n.x + n.w * t, n.y];
+    case 'bottom': return [n.x + n.w * t, n.y + n.h];
+  }
+}
+function wire(link, a, b) { link.geom = { x1: a[0], y1: a[1], x2: b[0], y2: b[1] }; }
+
+const mkM = () => new Message('M', 'HN');
+const mkA = () => new Message('A', 'E');
+const mkB = () => new Message('B', 'S');
+
+const SCENARIOS = [];
+
+// ------------------------------------------------ 1 · message lifecycle
+SCENARIOS.push({
+  id: 'lifecycle', title: '1 · Message lifecycle',
+  blurb: `Follow messages through the full pipeline (doc §2): the producer
+    <b>spends a link credit at send</b>; the message travels <b>t_link</b>
+    cycles into the input <b>CreditedLinkBuffer</b>; after ≥ 1 cycle dwell the
+    XP arbiter <b>grants</b> it — at that instant the credit token starts
+    travelling back over <b>t_creditReturn</b> while the message moves to the
+    output <b>staging</b> buffer; the link driver then spends a credit of the
+    <i>next</i> link. Uncheck <b>credited flow control</b> to see today's
+    SimpleNetwork (no credits, no backpressure).`,
+  params: [
+    { key: 'credited', label: 'credited flow control', type: 'check', def: true },
+    { key: 'credits', label: 'credits per link', type: 'range', min: 1, max: 6, step: 1, def: 3 },
+    { key: 'tLink', label: 't_link (wire cycles)', type: 'range', min: 1, max: 4, step: 1, def: 2 },
+    { key: 'tCR', label: 't_creditReturn', type: 'range', min: 1, max: 4, step: 1, def: 1 },
+    { key: 'staging', label: 'staging depth', type: 'range', min: 1, max: 3, step: 1, def: 2 },
+    { key: 'gap', label: 'inject every N cycles', type: 'range', min: 1, max: 8, step: 1, def: 4 },
+  ],
+  actions: [],
+  build(P) {
+    const sim = new Sim();
+    const C = P.credited ? P.credits : 0;
+    const lo = { tLink: P.tLink, tCR: P.tCR, credits: C };
+    const L0 = sim.addLink('L0', { ...lo, label: 'RN→XP0' });
+    const L1 = sim.addLink('L1', { ...lo, label: 'XP0→XP1' });
+    const L2 = sim.addLink('L2', { ...lo, label: 'XP1→HN' });
+    const rn = sim.addProducer('RN', { gen: genEvery(P.gap, mkM) });
+    rn.link = L0;
+    const x0 = sim.addXP('XP0', { stagingDepth: P.staging });
+    x0.addInput(L0); x0.addOutput('E', L1);
+    const x1 = sim.addXP('XP1', { stagingDepth: P.staging });
+    x1.addInput(L1); x1.addOutput('E', L2);
+    const hn = sim.addSink('HN'); hn.input = L2;
+    const N = sim.layout.nodes;
+    const nRN = nodeDef('RN', 'rn', rn, 30, 228, 84, 54);
+    const nX0 = nodeDef('XP0', 'xp', x0, 240, 212, 156, 86);
+    const nX1 = nodeDef('XP1', 'xp', x1, 520, 212, 156, 86);
+    const nHN = nodeDef('HN', 'sink', hn, 800, 228, 84, 54);
+    N.push(nRN, nX0, nX1, nHN);
+    wire(L0, port(nRN, 'right'), port(nX0, 'left'));
+    wire(L1, port(nX0, 'right'), port(nX1, 'left'));
+    wire(L2, port(nX1, 'right'), port(nHN, 'left'));
+    sim.handles = { rn, hn, links: [L0, L1, L2], xps: [x0, x1] };
+    sim.sampleSpec = [
+      { label: 'RN→XP0 credits', color: '#ffd54f', get: () => L0.credits },
+    ];
+    sim.chart = { title: 'RN→XP0 credits available', yMax: Math.max(1, C),
+                  series: [{ label: 'RN→XP0 credits', color: '#ffd54f' }] };
+    sim.statsFn = () => [
+      ['injected', rn.injected], ['delivered', hn.delivered],
+      ['avg latency', hn.avgLatency.toFixed(1) + ' cy'],
+      ['RTT_min per link', rttMin(L0) + ' cy'],
+      ['L0 credit returns', L0.creditReturns],
+      ['RN credit-stall cycles', rn.creditStallCycles],
+    ];
+    return sim;
+  },
+});
+
+// ------------------------------------------------ 2 · throughput knee
+SCENARIOS.push({
+  id: 'knee', title: '2 · Throughput knee',
+  blurb: `The bandwidth–delay product rule (spec P5): a link sustains full rate
+    only if <b>credits ≥ RTT_min = t_link + 1 + t_creditReturn</b>. The
+    producer always has traffic and the sink always drains — the credit loop on
+    RN→XP is the <i>only</i> limit. Sweep <b>credits</b> and watch measured
+    throughput land exactly on <b>min(1, credits/RTT_min)</b> (dashed line) —
+    the knee sits at credits = RTT_min. This is gap G1/G2 of the spec: the
+    classic SimpleNetwork (instant credit return) cannot reproduce this.`,
+  params: [
+    { key: 'credits', label: 'credits on RN→XP', type: 'range', min: 1, max: 8, step: 1, def: 2 },
+    { key: 'tLink', label: 't_link (wire cycles)', type: 'range', min: 1, max: 4, step: 1, def: 2 },
+    { key: 'tCR', label: 't_creditReturn', type: 'range', min: 1, max: 4, step: 1, def: 1 },
+  ],
+  actions: [],
+  build(P) {
+    const sim = new Sim();
+    const L0 = sim.addLink('L0', { tLink: P.tLink, tCR: P.tCR,
+                                   credits: P.credits, label: 'RN→XP' });
+    const L1 = sim.addLink('L1', { tLink: 2, tCR: 1, credits: 12, label: 'XP→HN' });
+    const rn = sim.addProducer('RN', { gen: genAlways(mkM) });
+    rn.link = L0;
+    const x0 = sim.addXP('XP', { stagingDepth: 2 });
+    x0.addInput(L0); x0.addOutput('E', L1);
+    const hn = sim.addSink('HN'); hn.input = L1;
+    const N = sim.layout.nodes;
+    const nRN = nodeDef('RN', 'rn', rn, 40, 228, 84, 54);
+    const nX0 = nodeDef('XP', 'xp', x0, 340, 212, 170, 86);
+    const nHN = nodeDef('HN', 'sink', hn, 760, 228, 90, 54);
+    N.push(nRN, nX0, nHN);
+    wire(L0, port(nRN, 'right'), port(nX0, 'left'));
+    wire(L1, port(nX0, 'right'), port(nHN, 'left'));
+    const predicted = Math.min(1, P.credits / (P.tLink + 1 + P.tCR));
+    sim.handles = { rn, hn, L0, predicted };
+    sim.sampleSpec = [
+      { label: 'throughput', color: '#53d8d8', get: s => windowRate(hn, 50) },
+    ];
+    sim.chart = { title: 'delivered msgs/cycle (50-cycle window)', yMax: 1.08,
+                  hline: { value: predicted, label: 'predicted' },
+                  series: [{ label: 'throughput', color: '#53d8d8' }] };
+    sim.statsFn = () => [
+      ['RTT_min', (P.tLink + 1 + P.tCR) + ' cy'],
+      ['credits', P.credits],
+      ['predicted', predicted.toFixed(3) + ' msg/cy'],
+      ['measured (50 cy)', windowRate(hn, 50).toFixed(3) + ' msg/cy'],
+      ['delivered', hn.delivered],
+      ['RN credit-stall cycles', rn.creditStallCycles],
+    ];
+    return sim;
+  },
+});
+
+// ------------------------------------------------ 3 · backpressure
+SCENARIOS.push({
+  id: 'backpressure', title: '3 · Backpressure',
+  blurb: `Backpressure propagates <b>hop-by-hop through credit starvation</b> —
+    no message is ever dropped (spec §7). At cycle 40 the sink stalls: the last
+    link's credits drain first, staging fills, then the previous link starves…
+    the stall walks upstream link by link with real per-hop delay (watch the
+    chart lines hit zero right-to-left). At cycle 130 the sink resumes and the
+    recovery wave flows back downstream. Try the manual stall button too.`,
+  params: [
+    { key: 'scripted', label: 'scripted stall @40 / resume @130', type: 'check', def: true },
+    { key: 'credits', label: 'credits per link', type: 'range', min: 4, max: 8, step: 1, def: 6 },
+  ],
+  actions: [
+    { key: 'stall', label: 'Stall / resume sink',
+      get: s => s.handles.hn.forceStall,
+      set: (s, v) => { s.handles.hn.forceStall = v;
+        s.note(s.cycle, `HN ${v ? 'STALLED' : 'resumed'} (manual)`, v ? 'stall' : 'info'); } },
+  ],
+  build(P) {
+    const sim = new Sim();
+    const mk = (id, label) =>
+      sim.addLink(id, { tLink: 2, tCR: 1, credits: P.credits, label });
+    const L0 = mk('L0', 'RN→XP0'), L1 = mk('L1', 'XP0→XP1');
+    const L2 = mk('L2', 'XP1→XP2'), L3 = mk('L3', 'XP2→HN');
+    const rn = sim.addProducer('RN', { gen: genAlways(mkM) });
+    rn.link = L0;
+    const xs = [['XP0', L0, L1], ['XP1', L1, L2], ['XP2', L2, L3]].map(
+      ([id, li, lo]) => {
+        const x = sim.addXP(id, { stagingDepth: 2 });
+        x.addInput(li); x.addOutput('E', lo); return x;
+      });
+    const hn = sim.addSink('HN'); hn.input = L3;
+    const N = sim.layout.nodes;
+    const nRN = nodeDef('RN', 'rn', rn, 16, 230, 72, 50);
+    const nX0 = nodeDef('XP0', 'xp', xs[0], 158, 215, 126, 80);
+    const nX1 = nodeDef('XP1', 'xp', xs[1], 382, 215, 126, 80);
+    const nX2 = nodeDef('XP2', 'xp', xs[2], 606, 215, 126, 80);
+    const nHN = nodeDef('HN', 'sink', hn, 812, 230, 76, 50);
+    N.push(nRN, nX0, nX1, nX2, nHN);
+    wire(L0, port(nRN, 'right'), port(nX0, 'left'));
+    wire(L1, port(nX0, 'right'), port(nX1, 'left'));
+    wire(L2, port(nX1, 'right'), port(nX2, 'left'));
+    wire(L3, port(nX2, 'right'), port(nHN, 'left'));
+    sim.handles = { rn, hn, links: [L0, L1, L2, L3] };
+    if (P.scripted) {
+      sim.hooks.push((now, s) => {
+        if (now === 40) { hn.forceStall = true;
+          s.note(now, 'SCENARIO: sink HN stalls — watch credits drain upstream', 'stall'); }
+        if (now === 130) { hn.forceStall = false;
+          s.note(now, 'SCENARIO: sink HN resumes — recovery wave', 'info'); }
+      });
+    }
+    sim.hooks.push((now, s) => {
+      for (const l of [L3, L2, L1, L0]) {
+        if (l.credits === 0 && !l._zero) {
+          l._zero = true;
+          s.note(now, `backpressure reached ${l.label}: 0 credits`, 'stall');
+        } else if (l.credits > 0) l._zero = false;
+      }
+    });
+    const colors = ['#ff6b6b', '#ff8a50', '#ffd54f', '#6ea8ff'];
+    sim.sampleSpec = [L3, L2, L1, L0].map((l, i) => (
+      { label: l.label + ' credits', color: colors[i], get: () => l.credits }));
+    sim.chart = { title: 'credits per link (stall walks right→left)',
+                  yMax: P.credits,
+                  series: sim.sampleSpec.map(s => ({ label: s.label, color: s.color })) };
+    sim.statsFn = () => [
+      ['sink', hn.isActive(sim.cycle) ? 'draining' : 'STALLED'],
+      ...[L0, L1, L2, L3].map(l => [l.label + ' credits',
+                                    `${l.credits}/${l.maxCredits}`]),
+      ['delivered', hn.delivered],
+      ['RN credit-stall cycles', rn.creditStallCycles],
+    ];
+    return sim;
+  },
+});
+
+// ------------------------------------------------ 4 · HoL elimination
+SCENARIOS.push({
+  id: 'hol', title: '4 · HoL elimination',
+  blurb: `One input CLB carries two interleaved flows (spec §16.4):
+    <b>A (orange) → East</b>, whose sink is slow and freezes at cycle 30, and
+    <b>B (blue) → South</b>, whose sink is free. With <b>HoL elimination</b>
+    (oldest-<i>eligible</i> grant, <code>selectEligible</code>/<code>popAt</code>)
+    B keeps draining past stuck A messages — watch the purple "HoL skip" events.
+    Switch to head-only and B starves behind the first blocked A. Note the
+    honest endgame: blocked A's pin shared credits, so a single shared VC
+    eventually couples the flows — exactly why CHI gives each channel its own
+    vnet/credit pool (doc §2, §6).`,
+  params: [
+    { key: 'hol', label: 'HoL elimination (oldest eligible)', type: 'check', def: true },
+    { key: 'credits', label: 'credits on RN→XP', type: 'range', min: 4, max: 10, step: 1, def: 8 },
+    { key: 'eGap', label: 'East sink: 1 msg per N cy', type: 'range', min: 4, max: 16, step: 1, def: 8 },
+  ],
+  actions: [
+    { key: 'freeze', label: 'Freeze / thaw East sink',
+      get: s => s.handles.sinkE.forceStall,
+      set: (s, v) => { s.handles.sinkE.forceStall = v;
+        s.note(s.cycle, `East sink ${v ? 'FROZEN' : 'thawed'} (manual)`, v ? 'stall' : 'info'); } },
+  ],
+  build(P) {
+    const sim = new Sim();
+    const L0 = sim.addLink('L0', { tLink: 2, tCR: 1, credits: P.credits, label: 'RN→XP' });
+    const LE = sim.addLink('LE', { tLink: 2, tCR: 1, credits: 2, label: 'XP→East' });
+    const LS = sim.addLink('LS', { tLink: 2, tCR: 1, credits: 4, label: 'XP→South' });
+    const rn = sim.addProducer('RN', { gen: genPattern([mkA, mkB, mkB]) });
+    rn.link = L0;
+    const x0 = sim.addXP('XP', { hol: P.hol, stagingDepth: 1 });
+    x0.addInput(L0);
+    x0.addOutput('East', LE, m => m.dest === 'E');
+    x0.addOutput('South', LS, m => m.dest === 'S');
+    const sinkE = sim.addSink('East', { active: now => now % P.eGap === 0 });
+    sinkE.input = LE;
+    const sinkS = sim.addSink('South'); sinkS.input = LS;
+    const N = sim.layout.nodes;
+    const nRN = nodeDef('RN', 'rn', rn, 50, 182, 84, 54);
+    const nXP = nodeDef('XP', 'xp', x0, 300, 150, 180, 130);
+    const nE = nodeDef('East', 'sink', sinkE, 700, 180, 104, 60);
+    const nS = nodeDef('South', 'sink', sinkS, 330, 430, 104, 60);
+    N.push(nRN, nXP, nE, nS);
+    wire(L0, port(nRN, 'right'), port(nXP, 'left', 0.45));
+    wire(LE, port(nXP, 'right', 0.46), port(nE, 'left'));
+    wire(LS, port(nXP, 'bottom', 0.45), port(nS, 'top'));
+    sim.handles = { rn, sinkE, sinkS, x0, L0, LE, LS };
+    sim.hooks.push((now, s) => {
+      if (now === 30 && !sinkE._froze) {
+        sinkE._froze = true; sinkE.forceStall = true;
+        s.note(now, 'SCENARIO: East sink frozen — A msgs start piling up', 'stall');
+      }
+    });
+    sim.sampleSpec = [
+      { label: 'B delivered', color: '#6ea8ff', get: () => sinkS.delivered },
+      { label: 'A delivered', color: '#ff8a50', get: () => sinkE.delivered },
+    ];
+    sim.chart = { title: 'cumulative deliveries by flow',
+                  series: sim.sampleSpec.map(s => ({ label: s.label, color: s.color })) };
+    sim.statsFn = () => [
+      ['arbiter mode', P.hol ? 'HoL elimination' : 'head-only FIFO'],
+      ['B (South) delivered', sinkS.delivered],
+      ['A (East) delivered', sinkE.delivered],
+      ['HoL skips', x0.holSkips],
+      ['head-blocked cycles', x0.headBlockedCycles],
+      ['RN→XP credits free', `${L0.credits}/${L0.maxCredits}`],
+      ['RN credit-stall cycles', rn.creditStallCycles],
+    ];
+    return sim;
+  },
+});
+
+// ------------------------------------------------ 5 · staging decoupling
+SCENARIOS.push({
+  id: 'staging', title: '5 · Staging decouples',
+  blurb: `Staging decouples <b>switch allocation</b> from <b>link
+    allocation</b> (doc §2): this XP is <i>head-only</i>, and East's sink only
+    drains in bursts (5 on / 9 off). While East is credit-starved, granted A
+    messages <b>park in East's staging buffer</b> — clearing the input head so
+    B can pass. Sweep <b>staging depth</b> 1→3: deeper staging keeps the
+    crossbar granting through the whole off-burst (fewer head-blocked cycles,
+    more B throughput). The input credit frees at <i>grant</i>, not at wire
+    time — exactly Garnet's credit-at-SwitchAllocator timing (spec P3).`,
+  params: [
+    { key: 'depth', label: 'staging depth (East/South)', type: 'range', min: 1, max: 3, step: 1, def: 1 },
+    { key: 'hol', label: 'HoL elimination (compare)', type: 'check', def: false },
+  ],
+  actions: [],
+  build(P) {
+    const sim = new Sim();
+    const L0 = sim.addLink('L0', { tLink: 2, tCR: 1, credits: 6, label: 'RN→XP' });
+    const LE = sim.addLink('LE', { tLink: 2, tCR: 1, credits: 2, label: 'XP→East' });
+    const LS = sim.addLink('LS', { tLink: 2, tCR: 1, credits: 4, label: 'XP→South' });
+    const rn = sim.addProducer('RN', { gen: genPattern([mkA, mkB, mkB]) });
+    rn.link = L0;
+    const x0 = sim.addXP('XP', { hol: P.hol, stagingDepth: P.depth });
+    x0.addInput(L0);
+    x0.addOutput('East', LE, m => m.dest === 'E');
+    x0.addOutput('South', LS, m => m.dest === 'S');
+    const sinkE = sim.addSink('East', { active: burst(5, 9) });
+    sinkE.input = LE;
+    const sinkS = sim.addSink('South'); sinkS.input = LS;
+    const N = sim.layout.nodes;
+    const nRN = nodeDef('RN', 'rn', rn, 50, 182, 84, 54);
+    const nXP = nodeDef('XP', 'xp', x0, 300, 150, 180, 130);
+    const nE = nodeDef('East', 'sink', sinkE, 700, 180, 104, 60);
+    const nS = nodeDef('South', 'sink', sinkS, 330, 430, 104, 60);
+    N.push(nRN, nXP, nE, nS);
+    wire(L0, port(nRN, 'right'), port(nXP, 'left', 0.45));
+    wire(LE, port(nXP, 'right', 0.46), port(nE, 'left'));
+    wire(LS, port(nXP, 'bottom', 0.45), port(nS, 'top'));
+    sim.handles = { rn, sinkE, sinkS, x0, L0, LE, LS };
+    sim.sampleSpec = [
+      { label: 'B delivered', color: '#6ea8ff', get: () => sinkS.delivered },
+      { label: 'A delivered', color: '#ff8a50', get: () => sinkE.delivered },
+    ];
+    sim.chart = { title: 'cumulative deliveries by flow',
+                  series: sim.sampleSpec.map(s => ({ label: s.label, color: s.color })) };
+    sim.statsFn = () => {
+      const east = x0.outputs[0];
+      return [
+        ['staging depth', P.depth],
+        ['arbiter mode', P.hol ? 'HoL elimination' : 'head-only FIFO'],
+        ['B (South) delivered', sinkS.delivered],
+        ['A (East) delivered', sinkE.delivered],
+        ['head-blocked cycles', x0.headBlockedCycles],
+        ['East staging occupancy', `${east.staging.length}/${P.depth}`],
+        ['link-credit stall cycles', x0.linkCreditStallCycles],
+        ['staging-full stall cycles', x0.stagingFullStallCycles],
+      ];
+    };
+    return sim;
+  },
+});
+
+function defaultsOf(sc) {
+  const o = {};
+  for (const p of sc.params) o[p.key] = p.def;
+  return o;
+}
+Engine.buildScenario = function (id, P) {
+  const sc = SCENARIOS.find(s => s.id === id);
+  if (!sc) throw new Error('unknown scenario ' + id);
+  const sim = sc.build(Object.assign({}, defaultsOf(sc), P || {}));
+  sim.scenarioId = id;
+  return sim;
+};
+Object.assign(Engine, {
+  Message, Link, XP, Producer, Sink, Sim, SCENARIOS,
+  rttMin, windowRate, burst, genEvery, genAlways, genPattern,
+});
+root.Engine = Engine;
+})(typeof globalThis !== 'undefined' ? globalThis : window);
+/*ENGINE-END*/
+</script>
+<script>
+'use strict';
+(function () {
+const E = globalThis.Engine;
+const $ = s => document.querySelector(s);
+const FLOW = { M: '#53d8d8', A: '#ff8a50', B: '#6ea8ff' };
+const W = 900, H = 560;
+
+let sim = null, scDef = null;
+let playing = false, speed = 6, acc = 0, lastT = 0, logRendered = -1;
+const paramState = {};
+
+// ---------- canvas setup ----------
+const view = $('#view'), vctx = view.getContext('2d');
+const chart = $('#chart'), cctx = chart.getContext('2d');
+function fitCanvas(cv, w, h) {
+  const dpr = window.devicePixelRatio || 1;
+  cv.width = w * dpr; cv.height = h * dpr;
+  cv.style.aspectRatio = `${w} / ${h}`;
+  cv.getContext('2d').setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+fitCanvas(view, W, H);
+fitCanvas(chart, 334, 130);
+
+// ---------- scenario lifecycle ----------
+function defaults(sc) {
+  const o = {}; for (const p of sc.params) o[p.key] = p.def; return o;
+}
+function rebuild() {
+  try {
+    sim = E.buildScenario(scDef.id, paramState[scDef.id]);
+    $('#err').style.display = 'none';
+  } catch (e) { showError(e); return; }
+  playing = false; acc = 0; logRendered = -1;
+  $('#log').innerHTML = '';
+  updatePlayBtn();
+  renderActions();
+  $('#chartTitle').textContent = sim.chart ? sim.chart.title : 'Chart';
+}
+function selectScenario(id) {
+  scDef = E.SCENARIOS.find(s => s.id === id);
+  if (!paramState[id]) paramState[id] = defaults(scDef);
+  renderTabs(); renderParams(); renderBlurb();
+  rebuild();
+}
+function showError(e) {
+  const el = $('#err');
+  el.style.display = 'block';
+  el.textContent = 'Engine error: ' + e.message;
+  console.error(e);
+}
+
+// ---------- panel rendering ----------
+function renderTabs() {
+  const t = $('#tabs');
+  t.innerHTML = '';
+  for (const sc of E.SCENARIOS) {
+    const b = document.createElement('button');
+    b.className = 'tab' + (scDef && sc.id === scDef.id ? ' active' : '');
+    b.dataset.sc = sc.id;
+    b.textContent = sc.title;
+    b.onclick = () => selectScenario(sc.id);
+    t.appendChild(b);
+  }
+}
+function renderBlurb() { $('#blurb').innerHTML = scDef.blurb; }
+function renderParams() {
+  const box = $('#params');
+  box.innerHTML = '';
+  const P = paramState[scDef.id];
+  for (const p of scDef.params) {
+    const row = document.createElement('div');
+    row.className = 'param';
+    if (p.type === 'check') {
+      const cb = document.createElement('input');
+      cb.type = 'checkbox'; cb.checked = P[p.key];
+      cb.onchange = () => { P[p.key] = cb.checked; rebuild(); };
+      const lab = document.createElement('label');
+      lab.textContent = p.label;
+      row.appendChild(cb); row.appendChild(lab);
+    } else {
+      const lab = document.createElement('label');
+      lab.textContent = p.label;
+      const r = document.createElement('input');
+      r.type = 'range'; r.min = p.min; r.max = p.max; r.step = p.step;
+      r.value = P[p.key]; r.style.flex = '1.2';
+      const val = document.createElement('span');
+      val.className = 'val'; val.textContent = P[p.key];
+      r.oninput = () => {
+        P[p.key] = +r.value; val.textContent = r.value; rebuild();
+      };
+      row.appendChild(lab); row.appendChild(r); row.appendChild(val);
+    }
+    box.appendChild(row);
+  }
+}
+function renderActions() {
+  const box = $('#actions');
+  box.innerHTML = '';
+  for (const a of scDef.actions) {
+    const b = document.createElement('button');
+    b.className = 'ctl';
+    b.dataset.action = a.key;
+    b.textContent = a.label;
+    b.onclick = () => { a.set(sim, !a.get(sim)); };
+    box.appendChild(b);
+  }
+}
+function updateActions() {
+  for (const a of scDef.actions) {
+    const b = $('#actions [data-action="' + a.key + '"]');
+    if (b) b.classList.toggle('on', !!a.get(sim));
+  }
+}
+function updateStats() {
+  let html = '<table>';
+  html += `<tr><td>cycle</td><td>${sim.cycle}</td></tr>`;
+  for (const [k, v] of sim.statsFn()) html += `<tr><td>${k}</td><td>${v}</td></tr>`;
+  html += '</table>';
+  $('#stats').innerHTML = html;
+  $('#cycleNum').textContent = 'cycle ' + sim.cycle;
+}
+function updateLog() {
+  const logs = sim.logs;
+  if (!logs.length) return;
+  if (logs[logs.length - 1].seq === logRendered) return;
+  const el = $('#log');
+  const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 30;
+  for (const e of logs) {
+    if (e.seq <= logRendered) continue;
+    const d = document.createElement('div');
+    d.innerHTML = `<span class="c">${e.cycle}</span>` +
+                  `<span class="${e.kind}"></span>`;
+    d.lastChild.textContent = e.text;
+    el.appendChild(d);
+  }
+  logRendered = logs[logs.length - 1].seq;
+  while (el.children.length > 260) el.removeChild(el.firstChild);
+  if (atBottom) el.scrollTop = el.scrollHeight;
+}
+
+// ---------- chart ----------
+function drawChart() {
+  const w = 334, h = 130;
+  cctx.clearRect(0, 0, w, h);
+  const ch = sim.chart;
+  if (!ch) return;
+  const pad = { l: 26, r: 6, t: 8, b: 14 };
+  let ymax = ch.yMax || 1;
+  for (const s of ch.series) {
+    const d = sim.series[s.label] || [];
+    for (const v of d) if (v > ymax) ymax = v;
+  }
+  if (ch.hline && ch.hline.value > ymax) ymax = ch.hline.value;
+  ymax *= 1.05;
+  const X = i => pad.l + (i / 459) * (w - pad.l - pad.r);
+  const Y = v => h - pad.b - (v / ymax) * (h - pad.t - pad.b);
+  cctx.strokeStyle = '#2e3a52';
+  cctx.lineWidth = 1;
+  cctx.strokeRect(pad.l, pad.t, w - pad.l - pad.r, h - pad.t - pad.b);
+  cctx.fillStyle = '#8a93a6';
+  cctx.font = '10px Menlo, monospace';
+  cctx.fillText((ymax / 1.05).toPrecision(2), 2, pad.t + 8);
+  cctx.fillText('0', 2, h - pad.b);
+  if (ch.hline) {
+    cctx.strokeStyle = '#ffd54f';
+    cctx.setLineDash([4, 4]);
+    cctx.beginPath();
+    cctx.moveTo(pad.l, Y(ch.hline.value));
+    cctx.lineTo(w - pad.r, Y(ch.hline.value));
+    cctx.stroke();
+    cctx.setLineDash([]);
+    cctx.fillStyle = '#ffd54f';
+    cctx.fillText(ch.hline.label + ' ' + ch.hline.value.toFixed(2),
+                  pad.l + 4, Y(ch.hline.value) - 3);
+  }
+  let lx = pad.l + 4;
+  for (const s of ch.series) {
+    const d = sim.series[s.label] || [];
+    cctx.strokeStyle = s.color;
+    cctx.lineWidth = 1.4;
+    cctx.beginPath();
+    for (let i = 0; i < d.length; i++) {
+      const x = X(i + (460 - d.length)), y = Y(d[i]);
+      i === 0 ? cctx.moveTo(x, y) : cctx.lineTo(x, y);
+    }
+    cctx.stroke();
+    cctx.fillStyle = s.color;
+    cctx.fillRect(lx, h - 9, 8, 3);
+    cctx.fillStyle = '#8a93a6';
+    cctx.fillText(s.label, lx + 11, h - 4);
+    lx += 11 + cctx.measureText(s.label).width + 12;
+  }
+}
+
+// ---------- main canvas ----------
+function rr(x, y, w, h, r) {
+  vctx.beginPath();
+  vctx.roundRect(x, y, w, h, r);
+}
+function msgSquare(x, y, flow, size = 11) {
+  vctx.fillStyle = FLOW[flow] || '#9fb4d0';
+  rr(x - size / 2, y - size / 2, size, size, 2.5);
+  vctx.fill();
+}
+function uvec(g) {
+  const dx = g.x2 - g.x1, dy = g.y2 - g.y1, L = Math.hypot(dx, dy) || 1;
+  return { ux: dx / L, uy: dy / L, L };
+}
+function lerpPt(g, p) {
+  return [g.x1 + (g.x2 - g.x1) * p, g.y1 + (g.y2 - g.y1) * p];
+}
+function clbSlotPos(l, i) {
+  const g = l.geom, { ux, uy } = uvec(g);
+  return [g.x2 + ux * (13 + i * 13), g.y2 + uy * (13 + i * 13)];
+}
+function stagingSlotPos(l, i) {
+  const g = l.geom, { ux, uy } = uvec(g);
+  return [g.x1 - ux * (13 + i * 13), g.y1 - uy * (13 + i * 13)];
+}
+function drawLinkBase(l) {
+  if (!l.geom) return;
+  const g = l.geom;
+  vctx.strokeStyle = '#39435a';
+  vctx.lineWidth = 2;
+  vctx.beginPath();
+  vctx.moveTo(g.x1, g.y1);
+  vctx.lineTo(g.x2, g.y2);
+  vctx.stroke();
+}
+function drawLinkDynamics(l, T) {
+  if (!l.geom) return;
+  const g = l.geom, { ux, uy } = uvec(g);
+  const nx = -uy, ny = ux;
+  // credit pool at sender side
+  if (l.credited) {
+    for (let i = 0; i < Math.min(l.maxCredits, 10); i++) {
+      const cx = g.x1 + ux * (8 + i * 10) + nx * 15;
+      const cy = g.y1 + uy * (8 + i * 10) + ny * 15;
+      vctx.beginPath();
+      vctx.arc(cx, cy, 3.4, 0, 7);
+      if (i < l.credits) { vctx.fillStyle = '#ffd54f'; vctx.fill(); }
+      else { vctx.strokeStyle = '#7a6a2c'; vctx.lineWidth = 1.2; vctx.stroke(); }
+    }
+    if (l.credits === 0) {
+      vctx.fillStyle = '#ff6b6b';
+      vctx.font = '10px Menlo, monospace';
+      vctx.fillText('0 cr', g.x1 + ux * 8 + nx * 27, g.y1 + uy * 8 + ny * 27 + 3);
+    }
+  } else {
+    vctx.fillStyle = '#8a93a6';
+    vctx.font = '11px Menlo, monospace';
+    vctx.fillText('∞', g.x1 + ux * 10 + nx * 16 - 3, g.y1 + uy * 10 + ny * 16 + 4);
+  }
+  // in-flight messages (forward, offset to one side)
+  for (const e of l.inFlight) {
+    const p = Math.max(0, Math.min(1, (T - e.sentAt) / (e.arriveAt - e.sentAt)));
+    const [x, y] = lerpPt(g, p);
+    msgSquare(x - nx * 8, y - ny * 8, e.msg.flow);
+  }
+  // returning credits (backward, offset to the other side)
+  for (const c of l.crInFlight) {
+    const dur = Math.max(1, c.arriveAt - c.sentAt);
+    const p = Math.max(0, Math.min(1, (T - c.sentAt) / dur));
+    const x = g.x2 + (g.x1 - g.x2) * p, y = g.y2 + (g.y1 - g.y2) * p;
+    vctx.beginPath();
+    vctx.arc(x + nx * 8, y + ny * 8, 4, 0, 7);
+    vctx.fillStyle = '#ffd54f';
+    vctx.fill();
+    vctx.strokeStyle = '#10141b';
+    vctx.lineWidth = 1;
+    vctx.stroke();
+  }
+  // CLB slots + contents at receiver side
+  const cap = Math.min(l.credited ? l.maxCredits : Math.max(4, l.clb.length), 8);
+  for (let i = 0; i < cap; i++) {
+    const [x, y] = clbSlotPos(l, i);
+    vctx.strokeStyle = '#3d4961';
+    vctx.lineWidth = 1;
+    rr(x - 6, y - 6, 12, 12, 2.5);
+    vctx.stroke();
+  }
+  for (let j = 0; j < Math.min(l.clb.length, 8); j++) {
+    const [x, y] = clbSlotPos(l, j);
+    msgSquare(x, y, l.clb[j].msg.flow);
+  }
+  if (l.clb.length > 8) {
+    const [x, y] = clbSlotPos(l, 8);
+    vctx.fillStyle = '#cfd8e6';
+    vctx.font = '10px Menlo, monospace';
+    vctx.fillText('+' + (l.clb.length - 8), x - 5, y + 3);
+  }
+}
+function drawStaging(x) {
+  for (const out of x.outputs) {
+    const l = out.link;
+    if (!l.geom) continue;
+    for (let i = 0; i < x.stagingDepth; i++) {
+      const [sx, sy] = stagingSlotPos(l, i);
+      vctx.strokeStyle = out.stalled ? '#ff6b6b' : '#56627d';
+      vctx.lineWidth = 1;
+      rr(sx - 6, sy - 6, 12, 12, 2.5);
+      vctx.stroke();
+    }
+    for (let i = 0; i < Math.min(out.staging.length, x.stagingDepth); i++) {
+      const [sx, sy] = stagingSlotPos(l, i);
+      msgSquare(sx, sy, out.staging[i].msg.flow);
+    }
+  }
+}
+function drawNode(n) {
+  const stalledRing =
+    (n.type === 'rn' && n.ref.stalled) ||
+    (n.type === 'sink' && !n.ref.isActive(sim.cycle));
+  vctx.fillStyle = '#1b2230';
+  vctx.strokeStyle = stalledRing ? '#ff6b6b' : '#3d4961';
+  vctx.lineWidth = stalledRing ? 2 : 1.4;
+  rr(n.x, n.y, n.w, n.h, 8);
+  vctx.fill();
+  vctx.stroke();
+  vctx.fillStyle = '#fff';
+  vctx.font = '600 12px Menlo, monospace';
+  if (n.type === 'xp') {
+    vctx.fillText(n.label, n.x + 8, n.y + 16);
+    vctx.fillStyle = '#8a93a6';
+    vctx.font = '10px Menlo, monospace';
+    vctx.fillText(n.ref.hol ? 'ARB: oldest-eligible' : 'ARB: head-only',
+                  n.x + 8, n.y + n.h - 7);
+  } else if (n.type === 'rn') {
+    vctx.fillText(n.label, n.x + 8, n.y + 16);
+    vctx.fillStyle = '#8a93a6';
+    vctx.font = '10px Menlo, monospace';
+    vctx.fillText('inj ' + n.ref.injected, n.x + 8, n.y + n.h - 7);
+    if (n.ref.pending)
+      msgSquare(n.x + n.w - 13, n.y + 13, n.ref.pending.flow, 10);
+  } else if (n.type === 'sink') {
+    vctx.fillText(n.label, n.x + 8, n.y + 16);
+    vctx.fillStyle = stalledRing ? '#ff6b6b' : '#8a93a6';
+    vctx.font = '10px Menlo, monospace';
+    vctx.fillText(stalledRing ? 'STALLED · got ' + n.ref.delivered
+                              : 'got ' + n.ref.delivered,
+                  n.x + 8, n.y + n.h - 7);
+  }
+}
+function drawFlashes(frac) {
+  const byId = {};
+  for (const l of sim.links) byId[l.id] = l;
+  vctx.lineWidth = 2;
+  for (const f of sim.flashes) {
+    const from = byId[f.from];
+    if (!from || !from.geom) continue;
+    const [x1, y1] = clbSlotPos(from, 0);
+    let x2, y2;
+    if (f.to && byId[f.to] && byId[f.to].geom) {
+      [x2, y2] = stagingSlotPos(byId[f.to], 0);
+    } else {
+      const g = from.geom, { ux, uy } = uvec(g);
+      x2 = g.x2 + ux * 50; y2 = g.y2 + uy * 50;
+    }
+    vctx.strokeStyle = `rgba(255,213,79,${Math.max(0, 1 - frac).toFixed(2)})`;
+    vctx.beginPath();
+    vctx.moveTo(x1, y1);
+    vctx.lineTo(x2, y2);
+    vctx.stroke();
+  }
+}
+function drawLinkLabels() {
+  vctx.fillStyle = '#5a657a';
+  vctx.font = '10px Menlo, monospace';
+  for (const l of sim.links) {
+    if (!l.geom) continue;
+    const g = l.geom, { ux, uy } = uvec(g);
+    const nx = -uy, ny = ux;
+    const mx = (g.x1 + g.x2) / 2, my = (g.y1 + g.y2) / 2;
+    const txt = `t_link=${l.tLink}` + (l.credited ? ` t_cr=${l.tCR}` : '');
+    vctx.fillText(txt, mx - vctx.measureText(txt).width / 2 - nx * 26,
+                  my - ny * 26 + 3);
+  }
+}
+function draw(frac) {
+  vctx.clearRect(0, 0, W, H);
+  const T = sim.cycle + frac;
+  for (const l of sim.links) drawLinkBase(l);
+  drawLinkLabels();
+  for (const n of sim.layout.nodes) drawNode(n);
+  for (const l of sim.links) drawLinkDynamics(l, T);
+  for (const x of sim.xps) drawStaging(x);
+  drawFlashes(frac);
+  vctx.fillStyle = '#ffd54f';
+  vctx.font = '600 15px Menlo, monospace';
+  vctx.fillText('cycle ' + sim.cycle, 14, 24);
+  if (!playing) {
+    vctx.fillStyle = '#8a93a6';
+    vctx.font = '11px Menlo, monospace';
+    vctx.fillText('paused — Play, Step, or Space', 14, 42);
+  }
+}
+
+// ---------- run loop ----------
+function stepSafe() {
+  try { sim.step(); } catch (e) { showError(e); playing = false; updatePlayBtn(); }
+}
+function updatePlayBtn() {
+  $('#btn-play').textContent = playing ? '❚❚ Pause' : '▶ Play';
+}
+function frame(t) {
+  const dt = Math.min(0.1, (t - lastT) / 1000);
+  lastT = t;
+  if (playing && sim) {
+    acc += dt * speed;
+    let n = 0;
+    while (acc >= 1 && n < 200) { stepSafe(); acc -= 1; n++; }
+    if (n >= 200) acc = 0;
+  }
+  if (sim) {
+    draw(playing ? Math.min(acc, 1) : 0);
+    updateStats(); updateLog(); updateActions(); drawChart();
+  }
+  requestAnimationFrame(frame);
+}
+
+// ---------- controls ----------
+$('#btn-play').onclick = () => { playing = !playing; acc = 0; updatePlayBtn(); };
+$('#btn-step').onclick = () => { playing = false; updatePlayBtn(); stepSafe(); };
+$('#btn-step10').onclick = () => {
+  playing = false; updatePlayBtn();
+  for (let i = 0; i < 10; i++) stepSafe();
+};
+$('#btn-reset').onclick = () => rebuild();
+$('#speed').oninput = function () {
+  speed = +this.value;
+  $('#speedVal').textContent = speed + ' cy/s';
+};
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space' && e.target.tagName !== 'INPUT') {
+    e.preventDefault();
+    $('#btn-play').click();
+  }
+});
+
+selectScenario('lifecycle');
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
