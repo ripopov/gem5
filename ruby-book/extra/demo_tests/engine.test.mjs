@@ -284,6 +284,15 @@ test('layout: all 8 links have geometry, 5 nodes placed', () => {
   assert.equal(sim.layout.nodes.length, 5);
   for (const l of sim.links) assert(l.geom, l.id + ' missing geom');
   for (const n of sim.layout.nodes) assert(n.w > 0 && n.h > 0 && n.ref);
+  // latency-tag anchors: every link gets one, on-canvas, valid alignment
+  for (const l of sim.links) {
+    const a = l.geom.lbl;
+    assert(a, l.id + ' missing latency-label anchor');
+    assert(a.x > 0 && a.x < 900 && a.y > 0 && a.y < 640,
+           l.id + ' label anchor off-canvas');
+    assert(['left', 'right', 'center'].includes(a.align),
+           l.id + ' bad label alignment');
+  }
 });
 
 console.log(passed + ' test group(s) passed' +

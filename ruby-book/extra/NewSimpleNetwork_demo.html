@@ -124,7 +124,9 @@
       (filled = available at sender; moving back = returning over
       t_creditReturn) · slot row on a wire into the XP = that input's CLB ·
       slot row inside the XP at an output = staging · slot row inside a peer =
-      its RX CLB · yellow flash = arbiter grant · red = stalled
+      its RX CLB · yellow flash = arbiter grant · red = stalled ·
+      each wire is tagged with its latencies: t_link (forward, grey) and
+      t_cr = t_creditReturn (gold); t_pipe inside the XP
     </div>
   </div>
   <aside>
@@ -574,6 +576,18 @@ function buildLayout(sim) {
   peers.W.rxLink.geom = g(350, 359, 210, 359);
   peers.E.txLink.geom = g(690, 291, 550, 291);
   peers.E.rxLink.geom = g(550, 359, 690, 359);
+  // latency-tag anchors: hand-placed on each link's outer side, clear of
+  // credit-dot rows, message/credit lanes, CLB slots and '0cr' markers.
+  // (x, y) = baseline of the first text line; second line is +12px below.
+  const lbl = (l, x, y, align) => { l.geom.lbl = { x, y, align }; };
+  lbl(peers.N.txLink, 386, 167, 'right');
+  lbl(peers.N.rxLink, 514, 167, 'left');
+  lbl(peers.S.txLink, 392, 466, 'right');
+  lbl(peers.S.rxLink, 508, 466, 'left');
+  lbl(peers.W.txLink, 280, 256, 'center');
+  lbl(peers.W.rxLink, 280, 389, 'center');
+  lbl(peers.E.txLink, 620, 256, 'center');
+  lbl(peers.E.rxLink, 620, 389, 'center');
 }
 
 Object.assign(Engine, {
@@ -987,6 +1001,21 @@ function drawLinkBase(l) {
   vctx.lineTo(g.x2 - ux * 8 + uy * 4, g.y2 - uy * 8 - ux * 4);
   vctx.fill();
 }
+function drawLinkLabels(l) {
+  const a = l.geom && l.geom.lbl;
+  if (!a) return;
+  vctx.font = '10px Menlo, monospace';
+  vctx.textAlign = a.align;
+  // uncredited mode has no credit-return path: center the single line
+  const y0 = l.credited ? a.y : a.y + 6;
+  vctx.fillStyle = '#8a93a6';
+  vctx.fillText(`t_link ${l.tLink}`, a.x, y0);
+  if (l.credited) {
+    vctx.fillStyle = 'rgba(255,213,79,0.6)';
+    vctx.fillText(`t_cr ${l.tCR}`, a.x, a.y + 12);
+  }
+  vctx.textAlign = 'start';
+}
 function drawLinkDynamics(l, T) {
   if (!l.geom) return;
   const g = l.geom, { ux, uy } = uvec(g);
@@ -1091,7 +1120,7 @@ function drawNode(n) {
     const mode = x.hol ? 'oldest-eligible' : 'head-only';
     vctx.fillText(mode, n.x + n.w / 2 - vctx.measureText(mode).width / 2,
                   n.y + n.h / 2 + 9);
-    const sub = `stg ${x.stagingDepth} · pipe ${x.tPipe}`;
+    const sub = `t_pipe ${x.tPipe} · stg ${x.stagingDepth}`;
     vctx.fillText(sub, n.x + n.w / 2 - vctx.measureText(sub).width / 2,
                   n.y + n.h / 2 + 22);
   } else {
@@ -1144,6 +1173,7 @@ function draw(frac) {
   vctx.clearRect(0, 0, W, H);
   const T = sim.cycle + frac;
   for (const l of sim.links) drawLinkBase(l);
+  for (const l of sim.links) drawLinkLabels(l);
   for (const n of sim.layout.nodes) drawNode(n);
   for (const l of sim.links) drawLinkDynamics(l, T);
   for (const x of sim.xps) drawStaging(x);
