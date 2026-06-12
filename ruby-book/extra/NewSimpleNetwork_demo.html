@@ -3,57 +3,77 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>NewSimpleNetwork — Credited XP NoC, Live Demo</title>
+<title>NewSimpleNetwork — Credited XP, Single CHI Channel Demo</title>
 <style>
   :root {
     --bg:#10141b; --panel:#171d28; --panel2:#1b2230; --line:#2e3a52;
     --txt:#cfd8e6; --dim:#8a93a6; --acc:#ffd54f; --red:#ff6b6b;
-    --cyan:#53d8d8; --orange:#ff8a50; --blue:#6ea8ff;
+    --n:#c792ea; --e:#ff8a50; --s:#6ea8ff; --w:#53d8d8;
   }
   * { box-sizing:border-box; }
   body { margin:0; background:var(--bg); color:var(--txt);
          font:14px/1.45 "SF Mono", Menlo, Consolas, monospace; }
-  header { padding:10px 16px 0; }
-  h1 { font-size:17px; margin:0 0 2px; color:#fff; font-weight:600; }
+  header { padding:10px 16px 8px; }
+  h1 { font-size:17px; margin:0; color:#fff; font-weight:600; }
   h1 .sub { color:var(--dim); font-weight:400; font-size:12px; margin-left:8px; }
-  #tabs { display:flex; gap:6px; margin:10px 0; flex-wrap:wrap; }
-  .tab { background:var(--panel); border:1px solid var(--line); color:var(--txt);
-         padding:6px 12px; border-radius:6px; cursor:pointer; font:inherit; font-size:13px; }
-  .tab.active { background:#2a3550; border-color:var(--acc); color:#fff; }
   main { display:flex; gap:12px; padding:0 16px; align-items:flex-start; flex-wrap:wrap; }
-  #stage { flex:1 1 640px; min-width:560px; }
+  #left { flex:0 0 300px; display:flex; flex-direction:column; gap:10px; }
+  #stage { flex:1 1 560px; min-width:520px; }
+  aside { flex:0 0 348px; display:flex; flex-direction:column; gap:10px; }
   canvas#view { width:100%; background:var(--panel); border:1px solid var(--line);
                 border-radius:8px; display:block; }
-  #blurb { background:var(--panel); border:1px solid var(--line); border-radius:8px;
-           padding:10px 14px; margin-top:10px; color:var(--txt); font-size:13px; }
+  .box { background:var(--panel); border:1px solid var(--line); border-radius:8px;
+         padding:10px 12px; }
+  .box h3 { margin:0 0 8px; font-size:12px; color:var(--dim); text-transform:uppercase;
+            letter-spacing:.06em; font-weight:600; }
+  #blurb { margin-top:10px; font-size:13px; }
   #blurb b { color:var(--acc); }
+  #blurb code { color:var(--w); }
   #legend { margin-top:8px; color:var(--dim); font-size:12px; }
   #legend span.sw { display:inline-block; width:10px; height:10px; border-radius:2px;
                     margin:0 4px -1px 10px; }
-  aside { flex:0 0 360px; display:flex; flex-direction:column; gap:10px; }
-  .box { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:10px 12px; }
-  .box h3 { margin:0 0 8px; font-size:12px; color:var(--dim); text-transform:uppercase;
-            letter-spacing:.06em; font-weight:600; }
-  #controls .row { display:flex; gap:8px; align-items:center; margin-bottom:8px; flex-wrap:wrap; }
   button.ctl { background:var(--panel2); color:var(--txt); border:1px solid var(--line);
-               border-radius:6px; padding:6px 12px; font:inherit; font-size:13px; cursor:pointer; }
+               border-radius:6px; padding:6px 10px; font:inherit; font-size:12.5px;
+               cursor:pointer; }
   button.ctl:hover { border-color:var(--acc); }
   button.ctl.primary { background:#2a3550; color:#fff; }
   button.ctl.on { background:#5a2330; border-color:var(--red); color:#fff; }
+  #controls .row { display:flex; gap:7px; align-items:center; margin-bottom:8px;
+                   flex-wrap:wrap; }
   #cycleNum { color:var(--acc); font-size:15px; margin-left:auto; }
   input[type=range] { accent-color:var(--acc); }
-  .param { display:flex; align-items:center; gap:8px; margin:5px 0; font-size:12.5px; }
-  .param label { flex:1; color:var(--txt); }
-  .param .val { width:28px; text-align:right; color:var(--acc); }
-  #stats table { width:100%; border-collapse:collapse; font-size:12.5px; }
-  #stats td { padding:2px 0; }
-  #stats td:last-child { text-align:right; color:#fff; }
+  /* config tabs */
+  #cfgTabs { display:flex; gap:4px; flex-wrap:wrap; margin-bottom:8px; }
+  #cfgTabs button { flex:1; background:var(--panel2); border:1px solid var(--line);
+                    color:var(--txt); border-radius:6px; padding:5px 4px; font:inherit;
+                    font-size:12px; cursor:pointer; }
+  #cfgTabs button.active { background:#2a3550; border-color:var(--acc); color:#fff; }
+  .fgroup { margin:10px 0 4px; font-size:11px; color:var(--dim);
+            text-transform:uppercase; letter-spacing:.05em;
+            border-bottom:1px solid var(--line); padding-bottom:2px; }
+  .param { display:flex; align-items:center; gap:7px; margin:5px 0; font-size:12px; }
+  .param label { flex:1.15; color:var(--txt); }
+  .param label .rb { color:#7a6a2c; }
+  .param input[type=range] { flex:1; min-width:60px; }
+  .param .val { width:24px; text-align:right; color:var(--acc); }
+  .dests { display:flex; gap:8px; font-size:12px; margin:5px 0; align-items:center; }
+  #presets { display:flex; gap:6px; flex-wrap:wrap; }
+  #presets button { font-size:11.5px; padding:5px 8px; }
+  #stats table { width:100%; border-collapse:collapse; font-size:12px; }
+  #stats td { padding:1.5px 2px; }
+  #stats td.num { text-align:right; color:#fff; }
+  #stats .sw { display:inline-block; width:9px; height:9px; border-radius:2px;
+               margin-right:5px; }
+  #stats tr.sep td { border-top:1px solid var(--line); padding-top:4px; }
   canvas#chart { width:100%; background:var(--panel2); border-radius:6px; display:block; }
-  #log { height:170px; overflow-y:auto; font-size:11.5px; line-height:1.5;
+  select { background:var(--panel2); color:var(--txt); border:1px solid var(--line);
+           border-radius:6px; font:inherit; font-size:12px; padding:3px 6px;
+           width:100%; margin-bottom:6px; }
+  #log { height:150px; overflow-y:auto; font-size:11.5px; line-height:1.5;
          background:var(--panel2); border-radius:6px; padding:6px 8px; }
   #log .c { color:var(--dim); margin-right:6px; }
   #log .send { color:#9fb4d0; } #log .grant { color:var(--acc); }
-  #log .deliver { color:var(--cyan); } #log .stall { color:var(--red); }
+  #log .deliver { color:#7adf9e; } #log .stall { color:var(--red); }
   #log .hol { color:#c792ea; } #log .info { color:var(--dim); }
   #err { display:none; background:#5a2330; border:1px solid var(--red); color:#fff;
          padding:8px 12px; border-radius:6px; margin:8px 16px; }
@@ -62,25 +82,49 @@
 </head>
 <body>
 <header>
-  <h1>NewSimpleNetwork — Credited XP NoC <span class="sub">live companion to
-      NewSimpleNetwork.md / CreditedLinkBuffer.md</span></h1>
-  <div id="tabs"></div>
+  <h1>NewSimpleNetwork — Credited XP, single CHI channel
+      <span class="sub">live companion to NewSimpleNetwork.md / CreditedLinkBuffer.md</span></h1>
 </header>
 <div id="err"></div>
 <main>
+  <div id="left">
+    <div class="box"><h3>Presets</h3><div id="presets"></div></div>
+    <div class="box"><h3>Configuration</h3>
+      <div id="cfgTabs"></div>
+      <div id="cfgBody"></div>
+    </div>
+  </div>
   <div id="stage">
     <canvas id="view"></canvas>
-    <div id="blurb"></div>
+    <div class="box" id="blurb">
+      One <b>XP crosspoint</b> switching a single CHI channel between four peers
+      (<span style="color:var(--n)">North</span>,
+      <span style="color:var(--e)">East</span>,
+      <span style="color:var(--s)">South</span>,
+      <span style="color:var(--w)">West</span>). Every peer has a
+      <b>TX</b> (traffic generator) and an <b>RX</b> (consumer); each direction
+      is its own <b>credited link</b>: credit spent at send, message flies
+      <code>t_link</code> cycles into the input CLB, dwells ≥ 1 cycle, and the
+      credit returns to the sender at arbiter <b>grant</b> +
+      <code>t_creditReturn</code>. Messages are coloured by <b>destination</b>.
+      Things to try (or use the presets): drop one link's credits below
+      RTT_min = t_link + 1 + t_creditReturn and watch its throughput cap at
+      credits/RTT_min · freeze an RX and watch credit starvation walk upstream
+      · point all TX at East to create a hot-spot · turn off HoL elimination
+      while an RX is frozen and watch other flows starve behind blocked heads —
+      then raise staging depth to win some slack back.
+    </div>
     <div id="legend">
       <b>Legend:</b>
-      <span class="sw" style="background:var(--cyan)"></span>message
-      <span class="sw" style="background:var(--orange)"></span>flow A
-      <span class="sw" style="background:var(--blue)"></span>flow B
+      <span class="sw" style="background:var(--n)"></span>→North
+      <span class="sw" style="background:var(--e)"></span>→East
+      <span class="sw" style="background:var(--s)"></span>→South
+      <span class="sw" style="background:var(--w)"></span>→West
       <span class="sw" style="background:var(--acc);border-radius:50%"></span>credit
-      (filled = available at sender; moving back = returning over t_creditReturn) ·
-      slot row at a link's end = input CLB · slot row before an output port =
-      staging (1–3 deep) · yellow flash = arbiter grant (credit returns to
-      upstream at grant) · red = stalled
+      (filled = available at sender; moving back = returning over
+      t_creditReturn) · slot row on a wire into the XP = that input's CLB ·
+      slot row inside the XP at an output = staging · slot row inside a peer =
+      its RX CLB · yellow flash = arbiter grant · red = stalled
     </div>
   </div>
   <aside>
@@ -97,20 +141,25 @@
         <input type="range" id="speed" min="1" max="40" step="1" value="6" style="flex:1">
         <span id="speedVal" style="font-size:12px;color:var(--dim)">6 cy/s</span>
       </div>
-      <div id="actions" class="row"></div>
+      <div class="row" style="margin-bottom:0">
+        <span style="font-size:12px;color:var(--dim)">freeze RX:</span>
+        <span id="freezes" style="display:flex;gap:6px"></span>
+      </div>
     </div>
-    <div class="box"><h3>Parameters <span style="text-transform:none;color:#5a657a">(change ⇒ reset)</span></h3>
-      <div id="params"></div></div>
     <div class="box"><h3>Stats</h3><div id="stats"></div></div>
-    <div class="box"><h3 id="chartTitle">Chart</h3><canvas id="chart"></canvas></div>
+    <div class="box"><h3>Plot</h3>
+      <select id="chartSel"></select>
+      <canvas id="chart"></canvas>
+    </div>
     <div class="box"><h3>Event log</h3><div id="log"></div></div>
   </aside>
 </main>
 <footer>
   Cycle-accurate to the spec: credit spent at <i>send</i>, returned at arbiter
   <i>grant</i> (departure to staging) + t_creditReturn; dwell ≥ 1 cycle;
-  RTT_min = t_link + 1 + t_creditReturn; throughput = min(1, credits/RTT_min).
-  Single shareable file — engine has no DOM dependency and is unit-testable.
+  RTT_min = t_link + 1 + t_creditReturn; per-link throughput =
+  min(1, credits/RTT_min). Single shareable file — the engine is DOM-free and
+  unit-testable.
 </footer>
 
 <script>
@@ -123,8 +172,8 @@ let msgSeq = 0;
 class Message {
   constructor(flow, dest) {
     this.id = msgSeq++;
-    this.flow = flow;        // 'M' | 'A' | 'B'  (display class)
-    this.dest = dest;        // routing tag
+    this.flow = flow;        // display class == destination peer
+    this.dest = dest;        // routing tag: 'N' | 'E' | 'S' | 'W'
     this.bornAt = -1;
     this.deliveredAt = -1;
   }
@@ -139,13 +188,14 @@ class Link {
     this.label = o.label || id;
     this.tLink = Math.max(1, o.tLink ?? 2);     // forward wire delay (P6: >=1)
     this.tCR = Math.max(0, o.tCR ?? 1);         // credit return latency
-    this.maxCredits = o.credits ?? 3;
+    this.maxCredits = o.credits ?? 4;
     this.credits = this.maxCredits;
     this.inFlight = [];      // {msg, sentAt, arriveAt} FIFO by arriveAt
     this.crInFlight = [];    // {sentAt, arriveAt} returning credits
     this.clb = [];           // {msg, arrivedAt} receiver buffer, arrival order
     this.sends = 0; this.grants = 0; this.creditReturns = 0;
-    this.geom = null;        // set by scenario layout
+    this.geom = null;        // set by layout
+    this.clbOutside = false; // draw CLB on the wire outside the receiving box
   }
   get credited() { return this.maxCredits > 0; }
   hasCredit() { return !this.credited || this.credits > 0; }
@@ -235,7 +285,7 @@ class XP {
       } else {
         this.linkCreditStallCycles++;
         if (!out.stalled)
-          sim.note(now, `${this.id}.${out.name}: link driver stalled — ` +
+          sim.note(now, `${this.id}→${out.name}: link driver stalled — ` +
                    `no credit on ${out.link.label}`, 'stall');
         out.stalled = true;
       }
@@ -302,8 +352,7 @@ class Producer {
       m.bornAt = now; this.injected++;
       this.link.send(m, now);
       this.stalled = false;
-      const tag = m.flow !== 'M' ? ` [${m.flow}→${m.dest}]` : '';
-      sim.note(now, `${this.id}: inject msg#${m.id}${tag} (credit spent, ` +
+      sim.note(now, `${this.id}: inject msg#${m.id} →${m.dest} (credit spent, ` +
         `${this.link.credited ? this.link.credits : '∞'} left)`, 'send');
     } else {
       this.creditStallCycles++;
@@ -346,10 +395,10 @@ class Sim {
     this.hooks = [];
     this.logs = []; this._logSeq = 0; this.maxLog = 400;
     this.flashes = [];
-    this.series = {}; this.sampleSpec = []; this.chart = null;
+    this.series = {}; this.sampleSpec = [];
     this.layout = { nodes: [] };
     this.handles = {};
-    this.statsFn = () => [];
+    this.liveSync = null;     // (sim) => void, copies live cfg into objects
   }
   addLink(id, o) { const l = new Link(id, o); this.links.push(l); return l; }
   addXP(id, o) { const x = new XP(id, o); this.xps.push(x); return x; }
@@ -368,6 +417,7 @@ class Sim {
   step() {
     this.cycle++;
     const now = this.cycle;
+    if (this.liveSync) this.liveSync(this);
     this.flashes = this.flashes.filter(f => f.cycle === now); // drop stale
     // Phase A: events due this edge — credit returns first (P7), then arrivals
     for (const l of this.links) { l.applyCreditReturns(now); l.applyArrivals(now); }
@@ -399,7 +449,7 @@ class Sim {
     for (const l of this.links) n += l.inFlight.length + l.clb.length;
     for (const x of this.xps)
       for (const o of x.outputs) n += o.staging.length;
-    return n;
+    return n;   // producer .pending is not in transit: never injected
   }
 }
 
@@ -410,378 +460,125 @@ function windowRate(sink, w) {
   const n = Math.min(w, h.length - 1);
   return (h[h.length - 1] - h[h.length - 1 - n]) / n;
 }
-function genEvery(gap, mk) {
-  let next = 1;
-  return (now) => { if (now >= next) { next = now + gap; return mk(now); } return null; };
-}
-function genAlways(mk) { return () => mk(); }
-// pattern: array of factories cycled per generated message, e.g. [A,B,B]
-function genPattern(pat) { let i = 0; return () => pat[i++ % pat.length](); }
-function burst(on, off, phase = 0) {
-  return (now) => ((now + phase) % (on + off)) < on;
+
+const PEERS = ['N', 'E', 'S', 'W'];
+const PEER_NAMES = { N: 'North', E: 'East', S: 'South', W: 'West' };
+
+// ----------------------------------------------------------------- config
+// One config object drives the whole demo. "Live" fields are re-read every
+// cycle (no reset needed); link fields are structural and need a rebuild.
+function defaultCfg() {
+  const peer = () => ({
+    txGap: 3,                       // inject 1 msg per N cycles; 0 = off (live)
+    dests: { N: true, E: true, S: true, W: true },   // round-robin set (live)
+    rxGap: 1,                       // RX drains 1 msg per N cycles (live)
+    stallLen: 0,                    // scripted RX stall: stalled cycles (live)
+    stallPeriod: 40,                // ...out of every N cycles (live)
+    freeze: false,                  // manual RX freeze (live)
+    txLink: { credits: 4, tLink: 2, tCR: 1 },        // peer -> XP (rebuild)
+    rxLink: { credits: 4, tLink: 2, tCR: 1 },        // XP -> peer (rebuild)
+  });
+  return {
+    credited: true,                 // false => all links plain (rebuild)
+    xp: { hol: true, stagingDepth: 2, tPipe: 1 },    // all live
+    peers: { N: peer(), E: peer(), S: peer(), W: peer() },
+  };
 }
 
-// ---- layout helpers (pure data; renderer-side) ----
-function nodeDef(id, type, ref, x, y, w, h, label) {
-  return { id, type, ref, x, y, w, h, label: label || id };
+function rxActive(cfg, P, now) {
+  const pc = cfg.peers[P];
+  if (pc.freeze) return false;
+  if (pc.stallLen > 0 && pc.stallPeriod > 0 &&
+      (now % pc.stallPeriod) < pc.stallLen) return false;
+  return pc.rxGap <= 1 || now % pc.rxGap === 0;
 }
-function port(n, side, t = 0.5) {
-  switch (side) {
-    case 'left':   return [n.x, n.y + n.h * t];
-    case 'right':  return [n.x + n.w, n.y + n.h * t];
-    case 'top':    return [n.x + n.w * t, n.y];
-    case 'bottom': return [n.x + n.w * t, n.y + n.h];
+
+// ----------------------------------------------------------------- build
+function buildSim(cfg) {
+  const sim = new Sim();
+  sim.cfg = cfg;
+  const xp = sim.addXP('XP', { hol: cfg.xp.hol,
+                               stagingDepth: cfg.xp.stagingDepth,
+                               tPipe: cfg.xp.tPipe });
+  const peers = {};
+  for (const P of PEERS) {
+    const pc = cfg.peers[P];
+    const cr = v => cfg.credited ? v : 0;
+    const txLink = sim.addLink('tx' + P, {
+      label: `${P}→XP`, credits: cr(pc.txLink.credits),
+      tLink: pc.txLink.tLink, tCR: pc.txLink.tCR });
+    const rxLink = sim.addLink('rx' + P, {
+      label: `XP→${P}`, credits: cr(pc.rxLink.credits),
+      tLink: pc.rxLink.tLink, tCR: pc.rxLink.tCR });
+    txLink.clbOutside = true;       // draw the XP input CLB on the wire
+    xp.addInput(txLink);
+    xp.addOutput(P, rxLink, m => m.dest === P);
+    const st = { next: 1, rr: 0 };
+    const producer = sim.addProducer(P + '.TX', {
+      gen: (now) => {
+        const c = cfg.peers[P];
+        if (c.txGap <= 0 || now < st.next) return null;
+        const dests = PEERS.filter(d => d !== P && c.dests[d]);
+        if (!dests.length) return null;
+        st.next = now + c.txGap;
+        const d = dests[st.rr++ % dests.length];
+        return new Message(d, d);
+      },
+    });
+    producer.link = txLink;
+    const sink = sim.addSink(P + '.RX', { active: now => rxActive(cfg, P, now) });
+    sink.input = rxLink;
+    peers[P] = { producer, sink, txLink, rxLink };
   }
-}
-function wire(link, a, b) { link.geom = { x1: a[0], y1: a[1], x2: b[0], y2: b[1] }; }
-
-const mkM = () => new Message('M', 'HN');
-const mkA = () => new Message('A', 'E');
-const mkB = () => new Message('B', 'S');
-
-const SCENARIOS = [];
-
-// ------------------------------------------------ 1 · message lifecycle
-SCENARIOS.push({
-  id: 'lifecycle', title: '1 · Message lifecycle',
-  blurb: `Follow messages through the full pipeline (doc §2): the producer
-    <b>spends a link credit at send</b>; the message travels <b>t_link</b>
-    cycles into the input <b>CreditedLinkBuffer</b>; after ≥ 1 cycle dwell the
-    XP arbiter <b>grants</b> it — at that instant the credit token starts
-    travelling back over <b>t_creditReturn</b> while the message moves to the
-    output <b>staging</b> buffer; the link driver then spends a credit of the
-    <i>next</i> link. Uncheck <b>credited flow control</b> to see today's
-    SimpleNetwork (no credits, no backpressure).`,
-  params: [
-    { key: 'credited', label: 'credited flow control', type: 'check', def: true },
-    { key: 'credits', label: 'credits per link', type: 'range', min: 1, max: 6, step: 1, def: 3 },
-    { key: 'tLink', label: 't_link (wire cycles)', type: 'range', min: 1, max: 4, step: 1, def: 2 },
-    { key: 'tCR', label: 't_creditReturn', type: 'range', min: 1, max: 4, step: 1, def: 1 },
-    { key: 'staging', label: 'staging depth', type: 'range', min: 1, max: 3, step: 1, def: 2 },
-    { key: 'gap', label: 'inject every N cycles', type: 'range', min: 1, max: 8, step: 1, def: 4 },
-  ],
-  actions: [],
-  build(P) {
-    const sim = new Sim();
-    const C = P.credited ? P.credits : 0;
-    const lo = { tLink: P.tLink, tCR: P.tCR, credits: C };
-    const L0 = sim.addLink('L0', { ...lo, label: 'RN→XP0' });
-    const L1 = sim.addLink('L1', { ...lo, label: 'XP0→XP1' });
-    const L2 = sim.addLink('L2', { ...lo, label: 'XP1→HN' });
-    const rn = sim.addProducer('RN', { gen: genEvery(P.gap, mkM) });
-    rn.link = L0;
-    const x0 = sim.addXP('XP0', { stagingDepth: P.staging });
-    x0.addInput(L0); x0.addOutput('E', L1);
-    const x1 = sim.addXP('XP1', { stagingDepth: P.staging });
-    x1.addInput(L1); x1.addOutput('E', L2);
-    const hn = sim.addSink('HN'); hn.input = L2;
-    const N = sim.layout.nodes;
-    const nRN = nodeDef('RN', 'rn', rn, 30, 228, 84, 54);
-    const nX0 = nodeDef('XP0', 'xp', x0, 240, 212, 156, 86);
-    const nX1 = nodeDef('XP1', 'xp', x1, 520, 212, 156, 86);
-    const nHN = nodeDef('HN', 'sink', hn, 800, 228, 84, 54);
-    N.push(nRN, nX0, nX1, nHN);
-    wire(L0, port(nRN, 'right'), port(nX0, 'left'));
-    wire(L1, port(nX0, 'right'), port(nX1, 'left'));
-    wire(L2, port(nX1, 'right'), port(nHN, 'left'));
-    sim.handles = { rn, hn, links: [L0, L1, L2], xps: [x0, x1] };
-    sim.sampleSpec = [
-      { label: 'RN→XP0 credits', color: '#ffd54f', get: () => L0.credits },
-    ];
-    sim.chart = { title: 'RN→XP0 credits available', yMax: Math.max(1, C),
-                  series: [{ label: 'RN→XP0 credits', color: '#ffd54f' }] };
-    sim.statsFn = () => [
-      ['injected', rn.injected], ['delivered', hn.delivered],
-      ['avg latency', hn.avgLatency.toFixed(1) + ' cy'],
-      ['RTT_min per link', rttMin(L0) + ' cy'],
-      ['L0 credit returns', L0.creditReturns],
-      ['RN credit-stall cycles', rn.creditStallCycles],
-    ];
-    return sim;
-  },
-});
-
-// ------------------------------------------------ 2 · throughput knee
-SCENARIOS.push({
-  id: 'knee', title: '2 · Throughput knee',
-  blurb: `The bandwidth–delay product rule (spec P5): a link sustains full rate
-    only if <b>credits ≥ RTT_min = t_link + 1 + t_creditReturn</b>. The
-    producer always has traffic and the sink always drains — the credit loop on
-    RN→XP is the <i>only</i> limit. Sweep <b>credits</b> and watch measured
-    throughput land exactly on <b>min(1, credits/RTT_min)</b> (dashed line) —
-    the knee sits at credits = RTT_min. This is gap G1/G2 of the spec: the
-    classic SimpleNetwork (instant credit return) cannot reproduce this.`,
-  params: [
-    { key: 'credits', label: 'credits on RN→XP', type: 'range', min: 1, max: 8, step: 1, def: 2 },
-    { key: 'tLink', label: 't_link (wire cycles)', type: 'range', min: 1, max: 4, step: 1, def: 2 },
-    { key: 'tCR', label: 't_creditReturn', type: 'range', min: 1, max: 4, step: 1, def: 1 },
-  ],
-  actions: [],
-  build(P) {
-    const sim = new Sim();
-    const L0 = sim.addLink('L0', { tLink: P.tLink, tCR: P.tCR,
-                                   credits: P.credits, label: 'RN→XP' });
-    const L1 = sim.addLink('L1', { tLink: 2, tCR: 1, credits: 12, label: 'XP→HN' });
-    const rn = sim.addProducer('RN', { gen: genAlways(mkM) });
-    rn.link = L0;
-    const x0 = sim.addXP('XP', { stagingDepth: 2 });
-    x0.addInput(L0); x0.addOutput('E', L1);
-    const hn = sim.addSink('HN'); hn.input = L1;
-    const N = sim.layout.nodes;
-    const nRN = nodeDef('RN', 'rn', rn, 40, 228, 84, 54);
-    const nX0 = nodeDef('XP', 'xp', x0, 340, 212, 170, 86);
-    const nHN = nodeDef('HN', 'sink', hn, 760, 228, 90, 54);
-    N.push(nRN, nX0, nHN);
-    wire(L0, port(nRN, 'right'), port(nX0, 'left'));
-    wire(L1, port(nX0, 'right'), port(nHN, 'left'));
-    const predicted = Math.min(1, P.credits / (P.tLink + 1 + P.tCR));
-    sim.handles = { rn, hn, L0, predicted };
-    sim.sampleSpec = [
-      { label: 'throughput', color: '#53d8d8', get: s => windowRate(hn, 50) },
-    ];
-    sim.chart = { title: 'delivered msgs/cycle (50-cycle window)', yMax: 1.08,
-                  hline: { value: predicted, label: 'predicted' },
-                  series: [{ label: 'throughput', color: '#53d8d8' }] };
-    sim.statsFn = () => [
-      ['RTT_min', (P.tLink + 1 + P.tCR) + ' cy'],
-      ['credits', P.credits],
-      ['predicted', predicted.toFixed(3) + ' msg/cy'],
-      ['measured (50 cy)', windowRate(hn, 50).toFixed(3) + ' msg/cy'],
-      ['delivered', hn.delivered],
-      ['RN credit-stall cycles', rn.creditStallCycles],
-    ];
-    return sim;
-  },
-});
-
-// ------------------------------------------------ 3 · backpressure
-SCENARIOS.push({
-  id: 'backpressure', title: '3 · Backpressure',
-  blurb: `Backpressure propagates <b>hop-by-hop through credit starvation</b> —
-    no message is ever dropped (spec §7). At cycle 40 the sink stalls: the last
-    link's credits drain first, staging fills, then the previous link starves…
-    the stall walks upstream link by link with real per-hop delay (watch the
-    chart lines hit zero right-to-left). At cycle 130 the sink resumes and the
-    recovery wave flows back downstream. Try the manual stall button too.`,
-  params: [
-    { key: 'scripted', label: 'scripted stall @40 / resume @130', type: 'check', def: true },
-    { key: 'credits', label: 'credits per link', type: 'range', min: 4, max: 8, step: 1, def: 6 },
-  ],
-  actions: [
-    { key: 'stall', label: 'Stall / resume sink',
-      get: s => s.handles.hn.forceStall,
-      set: (s, v) => { s.handles.hn.forceStall = v;
-        s.note(s.cycle, `HN ${v ? 'STALLED' : 'resumed'} (manual)`, v ? 'stall' : 'info'); } },
-  ],
-  build(P) {
-    const sim = new Sim();
-    const mk = (id, label) =>
-      sim.addLink(id, { tLink: 2, tCR: 1, credits: P.credits, label });
-    const L0 = mk('L0', 'RN→XP0'), L1 = mk('L1', 'XP0→XP1');
-    const L2 = mk('L2', 'XP1→XP2'), L3 = mk('L3', 'XP2→HN');
-    const rn = sim.addProducer('RN', { gen: genAlways(mkM) });
-    rn.link = L0;
-    const xs = [['XP0', L0, L1], ['XP1', L1, L2], ['XP2', L2, L3]].map(
-      ([id, li, lo]) => {
-        const x = sim.addXP(id, { stagingDepth: 2 });
-        x.addInput(li); x.addOutput('E', lo); return x;
-      });
-    const hn = sim.addSink('HN'); hn.input = L3;
-    const N = sim.layout.nodes;
-    const nRN = nodeDef('RN', 'rn', rn, 16, 230, 72, 50);
-    const nX0 = nodeDef('XP0', 'xp', xs[0], 158, 215, 126, 80);
-    const nX1 = nodeDef('XP1', 'xp', xs[1], 382, 215, 126, 80);
-    const nX2 = nodeDef('XP2', 'xp', xs[2], 606, 215, 126, 80);
-    const nHN = nodeDef('HN', 'sink', hn, 812, 230, 76, 50);
-    N.push(nRN, nX0, nX1, nX2, nHN);
-    wire(L0, port(nRN, 'right'), port(nX0, 'left'));
-    wire(L1, port(nX0, 'right'), port(nX1, 'left'));
-    wire(L2, port(nX1, 'right'), port(nX2, 'left'));
-    wire(L3, port(nX2, 'right'), port(nHN, 'left'));
-    sim.handles = { rn, hn, links: [L0, L1, L2, L3] };
-    if (P.scripted) {
-      sim.hooks.push((now, s) => {
-        if (now === 40) { hn.forceStall = true;
-          s.note(now, 'SCENARIO: sink HN stalls — watch credits drain upstream', 'stall'); }
-        if (now === 130) { hn.forceStall = false;
-          s.note(now, 'SCENARIO: sink HN resumes — recovery wave', 'info'); }
-      });
-    }
-    sim.hooks.push((now, s) => {
-      for (const l of [L3, L2, L1, L0]) {
-        if (l.credits === 0 && !l._zero) {
-          l._zero = true;
-          s.note(now, `backpressure reached ${l.label}: 0 credits`, 'stall');
-        } else if (l.credits > 0) l._zero = false;
-      }
-    });
-    const colors = ['#ff6b6b', '#ff8a50', '#ffd54f', '#6ea8ff'];
-    sim.sampleSpec = [L3, L2, L1, L0].map((l, i) => (
-      { label: l.label + ' credits', color: colors[i], get: () => l.credits }));
-    sim.chart = { title: 'credits per link (stall walks right→left)',
-                  yMax: P.credits,
-                  series: sim.sampleSpec.map(s => ({ label: s.label, color: s.color })) };
-    sim.statsFn = () => [
-      ['sink', hn.isActive(sim.cycle) ? 'draining' : 'STALLED'],
-      ...[L0, L1, L2, L3].map(l => [l.label + ' credits',
-                                    `${l.credits}/${l.maxCredits}`]),
-      ['delivered', hn.delivered],
-      ['RN credit-stall cycles', rn.creditStallCycles],
-    ];
-    return sim;
-  },
-});
-
-// ------------------------------------------------ 4 · HoL elimination
-SCENARIOS.push({
-  id: 'hol', title: '4 · HoL elimination',
-  blurb: `One input CLB carries two interleaved flows (spec §16.4):
-    <b>A (orange) → East</b>, whose sink is slow and freezes at cycle 30, and
-    <b>B (blue) → South</b>, whose sink is free. With <b>HoL elimination</b>
-    (oldest-<i>eligible</i> grant, <code>selectEligible</code>/<code>popAt</code>)
-    B keeps draining past stuck A messages — watch the purple "HoL skip" events.
-    Switch to head-only and B starves behind the first blocked A. Note the
-    honest endgame: blocked A's pin shared credits, so a single shared VC
-    eventually couples the flows — exactly why CHI gives each channel its own
-    vnet/credit pool (doc §2, §6).`,
-  params: [
-    { key: 'hol', label: 'HoL elimination (oldest eligible)', type: 'check', def: true },
-    { key: 'credits', label: 'credits on RN→XP', type: 'range', min: 4, max: 10, step: 1, def: 8 },
-    { key: 'eGap', label: 'East sink: 1 msg per N cy', type: 'range', min: 4, max: 16, step: 1, def: 8 },
-  ],
-  actions: [
-    { key: 'freeze', label: 'Freeze / thaw East sink',
-      get: s => s.handles.sinkE.forceStall,
-      set: (s, v) => { s.handles.sinkE.forceStall = v;
-        s.note(s.cycle, `East sink ${v ? 'FROZEN' : 'thawed'} (manual)`, v ? 'stall' : 'info'); } },
-  ],
-  build(P) {
-    const sim = new Sim();
-    const L0 = sim.addLink('L0', { tLink: 2, tCR: 1, credits: P.credits, label: 'RN→XP' });
-    const LE = sim.addLink('LE', { tLink: 2, tCR: 1, credits: 2, label: 'XP→East' });
-    const LS = sim.addLink('LS', { tLink: 2, tCR: 1, credits: 4, label: 'XP→South' });
-    const rn = sim.addProducer('RN', { gen: genPattern([mkA, mkB, mkB]) });
-    rn.link = L0;
-    const x0 = sim.addXP('XP', { hol: P.hol, stagingDepth: 1 });
-    x0.addInput(L0);
-    x0.addOutput('East', LE, m => m.dest === 'E');
-    x0.addOutput('South', LS, m => m.dest === 'S');
-    const sinkE = sim.addSink('East', { active: now => now % P.eGap === 0 });
-    sinkE.input = LE;
-    const sinkS = sim.addSink('South'); sinkS.input = LS;
-    const N = sim.layout.nodes;
-    const nRN = nodeDef('RN', 'rn', rn, 50, 182, 84, 54);
-    const nXP = nodeDef('XP', 'xp', x0, 300, 150, 180, 130);
-    const nE = nodeDef('East', 'sink', sinkE, 700, 180, 104, 60);
-    const nS = nodeDef('South', 'sink', sinkS, 330, 430, 104, 60);
-    N.push(nRN, nXP, nE, nS);
-    wire(L0, port(nRN, 'right'), port(nXP, 'left', 0.45));
-    wire(LE, port(nXP, 'right', 0.46), port(nE, 'left'));
-    wire(LS, port(nXP, 'bottom', 0.45), port(nS, 'top'));
-    sim.handles = { rn, sinkE, sinkS, x0, L0, LE, LS };
-    sim.hooks.push((now, s) => {
-      if (now === 30 && !sinkE._froze) {
-        sinkE._froze = true; sinkE.forceStall = true;
-        s.note(now, 'SCENARIO: East sink frozen — A msgs start piling up', 'stall');
-      }
-    });
-    sim.sampleSpec = [
-      { label: 'B delivered', color: '#6ea8ff', get: () => sinkS.delivered },
-      { label: 'A delivered', color: '#ff8a50', get: () => sinkE.delivered },
-    ];
-    sim.chart = { title: 'cumulative deliveries by flow',
-                  series: sim.sampleSpec.map(s => ({ label: s.label, color: s.color })) };
-    sim.statsFn = () => [
-      ['arbiter mode', P.hol ? 'HoL elimination' : 'head-only FIFO'],
-      ['B (South) delivered', sinkS.delivered],
-      ['A (East) delivered', sinkE.delivered],
-      ['HoL skips', x0.holSkips],
-      ['head-blocked cycles', x0.headBlockedCycles],
-      ['RN→XP credits free', `${L0.credits}/${L0.maxCredits}`],
-      ['RN credit-stall cycles', rn.creditStallCycles],
-    ];
-    return sim;
-  },
-});
-
-// ------------------------------------------------ 5 · staging decoupling
-SCENARIOS.push({
-  id: 'staging', title: '5 · Staging decouples',
-  blurb: `Staging decouples <b>switch allocation</b> from <b>link
-    allocation</b> (doc §2): this XP is <i>head-only</i>, and East's sink only
-    drains in bursts (5 on / 9 off). While East is credit-starved, granted A
-    messages <b>park in East's staging buffer</b> — clearing the input head so
-    B can pass. Sweep <b>staging depth</b> 1→3: deeper staging keeps the
-    crossbar granting through the whole off-burst (fewer head-blocked cycles,
-    more B throughput). The input credit frees at <i>grant</i>, not at wire
-    time — exactly Garnet's credit-at-SwitchAllocator timing (spec P3).`,
-  params: [
-    { key: 'depth', label: 'staging depth (East/South)', type: 'range', min: 1, max: 3, step: 1, def: 1 },
-    { key: 'hol', label: 'HoL elimination (compare)', type: 'check', def: false },
-  ],
-  actions: [],
-  build(P) {
-    const sim = new Sim();
-    const L0 = sim.addLink('L0', { tLink: 2, tCR: 1, credits: 6, label: 'RN→XP' });
-    const LE = sim.addLink('LE', { tLink: 2, tCR: 1, credits: 2, label: 'XP→East' });
-    const LS = sim.addLink('LS', { tLink: 2, tCR: 1, credits: 4, label: 'XP→South' });
-    const rn = sim.addProducer('RN', { gen: genPattern([mkA, mkB, mkB]) });
-    rn.link = L0;
-    const x0 = sim.addXP('XP', { hol: P.hol, stagingDepth: P.depth });
-    x0.addInput(L0);
-    x0.addOutput('East', LE, m => m.dest === 'E');
-    x0.addOutput('South', LS, m => m.dest === 'S');
-    const sinkE = sim.addSink('East', { active: burst(5, 9) });
-    sinkE.input = LE;
-    const sinkS = sim.addSink('South'); sinkS.input = LS;
-    const N = sim.layout.nodes;
-    const nRN = nodeDef('RN', 'rn', rn, 50, 182, 84, 54);
-    const nXP = nodeDef('XP', 'xp', x0, 300, 150, 180, 130);
-    const nE = nodeDef('East', 'sink', sinkE, 700, 180, 104, 60);
-    const nS = nodeDef('South', 'sink', sinkS, 330, 430, 104, 60);
-    N.push(nRN, nXP, nE, nS);
-    wire(L0, port(nRN, 'right'), port(nXP, 'left', 0.45));
-    wire(LE, port(nXP, 'right', 0.46), port(nE, 'left'));
-    wire(LS, port(nXP, 'bottom', 0.45), port(nS, 'top'));
-    sim.handles = { rn, sinkE, sinkS, x0, L0, LE, LS };
-    sim.sampleSpec = [
-      { label: 'B delivered', color: '#6ea8ff', get: () => sinkS.delivered },
-      { label: 'A delivered', color: '#ff8a50', get: () => sinkE.delivered },
-    ];
-    sim.chart = { title: 'cumulative deliveries by flow',
-                  series: sim.sampleSpec.map(s => ({ label: s.label, color: s.color })) };
-    sim.statsFn = () => {
-      const east = x0.outputs[0];
-      return [
-        ['staging depth', P.depth],
-        ['arbiter mode', P.hol ? 'HoL elimination' : 'head-only FIFO'],
-        ['B (South) delivered', sinkS.delivered],
-        ['A (East) delivered', sinkE.delivered],
-        ['head-blocked cycles', x0.headBlockedCycles],
-        ['East staging occupancy', `${east.staging.length}/${P.depth}`],
-        ['link-credit stall cycles', x0.linkCreditStallCycles],
-        ['staging-full stall cycles', x0.stagingFullStallCycles],
-      ];
-    };
-    return sim;
-  },
-});
-
-function defaultsOf(sc) {
-  const o = {};
-  for (const p of sc.params) o[p.key] = p.def;
-  return o;
-}
-Engine.buildScenario = function (id, P) {
-  const sc = SCENARIOS.find(s => s.id === id);
-  if (!sc) throw new Error('unknown scenario ' + id);
-  const sim = sc.build(Object.assign({}, defaultsOf(sc), P || {}));
-  sim.scenarioId = id;
+  sim.handles = { xp, peers };
+  sim.liveSync = () => {
+    xp.hol = cfg.xp.hol;
+    xp.stagingDepth = Math.max(1, cfg.xp.stagingDepth);
+    xp.tPipe = Math.max(0, cfg.xp.tPipe);
+  };
+  // sampled series (charts pick subsets)
+  for (const P of PEERS) {
+    sim.sampleSpec.push(
+      { label: 'rx_' + P, get: () => windowRate(peers[P].sink, 50) },
+      { label: 'txcr_' + P, get: () => peers[P].txLink.credits },
+      { label: 'rxcr_' + P, get: () => peers[P].rxLink.credits },
+      { label: 'stg_' + P,
+        get: () => xp.outputs.find(o => o.name === P).staging.length });
+  }
+  buildLayout(sim);
   return sim;
-};
+}
+
+// ----------------------------------------------------------------- layout
+// Canvas 900x640. XP center; peers N/E/S/W with parallel TX/RX wires.
+function buildLayout(sim) {
+  const { xp, peers } = sim.handles;
+  const nd = (id, type, ref, x, y, w, h, label) =>
+    ({ id, type, ref, x, y, w, h, label });
+  const XPB = { x: 350, y: 240, w: 200, h: 170 };
+  const nodes = [
+    nd('XP', 'xp', xp, XPB.x, XPB.y, XPB.w, XPB.h, 'XP'),
+    nd('N', 'peer', peers.N, 350, 30, 200, 80, 'North'),
+    nd('S', 'peer', peers.S, 350, 530, 200, 80, 'South'),
+    nd('W', 'peer', peers.W, 40, 245, 170, 130, 'West'),
+    nd('E', 'peer', peers.E, 690, 245, 170, 130, 'East'),
+  ];
+  sim.layout.nodes = nodes;
+  const g = (x1, y1, x2, y2) => ({ x1, y1, x2, y2 });
+  // ports: inputs at 0.3 of the XP edge, outputs at 0.7
+  peers.N.txLink.geom = g(410, 110, 410, 240);   // N bottom -> XP top
+  peers.N.rxLink.geom = g(490, 240, 490, 110);   // XP top -> N bottom
+  peers.S.txLink.geom = g(410, 530, 410, 410);
+  peers.S.rxLink.geom = g(490, 410, 490, 530);
+  peers.W.txLink.geom = g(210, 291, 350, 291);
+  peers.W.rxLink.geom = g(350, 359, 210, 359);
+  peers.E.txLink.geom = g(690, 291, 550, 291);
+  peers.E.rxLink.geom = g(550, 359, 690, 359);
+}
+
 Object.assign(Engine, {
-  Message, Link, XP, Producer, Sink, Sim, SCENARIOS,
-  rttMin, windowRate, burst, genEvery, genAlways, genPattern,
+  Message, Link, XP, Producer, Sink, Sim,
+  PEERS, PEER_NAMES, defaultCfg, buildSim, rxActive, rttMin, windowRate,
 });
 root.Engine = Engine;
 })(typeof globalThis !== 'undefined' ? globalThis : window);
@@ -792,12 +589,14 @@ root.Engine = Engine;
 (function () {
 const E = globalThis.Engine;
 const $ = s => document.querySelector(s);
-const FLOW = { M: '#53d8d8', A: '#ff8a50', B: '#6ea8ff' };
-const W = 900, H = 560;
+const PCOLOR = { N: '#c792ea', E: '#ff8a50', S: '#6ea8ff', W: '#53d8d8' };
+const W = 900, H = 640;
 
-let sim = null, scDef = null;
+let cfg = E.defaultCfg();
+let sim = null;
 let playing = false, speed = 6, acc = 0, lastT = 0, logRendered = -1;
-const paramState = {};
+let activeTab = 'xp';
+let chartDefs = {}, chartKey = 'rx';
 
 // ---------- canvas setup ----------
 const view = $('#view'), vctx = view.getContext('2d');
@@ -809,28 +608,43 @@ function fitCanvas(cv, w, h) {
   cv.getContext('2d').setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 fitCanvas(view, W, H);
-fitCanvas(chart, 334, 130);
+fitCanvas(chart, 322, 132);
 
-// ---------- scenario lifecycle ----------
-function defaults(sc) {
-  const o = {}; for (const p of sc.params) o[p.key] = p.def; return o;
+// ---------- cfg path access ----------
+function getPath(p) { return p.split('.').reduce((o, k) => o[k], cfg); }
+function setPath(p, v) {
+  const ks = p.split('.');
+  let o = cfg;
+  for (let i = 0; i < ks.length - 1; i++) o = o[ks[i]];
+  o[ks[ks.length - 1]] = v;
 }
+
+// ---------- rebuild ----------
 function rebuild() {
   try {
-    sim = E.buildScenario(scDef.id, paramState[scDef.id]);
+    sim = E.buildSim(cfg);
     $('#err').style.display = 'none';
   } catch (e) { showError(e); return; }
   playing = false; acc = 0; logRendered = -1;
   $('#log').innerHTML = '';
   updatePlayBtn();
-  renderActions();
-  $('#chartTitle').textContent = sim.chart ? sim.chart.title : 'Chart';
-}
-function selectScenario(id) {
-  scDef = E.SCENARIOS.find(s => s.id === id);
-  if (!paramState[id]) paramState[id] = defaults(scDef);
-  renderTabs(); renderParams(); renderBlurb();
-  rebuild();
+  const maxTx = Math.max(...E.PEERS.map(P => cfg.peers[P].txLink.credits));
+  const maxRx = Math.max(...E.PEERS.map(P => cfg.peers[P].rxLink.credits));
+  chartDefs = {
+    rx: { title: 'RX throughput (msgs/cy, 50-cy window)', yMax: 1.05,
+          series: E.PEERS.map(P => ({ label: 'rx_' + P, color: PCOLOR[P],
+                                      name: P + '.RX' })) },
+    txcr: { title: 'TX→XP link credits', yMax: maxTx,
+            series: E.PEERS.map(P => ({ label: 'txcr_' + P, color: PCOLOR[P],
+                                        name: P + '→XP' })) },
+    rxcr: { title: 'XP→RX link credits', yMax: maxRx,
+            series: E.PEERS.map(P => ({ label: 'rxcr_' + P, color: PCOLOR[P],
+                                        name: 'XP→' + P })) },
+    stg: { title: 'XP staging occupancy per output', yMax: 3,
+           series: E.PEERS.map(P => ({ label: 'stg_' + P, color: PCOLOR[P],
+                                       name: '→' + P })) },
+  };
+  renderChartSel();
 }
 function showError(e) {
   const el = $('#err');
@@ -839,73 +653,281 @@ function showError(e) {
   console.error(e);
 }
 
-// ---------- panel rendering ----------
-function renderTabs() {
-  const t = $('#tabs');
-  t.innerHTML = '';
-  for (const sc of E.SCENARIOS) {
+// ---------- presets ----------
+const PRESETS = [
+  { id: 'balanced', label: 'Balanced', chart: 'rx',
+    apply: c => c },
+  { id: 'knee', label: 'Starved link (knee)', chart: 'rx',
+    apply: c => {
+      for (const P of E.PEERS) c.peers[P].txGap = 0;
+      c.peers.W.txGap = 1;
+      c.peers.W.dests = { N: false, E: true, S: false, W: false };
+      c.peers.W.txLink.credits = 1;   // RTT_min=4 => rate caps at 0.25
+      return c;
+    } },
+  { id: 'hotspot', label: 'Hot-spot East', chart: 'txcr',
+    apply: c => {
+      for (const P of ['N', 'S', 'W']) {
+        c.peers[P].txGap = 2;
+        c.peers[P].dests = { N: false, E: true, S: false, W: false };
+      }
+      c.peers.E.txGap = 0;
+      return c;
+    } },
+  { id: 'freeze', label: 'Freeze East (backpressure)', chart: 'rxcr',
+    apply: c => { c.peers.E.freeze = true; return c; } },
+  { id: 'holoff', label: 'Head-only + slow East', chart: 'rx',
+    apply: c => {
+      c.xp.hol = false;            // flip HoL back on (XP tab) to compare!
+      c.xp.stagingDepth = 1;
+      c.peers.E.rxGap = 4;         // congested but draining East
+      for (const P of E.PEERS) {
+        c.peers[P].txGap = 1;
+        c.peers[P].txLink.credits = 8;
+      }
+      return c;
+    } },
+];
+function renderPresets() {
+  const box = $('#presets');
+  box.innerHTML = '';
+  for (const p of PRESETS) {
     const b = document.createElement('button');
-    b.className = 'tab' + (scDef && sc.id === scDef.id ? ' active' : '');
-    b.dataset.sc = sc.id;
-    b.textContent = sc.title;
-    b.onclick = () => selectScenario(sc.id);
+    b.className = 'ctl';
+    b.dataset.preset = p.id;
+    b.textContent = p.label;
+    b.onclick = () => {
+      cfg = p.apply(E.defaultCfg());
+      chartKey = p.chart;
+      rebuild();
+      renderCfgBody();
+      sim.note(0, `preset: ${p.label}`, 'info');
+    };
+    box.appendChild(b);
+  }
+}
+
+// ---------- config tabs ----------
+const TABS = [
+  { id: 'xp', label: 'XP' },
+  ...E.PEERS.map(P => ({ id: P, label: E.PEER_NAMES[P] })),
+];
+function fieldsFor(tab) {
+  if (tab === 'xp') return [
+    { group: 'arbiter & staging (live)' },
+    { check: 'xp.hol', label: 'HoL elimination (oldest eligible)' },
+    { range: 'xp.stagingDepth', label: 'staging depth', min: 1, max: 3 },
+    { range: 'xp.tPipe', label: 't_pipe (routing latency)', min: 0, max: 3 },
+    { group: 'flow control' },
+    { check: 'credited', label: 'credited links', rebuild: true },
+  ];
+  const P = tab;
+  return [
+    { group: 'TX — traffic generator (live)' },
+    { range: `peers.${P}.txGap`, label: 'inject every N cy (0=off)', min: 0, max: 12 },
+    { dests: P },
+    { group: 'RX — consumer (live)' },
+    { range: `peers.${P}.rxGap`, label: 'drain every N cy', min: 1, max: 8 },
+    { range: `peers.${P}.stallLen`, label: 'scripted stall: cycles', min: 0, max: 40 },
+    { range: `peers.${P}.stallPeriod`, label: '… out of every N cy', min: 10, max: 80 },
+    { group: `link ${P} → XP` },
+    { range: `peers.${P}.txLink.credits`, label: 'credits (= CLB slots)', min: 1, max: 8, rebuild: true },
+    { range: `peers.${P}.txLink.tLink`, label: 't_link', min: 1, max: 5, rebuild: true },
+    { range: `peers.${P}.txLink.tCR`, label: 't_creditReturn', min: 1, max: 5, rebuild: true },
+    { group: `link XP → ${P}` },
+    { range: `peers.${P}.rxLink.credits`, label: 'credits (= CLB slots)', min: 1, max: 8, rebuild: true },
+    { range: `peers.${P}.rxLink.tLink`, label: 't_link', min: 1, max: 5, rebuild: true },
+    { range: `peers.${P}.rxLink.tCR`, label: 't_creditReturn', min: 1, max: 5, rebuild: true },
+  ];
+}
+function renderCfgTabs() {
+  const t = $('#cfgTabs');
+  t.innerHTML = '';
+  for (const tab of TABS) {
+    const b = document.createElement('button');
+    b.dataset.tab = tab.id;
+    b.textContent = tab.label;
+    if (PCOLOR[tab.id]) b.style.color = PCOLOR[tab.id];
+    b.className = tab.id === activeTab ? 'active' : '';
+    b.onclick = () => { activeTab = tab.id; renderCfgTabs(); renderCfgBody(); };
     t.appendChild(b);
   }
 }
-function renderBlurb() { $('#blurb').innerHTML = scDef.blurb; }
-function renderParams() {
-  const box = $('#params');
+function renderCfgBody() {
+  const box = $('#cfgBody');
   box.innerHTML = '';
-  const P = paramState[scDef.id];
-  for (const p of scDef.params) {
+  for (const f of fieldsFor(activeTab)) {
+    if (f.group) {
+      const d = document.createElement('div');
+      d.className = 'fgroup';
+      d.textContent = f.group;
+      box.appendChild(d);
+      continue;
+    }
+    if (f.dests) {
+      const P = f.dests;
+      const d = document.createElement('div');
+      d.className = 'dests';
+      d.appendChild(document.createTextNode('send to:'));
+      for (const D of E.PEERS) {
+        if (D === P) continue;
+        const lab = document.createElement('label');
+        lab.style.color = PCOLOR[D];
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = cfg.peers[P].dests[D];
+        cb.onchange = () => { cfg.peers[P].dests[D] = cb.checked; };
+        lab.appendChild(cb);
+        lab.appendChild(document.createTextNode(' ' + D));
+        d.appendChild(lab);
+      }
+      box.appendChild(d);
+      continue;
+    }
     const row = document.createElement('div');
     row.className = 'param';
-    if (p.type === 'check') {
+    if (f.check) {
       const cb = document.createElement('input');
-      cb.type = 'checkbox'; cb.checked = P[p.key];
-      cb.onchange = () => { P[p.key] = cb.checked; rebuild(); };
+      cb.type = 'checkbox';
+      cb.checked = !!getPath(f.check);
+      cb.onchange = () => { setPath(f.check, cb.checked); if (f.rebuild) rebuild(); };
       const lab = document.createElement('label');
-      lab.textContent = p.label;
+      lab.innerHTML = f.label + (f.rebuild ? ' <span class="rb">⟳</span>' : '');
       row.appendChild(cb); row.appendChild(lab);
     } else {
       const lab = document.createElement('label');
-      lab.textContent = p.label;
+      lab.innerHTML = f.label + (f.rebuild ? ' <span class="rb">⟳</span>' : '');
       const r = document.createElement('input');
-      r.type = 'range'; r.min = p.min; r.max = p.max; r.step = p.step;
-      r.value = P[p.key]; r.style.flex = '1.2';
+      r.type = 'range'; r.min = f.min; r.max = f.max; r.step = 1;
+      r.value = getPath(f.range);
       const val = document.createElement('span');
-      val.className = 'val'; val.textContent = P[p.key];
+      val.className = 'val';
+      val.textContent = getPath(f.range);
       r.oninput = () => {
-        P[p.key] = +r.value; val.textContent = r.value; rebuild();
+        setPath(f.range, +r.value);
+        val.textContent = r.value;
+        if (f.rebuild) rebuild();
       };
       row.appendChild(lab); row.appendChild(r); row.appendChild(val);
     }
     box.appendChild(row);
   }
+  const hint = document.createElement('div');
+  hint.style.cssText = 'color:#7a6a2c;font-size:11px;margin-top:8px';
+  hint.textContent = '⟳ = structural, applying resets the simulation';
+  box.appendChild(hint);
 }
-function renderActions() {
-  const box = $('#actions');
+
+// ---------- freeze buttons ----------
+function renderFreezes() {
+  const box = $('#freezes');
   box.innerHTML = '';
-  for (const a of scDef.actions) {
+  for (const P of E.PEERS) {
     const b = document.createElement('button');
     b.className = 'ctl';
-    b.dataset.action = a.key;
-    b.textContent = a.label;
-    b.onclick = () => { a.set(sim, !a.get(sim)); };
+    b.dataset.freeze = P;
+    b.textContent = P;
+    b.style.color = PCOLOR[P];
+    b.title = 'freeze/thaw ' + E.PEER_NAMES[P] + ' RX';
+    b.onclick = () => {
+      const pc = cfg.peers[P];
+      pc.freeze = !pc.freeze;
+      sim.note(sim.cycle, `${P}.RX ${pc.freeze ? 'FROZEN' : 'thawed'} (manual)`,
+               pc.freeze ? 'stall' : 'info');
+    };
     box.appendChild(b);
   }
 }
-function updateActions() {
-  for (const a of scDef.actions) {
-    const b = $('#actions [data-action="' + a.key + '"]');
-    if (b) b.classList.toggle('on', !!a.get(sim));
+function updateFreezes() {
+  for (const P of E.PEERS) {
+    const b = $('#freezes [data-freeze="' + P + '"]');
+    if (b) b.classList.toggle('on', !!cfg.peers[P].freeze);
   }
 }
+
+// ---------- chart ----------
+function renderChartSel() {
+  const sel = $('#chartSel');
+  sel.innerHTML = '';
+  for (const [k, d] of Object.entries(chartDefs)) {
+    const o = document.createElement('option');
+    o.value = k; o.textContent = d.title;
+    sel.appendChild(o);
+  }
+  sel.value = chartKey;
+  sel.onchange = () => { chartKey = sel.value; };
+}
+function drawChart() {
+  const w = 322, h = 132;
+  cctx.clearRect(0, 0, w, h);
+  const ch = chartDefs[chartKey];
+  if (!ch) return;
+  const pad = { l: 24, r: 6, t: 8, b: 14 };
+  let ymax = ch.yMax || 1;
+  for (const s of ch.series) {
+    const d = sim.series[s.label] || [];
+    for (const v of d) if (v > ymax) ymax = v;
+  }
+  ymax *= 1.05;
+  const X = i => pad.l + (i / 459) * (w - pad.l - pad.r);
+  const Y = v => h - pad.b - (v / ymax) * (h - pad.t - pad.b);
+  cctx.strokeStyle = '#2e3a52';
+  cctx.lineWidth = 1;
+  cctx.strokeRect(pad.l, pad.t, w - pad.l - pad.r, h - pad.t - pad.b);
+  cctx.fillStyle = '#8a93a6';
+  cctx.font = '10px Menlo, monospace';
+  cctx.fillText((ymax / 1.05).toPrecision(2), 1, pad.t + 8);
+  cctx.fillText('0', 1, h - pad.b);
+  let lx = pad.l + 4;
+  for (const s of ch.series) {
+    const d = sim.series[s.label] || [];
+    cctx.strokeStyle = s.color;
+    cctx.lineWidth = 1.3;
+    cctx.beginPath();
+    for (let i = 0; i < d.length; i++) {
+      const x = X(i + (460 - d.length)), y = Y(d[i]);
+      i === 0 ? cctx.moveTo(x, y) : cctx.lineTo(x, y);
+    }
+    cctx.stroke();
+    cctx.fillStyle = s.color;
+    cctx.fillRect(lx, h - 9, 8, 3);
+    cctx.fillStyle = '#8a93a6';
+    cctx.fillText(s.name, lx + 11, h - 4);
+    lx += 11 + cctx.measureText(s.name).width + 10;
+  }
+}
+
+// ---------- stats ----------
 function updateStats() {
-  let html = '<table>';
-  html += `<tr><td>cycle</td><td>${sim.cycle}</td></tr>`;
-  for (const [k, v] of sim.statsFn()) html += `<tr><td>${k}</td><td>${v}</td></tr>`;
-  html += '</table>';
+  const { xp, peers } = sim.handles;
+  let inj = 0, del = 0, rate = 0;
+  let rows = '';
+  for (const P of E.PEERS) {
+    const pr = peers[P].producer, sk = peers[P].sink;
+    inj += pr.injected; del += sk.delivered;
+    rate += E.windowRate(sk, 50);
+    const flags =
+      (pr.stalled ? ' <span style="color:#ff6b6b">TX!</span>' : '') +
+      (!sk.isActive(sim.cycle) ? ' <span style="color:#ff6b6b">RX⛔</span>' : '');
+    rows += `<tr><td><span class="sw" style="background:${PCOLOR[P]}"></span>` +
+      `${E.PEER_NAMES[P]}${flags}</td>` +
+      `<td class="num">${pr.injected}</td><td class="num">${sk.delivered}</td>` +
+      `<td class="num">${sk.avgLatency.toFixed(1)}</td></tr>`;
+  }
+  let html = '<table><tr style="color:#8a93a6"><td>peer</td>' +
+    '<td class="num">inj</td><td class="num">recv</td>' +
+    '<td class="num">lat</td></tr>' + rows;
+  html += `<tr class="sep"><td>total</td><td class="num">${inj}</td>` +
+    `<td class="num">${del}</td><td class="num">${rate.toFixed(2)}/cy</td></tr>`;
+  html += `<tr class="sep"><td>XP grants</td><td class="num" colspan="3">` +
+    `${xp.grantsTotal}</td></tr>`;
+  html += `<tr><td>HoL skips</td><td class="num" colspan="3">${xp.holSkips}</td></tr>`;
+  html += `<tr><td>head-blocked cy</td><td class="num" colspan="3">` +
+    `${xp.headBlockedCycles}</td></tr>`;
+  html += `<tr><td>staging-full cy</td><td class="num" colspan="3">` +
+    `${xp.stagingFullStallCycles}</td></tr>`;
+  html += `<tr><td>link-credit-stall cy</td><td class="num" colspan="3">` +
+    `${xp.linkCreditStallCycles}</td></tr></table>`;
   $('#stats').innerHTML = html;
   $('#cycleNum').textContent = 'cycle ' + sim.cycle;
 }
@@ -918,8 +940,7 @@ function updateLog() {
   for (const e of logs) {
     if (e.seq <= logRendered) continue;
     const d = document.createElement('div');
-    d.innerHTML = `<span class="c">${e.cycle}</span>` +
-                  `<span class="${e.kind}"></span>`;
+    d.innerHTML = `<span class="c">${e.cycle}</span><span class="${e.kind}"></span>`;
     d.lastChild.textContent = e.text;
     el.appendChild(d);
   }
@@ -928,67 +949,10 @@ function updateLog() {
   if (atBottom) el.scrollTop = el.scrollHeight;
 }
 
-// ---------- chart ----------
-function drawChart() {
-  const w = 334, h = 130;
-  cctx.clearRect(0, 0, w, h);
-  const ch = sim.chart;
-  if (!ch) return;
-  const pad = { l: 26, r: 6, t: 8, b: 14 };
-  let ymax = ch.yMax || 1;
-  for (const s of ch.series) {
-    const d = sim.series[s.label] || [];
-    for (const v of d) if (v > ymax) ymax = v;
-  }
-  if (ch.hline && ch.hline.value > ymax) ymax = ch.hline.value;
-  ymax *= 1.05;
-  const X = i => pad.l + (i / 459) * (w - pad.l - pad.r);
-  const Y = v => h - pad.b - (v / ymax) * (h - pad.t - pad.b);
-  cctx.strokeStyle = '#2e3a52';
-  cctx.lineWidth = 1;
-  cctx.strokeRect(pad.l, pad.t, w - pad.l - pad.r, h - pad.t - pad.b);
-  cctx.fillStyle = '#8a93a6';
-  cctx.font = '10px Menlo, monospace';
-  cctx.fillText((ymax / 1.05).toPrecision(2), 2, pad.t + 8);
-  cctx.fillText('0', 2, h - pad.b);
-  if (ch.hline) {
-    cctx.strokeStyle = '#ffd54f';
-    cctx.setLineDash([4, 4]);
-    cctx.beginPath();
-    cctx.moveTo(pad.l, Y(ch.hline.value));
-    cctx.lineTo(w - pad.r, Y(ch.hline.value));
-    cctx.stroke();
-    cctx.setLineDash([]);
-    cctx.fillStyle = '#ffd54f';
-    cctx.fillText(ch.hline.label + ' ' + ch.hline.value.toFixed(2),
-                  pad.l + 4, Y(ch.hline.value) - 3);
-  }
-  let lx = pad.l + 4;
-  for (const s of ch.series) {
-    const d = sim.series[s.label] || [];
-    cctx.strokeStyle = s.color;
-    cctx.lineWidth = 1.4;
-    cctx.beginPath();
-    for (let i = 0; i < d.length; i++) {
-      const x = X(i + (460 - d.length)), y = Y(d[i]);
-      i === 0 ? cctx.moveTo(x, y) : cctx.lineTo(x, y);
-    }
-    cctx.stroke();
-    cctx.fillStyle = s.color;
-    cctx.fillRect(lx, h - 9, 8, 3);
-    cctx.fillStyle = '#8a93a6';
-    cctx.fillText(s.label, lx + 11, h - 4);
-    lx += 11 + cctx.measureText(s.label).width + 12;
-  }
-}
-
 // ---------- main canvas ----------
-function rr(x, y, w, h, r) {
-  vctx.beginPath();
-  vctx.roundRect(x, y, w, h, r);
-}
+function rr(x, y, w, h, r) { vctx.beginPath(); vctx.roundRect(x, y, w, h, r); }
 function msgSquare(x, y, flow, size = 11) {
-  vctx.fillStyle = FLOW[flow] || '#9fb4d0';
+  vctx.fillStyle = PCOLOR[flow] || '#9fb4d0';
   rr(x - size / 2, y - size / 2, size, size, 2.5);
   vctx.fill();
 }
@@ -996,12 +960,10 @@ function uvec(g) {
   const dx = g.x2 - g.x1, dy = g.y2 - g.y1, L = Math.hypot(dx, dy) || 1;
   return { ux: dx / L, uy: dy / L, L };
 }
-function lerpPt(g, p) {
-  return [g.x1 + (g.x2 - g.x1) * p, g.y1 + (g.y2 - g.y1) * p];
-}
 function clbSlotPos(l, i) {
   const g = l.geom, { ux, uy } = uvec(g);
-  return [g.x2 + ux * (13 + i * 13), g.y2 + uy * (13 + i * 13)];
+  const s = l.clbOutside ? -1 : 1;
+  return [g.x2 + s * ux * (13 + i * 13), g.y2 + s * uy * (13 + i * 13)];
 }
 function stagingSlotPos(l, i) {
   const g = l.geom, { ux, uy } = uvec(g);
@@ -1016,6 +978,14 @@ function drawLinkBase(l) {
   vctx.moveTo(g.x1, g.y1);
   vctx.lineTo(g.x2, g.y2);
   vctx.stroke();
+  // arrowhead at destination
+  const { ux, uy } = uvec(g);
+  vctx.fillStyle = '#39435a';
+  vctx.beginPath();
+  vctx.moveTo(g.x2, g.y2);
+  vctx.lineTo(g.x2 - ux * 8 - uy * 4, g.y2 - uy * 8 + ux * 4);
+  vctx.lineTo(g.x2 - ux * 8 + uy * 4, g.y2 - uy * 8 - ux * 4);
+  vctx.fill();
 }
 function drawLinkDynamics(l, T) {
   if (!l.geom) return;
@@ -1023,37 +993,38 @@ function drawLinkDynamics(l, T) {
   const nx = -uy, ny = ux;
   // credit pool at sender side
   if (l.credited) {
-    for (let i = 0; i < Math.min(l.maxCredits, 10); i++) {
-      const cx = g.x1 + ux * (8 + i * 10) + nx * 15;
-      const cy = g.y1 + uy * (8 + i * 10) + ny * 15;
+    for (let i = 0; i < Math.min(l.maxCredits, 8); i++) {
+      const cx = g.x1 + ux * (10 + i * 9) + nx * 16;
+      const cy = g.y1 + uy * (10 + i * 9) + ny * 16;
       vctx.beginPath();
-      vctx.arc(cx, cy, 3.4, 0, 7);
+      vctx.arc(cx, cy, 3.2, 0, 7);
       if (i < l.credits) { vctx.fillStyle = '#ffd54f'; vctx.fill(); }
-      else { vctx.strokeStyle = '#7a6a2c'; vctx.lineWidth = 1.2; vctx.stroke(); }
+      else { vctx.strokeStyle = '#7a6a2c'; vctx.lineWidth = 1.1; vctx.stroke(); }
     }
     if (l.credits === 0) {
       vctx.fillStyle = '#ff6b6b';
       vctx.font = '10px Menlo, monospace';
-      vctx.fillText('0 cr', g.x1 + ux * 8 + nx * 27, g.y1 + uy * 8 + ny * 27 + 3);
+      vctx.fillText('0cr', g.x1 + ux * 14 + nx * 28 - 8,
+                    g.y1 + uy * 14 + ny * 28 + 3);
     }
-  } else {
+  } else {     // flow control disabled: infinite credits at the sender
     vctx.fillStyle = '#8a93a6';
-    vctx.font = '11px Menlo, monospace';
-    vctx.fillText('∞', g.x1 + ux * 10 + nx * 16 - 3, g.y1 + uy * 10 + ny * 16 + 4);
+    vctx.font = '12px Menlo, monospace';
+    vctx.fillText('∞', g.x1 + ux * 12 + nx * 16 - 3, g.y1 + uy * 12 + ny * 16 + 4);
   }
-  // in-flight messages (forward, offset to one side)
+  // in-flight messages
   for (const e of l.inFlight) {
     const p = Math.max(0, Math.min(1, (T - e.sentAt) / (e.arriveAt - e.sentAt)));
-    const [x, y] = lerpPt(g, p);
-    msgSquare(x - nx * 8, y - ny * 8, e.msg.flow);
+    const x = g.x1 + (g.x2 - g.x1) * p, y = g.y1 + (g.y2 - g.y1) * p;
+    msgSquare(x - nx * 9, y - ny * 9, e.msg.flow);
   }
-  // returning credits (backward, offset to the other side)
+  // returning credits
   for (const c of l.crInFlight) {
     const dur = Math.max(1, c.arriveAt - c.sentAt);
     const p = Math.max(0, Math.min(1, (T - c.sentAt) / dur));
     const x = g.x2 + (g.x1 - g.x2) * p, y = g.y2 + (g.y1 - g.y2) * p;
     vctx.beginPath();
-    vctx.arc(x + nx * 8, y + ny * 8, 4, 0, 7);
+    vctx.arc(x + nx * 9, y + ny * 9, 4, 0, 7);
     vctx.fillStyle = '#ffd54f';
     vctx.fill();
     vctx.strokeStyle = '#10141b';
@@ -1061,74 +1032,89 @@ function drawLinkDynamics(l, T) {
     vctx.stroke();
   }
   // CLB slots + contents at receiver side
-  const cap = Math.min(l.credited ? l.maxCredits : Math.max(4, l.clb.length), 8);
-  for (let i = 0; i < cap; i++) {
+  const capDraw = Math.min(l.credited ? l.maxCredits : Math.max(4, l.clb.length),
+                           l.clbOutside ? 5 : 4);
+  for (let i = 0; i < capDraw; i++) {
     const [x, y] = clbSlotPos(l, i);
     vctx.strokeStyle = '#3d4961';
     vctx.lineWidth = 1;
     rr(x - 6, y - 6, 12, 12, 2.5);
     vctx.stroke();
   }
-  for (let j = 0; j < Math.min(l.clb.length, 8); j++) {
+  for (let j = 0; j < Math.min(l.clb.length, capDraw); j++) {
     const [x, y] = clbSlotPos(l, j);
     msgSquare(x, y, l.clb[j].msg.flow);
   }
-  if (l.clb.length > 8) {
-    const [x, y] = clbSlotPos(l, 8);
+  if (l.clb.length > capDraw) {
+    const [x, y] = clbSlotPos(l, capDraw);
     vctx.fillStyle = '#cfd8e6';
     vctx.font = '10px Menlo, monospace';
-    vctx.fillText('+' + (l.clb.length - 8), x - 5, y + 3);
+    vctx.fillText('+' + (l.clb.length - capDraw), x - 6, y + 3);
   }
 }
 function drawStaging(x) {
   for (const out of x.outputs) {
     const l = out.link;
     if (!l.geom) continue;
-    for (let i = 0; i < x.stagingDepth; i++) {
+    const depth = Math.min(x.stagingDepth, 3);
+    for (let i = 0; i < depth; i++) {
       const [sx, sy] = stagingSlotPos(l, i);
       vctx.strokeStyle = out.stalled ? '#ff6b6b' : '#56627d';
       vctx.lineWidth = 1;
       rr(sx - 6, sy - 6, 12, 12, 2.5);
       vctx.stroke();
     }
-    for (let i = 0; i < Math.min(out.staging.length, x.stagingDepth); i++) {
+    for (let i = 0; i < Math.min(out.staging.length, depth); i++) {
       const [sx, sy] = stagingSlotPos(l, i);
       msgSquare(sx, sy, out.staging[i].msg.flow);
     }
   }
 }
 function drawNode(n) {
-  const stalledRing =
-    (n.type === 'rn' && n.ref.stalled) ||
-    (n.type === 'sink' && !n.ref.isActive(sim.cycle));
+  let stalled = false;
+  if (n.type === 'peer') {
+    stalled = n.ref.producer.stalled || !n.ref.sink.isActive(sim.cycle);
+  }
   vctx.fillStyle = '#1b2230';
-  vctx.strokeStyle = stalledRing ? '#ff6b6b' : '#3d4961';
-  vctx.lineWidth = stalledRing ? 2 : 1.4;
+  vctx.strokeStyle = stalled ? '#ff6b6b' : '#3d4961';
+  vctx.lineWidth = stalled ? 2 : 1.4;
   rr(n.x, n.y, n.w, n.h, 8);
   vctx.fill();
   vctx.stroke();
-  vctx.fillStyle = '#fff';
-  vctx.font = '600 12px Menlo, monospace';
   if (n.type === 'xp') {
-    vctx.fillText(n.label, n.x + 8, n.y + 16);
+    const x = n.ref;
+    vctx.fillStyle = '#fff';
+    vctx.font = '600 13px Menlo, monospace';
+    vctx.fillText('XP', n.x + n.w / 2 - 10, n.y + n.h / 2 - 6);
     vctx.fillStyle = '#8a93a6';
     vctx.font = '10px Menlo, monospace';
-    vctx.fillText(n.ref.hol ? 'ARB: oldest-eligible' : 'ARB: head-only',
-                  n.x + 8, n.y + n.h - 7);
-  } else if (n.type === 'rn') {
-    vctx.fillText(n.label, n.x + 8, n.y + 16);
-    vctx.fillStyle = '#8a93a6';
-    vctx.font = '10px Menlo, monospace';
-    vctx.fillText('inj ' + n.ref.injected, n.x + 8, n.y + n.h - 7);
-    if (n.ref.pending)
-      msgSquare(n.x + n.w - 13, n.y + 13, n.ref.pending.flow, 10);
-  } else if (n.type === 'sink') {
-    vctx.fillText(n.label, n.x + 8, n.y + 16);
-    vctx.fillStyle = stalledRing ? '#ff6b6b' : '#8a93a6';
-    vctx.font = '10px Menlo, monospace';
-    vctx.fillText(stalledRing ? 'STALLED · got ' + n.ref.delivered
-                              : 'got ' + n.ref.delivered,
-                  n.x + 8, n.y + n.h - 7);
+    const mode = x.hol ? 'oldest-eligible' : 'head-only';
+    vctx.fillText(mode, n.x + n.w / 2 - vctx.measureText(mode).width / 2,
+                  n.y + n.h / 2 + 9);
+    const sub = `stg ${x.stagingDepth} · pipe ${x.tPipe}`;
+    vctx.fillText(sub, n.x + n.w / 2 - vctx.measureText(sub).width / 2,
+                  n.y + n.h / 2 + 22);
+  } else {
+    const { producer, sink } = n.ref;
+    vctx.fillStyle = PCOLOR[n.id];
+    rr(n.x + 8, n.y + 8, 10, 10, 2.5);
+    vctx.fill();
+    vctx.fillStyle = '#fff';
+    vctx.font = '600 12px Menlo, monospace';
+    vctx.fillText(n.label, n.x + 24, n.y + 17);
+    vctx.font = '11px Menlo, monospace';
+    vctx.fillStyle = producer.stalled ? '#ff6b6b' : '#8a93a6';
+    vctx.fillText(`TX ${producer.injected}${producer.stalled ? ' stall' : ''}`,
+                  n.x + 8, n.y + 36);
+    if (producer.pending)
+      msgSquare(n.x + 8 + vctx.measureText(
+        `TX ${producer.injected}${producer.stalled ? ' stall' : ''}`).width + 11,
+        n.y + 32, producer.pending.flow, 9);
+    const rxStalled = !sink.isActive(sim.cycle);
+    vctx.fillStyle = rxStalled ? '#ff6b6b' : '#8a93a6';
+    vctx.fillText(`RX ${sink.delivered}${rxStalled ? ' STALL' : ''}` +
+      (sink.delivered ? ` · ${sink.avgLatency.toFixed(1)}cy` : ''),
+      n.x + 8, n.y + 52);
   }
 }
 function drawFlashes(frac) {
@@ -1139,38 +1125,25 @@ function drawFlashes(frac) {
     const from = byId[f.from];
     if (!from || !from.geom) continue;
     const [x1, y1] = clbSlotPos(from, 0);
-    let x2, y2;
+    const a = Math.max(0, 1 - frac).toFixed(2);
+    vctx.strokeStyle = `rgba(255,213,79,${a})`;
     if (f.to && byId[f.to] && byId[f.to].geom) {
-      [x2, y2] = stagingSlotPos(byId[f.to], 0);
-    } else {
-      const g = from.geom, { ux, uy } = uvec(g);
-      x2 = g.x2 + ux * 50; y2 = g.y2 + uy * 50;
+      const [x2, y2] = stagingSlotPos(byId[f.to], 0);
+      vctx.beginPath();
+      vctx.moveTo(x1, y1);
+      vctx.lineTo(x2, y2);
+      vctx.stroke();
+    } else {           // sink consumed: pulse a ring around the CLB head slot
+      vctx.beginPath();
+      vctx.arc(x1, y1, 10, 0, 7);
+      vctx.stroke();
     }
-    vctx.strokeStyle = `rgba(255,213,79,${Math.max(0, 1 - frac).toFixed(2)})`;
-    vctx.beginPath();
-    vctx.moveTo(x1, y1);
-    vctx.lineTo(x2, y2);
-    vctx.stroke();
-  }
-}
-function drawLinkLabels() {
-  vctx.fillStyle = '#5a657a';
-  vctx.font = '10px Menlo, monospace';
-  for (const l of sim.links) {
-    if (!l.geom) continue;
-    const g = l.geom, { ux, uy } = uvec(g);
-    const nx = -uy, ny = ux;
-    const mx = (g.x1 + g.x2) / 2, my = (g.y1 + g.y2) / 2;
-    const txt = `t_link=${l.tLink}` + (l.credited ? ` t_cr=${l.tCR}` : '');
-    vctx.fillText(txt, mx - vctx.measureText(txt).width / 2 - nx * 26,
-                  my - ny * 26 + 3);
   }
 }
 function draw(frac) {
   vctx.clearRect(0, 0, W, H);
   const T = sim.cycle + frac;
   for (const l of sim.links) drawLinkBase(l);
-  drawLinkLabels();
   for (const n of sim.layout.nodes) drawNode(n);
   for (const l of sim.links) drawLinkDynamics(l, T);
   for (const x of sim.xps) drawStaging(x);
@@ -1203,7 +1176,7 @@ function frame(t) {
   }
   if (sim) {
     draw(playing ? Math.min(acc, 1) : 0);
-    updateStats(); updateLog(); updateActions(); drawChart();
+    updateStats(); updateLog(); updateFreezes(); drawChart();
   }
   requestAnimationFrame(frame);
 }
@@ -1221,13 +1194,26 @@ $('#speed').oninput = function () {
   $('#speedVal').textContent = speed + ' cy/s';
 };
 document.addEventListener('keydown', e => {
-  if (e.code === 'Space' && e.target.tagName !== 'INPUT') {
+  // ignore when a control is focused: buttons self-activate on Space, and
+  // inputs/selects need the key — otherwise Space would double-trigger
+  if (e.code === 'Space' &&
+      !['INPUT', 'SELECT', 'BUTTON'].includes(e.target.tagName)) {
     e.preventDefault();
     $('#btn-play').click();
   }
 });
+// re-fit canvases if the devicePixelRatio changes (e.g. moving the window
+// to another display) — otherwise the drawing turns blurry or mis-scaled
+window.addEventListener('resize', () => {
+  fitCanvas(view, W, H);
+  fitCanvas(chart, 322, 132);
+});
 
-selectScenario('lifecycle');
+renderPresets();
+renderCfgTabs();
+renderCfgBody();
+renderFreezes();
+rebuild();
 requestAnimationFrame(frame);
 })();
 </script>
