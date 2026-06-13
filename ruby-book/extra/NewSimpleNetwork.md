@@ -26,8 +26,10 @@ int-link buffers (input of Switch i) ─────────────► 
   intermediate `port_buffers`, and enqueues with `routing_latency`.
 - `Throttle` (one per output link) models bandwidth (bytes/cycle) and applies
   `link_latency` when enqueuing into the next hop's input buffer.
-- Buffer occupancy is the only backpressure; freed slots are visible
-  instantly (the gaps G1-G5 analysed in `CreditedLinkBuffer.md` section 1).
+- Buffer occupancy is the only backpressure; freed slots become visible through
+  `MessageBuffer`'s fixed next-cycle accounting, not through a configurable
+  credit-return path (the gaps G1-G5 analysed in `CreditedLinkBuffer.md`
+  section 1).
 - Wiring: `Topology::createLinks` → virtual
   `SimpleNetwork::make{ExtIn,ExtOut,Internal}Link` → `Switch::add{In,Out}Port`.
   Ext links have no buffers of their own: controller-owned `m_toNetQueues` /

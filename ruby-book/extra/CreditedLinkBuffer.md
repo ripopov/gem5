@@ -43,8 +43,8 @@ For credited NoC modelling, that contract leaves five gaps.
 
 | Gap | Current behavior | Why it is a problem |
 | --- | --- | --- |
-| G1 | A slot freed by `dequeue()` is visible to the producer immediately. | There is no credit-return latency, so congestion propagates too quickly and credit-limited throughput cannot be reproduced. |
-| G2 | The only backpressure knob is `buffer_size`. | Credit count cannot be sized independently from physical storage. |
+| G1 | A slot freed by `dequeue()` becomes visible to capacity checks on the next cycle. | This is a fixed one-cycle capacity-feedback rule, not a configurable credit-return latency, so credit-limited throughput and delayed congestion propagation cannot be reproduced. |
+| G2 | Admission is derived from `buffer_size` and visible occupancy, not from explicit credit state. | Even when advertised credits equal receive-buffer depth, the model cannot keep "slot became free" and "credit returned to producer" apart. |
 | G3 | Link latency, storage depth, and flow-control timing are not independently configurable. | A slow distant link and a congested downstream buffer are hard to distinguish. |
 | G4 | `PerfectSwitch` only examines the head of each input buffer. | A message for a blocked output can stall newer messages for free outputs. |
 | G5 | The network lacks a reusable credited-buffer primitive. | New experiments would need ad hoc buffering, stats, wakeups, and checkpoint handling. |
@@ -74,18 +74,26 @@ Each credited buffer has:
 `credits` starts at `max_credits`. A successful send decrements it. A delayed
 credit-return event increments it.
 
-### 2.2 Credit count decoupled from storage capacity
+### 2.2 Explicit credit state and storage capacity
 
-`max_credits` is a flow-control parameter, not a synonym for `buffer_size`.
-The storage capacity must be at least as large as the credit pool:
+`max_credits` is the advertised link credit pool. In the common case it should
+equal the number of receive-buffer entries that the model wants to expose to
+the upstream producer. The important change from plain `MessageBuffer` is not
+that `max_credits` must differ from `buffer_size`; it is that current credit
+availability is explicit state and can lag behind physical slot availability
+because returns are delayed.
+
+The storage capacity must be at least as large as the advertised credit pool:
 
 ```text
 buffer_size >= max_credits
 ```
 
-This makes the credit loop the intentional bottleneck. Extra storage may exist
-for implementation slack, but it must not silently change credit-limited
-throughput.
+Use `buffer_size > max_credits` only when the extra entries are not part of the
+link credit domain, for example implementation slack in the gem5 container,
+local staging or reserved entries inside the XP, or an experiment that models
+hidden receiver storage. Otherwise, expose all receive-buffer entries as
+credits and set `buffer_size == max_credits`.
 
 ### 2.3 Explicit forward and return latency knobs
 
