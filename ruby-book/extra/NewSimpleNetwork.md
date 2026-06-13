@@ -13,12 +13,21 @@ network/router level and the execution plan.
 One `Switch` per router, composed of two engines and three buffer layers
 (`src/mem/ruby/network/simple/`):
 
-```
-ctrl out (m_toNetQueues, ctrl-owned)                ┌────────── Switch i ──────────┐    int-link buffers (SimpleIntLink.m_buffers,
-        ─────────────►  ─────────────────────────► │ PerfectSwitch ─► port_buffers │ ─►  1/vnet) = Switch j's input  ─► ...
-int-link buffers (input of Switch i) ─────────────► │  (routing,      ─► Throttle   │      enqueue(delta = link_latency)
-                                                    │  0-cost move)   (bandwidth)   │
-                                                    └───────────────────────────────┘
+```mermaid
+flowchart LR
+    Ctrl["ctrl out<br/>(m_toNetQueues, ctrl-owned)"] --> PS
+    IntIn["int-link buffers<br/>(input of Switch i)"] --> PS
+
+    subgraph SwitchI["Switch i"]
+        direction LR
+        PS["PerfectSwitch<br/>(routing, 0-cost move)"]
+        PB["port_buffers"]
+        TH["Throttle<br/>(bandwidth)"]
+        PS --> PB --> TH
+    end
+
+    TH -->|"enqueue(delta = link_latency)"| Next["int-link buffers<br/>(SimpleIntLink.m_buffers, 1/vnet)<br/>= Switch j's input"]
+    Next --> More["..."]
 ```
 
 - `PerfectSwitch` drains each input buffer **head-only**, routes via the
@@ -41,27 +50,23 @@ A CMN-style XP, at message (= single-flit CHI packet) granularity. The
 existing three-stage `Switch` decomposition is **kept** — it maps onto a real
 XP one-to-one; each stage's flow control is what changes:
 
-```
-        upstream XP / RN
-              │ enqueue(delta = t_link)        ◄─ link credit spent at send
-              ▼
- ┌──────────────────── XPSwitch ──────────────────────┐
- │ per-(inport,vnet) CreditedLinkBuffer                │ ◄─ int-link buffer, now credited
- │        │ ready after t_link                         │
- │        ▼                                            │
- │ XP arbiter: per (output,vnet), grant the OLDEST     │ ◄─ PerfectSwitch's successor
- │   eligible msg — eligible = routes there AND a      │    (HoL elimination)
- │   staging slot is free (local same-cycle check)     │
- │   grant: popAt() ─► upstream credit return          │ ◄─ credit returns at GRANT,
- │          enqueue(staging, delta = t_pipe)           │    per CLB departure rule
- │        ▼                                            │
- │ staging buffer, 1–3 deep, per (output,vnet)         │ ◄─ today's port_buffers, finite
- │        ▼                                            │
- │ link driver: while staging ready AND downstream     │ ◄─ Throttle's successor
- │   hasCredit(): dequeue, spend link credit,          │
- │   enqueue downstream CLB (delta = t_link),          │
- │   ≤1 msg per channel per cycle                      │
- └─────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+    Up["upstream XP / RN"] -->|"enqueue(delta = t_link)<br/>link credit spent at send"| CLB
+
+    subgraph XP["XPSwitch"]
+        direction LR
+        CLB["per-(inport,vnet) CreditedLinkBuffer<br/>(int-link buffer, now credited)"]
+        Arb["XP arbiter: per (output,vnet), grant the OLDEST<br/>eligible msg — eligible = routes there AND a<br/>staging slot is free (local same-cycle check)<br/>(PerfectSwitch's successor; HoL elimination)"]
+        Stage["staging buffer, 1–3 deep, per (output,vnet)<br/>(today's port_buffers, finite)"]
+        Link["link driver: while staging ready AND downstream<br/>hasCredit(): dequeue, spend link credit,<br/>enqueue downstream CLB (delta = t_link),<br/>≤1 msg per channel per cycle<br/>(Throttle's successor)"]
+
+        CLB -->|"ready after t_link"| Arb
+        Arb -->|"grant: popAt() → upstream credit return<br/>credit returns at GRANT, per CLB departure rule<br/>enqueue(staging, delta = t_pipe)"| Stage
+        Stage --> Link
+    end
+
+    Link --> Down["downstream CLB"]
 ```
 
 The staging buffer decouples **switch allocation** (crossbar grant) from
