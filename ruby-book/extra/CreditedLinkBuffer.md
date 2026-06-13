@@ -366,13 +366,39 @@ so the XP arbiter can choose between head-only and HoL-eliminating behavior.
 
 ## 5. Implementation options
 
-The semantics above are fixed. The storage backend is still a design choice.
+The semantics above are fixed. The implementation is allowed to add small seams
+to existing gem5 classes when that makes the result cleaner. The constraint is
+not "never touch upstream code"; the constraint is "keep upstream-facing
+changes narrow, obvious, default-off, and easy to rebase."
+
+Acceptable seams include:
+
+- making a small method virtual when a subclass needs to specialize behavior;
+- moving a field or helper from `private` to `protected` when a subclass needs
+  controlled access;
+- adding a guarded hook whose default behavior is exactly the existing
+  `MessageBuffer` behavior;
+- adding Python parameters that default to disabled behavior.
+
+Avoid broad rewrites of `MessageBuffer`, changes to SLICC controller queue
+semantics, or changes that make classic `SimpleNetwork` depend on credited
+mode. Each upstream seam should be reviewable as a small mechanical patch with
+a clear reason.
+
+Recommended order:
+
+| Rank | Option | Rating | Why |
+| --- | --- | --- | --- |
+| 1 | Option A: extend `MessageBuffer` with credited mode | Recommended | Best fit for `SimpleNetwork`/`XPNetwork` integration: preserves existing buffer wiring and gem5 observability while allowing small, controlled upstream seams. |
+| 2 | Option B: standalone `SimObject` | Viable fallback | Cleanest local class, but it duplicates functional access, serialization, stats, and wakeup infrastructure and makes integration less incremental. |
+| 3 | Option C: wrapper around `MessageBuffer` | Avoid for HoL XP | Avoids touching `MessageBuffer`, but creates a leaky boundary and does not naturally support arbitrary `popAt()` / oldest-eligible arbitration. |
 
 ### 5.1 Option A: extend MessageBuffer with credited mode
+**Rating: recommended.**
 
 This option keeps `CreditedLinkBuffer` as a `MessageBuffer`-compatible object.
-It adds guarded credited-mode state to the existing buffer implementation and
-uses a Python subclass for configuration.
+It adds a Python subclass for configuration and a small C++ subclass or
+credited-mode extension for the NoC-specific behavior.
 
 ```cpp
 class CreditedLinkBuffer : public MessageBuffer
@@ -390,6 +416,21 @@ class CreditedLinkBuffer : public MessageBuffer
 };
 ```
 
+Option A may require minor `MessageBuffer` changes. That is acceptable when the
+change creates a clean subclass seam and keeps disabled behavior identical. For
+example:
+
+- make `enqueue()` call a protected hook before insertion so credited mode can
+  spend a credit without duplicating enqueue logic;
+- expose protected iteration helpers for functional access and serialization;
+- make `isReady()` / `readyTime()` / selected accessors virtual if the ready set
+  moves out of the inherited priority heap;
+- move narrowly needed state from `private` to `protected` instead of copying
+  `MessageBuffer` internals into a parallel class.
+
+The important rule is that existing users of `MessageBuffer` must not observe a
+behavior change when credited parameters are disabled.
+
 Two storage layouts are possible inside this option.
 
 | Layout | Shape | Trade-off |
@@ -403,22 +444,26 @@ Benefits:
   `VectorParam.MessageBuffer`;
 - reuses existing `MessageBuffer` wakeup, randomization, tracing, stats base,
   and functional-access conventions;
-- keeps endpoint controller queues on the familiar type.
+- keeps endpoint controller queues on the familiar type;
+- keeps upstream diffs small when the needed `MessageBuffer` seams are
+  explicit and default-off.
 
 Costs:
 
-- existing `MessageBuffer` methods are not all virtual, so credited behavior
-  must be implemented in the base mutation paths or all credited call sites
-  must hold the concrete type;
+- requires a few carefully chosen `MessageBuffer` seams, such as protected
+  helpers or virtual hooks;
 - the class carries some controller-oriented features that the NoC link does
   not need;
 - adding a ready deque requires careful updates to `getSize()`, `isEmpty()`,
   `functionalRead()`, `functionalWrite()`, and serialization.
 
-This is the recommended first implementation if the goal is minimal disruption
-to the existing `SimpleNetwork` wiring.
+This is the recommended first implementation for integration with
+`SimpleNetwork`/`XPNetwork`. It preserves the existing buffer type boundary and
+keeps the upstream synchronization burden manageable, as long as the supporting
+`MessageBuffer` changes stay small and isolated.
 
 ### 5.2 Option B: standalone SimObject
+**Rating: viable fallback for an isolated XP path.**
 
 This option implements a focused `CreditedLinkBuffer` that does not inherit
 from `MessageBuffer`.
@@ -452,12 +497,16 @@ Costs:
   `MessageBuffer*`;
 - functional access, serialization, stats, debug printing, and wakeup handling
   must be implemented from scratch;
-- it is less suitable for incremental replacement of `SimpleIntLink.buffers`.
+- it is less suitable for incremental replacement of `SimpleIntLink.buffers`;
+- if endpoint credits are needed later, controller-facing `MessageBuffer`
+  queues still need their own credited seam.
 
-This is attractive for a new XP-only network path where compatibility with
-classic `Switch` and `Throttle` is not required.
+This is attractive only if the XP path is deliberately isolated from classic
+`MessageBuffer` wiring and the team wants a small single-purpose class more
+than incremental integration.
 
 ### 5.3 Option C: credited wrapper around MessageBuffer
+**Rating: avoid for HoL-eliminating XP arbitration.**
 
 This option stores a plain `MessageBuffer` internally and adds credit state in
 a wrapper object.
@@ -476,7 +525,8 @@ Costs:
   network is fully converted.
 
 This option is viable only for head-only behavior or for a larger network
-refactor. It is not the preferred path for HoL-eliminating XP arbitration.
+refactor. It is not the preferred path for HoL-eliminating XP arbitration
+because it avoids the small upstream seams at the cost of a leakier abstraction.
 
 ### 5.4 Rejected shape: per-output demux lanes as the credit boundary
 
