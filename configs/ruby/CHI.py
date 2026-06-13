@@ -238,7 +238,7 @@ def create_system(
 
     ruby_system.network.control_msg_size = params.cntrl_msg_size
     ruby_system.network.data_msg_size = params.data_width
-    if options.network == "simple":
+    if options.network in ["simple", "simple_xp"]:
         ruby_system.network.buffer_size = params.router_buffer_size
 
     # Incorporate the params into options so it's propagated to

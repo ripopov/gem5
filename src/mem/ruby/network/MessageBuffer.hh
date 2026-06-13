@@ -51,6 +51,7 @@
 #include <cstdint>
 #include <functional>
 #include <iostream>
+#include <limits>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -125,7 +126,7 @@ class MessageBuffer : public SimObject
 
     const MsgPtr &peekMsgPtr() const { return m_prio_heap.front(); }
 
-    void enqueue(MsgPtr message, Tick curTime, Tick delta,
+    virtual void enqueue(MsgPtr message, Tick curTime, Tick delta,
                 bool ruby_is_random, bool ruby_warmup,
                 bool bypassStrictFIFO = false);
 
@@ -144,7 +145,7 @@ class MessageBuffer : public SimObject
 
     //! Updates the delay cycles of the message at the head of the queue,
     //! removes it from the queue and returns its total delay.
-    Tick dequeue(Tick current_time, bool decrement_messages = true);
+    virtual Tick dequeue(Tick current_time, bool decrement_messages = true);
 
     void registerDequeueCallback(std::function<void()> callback);
     void unregisterDequeueCallback();
@@ -224,12 +225,21 @@ class MessageBuffer : public SimObject
 
     int routingPriority() const { return m_routing_priority; }
 
-  private:
+  protected:
+    using MessagePredicate = std::function<bool(const Message&)>;
+    static constexpr size_t invalidMessageIndex =
+        std::numeric_limits<size_t>::max();
+
+    bool canDequeue(Tick current_time) const;
+    size_t findReady(MessagePredicate predicate, Tick current_time) const;
+    const MsgPtr& peekMsgPtrAt(size_t index) const;
+    Tick dequeueAt(size_t index, Tick current_time,
+                   bool decrement_messages = true);
+
     void reanalyzeList(std::list<MsgPtr> &, Tick);
 
     uint32_t functionalAccess(Packet *pkt, bool is_read, WriteMask *mask);
 
-  private:
     // Data Members (m_ prefix)
     //! Consumer to signal a wakeup(), can be NULL
     Consumer* m_consumer;

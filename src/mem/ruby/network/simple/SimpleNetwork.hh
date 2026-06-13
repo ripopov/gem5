@@ -94,16 +94,18 @@ class SimpleNetwork : public Network
     bool functionalRead(Packet *pkt, WriteMask &mask);
     uint32_t functionalWrite(Packet *pkt);
 
-  private:
+  protected:
     void addLink(SwitchID src, SwitchID dest, int link_latency);
     void makeLink(SwitchID src, SwitchID dest,
         const NetDest& routing_table_entry, int link_latency);
     void makeTopology();
 
+  private:
     // Private copy constructor and assignment operator
     SimpleNetwork(const SimpleNetwork& obj);
     SimpleNetwork& operator=(const SimpleNetwork& obj);
 
+  protected:
     std::unordered_map<int, Switch*> m_switches;
     std::vector<MessageBuffer*> m_int_link_buffers;
     const int m_buffer_size;

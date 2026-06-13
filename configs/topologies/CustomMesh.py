@@ -223,9 +223,7 @@ class CustomMesh(SimpleTopology):
 
     def _addExtLink(self, ctrl, router):
         vnets = (
-            list(range(self._num_vnets))
-            if self._per_vnet_links
-            else [None]
+            list(range(self._num_vnets)) if self._per_vnet_links else [None]
         )
 
         for vnet in vnets:
@@ -304,7 +302,7 @@ class CustomMesh(SimpleTopology):
         # only forward them when running the simple network. Default to the
         # router's own `latency` so behavior is unchanged unless overridden.
         self._routing_latency_kwargs = {}
-        if options.network == "simple":
+        if options.network in ["simple", "simple_xp"]:
             self._routing_latency_kwargs = dict(
                 int_routing_latency=getattr(
                     options, "int_routing_latency", options.router_latency
@@ -330,9 +328,8 @@ class CustomMesh(SimpleTopology):
         self._link_bandwidth_factor = getattr(
             options, "link_bandwidth_factor", 16
         )
-        self._per_vnet_links = (
-            options.network == "garnet"
-            and getattr(options, "per_vnet_links", False)
+        self._per_vnet_links = options.network == "garnet" and getattr(
+            options, "per_vnet_links", False
         )
         self._num_vnets = int(network.number_of_virtual_networks)
 

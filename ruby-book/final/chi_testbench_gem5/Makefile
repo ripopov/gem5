@@ -34,6 +34,7 @@ help:
 	@echo
 	@echo "Scenarios (pass RN_MODE=rni or RN_MODE=rnf_l2; default rnf_l2):"
 	@for s in $(SCENARIOS); do echo "  run-$$s"; done
+	@echo "Networks: pass NETWORK=simple, NETWORK=simple_xp, or NETWORK=garnet."
 	@echo
 	@echo "Meta:"
 	@echo "  run-all          run every scenario sequentially"

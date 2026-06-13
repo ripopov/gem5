@@ -45,6 +45,15 @@ class NoC_Params(CHI_config.NoC_Params):
         CHI_config.NoC_Params.data_width
         + CHI_config.NoC_Params.cntrl_msg_size,  # DAT
     ]
+    # XP SimpleNetwork-only: one credited receive buffer per vnet on each
+    # internal link. Sixteen credits cover the worst configured mesh forward
+    # delay plus return delay while still making credit occupancy/stalls
+    # visible under contention.
+    xp_credits = [16, 16, 16, 16]
+    xp_credit_return_latency = [2, 2, 2, 2]
+    xp_staging_depth = 2
+    xp_enable_ooo_pop = True
+
     # SimpleNetwork-only: PerfectSwitch per-hop routing latency (Cycles).
     # int = switch-to-switch hops, ext = switch-to-controller hops.
     int_routing_latency = router_latency
@@ -65,11 +74,23 @@ class NoC_Params(CHI_config.NoC_Params):
     cross_link_latency = router_link_latency + 5
     cross_links = [
         # vertical boundary: col 1 <-> col 2 (both directions)
-        (1, 2), (2, 1), (5, 6), (6, 5),
-        (9, 10), (10, 9), (13, 14), (14, 13),
+        (1, 2),
+        (2, 1),
+        (5, 6),
+        (6, 5),
+        (9, 10),
+        (10, 9),
+        (13, 14),
+        (14, 13),
         # horizontal boundary: row 1 <-> row 2 (both directions)
-        (4, 8), (8, 4), (5, 9), (9, 5),
-        (6, 10), (10, 6), (7, 11), (11, 7),
+        (4, 8),
+        (8, 4),
+        (5, 9),
+        (9, 5),
+        (6, 10),
+        (10, 6),
+        (7, 11),
+        (11, 7),
     ]
 
 

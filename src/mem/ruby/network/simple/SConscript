@@ -46,11 +46,17 @@ if not env['CONF']['RUBY']:
 SimObject('SimpleLink.py', sim_objects=['SimpleExtLink', 'SimpleIntLink'])
 SimObject('SimpleNetwork.py', sim_objects=['SimpleNetwork', 'BaseRoutingUnit',
     'WeightBased', 'Switch'])
+SimObject('xp/XPNetwork.py', sim_objects=['CreditedLinkBuffer', 'XPIntLink',
+    'XPExtLink', 'XPSwitch', 'XPNetwork'])
 
 Source('PerfectSwitch.cc')
 Source('SimpleLink.cc')
 Source('SimpleNetwork.cc')
 Source('Switch.cc')
 Source('Throttle.cc')
+Source('xp/CreditedLinkBuffer.cc')
+Source('xp/XPLink.cc')
+Source('xp/XPNetwork.cc')
+Source('xp/XPSwitch.cc')
 
 Source('routing/WeightBased.cc')

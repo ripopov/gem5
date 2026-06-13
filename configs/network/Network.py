@@ -55,8 +55,9 @@ def define_options(parser):
     parser.add_argument(
         "--network",
         default="simple",
-        choices=["simple", "garnet"],
-        help="""'simple'|'garnet' (garnet2.0 will be deprecated.)""",
+        choices=["simple", "simple_xp", "garnet"],
+        help="""'simple'|'simple_xp'|'garnet'
+            (garnet2.0 will be deprecated.)""",
     )
     parser.add_argument(
         "--router-latency",
@@ -152,6 +153,13 @@ def create_network(options, ruby):
         ExtLinkClass = GarnetExtLink
         RouterClass = GarnetRouter
         InterfaceClass = GarnetNetworkInterface
+
+    elif options.network == "simple_xp":
+        NetworkClass = XPNetwork
+        IntLinkClass = XPIntLink
+        ExtLinkClass = XPExtLink
+        RouterClass = XPSwitch
+        InterfaceClass = None
 
     else:
         NetworkClass = SimpleNetwork
@@ -274,13 +282,22 @@ def init_network(options, network, InterfaceClass):
             )
             extLink.int_cred_bridge = int_cred_bridges
 
-    if options.network == "simple":
+    if options.network in ["simple", "simple_xp"]:
         if options.simple_physical_channels:
             network.physical_vnets_channels = [1] * int(
                 network.number_of_virtual_networks
             )
             network.physical_vnets_bandwidth = getattr(
                 options, "physical_vnets_bandwidth", []
+            )
+        if options.network == "simple_xp":
+            network.xp_credits = getattr(options, "xp_credits", [])
+            network.xp_credit_return_latency = getattr(
+                options, "xp_credit_return_latency", []
+            )
+            network.xp_staging_depth = getattr(options, "xp_staging_depth", 2)
+            network.xp_enable_ooo_pop = getattr(
+                options, "xp_enable_ooo_pop", True
             )
         network.setup_buffers()
 

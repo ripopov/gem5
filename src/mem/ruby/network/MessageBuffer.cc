@@ -353,11 +353,19 @@ MessageBuffer::enqueue(MsgPtr message, Tick current_time, Tick delta,
 Tick
 MessageBuffer::dequeue(Tick current_time, bool decrement_messages)
 {
+    return dequeueAt(0, current_time, decrement_messages);
+}
+
+Tick
+MessageBuffer::dequeueAt(size_t index, Tick current_time,
+                         bool decrement_messages)
+{
     DPRINTF(RubyQueue, "Popping\n");
     assert(isReady(current_time));
+    assert(index < m_prio_heap.size());
 
     // get MsgPtr of the message about to be dequeued
-    MsgPtr message = m_prio_heap.front();
+    MsgPtr message = m_prio_heap[index];
 
     // get the delay cycles
     message->updateDelayedTicks(current_time);
@@ -373,13 +381,21 @@ MessageBuffer::dequeue(Tick current_time, bool decrement_messages)
     }
     ++m_dequeues_this_cy;
 
-    pop_heap(m_prio_heap.begin(), m_prio_heap.end(), std::greater<MsgPtr>());
-    m_prio_heap.pop_back();
-
     // FTR tracing: stamp dequeue event for traced messages
     if (auto *ftr = FtrTrace::get(); ftr && message->getRootTraceId() != 0) {
         ftr->stampEvent(message->getRootTraceId(), "dequeue", name(),
                         current_time);
+    }
+
+    if (index == 0) {
+        pop_heap(m_prio_heap.begin(), m_prio_heap.end(),
+                 std::greater<MsgPtr>());
+        m_prio_heap.pop_back();
+    } else {
+        m_prio_heap[index] = m_prio_heap.back();
+        m_prio_heap.pop_back();
+        std::make_heap(m_prio_heap.begin(), m_prio_heap.end(),
+                       std::greater<MsgPtr>());
     }
 
     if (decrement_messages) {
@@ -575,9 +591,7 @@ bool
 MessageBuffer::isReady(Tick current_time) const
 {
     assert(m_time_last_time_pop <= current_time);
-    bool can_dequeue = (m_max_dequeue_rate == 0) ||
-                       (m_time_last_time_pop < current_time) ||
-                       (m_dequeues_this_cy < m_max_dequeue_rate);
+    bool can_dequeue = canDequeue(current_time);
     bool is_ready = (m_prio_heap.size() > 0) &&
                    (m_prio_heap.front()->getLastEnqueueTime() <= current_time);
     if (!can_dequeue && is_ready) {
@@ -594,6 +608,46 @@ MessageBuffer::readyTime() const
         return MaxTick;
     else
         return m_prio_heap.front()->getLastEnqueueTime();
+}
+
+bool
+MessageBuffer::canDequeue(Tick current_time) const
+{
+    return (m_max_dequeue_rate == 0) ||
+           (m_time_last_time_pop < current_time) ||
+           (m_dequeues_this_cy < m_max_dequeue_rate);
+}
+
+size_t
+MessageBuffer::findReady(MessagePredicate predicate, Tick current_time) const
+{
+    if (!canDequeue(current_time)) {
+        return invalidMessageIndex;
+    }
+
+    size_t selected = invalidMessageIndex;
+    for (size_t i = 0; i < m_prio_heap.size(); ++i) {
+        const MsgPtr &msg = m_prio_heap[i];
+        if (msg->getLastEnqueueTime() > current_time) {
+            continue;
+        }
+        if (predicate && !predicate(*msg)) {
+            continue;
+        }
+        if (selected == invalidMessageIndex ||
+            m_prio_heap[selected] > msg) {
+            selected = i;
+        }
+    }
+
+    return selected;
+}
+
+const MsgPtr&
+MessageBuffer::peekMsgPtrAt(size_t index) const
+{
+    assert(index < m_prio_heap.size());
+    return m_prio_heap[index];
 }
 
 uint32_t

@@ -98,8 +98,13 @@ class Switch : public BasicRouter
                     bool is_external,
                     PortDirection dst_inport = "");
 
-    const statistics::Formula & getMsgCount(unsigned int type) const
+    virtual bool hasCustomStats() const { return false; }
+    virtual const statistics::Formula & getLinkUtilization() const
+    { return switchStats.percent_links_utilized; }
+    virtual const statistics::Formula & getMsgCount(unsigned int type) const
     { return *(switchStats.m_msg_counts[type]); }
+    virtual const statistics::Formula & getMsgBytes(unsigned int type) const
+    { return *(switchStats.m_msg_bytes[type]); }
 
     void print(std::ostream& out) const;
     void init_net_ptr(SimpleNetwork* net_ptr) { m_network_ptr = net_ptr; }

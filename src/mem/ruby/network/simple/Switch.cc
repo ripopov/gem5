@@ -203,6 +203,30 @@ void
 Switch::SwitchStats::regStats()
 {
     // Note: Throttles are not available at construction time only at regStats
+    if (parent->throttles.empty()) {
+        if (parent->hasCustomStats()) {
+            percent_links_utilized += parent->getLinkUtilization();
+            for (unsigned int type = MessageSizeType_FIRST;
+                 type < MessageSizeType_NUM; ++type) {
+                *(m_msg_counts[type]) += parent->getMsgCount(type);
+                *(m_msg_bytes[type]) =
+                    *(m_msg_counts[type]) *
+                    statistics::constant(
+                        Network::MessageSizeType_to_int(
+                            MessageSizeType(type)));
+            }
+        } else {
+            percent_links_utilized = 0;
+            for (unsigned int type = MessageSizeType_FIRST;
+                 type < MessageSizeType_NUM; ++type) {
+                *(m_msg_counts[type]) = statistics::constant(0);
+                *(m_msg_bytes[type]) = statistics::constant(0);
+            }
+        }
+        statistics::Group::regStats();
+        return;
+    }
+
     for (const auto &throttle : parent->throttles) {
         percent_links_utilized += throttle.getUtilization();
     }
