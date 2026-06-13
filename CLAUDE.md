@@ -127,7 +127,7 @@ This branch studies the Network-on-Chip using a **CPU-less CHI 4×4 mesh testben
 
 For an detailed description of the DUT (topology diagram, tile/HNF/SNF placement, address interleaving, vnets, network parameters, traffic engine, and transaction flow), see [`ruby-book/final/chi_testbench_gem5/NocUnderTest.md`](ruby-book/final/chi_testbench_gem5/NocUnderTest.md).
 
-Both Ruby network models are supported via `--network`: **garnet** (default — detailed flit/router model; the driver auto-sizes `--link-width-bits` for single-flit CHI data packets and sets `per_vnet_links`) and **simple** (`SimpleNetwork`, with `simple_physical_channels` for one channel per vnet). Run the same scenarios against either to compare NoC behavior.
+The testbench uses the **simple** Ruby network model (`SimpleNetwork`, with `simple_physical_channels` for one channel per vnet), selected via `--network=simple`.
 
 **Per-tile wiring** (see `driver/cfg_rn.py`): there are no real CPUs. Each tile is
 
@@ -139,7 +139,7 @@ with **no L1 and no side router** — the controller connects directly to its me
 - `rnf_l2` (default): coherent L2-sized leaf cache (ReadShared/ReadUnique/snoops).
 - `rni`: cache-less, DMA-like (ReadOnce/WriteNoSnp), nothing cached at the RN.
 
-**Driver entry** (`driver/rbook_testbench_gem5.py`): builds the `System`, loads a `--scenario` module, and swaps `CHI.create_system`'s request-node/Misc-node factories via the `system._rnf_gen` / `system._mn_gen` hooks. Defaults: 16 CPUs/L3s, 2 dirs, `CustomMesh` topology, `noc_config/rbook_4x4.py`, garnet network. Key flags: `--scenario`, `--active-cores`, `--operation` (store/load), `--num-outstanding-reqs`, `--allow-retryack` (HNF retry vs. backpressure), `--rn-mode`, `--network` (garnet/simple).
+**Driver entry** (`driver/rbook_testbench_gem5.py`): builds the `System`, loads a `--scenario` module, and swaps `CHI.create_system`'s request-node/Misc-node factories via the `system._rnf_gen` / `system._mn_gen` hooks. Defaults: 16 CPUs/L3s, 2 dirs, `CustomMesh` topology, `noc_config/rbook_4x4.py`, simple network. Key flags: `--scenario`, `--active-cores`, `--operation` (store/load), `--num-outstanding-reqs`, `--allow-retryack` (HNF retry vs. backpressure), `--rn-mode`, `--network` (simple).
 
 **Running**: `make -C ruby-book/final/chi_testbench_gem5 run-memset|run-ping_pong|run-all` (pass `RN_MODE=rni|rnf_l2`). Each run writes a timestamped `m5out/` dir, consistent with the timeout-wrapper guidance above.
 
