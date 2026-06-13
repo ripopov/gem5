@@ -1,615 +1,576 @@
-# CreditedLinkBuffer — Design Specification
+# CreditedLinkBuffer - Requirements and gem5 Design
 
-A credit-based, latency-accurate, **head-of-line-eliminating** link buffer for
-gem5's Ruby **SimpleNetwork**. It models a single point-to-point
-flow-controlled channel endpoint: the **receiver-side input buffer** of a
-switch/XP together with the **producer-side credit accounting** for the link
-that feeds it.
+`CreditedLinkBuffer` is the link-level building block for making Ruby's
+`SimpleNetwork` behave like a finite, credit-controlled NoC link while keeping
+the network at message granularity. It models the receiver-side input storage
+of one link/channel and the producer-visible credit count for that same
+downstream storage.
 
-This document is the reference design: storage, latency, and credit models; the
-producer/consumer scheduling and notification protocol; the public API; the
-causality rules; the invariants; and the rationale, with citations to the
-codebases the design draws from (Sparta, SystemC/TLM-2.0, BookSim 2, gem5
-Garnet).
+The component is intentionally small: one producer, one consumer, one credit
+pool, and one ordered admission stream of Ruby messages. Multi-channel or
+multi-vnet links compose several buffers.
 
-## Status: fixed semantics, open backend
+## 1. Problem statement
 
-This spec deliberately separates two layers:
+Ruby `SimpleNetwork` currently uses `MessageBuffer` as a powerful high-level
+building block: it carries messages, models enqueue delay, exposes capacity,
+drives wakeups, and participates in gem5's normal tracing and functional-access
+machinery. That is the right style of abstraction for this work. The problem
+is that the specific contract exposed by `MessageBuffer` is not specific enough
+for a credited NoC link: it has capacity-based backpressure, but not delayed
+credit return, an explicit credit lifetime, or oldest-eligible selection.
 
-- **Fixed (the contract).** The credit FSM, credit-return-on-departure timing,
-  the producer/consumer interface, the causality rules, the RTT sizing rule, and
-  the feature-off byte-identity. These are normative — change them and you are
-  modelling something else.
-- **Open (the implementation).** The storage container, whether maturation is a
-  separate stage or a predicate, and whether the class *extends* `MessageBuffer`
-  or is *standalone*. Several backends satisfy the same contract; §4 and §11
-  enumerate them with trade-offs. Because the credit FSM is decoupled from
-  storage (P11), this choice is deferrable and swappable.
-
----
-
-## 1. Motivation and Scope
-
-### 1.1 The goal
-
-We are evolving gem5's Ruby **SimpleNetwork** into a model of a realistic **AMBA
-CHI / CMN-style interconnect** — specifically the input buffering and crosspoint
-(XP) behaviour of a packet-switched mesh. SimpleNetwork was chosen over Garnet
-for its message (= packet) granularity and modelling productivity: for
-single-flit CHI traffic it sits at the right abstraction level. But to make it
-behave like a *real* CHI link and XP, it must reproduce the link-level mechanics
-a real NoC has — and that SimpleNetwork today does not. This component supplies
-exactly those mechanics as one reusable building block.
-
-### 1.2 What a real CHI/CMN link + XP does (the reference behaviour)
-
-- **Credit-based flow control.** The sender holds *credits* equal to the number
-  of free slots in the downstream input buffer. A send consumes a credit; when a
-  slot frees, the receiver sends a *credit* back; that credit travels over a
-  **return latency** before the sender may reuse it.
-- **Finite per-VC input buffering, sized to the bandwidth–delay product.** To
-  keep a link full you need `credits ≥ round-trip time`; with fewer credits the
-  link throttles even when the receiver is draining freely.
-- **Head-of-line-eliminating arbitration.** At the XP, a packet bound to a
-  *free* output is served even if an older packet bound to a *busy* output sits
-  ahead of it. (The target RTL router does this.)
-- **Three physically distinct realities:** forward wire delay, buffer occupancy,
-  and the backward credit-return delay are independent quantities.
-
-### 1.3 The problems — what SimpleNetwork cannot model today
-
-The root cause is that a single `MessageBuffer` at a SimpleNetwork switch input
-plays **three fused roles** (`src/mem/ruby/network/simple/{PerfectSwitch,Throttle}.cc`):
-it is the *delay line* (the `delta` to `enqueue()`, `Throttle.cc:203`), the
-*input storage* (the queue `PerfectSwitch` drains, `PerfectSwitch.cc:200,247`),
-**and** the *flow-control signal* (its finite capacity, checked instantaneously
-via `areNSlotsAvailable()`, `PerfectSwitch.cc:216` / `Throttle.cc:186`). On top
-of that, `PerfectSwitch` is **head-only** — it never looks past the head of an
-input buffer. The concrete consequences:
-
-| # | Problem | Consequence — what you cannot model today |
-|---|---------|-------------------------------------------|
-| **G1** | **Zero-latency credit return.** A freed slot is visible to the producer the same cycle the consumer dequeues. | No credit-return latency; cannot reproduce throughput throttling when `credits < RTT`, nor the *timing* of congestion propagation. |
-| **G2** | **Credits == capacity.** The only backpressure knob is the physical buffer depth. | Cannot set credit count independently of storage; cannot study credit/buffer sizing or the bandwidth–delay product. |
-| **G3** | **Wire, storage, and flow-control are one knob.** | Cannot separate "slow because far" (latency) from "slow because congested" (backpressure) — they share a parameter. |
-| **G4** | **Head-only switching (no HoL elimination).** | A head bound to a busy output stalls everything behind it, including packets to *free* outputs; HoL and congestion effects are under-modelled, and a HoL-eliminating RTL XP cannot be represented at all. |
-| **G5** | **No reusable, instrumented primitive.** | Each experiment re-derives ad-hoc buffering; want one building block whose stats/probes/checkpointing come for free and that can be iterated on. |
-
-### 1.4 What `CreditedLinkBuffer` provides
-
-| Capability | Solves |
-|------------|--------|
-| An explicit **credit pool** with a **configurable credit-return latency**, decremented on send and incremented only on a *delayed* event. | G1 |
-| Credit count **decoupled from buffer capacity** (`credits` independent of `buffer_size`, sized to `RTT`). | G2 |
-| **De-conflated** wire delay (`t_link`), storage, and credit signal as separate parameters. | G3 |
-| **Out-of-order (OOO) selection** so a packet to a free output is served past a head to a busy one. | G4 |
-| Built on / beside `MessageBuffer` machinery (or a focused standalone class) so **instrumentation is reused**. | G5 |
-
-### 1.5 Scope
-
-**In scope:** one producer, one consumer, one credit pool (a single VC / flow),
-with OOO selection for HoL elimination within that flow.
-**Out of scope (compose, don't bake in):** multiple VCs and switch arbitration —
-those live in the *router/XP*, built from one `CreditedLinkBuffer` per VC/flow.
-
----
-
-## 2. Design Principles (and where they come from)
-
-| # | Principle | Source / evidence |
-|---|-----------|-------------------|
-| P1 | **Separate the three concerns** — wire delay, storage, credit return are independent parameters. Fusing them makes "slow because far" indistinguishable from "slow because congested," and forces buffer-depth = link-latency. | SystemC keeps `sc_fifo` (storage, zero-delay) separate from PEQ delay channels and from credit events. Garnet uses a separate `CreditLink` with its own `m_latency`. |
-| P2 | **Credit counter is producer-side state; return *deltas*.** The upstream owns the count of free downstream slots; the downstream only emits "+N freed". Neither side reads the other's occupancy across the link (that would be acausal). | Sparta: producer holds `credits_`, `+=` on return, `--` on send. Garnet `OutVcState` lives on the upstream `OutputUnit`. BookSim `BufferState` lives on the sender. |
-| P2′ | **Hosting vs. semantics.** In gem5 the producer holds a pointer to the downstream buffer, so the credit counter may be *hosted on the buffer object* for convenience. This stays causal **iff** the counter is only incremented by *delayed* events — the lag is in the increment timing, not the read. | This conversation. |
-| P3 | **Return the credit when the message *departs to the output*, not when it arrives, and not when it merely matures.** A credit represents an input-buffer slot held until the message wins arbitration and crosses to the output. | Garnet generates the credit in the downstream `SwitchAllocator::arbitrate_outports` — exactly at departure (`SwitchAllocator.cc:246`). Matches RTL: credit returns when the item won arbitration and moved to the output buffer. |
-| P4 | **Credit return is a real, separately configurable latency.** | Garnet `CreditLink::m_latency`; BookSim separates wire `_delay` from processing `_credit_delay`. |
-| P5 | **Size credits to the round-trip time, not to memory.** Throughput caps at `min(1, credits/RTT)`. Storage must be ≥ credits so the *credit counter*, never the container, is the binding constraint. | Dally & Towles ch. 13 (`F_min = t_rt·b/L_f`); BookSim `vc_buf_size` independent of `buf_size`; Garnet `m_max_credit_count` independent of `flitBuffer`. |
-| P6 | **Break the zero-time feedback loop:** forward (data) latency must be ≥ 1 cycle so a credit→send→credit chain cannot recurse within one tick. | Sparta: data ports carry ≥1-cycle delay, credit ports 0. |
-| P7 | **Make same-tick credit visibility an explicit, consistent rule.** An off-by-one shifts effective RTT by a full cycle. | SystemC `notify(SC_ZERO_TIME)` → next delta; BookSim `+_delay-1`; Garnet routes all through `clockEdge()`. |
-| P8 | **Guard the counter with asserts** (`0 ≤ credits ≤ max`) — a leak inflates bandwidth, a lost credit deadlocks. | Garnet `OutVcState` asserts `>=0` on decrement, `<=max` on increment. |
-| P9 | **Opt-in, default-off / feature-isolated.** With credits disabled (or for plain `MessageBuffer`s), behaviour is byte-identical to today, so every protocol controller and regression is untouched. | This conversation; mirrors the `SwitchPortBuffer(MessageBuffer)` pattern (`SimpleNetwork.py:96`). |
-| P10 | **Self-collapsing per-cycle wake**, not a reschedule per event. | Sparta `UniqueEvent`/`SingleCycleUniqueEvent`. |
-| P11 | **Fix the semantics, keep the backend open.** The credit FSM and the producer/consumer contract are independent of the storage container and of whether the class extends `MessageBuffer` or is standalone. Choose the backend per need; it is swappable. | This conversation (storage/inheritance debate). |
-
----
-
-## 3. Structure
-
-```
-        PRODUCER  (upstream XP / Throttle)
-            |
-            |  (1) hasCredit(n)?  --no-->  stall; woken later by credit callback (6)
-            |  (2) yes: enqueue(msg, now, t_link)  ->  credits -= n     (spend at send)
-            v        ...the message becomes "ready" at now + t_link  (wire delay, >=1)
-
-   CreditedLinkBuffer  (one per link/VC; storage backend is an OPEN choice, see Sec.4)
-   +--------------------------------------------------------------------------+
-   |   CREDIT POOL (producer-view):   credits = 3 / max = 5   [#][#][#][.][.]  |
-   |                                                                          |
-   |   STORAGE  (holds each item from enqueue until it departs to an output): |
-   |      * maturing : items not yet ready (ready at enqueue_tick + t_link)   |
-   |      * ready    : eligible items = the arbitration set                   |
-   |      occupancy = maturing + ready ;  capacity >= credits   (P5)          |
-   +--------------------------------------------------------------------------+
-            |
-            |  (3) arbitration @ now:  selectEligible(out j) ->
-            |        OLDEST ready item whose route == j  (skips items bound to
-            |        busy/other outputs  ==>  head-of-line ELIMINATION)
-            v
-        CONSUMER  (downstream XP arbiter / crossbar)
-            |
-            |  (4) popAt(winner)  ->  item DEPARTS to the output  (OOO removal)
-            |        -> schedule CreditReturnEvent @ now + t_creditReturn   (P3, P4)
-            v
-        CreditReturnEvent fires (delayed by t_creditReturn):
-            (5) credits += n          (assert credits <= max)
-            (6) fire creditCB  ->  wake the stalled producer
-
-   Latencies:   t_link         = forward wire delay   (>= 1 cycle, P6)
-                t_creditReturn = credit return delay   (independent of t_link, P4)
-
-   RTT_min    =  t_link + 1 (min dwell) + t_creditReturn
-   throughput =  min( 1 ,  credits / RTT_min )   slots/cycle
-   =>  size credits >= RTT_min for full bandwidth (P5); fewer credits throttle the link.
+```text
+Producer / throttle
+    |
+    | enqueue(delta = link latency)
+    v
+MessageBuffer at next switch input
+    |
+    | head-only dequeue by PerfectSwitch
+    v
+Next switch pipeline
 ```
 
-The component owns **two** logical pieces of state: the **storage** (items from
-enqueue to departure, internally split into *maturing* and *ready*) and the
-**credit pool**. The **wire delay** is not stored — it is the `t_link` the
-producer passes to `enqueue()`. The **credit return delay** `t_creditReturn` is
-a parameter. How the storage is realized is deliberately open (§4).
+In the current `SimpleNetwork` path the same queue already covers useful
+high-level behavior:
 
----
+- the forward delay line, through the `delta` passed to `enqueue()`;
+- the input storage, through messages held in `MessageBuffer`;
+- the backpressure signal, through `areNSlotsAvailable()`.
 
-## 4. Storage Model — contract and backend options
+For credited NoC modelling, that contract leaves five gaps.
 
-### 4.1 The container-agnostic contract (FIXED, P11)
+| Gap | Current behavior | Why it is a problem |
+| --- | --- | --- |
+| G1 | A slot freed by `dequeue()` is visible to the producer immediately. | There is no credit-return latency, so congestion propagates too quickly and credit-limited throughput cannot be reproduced. |
+| G2 | The only backpressure knob is `buffer_size`. | Credit count cannot be sized independently from physical storage. |
+| G3 | Link latency, storage depth, and flow-control timing are not independently configurable. | A slow distant link and a congested downstream buffer are hard to distinguish. |
+| G4 | `PerfectSwitch` only examines the head of each input buffer. | A message for a blocked output can stall newer messages for free outputs. |
+| G5 | The network lacks a reusable credited-buffer primitive. | New experiments would need ad hoc buffering, stats, wakeups, and checkpoint handling. |
 
-The credit FSM (§6) and the consumer/producer API (§7–§8) depend only on this
-contract. *Any* backend that satisfies it is valid:
+`CreditedLinkBuffer` solves these gaps without lowering the network model to
+individual wires and RTL queues. It remains one gem5-level component, but its
+public contract includes the NoC-level semantics we need: a producer may inject
+only when it owns a credit, sending consumes that credit, and the credit
+returns only after the message leaves the downstream input buffer and the
+configured return latency has elapsed.
 
-| Operation | Meaning |
-|-----------|---------|
-| `insert(msg, ready_tick)` | admit an item that becomes eligible at `ready_tick = enqueue_tick + t_link` (supports per-item / variable delay). |
-| `isReady(now)` | does any item with `ready_tick ≤ now` exist? |
-| `selectEligible(pred, now)` | return a handle to the **oldest** item with `ready_tick ≤ now` satisfying `pred` (e.g. `route(msg)==output && downstreamHasCredit`). Oldest-first preserves per-(input,output) order while letting the arbiter skip items bound elsewhere → **HoL elimination**. |
-| `remove(handle)` | remove the selected item **from anywhere** in the buffer (the winner need not be the head). |
-| `occupancy()` | total items held = maturing + ready; **`capacity ≥ credits`** (P5). |
+The model should preserve the existing `SimpleNetwork` behavior when credited
+mode is disabled. This keeps classic `simple` regressions and existing Ruby
+controllers out of the blast radius.
 
-Plus: **single producer / single consumer per credit pool** (P2; SystemC
-`sc_fifo` contract). Multi-source links use one `CreditedLinkBuffer` per source.
+## 2. List of features Credited Link Buffer should support
 
-Note what the contract does **not** fix: whether "maturing" is a distinct
-physical stage, what container holds the ready set, and how `remove` is
-implemented. Those are open (§4.2).
+### 2.1 Explicit credit pool
 
-### 4.2 Backend options (OPEN — pick per need)
+Each credited buffer has:
 
-**Option A — two-stage: maturation heap + ready deque (reuse-maximizing).**
-Keep `MessageBuffer`'s inherited `m_prio_heap` as the *maturation* stage (it is
-good at time-ordered release and variable per-item delay), and, on access, move
-matured items (`ready_tick ≤ now`) into a separate **ready deque** that supports
-OOO scan + erase. Reuses the heap, the existing maturation/wakeup scheduling,
-and all instrumentation. `selectEligible`/`remove` operate on the deque;
-`insert` feeds the heap. (This is the "extend `MessageBuffer`" path, §11.A.)
+- `max_credits`: the number of slots the producer is allowed to have in flight;
+- `credits`: the currently available producer-side credits;
+- `credit_return_latency`: the delay between freeing a downstream slot and
+  making that credit visible to the producer.
 
-**Option B — single ready container with `ready_tick` (simplicity-maximizing).**
-Hold all items in one container (deque / small vector / intrusive list); each
-entry carries its `ready_tick`; *maturation is just a predicate* (`ready_tick ≤
-now`) inside `selectEligible`. No separate heap, no move step. At NoC buffer
-depths (≤ tens) the linear scan is trivial, so the two-stage split buys little.
-Works either as an extension or standalone.
+`credits` starts at `max_credits`. A successful send decrements it. A delayed
+credit-return event increments it.
 
-**Orthogonal axis — extend vs standalone:**
+### 2.2 Credit count decoupled from storage capacity
 
-| | Extend `MessageBuffer` | Standalone SimObject |
-|--|------------------------|----------------------|
-| Reuse | heap, maturation scheduling, consumer wakeup, stats, functional access, serialization | none — re-implement the surface you need |
-| Cleanliness | inherits unused protocol machinery (stall map, recycle, deferred msgs) | single responsibility |
-| Obligation | override `functionalRead/Write` + `serialize` so the *added* ready container is not invisible; occupancy/credit count must span both containers | implement `functionalRead/Write`, `serialize`, stats from scratch |
-| Substitutability | already a `MessageBuffer` (drop-in where the network expects one) | needs the network to hold the concrete type or a shared base |
+`max_credits` is a flow-control parameter, not a synonym for `buffer_size`.
+The storage capacity must be at least as large as the credit pool:
 
-**Decision guidance (not a mandate):**
-- Prioritizing reuse / minimal disruption, and you like the heap doing
-  maturation → **A (extend, two-stage)**.
-- Prioritizing a clean single-purpose container, and a scan-per-cycle is fine at
-  your depths → **B**, standalone or extended.
-- Because of the §4.1 contract and P11, you can start with one and swap later;
-  the credit FSM and the XP-facing API do not change.
-
----
-
-## 5. Latency Model — three independent latencies
-
-| Latency | Symbol | Where it lives | Models |
-|---------|--------|----------------|--------|
-| **Forward / wire** | `t_link` | `enqueue(msg, now, t_link, …)` `delta` (producer-supplied, as Throttle does today) | Time to traverse the link and land in the buffer. **Must be ≥ 1 cycle (P6).** |
-| **Dwell** | `dwell` | emergent: time from `ready` until the item wins arbitration and is `popAt`'d | Router pipeline / arbitration / contention. ≥ 1 cycle. |
-| **Credit return** | `t_creditReturn` | `credit_return_latency` parameter | Time for the freed-slot credit to reach the producer **after departure**. Configurable, independent of `t_link`. |
-
-The **round-trip time** a single credit is "out of circulation" is
-
-```
-RTT = t_link + dwell + t_creditReturn          (+ any 1-cycle apply overhead)
+```text
+buffer_size >= max_credits
 ```
 
-**For credit *sizing*, use the no-contention minimum** `RTT_min = t_link + 1 +
-t_creditReturn`. Under contention `dwell` grows, but then the consumer — not the
-credit loop — is the bottleneck, so the larger RTT does not demand more credits.
+This makes the credit loop the intentional bottleneck. Extra storage may exist
+for implementation slack, but it must not silently change credit-limited
+throughput.
 
-Sustained per-flow throughput is `min(1, credits / RTT_min)` slots/cycle (one
-slot = one single-flit message for the CHI NoC). This is the **bandwidth–delay
-product** rule (P5): you need ≥ `RTT_min` credits to keep an *uncongested* link
-full; fewer credits idle it `(RTT_min − credits)/RTT_min` of the time even when
-the consumer drains freely. Reproducing that throttle is the reason the
-component exists.
+### 2.3 Explicit forward and return latency knobs
 
----
+The forward link delay remains the `delta` used when the producer enqueues a
+message. The credit-return delay is a separate public knob on the same
+high-level component:
 
-## 6. Credit Model
-
-### 6.1 State
-
-```
-credits      : current credits the producer may still spend   (0 … max_credits)
-max_credits  : credit pool size = downstream admission limit   (the P5 knob)
+```text
+send at T
+  -> message becomes ready at T + forward_link_latency
+  -> message waits until it wins downstream arbitration
+  -> credit returns at departure + credit_return_latency
 ```
 
-`credits` is initialized to `max_credits` at `startup()` (link begins fully open
-— Sparta "send initial credits", P2).
+The minimum useful round-trip credit time is:
 
-### 6.2 Decrement on send, increment on delayed departure (P3)
+```text
+RTT_min = forward_link_latency + 1 cycle of downstream residency
+          + credit_return_latency
+```
 
-- **Decrement (at send).** The producer calls `enqueue(msg, now, t_link, …)`
-  only after `hasCredit(n)` returns true. `enqueue` asserts the credit, does
-  `credits -= n`, and `insert`s the item (eligible at `now + t_link`). The
-  credit is spent at *send* time, reserving a future slot so two in-flight items
-  cannot oversubscribe (hence `buffer_size ≥ credits`).
-- **No credit on maturation.** When a maturing item becomes ready (Option A's
-  heap→deque move, or simply `ready_tick ≤ now` in Option B), **no credit is
-  returned** — the item still occupies an input-buffer slot.
-- **Increment (at departure + return latency).** When the consumer wins
-  arbitration and removes the item with `popAt` at `t_depart`, the buffer
-  schedules a **`CreditReturnEvent`** at `t_depart + t_creditReturn`. When it
-  fires: `credits += n` (assert `≤ max_credits`, P8) and **notify the
-  producer** (§7).
+With one-slot messages, an uncongested link needs roughly `RTT_min` credits to
+send one message per cycle. Fewer credits intentionally throttle the producer.
 
-This timing is the load-bearing point: the credit is held for the item's full
-residency (maturing **and** ready) and returns **only when it wins arbitration
-and crosses to the output** — exactly matching an RTL credited input buffer.
-Returning earlier (on arrival, on maturation, or on a demux into per-output
-lanes) shortens the apparent RTT and over-admits.
+### 2.4 Credit return on departure, not on arrival
 
-### 6.3 Granularity
+A credit represents a downstream input slot. The slot is occupied from
+producer send until the message leaves the buffer for the next switch stage or
+output link. Therefore:
 
-Credits count **slots** (one per single-flit CHI packet). `n` defaults to 1.
-For variable-size messages, `n = ceil(bytes / slot_bytes)`. (For the CHI NoC,
-everything is single-flit, so `n == 1`.)
+- do not return a credit when the message arrives;
+- do not return a credit when the message becomes ready;
+- return the credit only when the consumer removes the message from the
+  credited buffer.
 
----
+This is the most important timing rule in the design.
 
-## 7. Producer Scheduling and Notification
+### 2.5 Producer wakeup on credit return
+
+When credits are exhausted, the producer must stall rather than dropping or
+polling aggressively. A delayed credit return should wake the producer through
+a callback or event hook. The producer can then retry the send path.
+
+The wakeup path should collapse repeated credit returns in the same cycle into
+one scheduled producer wakeup.
+
+### 2.6 Ready-message selection for HoL elimination
+
+The consumer must be able to select the oldest ready message satisfying a
+predicate, not only the physical head:
+
+```text
+oldest ready message where route(message) == output
+                         and output has space/credit
+```
+
+This supports head-of-line (HoL) elimination inside a link/vnet buffer: a
+message for a free output can pass an older ready message whose output is
+blocked. The selector must still preserve order among messages that target the
+same output.
+
+The same buffer should also support a head-only mode for behavior-equivalent
+bring-up and for router models that intentionally do not eliminate HoL.
+
+### 2.7 One buffer per independent flow-control domain
+
+The component models one credit pool. A network link with multiple vnets or
+physical channels should instantiate one `CreditedLinkBuffer` per independent
+credit domain. A starved vnet must not consume credits from another vnet.
+
+### 2.8 Functional access, checkpointing, and stats
+
+The buffer must remain visible to gem5's normal infrastructure:
+
+- functional reads and writes must see every message in the credited storage;
+- serialization must checkpoint all queued messages and credit state;
+- stats must expose credit stalls, credit occupancy, credit returns, storage
+  occupancy, and HoL skips.
+
+For the disabled mode, existing `MessageBuffer` stats and behavior should stay
+unchanged.
+
+### 2.9 Disabled mode
+
+`max_credits == 0` means credited mode is disabled. In disabled mode:
+
+- `hasCredit(n)` returns true;
+- enqueue/dequeue timing follows the existing `MessageBuffer` behavior;
+- no credit-return events are scheduled;
+- classic `SimpleNetwork` behavior remains the reference.
+
+## 3. Proposed public API
+
+The API is split by role. Producer-side calls spend credits and insert
+messages. Consumer-side calls select ready messages and return credits after
+departure.
+
+### 3.1 Parameters
+
+Python-facing parameters should be available either on a
+`CreditedLinkBuffer` SimObject or as guarded `MessageBuffer` parameters,
+depending on the implementation option chosen in section 5.
+
+```python
+credits = Param.Unsigned(
+    0,
+    "Credit pool size; 0 disables credited mode",
+)
+
+credit_return_latency = Param.Cycles(
+    1,
+    "Cycles from downstream departure until credit is visible upstream",
+)
+
+enable_ooo_pop = Param.Bool(
+    True,
+    "Allow oldest-eligible selection instead of head-only dequeue",
+)
+```
+
+The constructor should reject invalid credited configurations:
+
+- `credits > 0` with `buffer_size != 0` and `buffer_size < credits`;
+- credited enqueue with zero forward latency;
+- `enable_ooo_pop == true` on a backend that cannot remove from the selected
+  position.
+
+### 3.2 Producer-side API
 
 ```cpp
-if (link.hasCredit(n)) {                       // gate (replaces areNSlotsAvailable, P5)
-    link.enqueue(msg, now, t_link, rnd, warmup);   // spend credit + insert with wire delay
-}                                              // else: stall — do NOT drop (backpressure)
-link.registerCreditCallback(producerWake);     // fired on delayed credit return
-```
-
-On a `CreditReturnEvent` the buffer increments `credits` and invokes
-`producerWake`, which reschedules the producer's send attempt. To avoid a
-reschedule storm, `producerWake` pokes a **self-collapsing per-cycle event**
-(P10) that re-arms next cycle only while `hasCredit() && producer has traffic`.
-
-**Backpressure propagation (no drops).** If the consumer cannot drain (its own
-downstream is credit-starved), it stops winning arbitration → no
-`CreditReturnEvent`s fire → `credits` stays 0 → the producer stalls → *its*
-upstream credits drain. Congestion propagates hop-by-hop through credit
-starvation, with realistic timing instead of the current instantaneous check.
-
----
-
-## 8. Consumer Scheduling and Notification
-
-The consumer (downstream XP) is woken by the existing maturation/consumer
-mechanism when an item becomes ready. It then arbitrates with OOO selection:
-
-```cpp
-link.maybeMature(now);                          // Option A: heap->deque; Option B: no-op
-// For each output port j the arbiter is resolving this cycle:
-auto h = link.selectEligible(
-            [&](const Message& m){ return route(m) == j && out[j].hasCredit(); }, now);
-if (h.valid()) {
-    crossbarSend(out[j], link.peekAt(h));
-    link.popAt(h, now);          // OOO removal; schedules CreditReturnEvent @ now + t_creditReturn
-}
-```
-
-`selectEligible` returns the **oldest** ready item routing to `j`, so a message
-to a free output is served even when an older message to a *busy* output sits
-ahead of it — **head-of-line elimination** — while per-(input,output) order is
-preserved. The consumer never touches credits directly; `popAt` (departure) is
-what *causes* the delayed credit return (P2/P3).
-
-A **head-only** consumer (no HoL elimination) is the degenerate case: always
-select the head if its output has credit. That models a plain VC-FIFO XP and
-needs no OOO. Choose per the XP you are modelling (§10).
-
----
-
-## 9. Causality and Same-Tick Rules (P7)
-
-1. **Forward latency ≥ 1 (P6).** `enqueue` with `t_link == 0` is rejected/clamped
-   in credited mode. An item cannot be sent, matured, won, and credit-returned
-   within one tick, so a 1-credit link cannot spuriously sustain full rate.
-2. **A spent credit always returns strictly later than its own send.** Since
-   `t_link ≥ 1`, the earliest departure is `send + 1`, and the credit returns at
-   `depart + t_creditReturn` — never visible to the send that spent it. No
-   acausal self-credit regardless of `t_creditReturn`.
-3. **Credit returns land on a clock edge with defined priority.**
-   `CreditReturnEvent` is scheduled at `clockEdge(t_depart + t_creditReturn)`, at
-   an `EventQueue` priority **earlier** than producer send arbitration in that
-   tick, so a return due at tick *T* is seen consistently by every send decision
-   at *T*. Document the chosen priority next to the event class.
-4. **`credit_return_latency` semantics.** Additional delay beyond departure.
-   `== 1` ⇒ credit usable the cycle after departure; `== 0` ⇒ same edge the item
-   departed (a 1-cycle minimum back-channel still holds because departure is a
-   clock-edge event). True zero-cost credit return (today's behavior) is the
-   **disabled** mode (`credits == 0`), not `credit_return_latency == 0`.
-
----
-
-## 10. Head-of-Line Elimination — model options
-
-The user's target XP eliminates HoL, so OOO selection is the primary model;
-alternatives are documented for completeness. All are storage-backend choices
-under the §4.1 contract.
-
-**(1) OOO selection from a single ready set — recommended for HoL-eliminating
-XPs.** One buffer per VC; the arbiter `selectEligible`s the oldest ready item to
-a free output and `popAt`s it. The item stays in the input buffer until it wins,
-so the **credit returns exactly at departure** (P3) — correct RTL timing. OOO
-`remove` is the only special storage requirement, satisfied by either §4.2
-backend (deque erase, or heap-vector erase). At NoC depths the scan/erase is
-cheap. This is the design the rest of this spec is written around.
-
-**(2) Per-output FIFO lanes (demux on enqueue) — not recommended here.** Route
-each item into `lane[output]` on arrival; each lane is head-only FIFO; the
-arbiter peeks lane heads. Avoids arbitrary removal, **but**: (a) needs
-`N_out × N_vc` queues per input; and (b) the credit boundary is wrong unless the
-*lanes themselves* are the credited storage — popping from a credited buffer to
-demux into lanes returns the credit *before* arbitration (P3 violation). Making
-the lanes the credited storage re-introduces (a)'s complexity. Prefer (1).
-
-**(3) Head-only FIFO (no HoL elimination) — simplest.** Serve only the head if
-its output has credit. No OOO, no lanes; models a VC-FIFO XP where VCs (e.g. the
-CHI TgtID split) provide flow separation and HoL within a VC is real. Valid when
-the modelled XP does *not* eliminate HoL.
-
-Per-VC structure is always by **composition**: one `CreditedLinkBuffer` per VC,
-each with its own credit pool, so a starved VC never blocks siblings (Garnet /
-BookSim per-VC credits). HoL elimination, when used, is *within* a VC's buffer
-via option (1).
-
----
-
-## 11. Proposed API
-
-The **interface and behaviour are fixed**; the two skeletons below are the two
-implementation options from §4.2. Pick one; the XP-facing API is identical.
-
-### 11.1 Fixed interface
-
-```cpp
-// ---- Producer side ----
-bool     hasCredit(unsigned n = 1) const;          // !enabled || credits >= n
-unsigned curCredits() const;
+bool isCredited() const;
+bool hasCredit(unsigned slots = 1) const;
+unsigned availableCredits() const;
 unsigned maxCredits() const;
-void     registerCreditCallback(std::function<void()> cb);
 
-// ---- Consumer side ----
-void   maybeMature(Tick now);                      // Option A: heap->deque; Option B: no-op
-bool   isReady(Tick now) const;                    // any item ready_tick <= now
-using  Handle = /* stable handle into the ready set */;
-Handle selectEligible(const std::function<bool(const Message&)>& pred, Tick now) const;
-const Message* peekAt(Handle h) const;
-void   popAt(Handle h, Tick now, unsigned n = 1);  // OOO remove; schedule credit return
+void registerCreditCallback(std::function<void()> callback);
+void unregisterCreditCallback();
 
-// ---- Insert (producer) ----
-//   real MessageBuffer signature (MessageBuffer.hh:127):
-//   enqueue(MsgPtr, Tick curTime, Tick delta, bool ruby_is_random,
-//           bool ruby_warmup, bool bypassStrictFIFO=false);
-//   credited path: assert hasCredit(1) && delta>=1cy; credits-=1; insert(msg, curTime+delta).
-
-// ---- Params (MessageBuffer.py or a standalone .py) ----
-//   credits               (0 => disabled; <= buffer_size)
-//   credit_return_latency (cycles after departure; default 1)
-//   enable_ooo_pop        (allow selectEligible/popAt; else head-only)
+void enqueue(MsgPtr message,
+             Tick cur_time,
+             Tick forward_latency,
+             bool ruby_is_random,
+             bool ruby_warmup,
+             bool bypass_strict_fifo = false);
 ```
 
-### 11.2 Option A — extend `MessageBuffer` (two-stage)
+Producer-side semantics:
 
-Add a ready deque beside the inherited heap; `enqueue`/`dequeue` gain guarded
-branches (they are non-virtual, so this is a guarded branch *inside* them, not an
-override). `CreditedLinkBuffer` is a Python subclass setting the params.
+| Call | Credited-mode behavior |
+| --- | --- |
+| `hasCredit(slots)` | True when at least `slots` credits are available. |
+| `enqueue(...)` | Asserts `hasCredit(1)` and `forward_latency > 0`, decrements `credits`, and inserts the message with ready time `cur_time + forward_latency`. |
+| `registerCreditCallback(cb)` | Registers the event hook used to wake a stalled producer after delayed credit return. |
+
+If the class extends `MessageBuffer`, existing call sites can continue to use
+the familiar `enqueue()` signature. The credited branch must live where the
+actual enqueue mutation happens, not only in a subclass method that could be
+bypassed through a base pointer.
+
+### 3.3 Consumer-side API
 
 ```cpp
-// new members
-bool     m_credit_enabled;          // (credits != 0)
-unsigned m_credits, m_max_credits;
-Cycles   m_credit_return_latency;
-std::deque<Entry> m_ready;          // matured items (Entry = {MsgPtr, ready_tick})
-std::function<void()> m_credit_cb;
+struct CreditedBufferHandle
+{
+    bool valid() const;
+};
 
-// enqueue(): if (m_credit_enabled){ assert(hasCredit(1)); assert(delta>=1cy); --m_credits; }
-//            <existing insert into m_prio_heap>
-// maybeMature(now): pop heap entries with time<=now into m_ready
-// popAt(h,now,n): erase from m_ready; scheduleCreditReturn(n, now)
-// onCreditReturn(n): m_credits+=n; assert(<=max); if (m_credit_cb) m_credit_cb();
-// OVERRIDE functionalRead/Write + serialize to cover BOTH m_prio_heap AND m_ready
-// occupancy / credit accounting span both containers
+bool isReady(Tick cur_time) const;
+Tick readyTime() const;
+
+CreditedBufferHandle selectEligible(
+    const std::function<bool(const Message&)>& predicate,
+    Tick cur_time) const;
+
+const MsgPtr& peekAt(CreditedBufferHandle handle) const;
+Tick popAt(CreditedBufferHandle handle,
+           Tick cur_time,
+           unsigned slots = 1);
 ```
 
-### 11.3 Option B — standalone (single ready container)
+Consumer-side semantics:
+
+| Call | Behavior |
+| --- | --- |
+| `isReady(cur_time)` | True when at least one message has reached its ready time. |
+| `selectEligible(pred, cur_time)` | Returns the oldest ready message satisfying `pred`, or an invalid handle. |
+| `peekAt(handle)` | Reads the selected message without removing it. |
+| `popAt(handle, cur_time, slots)` | Removes the selected message and schedules a credit return for `slots`. |
+
+Head-only compatibility can be expressed as a degenerate selector: select the
+head only if it is ready and the downstream output is available.
+
+### 3.4 Same-tick and event-ordering rules
+
+The implementation must define one consistent rule for when returned credits
+become visible:
+
+- a credit-return event scheduled for tick `T` increments `credits` before the
+  producer's send decision for tick `T`;
+- a credit spent by a message cannot return before that message has departed;
+- credited enqueue rejects zero forward latency, so a send cannot credit
+  itself in the same tick.
+
+`credit_return_latency == 0` may mean "visible on the departure edge" if the
+event priority is documented. It must not mean classic instantaneous
+`areNSlotsAvailable()` behavior. Classic behavior is the disabled mode.
+
+### 3.5 Invariants
+
+The implementation should assert these invariants close to the mutation that
+could violate them:
+
+- `0 <= credits <= max_credits`;
+- one successful credited enqueue consumes exactly one credit by default;
+- one `popAt()` schedules exactly one credit return by default;
+- credit returns are never scheduled on message arrival or maturation;
+- functional access and serialization include all storage containers used by
+  the chosen backend.
+
+## 4. Design principles
+
+### 4.1 Keep a high-level component, expose NoC-level knobs
+
+`CreditedLinkBuffer` should not decompose the link into a set of low-level
+objects. It should stay a single instrumentable gem5 component that owns the
+message storage, credit accounting, producer wakeup, and stats. What changes is
+the public contract: forward latency, storage capacity, credit count, and
+credit-return latency become explicit knobs so experiments can distinguish
+distance, contention, and credit sizing.
+
+### 4.2 Credits are producer-visible state with delayed updates
+
+The producer decides whether it may send by reading `hasCredit()`. The count
+may be hosted on the buffer object for gem5 convenience, but it must change as
+if it were upstream-visible state: decrement at send, increment only through a
+delayed credit-return event.
+
+No producer should infer remote buffer occupancy directly from the downstream
+container size.
+
+### 4.3 Credit lifetime matches slot lifetime
+
+A message owns a downstream input slot until the consumer removes it from the
+credited buffer. The credit lifetime must match that slot lifetime. Returning
+the credit earlier changes both throughput and backpressure timing.
+
+### 4.4 Keep the default network path unchanged
+
+Credited behavior is opt-in. Plain `MessageBuffer`, classic `SimpleNetwork`,
+and SLICC controller queues should keep their existing behavior unless a
+specific network class instantiates or enables credited buffers.
+
+### 4.5 Compose per-vnet behavior instead of overloading one object
+
+The buffer models one flow-control domain. Multiple CHI channels, vnets, or
+physical lanes should be represented by multiple buffers. This keeps the credit
+accounting local and makes starvation/debugging easier.
+
+### 4.6 Preserve gem5 observability
+
+The buffer should not become invisible to functional access, checkpointing,
+statistics, or tracing. Any backend that adds a second container must update
+all of those surfaces.
+
+### 4.7 Make HoL elimination explicit
+
+Oldest-eligible selection is a router feature, not a side effect of the storage
+container. The API exposes it directly through `selectEligible()` and `popAt()`
+so the XP arbiter can choose between head-only and HoL-eliminating behavior.
+
+## 5. Implementation options
+
+The semantics above are fixed. The storage backend is still a design choice.
+
+### 5.1 Option A: extend MessageBuffer with credited mode
+
+This option keeps `CreditedLinkBuffer` as a `MessageBuffer`-compatible object.
+It adds guarded credited-mode state to the existing buffer implementation and
+uses a Python subclass for configuration.
 
 ```cpp
-class CreditedLinkBuffer : public SimObject /* or a shared RubyBuffer base */ {
-    std::deque<Entry> m_items;       // Entry = {MsgPtr, ready_tick}; maturation = predicate
-    unsigned m_credits, m_max_credits; Cycles m_credit_return_latency;
-    std::function<void()> m_credit_cb;
-    // insert/isReady/selectEligible(pred,now: ready_tick<=now && pred)/popAt as above
-    // implement functionalRead/Write + serialize + stats from scratch
+class CreditedLinkBuffer : public MessageBuffer
+{
+  public:
+    // Producer API: hasCredit(), availableCredits(), enqueue()
+    // Consumer API: selectEligible(), peekAt(), popAt()
+
+  private:
+    bool m_creditEnabled;
+    unsigned m_credits;
+    unsigned m_maxCredits;
+    Cycles m_creditReturnLatency;
+    std::function<void()> m_creditCallback;
 };
 ```
 
-### 11.4 Behavioural contract (both options)
+Two storage layouts are possible inside this option.
 
-| Call | Effect |
-|------|--------|
-| `hasCredit(n)` | `true` if disabled, else `credits >= n` |
-| `enqueue(…, delta, …)` (enabled) | `assert(hasCredit(1) && delta>=1cy)`; `credits-=1`; `insert(ready=now+delta)` |
-| `selectEligible(pred, now)` | oldest ready item satisfying `pred`, or invalid handle |
-| `popAt(h, now, n)` | OOO remove; `scheduleCreditReturn(n, now)` |
-| `onCreditReturn(n)` | `credits += n`; `assert(credits <= max)`; `credit_cb()` |
-| disabled (`credits==0`) | byte-identical to plain `MessageBuffer` |
+| Layout | Shape | Trade-off |
+| --- | --- | --- |
+| Heap plus ready deque | Keep the inherited priority heap for maturation, then move mature entries into a ready deque. | Reuses existing ready-time scheduling, but functional access, occupancy, and serialization must cover both containers. |
+| Single scan container | Store entries with `ready_tick` and scan for ready/eligible messages. | Simpler and likely fast enough for small NoC buffers, but reuses less of the current heap behavior. |
 
----
+Benefits:
 
-## 12. Lifecycle Walkthrough (one message + its credit)
+- easiest fit for `SimpleIntLink.buffers`, which are already
+  `VectorParam.MessageBuffer`;
+- reuses existing `MessageBuffer` wakeup, randomization, tracing, stats base,
+  and functional-access conventions;
+- keeps endpoint controller queues on the familiar type.
 
+Costs:
+
+- existing `MessageBuffer` methods are not all virtual, so credited behavior
+  must be implemented in the base mutation paths or all credited call sites
+  must hold the concrete type;
+- the class carries some controller-oriented features that the NoC link does
+  not need;
+- adding a ready deque requires careful updates to `getSize()`, `isEmpty()`,
+  `functionalRead()`, `functionalWrite()`, and serialization.
+
+This is the recommended first implementation if the goal is minimal disruption
+to the existing `SimpleNetwork` wiring.
+
+### 5.2 Option B: standalone SimObject
+
+This option implements a focused `CreditedLinkBuffer` that does not inherit
+from `MessageBuffer`.
+
+```cpp
+class CreditedLinkBuffer : public SimObject
+{
+  private:
+    struct Entry
+    {
+        MsgPtr message;
+        Tick readyTick;
+    };
+
+    std::deque<Entry> m_items;
+    unsigned m_credits;
+    unsigned m_maxCredits;
+    Cycles m_creditReturnLatency;
+};
 ```
- t0      Producer: hasCredit(1)==true -> enqueue(m, t0, t_link=2)
-         credits: 3 -> 2            (spent at send, §6.2)
- t0+2    m matures (ready); enters the ready set; consumer woken
- t0+2..  m waits while its output is busy / loses arbitration   <- dwell
-         (HoL elimination: other ready items to free outputs depart meanwhile)
- t5      m wins arbitration -> popAt(m) -> departs to output;
-         schedule CreditReturn @ t5 + 3
- t5      credits unchanged (still 2)        <- NOT restored until departure+return (P3)
- t8      CreditReturnEvent: credits 2 -> 3; producer wake fires
-         (visible to producer sends at the t8 edge, P7-3)
 
- Credit "out" t0..t8  =>  loop RTT = 8 = t_link(2) + dwell(3) + t_creditReturn(3).
- If max_credits < uncongested RTT_min (= t_link + 1 + t_creditReturn = 6),
- the link cannot stay full even when the consumer drains freely.
+Benefits:
+
+- smaller and easier to reason about;
+- no inherited stall-map, recycle, strict-FIFO, or controller queue behavior;
+- arbitrary selection/removal can be designed directly around XP arbitration.
+
+Costs:
+
+- new network code must hold `CreditedLinkBuffer*` rather than
+  `MessageBuffer*`;
+- functional access, serialization, stats, debug printing, and wakeup handling
+  must be implemented from scratch;
+- it is less suitable for incremental replacement of `SimpleIntLink.buffers`.
+
+This is attractive for a new XP-only network path where compatibility with
+classic `Switch` and `Throttle` is not required.
+
+### 5.3 Option C: credited wrapper around MessageBuffer
+
+This option stores a plain `MessageBuffer` internally and adds credit state in
+a wrapper object.
+
+Benefits:
+
+- avoids modifying `MessageBuffer` internals for the credit counter;
+- keeps the normal queue as the storage backend.
+
+Costs:
+
+- arbitrary `popAt()` is difficult if the wrapped buffer only exposes head
+  access;
+- functional access and serialization must cross object boundaries;
+- existing call sites using `MessageBuffer*` can bypass the wrapper unless the
+  network is fully converted.
+
+This option is viable only for head-only behavior or for a larger network
+refactor. It is not the preferred path for HoL-eliminating XP arbitration.
+
+### 5.4 Rejected shape: per-output demux lanes as the credit boundary
+
+A tempting implementation is to demultiplex each input into one FIFO per output
+and arbitrate among lane heads. That avoids arbitrary removal from a single
+container, but it changes the credit boundary unless each lane is separately
+credited. If the original input credit returns when a message moves into a
+lane, the credit returns before downstream arbitration and the timing is wrong.
+
+Use one credited input buffer with `selectEligible()` unless the hardware model
+really has separate credited per-output input lanes.
+
+## 6. Integration with SimpleNetwork / New Simple Network
+
+### 6.1 Classic SimpleNetwork baseline
+
+The relevant existing paths are:
+
+- `PerfectSwitch` routes from input buffers into per-output `port_buffers`;
+- `Throttle` drains `port_buffers` onto the next link;
+- both stages use `areNSlotsAvailable()` as instantaneous downstream
+  backpressure;
+- internal-link buffers are created by `SimpleIntLink.setup_buffers()`;
+- switch-local `port_buffers` are created by `Switch.setup_buffers()`.
+
+`CreditedLinkBuffer` should not be enabled in this baseline path by default.
+Classic `simple` remains the compatibility reference.
+
+### 6.2 New Simple Network placement
+
+For the XP-oriented network described in `NewSimpleNetwork.md`, the credited
+buffer belongs at the receiver side of each internal link and vnet/channel:
+
+```text
+upstream XP link driver
+    |
+    | hasCredit() / enqueue(delta = t_link)
+    v
+CreditedLinkBuffer for one downstream input vnet/channel
+    |
+    | selectEligible(route/output predicate)
+    v
+XP arbiter and staging buffer
+    |
+    | popAt() schedules delayed credit return
+    v
+downstream output/link stage
 ```
 
----
+The XP link driver spends the downstream buffer's credit when it sends. The XP
+arbiter returns that credit when it grants the message out of the input buffer
+into the next local stage.
 
-## 13. Invariants and Asserts (pitfalls, P8)
+### 6.3 Mapping to existing SimpleNetwork concepts
 
-- `0 ≤ credits ≤ max_credits` — assert on every mutation. Underflow ⇒ oversend
-  (gate bug); overflow ⇒ **double credit return / leak**.
-- `max_credits ≤ buffer_size` — checked at construction (P5).
-- `t_link ≥ 1` in credited mode (P6) — checked in `enqueue`.
-- **Exactly one `CreditReturnEvent` per `popAt`.** Missing ⇒ credit leak →
-  eventual deadlock; duplicate ⇒ inflated bandwidth + overflow assert.
-- **Credit returns on departure, never on maturation.** A return scheduled at
-  the heap→deque move (Option A) or at `ready_tick` (Option B) is a P3 bug.
-- `credits == 0` ⇒ feature disabled: no `CreditReturnEvent` ever scheduled;
-  behaviour equals plain `MessageBuffer` (regression safety, P9).
-- Option A only: occupancy, credit accounting, `functionalRead/Write`, and
-  `serialize` must span **both** the heap and the ready deque.
+| Existing concept | XP / credited equivalent |
+| --- | --- |
+| `SimpleIntLink.buffers` | One `CreditedLinkBuffer` per vnet/channel for internal links. |
+| `MessageBuffer::enqueue(delta)` | Still represents forward link latency. Credited mode also spends one credit. |
+| `areNSlotsAvailable()` | Replaced by `hasCredit()` at link-boundary send decisions. |
+| `PerfectSwitch` head peek/dequeue | Replaced by XP arbitration using `selectEligible()` and `popAt()`. |
+| `SwitchPortBuffer` | Remains a local staging buffer; it may use ordinary same-cycle slot checks. |
+| `Throttle` bandwidth accounting | Replaced or narrowed to the XP link driver, which enforces per-vnet/channel send rate and downstream credits. |
 
----
+The distinction is important: credits model flow control across a link. Local
+staging inside one XP can still use an immediate slot check because it is not a
+distance-crossing credit loop.
 
-## 14. Instrumentation
+### 6.4 Bring-up sequence
 
-- **Option A (extend):** inherits all `MessageBuffer` stats, debug flags
-  (`RubyNetwork`), functional access, serialization — *provided* the overrides
-  cover the ready deque (§13).
-- **Option B (standalone):** implement the functional/serialize surface and the
-  stats you want; optionally a shared helper.
+1. Add the buffer class and unit tests with `credits == 0` compatibility.
+2. Instantiate credited internal-link buffers in the XP network only.
+3. Teach the XP link driver to gate sends with `hasCredit()` and wake on credit
+   return.
+4. Keep XP arbitration head-only at first, using `popAt(head)` only.
+5. Enable `selectEligible()` for HoL-eliminating arbitration.
+6. Add per-vnet/channel credit and return-latency parameters to the NoC config.
 
-Add either way, into the buffer's `statistics::Group` at construction (Sparta
-auto-stats lesson):
-- `m_credit_stalls` — events with traffic but `credits == 0`.
-- `m_credit_occupancy` — running average of `max_credits − credits`; histogram
-  bucketed `0 … max_credits`.
-- `m_credit_returns` — total `CreditReturnEvent`s; must equal total `popAt`s at
-  drain (leak detector).
-- Storage occupancy (maturing/ready); the gap vs credit-occupancy shows the
-  bandwidth–delay-product slack.
+This sequence keeps each behavior change measurable.
 
----
+### 6.5 Validation expectations
 
-## 15. Integration with SimpleNetwork
+The implementation is correct only if these tests pass:
 
-- **Where:** the inter-switch **link buffers** created in
-  `SimpleLink.setup_buffers` (`SimpleLink.py:67`) become `CreditedLinkBuffer`s
-  (one per VC). Intermediate `SwitchPortBuffer` staging buffers stay vanilla
-  (`credits == 0`).
-- **Gate swap:** at `PerfectSwitch.cc:216` / `Throttle.cc:186` replace
-  `out->areNSlotsAvailable(1)` with `out->hasCredit(1)` (returns `true` for
-  non-credited staging, so one call site serves both).
-- **Arbitration:** the XP's per-output selection calls `selectEligible`/`popAt`
-  (HoL elimination) instead of the current head-only `peekMsgPtr`/`dequeue`
-  loop. If you build a bespoke XP, it can hold `CreditedLinkBuffer` directly —
-  then no `MessageBuffer` substitutability question arises (the network↔
-  controller edge keeps using `MessageBuffer`).
-- **Wire delay:** unchanged — Throttle passes `m_link_latency` as the `enqueue`
-  delta; that *is* `t_link`.
-- **Throttle role:** still models per-link **bandwidth**; credits model
-  **buffering/backpressure** — orthogonal knobs, as in real hardware.
-- **Producer wake:** route the credit callback into the XP's existing
-  wake/reschedule path so the producer wakes on credit return, not by polling.
+- disabled mode produces the same behavior as plain `MessageBuffer`;
+- credit conservation holds during execution:
+  `available credits + occupied slots + pending credit returns == max_credits`;
+  at drain, `available credits == max_credits`;
+- an uncongested one-hop test shows the throughput knee at the configured
+  credit round-trip time;
+- delayed credit return makes backpressure propagate upstream hop by hop;
+- a blocked-output HoL test shows that `selectEligible()` can drain messages
+  for a free output while head-only mode cannot;
+- checkpoint/restore and functional access see both maturing and ready
+  messages.
 
----
+### 6.6 Open implementation decisions
 
-## 16. Validation Plan
-
-1. **Disabled-mode identity:** `credits == 0` → full Ruby regression suite +
-   CHI testbench (`run-memset`, `run-ping_pong`) diff byte-identical (P9).
-2. **Throughput knee:** single producer→consumer, always-ready consumer. Sweep
-   `credits` at fixed `RTT_min`; assert sustained throughput
-   `= min(1, credits/RTT_min)`, knee at `credits == RTT_min` (P5). Proves the
-   latency is real, not instantaneous.
-3. **Credit conservation:** at drain, `m_credit_returns == total popAt` and
-   `credits == max_credits` (no leak).
-4. **HoL elimination:** mix two flows in one buffer, one bound to a blocked
-   output; confirm the other flow still departs (would stall under head-only).
-5. **Backpressure propagation:** chain three credited buffers; stall the tail;
-   confirm credit starvation walks upstream with the expected per-hop delay.
-6. **Backend equivalence:** Options A and B with identical params must produce
-   identical latency/throughput traces (validates the §4.1 contract / P11).
-7. **A/B vs Garnet:** matched single-flit, per-VC-credit config; latency–
-   throughput curves agree within modelling tolerance.
-
----
-
-## 17. Rationale Summary (per source)
-
-- **Sparta:** producer-held credit counter; return deltas; data ≥1 / credit 0
-  latency; self-collapsing per-cycle wake; auto-stats from the storage
-  constructor; `Buffer<T>` for OOO erase with stable iterators.
-- **SystemC/TLM:** never fuse wire/storage/credit; model each latency as an event
-  at an absolute future time; retry on no-credit, never drop; notify deferred a
-  delta, never same-evaluate.
-- **BookSim/Garnet:** return the credit on **departure** over a separate
-  latency-bearing channel; credit count decoupled from container size; size to
-  RTT; per-VC pools so a starved VC never blocks siblings; assert leak/overflow.
-
----
-
-## 18. References
-
-- gem5 Garnet (local): `src/mem/ruby/network/garnet/{Credit.hh, OutVcState.cc,
-  OutputUnit.cc, InputUnit.cc, SwitchAllocator.cc, NetworkLink.cc,
-  CreditLink.hh}`.
-- gem5 SimpleNetwork (target): `src/mem/ruby/network/simple/{Throttle.cc,
-  PerfectSwitch.cc, SimpleLink.py, SimpleNetwork.py}`; `MessageBuffer.{hh,py}`.
-- Sparta: `sparta::DataOutPort/DataInPort`, `Buffer`, `Queue`
-  (https://sparcians.github.io/map/communication.html,
-  https://sparcians.github.io/map/classsparta_1_1Buffer.html); core_example
-  `Decode.{hpp,cpp}`; olympia `Dispatch.{hpp,cpp}`
-  (https://github.com/riscv-software-src/riscv-perf-model).
-- SystemC/TLM: Accellera `sc_fifo.h`; `tlm_utils::peq_with_get` /
-  `peq_with_cb_and_phase`
-  (https://github.com/accellera-official/systemc; Doulos TLM-2.0 notes).
-- BookSim 2: `src/{buffer_state,channel,credit,creditchannel,flitchannel}.*`,
-  `src/routers/iq_router.cpp` (https://github.com/booksim/booksim2).
-- W. Dally & B. Towles, *Principles and Practices of Interconnection Networks*,
-  ch. 13 (Flow Control) — credit sizing `F_min = t_rt·b/L_f`, i.e.
-  `credits ≥ RTT`.
-```
+- Choose Option A or Option B before coding the XP network integration.
+- Define the exact event priority for credit-return visibility.
+- Decide whether endpoint links remain uncredited initially, as proposed in
+  `NewSimpleNetwork.md`, or whether controller-facing queues also need
+  credited mode.
+- Decide whether credits always count one Ruby message or whether variable
+  message sizes should consume multiple slots in non-CHI experiments.

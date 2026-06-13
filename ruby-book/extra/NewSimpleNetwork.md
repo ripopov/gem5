@@ -27,7 +27,7 @@ int-link buffers (input of Switch i) ─────────────► 
 - `Throttle` (one per output link) models bandwidth (bytes/cycle) and applies
   `link_latency` when enqueuing into the next hop's input buffer.
 - Buffer occupancy is the only backpressure; freed slots are visible
-  instantly (the gaps G1–G5 analysed in `CreditedLinkBuffer.md` §1.3).
+  instantly (the gaps G1-G5 analysed in `CreditedLinkBuffer.md` section 1).
 - Wiring: `Topology::createLinks` → virtual
   `SimpleNetwork::make{ExtIn,ExtOut,Internal}Link` → `Switch::add{In,Out}Port`.
   Ext links have no buffers of their own: controller-owned `m_toNetQueues` /
@@ -51,7 +51,7 @@ XP one-to-one; each stage's flow control is what changes:
  │   eligible msg — eligible = routes there AND a      │    (HoL elimination)
  │   staging slot is free (local same-cycle check)     │
  │   grant: popAt() ─► upstream credit return          │ ◄─ credit returns at GRANT,
- │          enqueue(staging, delta = t_pipe)           │    per spec P3 / Garnet SA
+ │          enqueue(staging, delta = t_pipe)           │    per CLB departure rule
  │        ▼                                            │
  │ staging buffer, 1–3 deep, per (output,vnet)         │ ◄─ today's port_buffers, finite
  │        ▼                                            │
@@ -77,8 +77,8 @@ with return latency are reserved for what crosses *distance*: the links.
 | Output staging     | `port_buffers`, infinite by default  | `port_buffers` kept, finite 1–3 deep (`staging_depth`) |
 | Bandwidth          | Throttle bytes/cycle                 | ≤1 msg per output-channel per cycle at the link driver (CHI is single-flit) |
 | Backpressure       | instantaneous `areNSlotsAvailable` everywhere | credits + `credit_return_latency` on links; instantaneous slot check only intra-XP |
-| Input buffering    | infinite by default, fused with flow control | CLB capacity ≥ credits, sized to RTT |
-| Switching          | head-only                            | oldest-eligible (HoL elimination), per CLB spec §8/§10 |
+| Input buffering    | infinite by default, capacity check is the flow-control signal | CLB capacity ≥ credits, explicit delayed credit loop |
+| Switching          | head-only                            | oldest-eligible (HoL elimination), per CLB sections 2.6 and 3.3 |
 
 VC structure: vnet = CHI channel (req/snp/rsp/dat) = one CLB + one credit pool
 per (link, vnet) — exactly CHI's per-channel L-credits. The existing
@@ -114,7 +114,7 @@ SimObject classes are the XP subclasses. The testbench driver selects it via
 
 Stats: `XPSwitch` reproduces the Throttle/Switch stat surface (msg counts,
 link utilization, stall cycles) so existing analysis scripts keep working;
-CLB adds credit stalls / credit occupancy / return-count (spec §14); new
+CLB adds credit stalls / credit occupancy / return-count (CLB section 2.8); new
 arbiter stats (grants/cycle, HoL-skip count, staging occupancy).
 
 ## 4. Upstream-sync strategy
@@ -137,7 +137,7 @@ arbiter stats (grants/cycle, HoL-skip count, staging occupancy).
 ## 5. Roadmap
 
 **Phase 0 — CreditedLinkBuffer** (spec already written).
-Implement per `CreditedLinkBuffer.md` (backend per §4.2 there), with unit
+Implement per `CreditedLinkBuffer.md` (backend per section 5 there), with unit
 tests: disabled-mode identity, credit conservation, throughput knee at
 `credits == RTT_min`. Gate: full Ruby regressions + CHI testbench unchanged
 with `credits==0`.
@@ -156,13 +156,13 @@ rn-modes) runs and matches within the documented delta.
 spends/returns credits; arbiter gates on finite staging slots; `popAt` at
 grant drives the delayed upstream credit return; producer wake via credit
 callback. Gate: throughput-knee sweep on a 2-XP chain; backpressure walks
-upstream hop-by-hop with per-hop delay (spec §16.2/.5); staging-depth sweep
+upstream hop-by-hop with per-hop delay (CLB section 6.5); staging-depth sweep
 (1–3) shows the expected grant/link decoupling slack.
 
 **Phase 3 — HoL elimination.**
 Arbiter from head-only to `selectEligible` (oldest eligible per output),
 flag-controlled (`enable_ooo_pop`). Gate: blocked-output test — the flow to a
-free output keeps draining (spec §16.4); A/B head-only vs OOO on testbench
+free output keeps draining (CLB section 6.5); A/B head-only vs OOO on testbench
 scenarios.
 
 **Phase 4 — Calibration & experiments.**
@@ -191,6 +191,6 @@ interfaces). Only if endpoint flow control becomes the experiment's subject.
 - **Deadlock**: finite credits + finite staging + cyclic dependence — vnets
   already break protocol cycles, but credit/staging sizing per vnet must be
   validated under `--allow-retryack` off (pure backpressure mode).
-- **MessageBuffer backend choice** (extend vs standalone, CLB spec §4.2/§11)
+- **MessageBuffer backend choice** (extend vs standalone, CLB sections 5 and 3)
   trades reuse against upstream-diff size; decision deferred until Phase 0
   prototyping, as the spec allows.
