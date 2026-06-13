@@ -14,7 +14,7 @@ TIMESTAMP  = $(shell date +%Y%m%d-%H%M%S)
 RN_MODE ?= rnf_l2
 ACTIVE_CORES ?= all
 NUM_OUTSTANDING_REQS ?= 4
-NETWORK ?= garnet
+NETWORK ?= simple
 MESSAGE_BUFFER_VCD ?= 0
 EXTRA_ARGS ?=
 
