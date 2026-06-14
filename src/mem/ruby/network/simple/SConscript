@@ -60,3 +60,19 @@ Source('xp/XPNetwork.cc')
 Source('xp/XPSwitch.cc')
 
 Source('routing/WeightBased.cc')
+
+credited_link_buffer_test_srcs = [
+    'xp/CreditedLinkBuffer.cc',
+    '../MessageBuffer.cc',
+    '../../common/Consumer.cc',
+    '../../../../sim/port.cc',
+    '../../../../base/random.cc',
+    '../../../../base/statistics.cc',
+    '../../../../base/stats/info.cc',
+    '../../../../base/types.cc',
+    '../../../../sim/clock_domain.cc',
+    '../../../../sim/clocked_object.cc',
+]
+
+GTest('credited_link_buffer.test', 'xp/credited_link_buffer.test.cc',
+    *credited_link_buffer_test_srcs, with_tag('gem5 simobject'))
