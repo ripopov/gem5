@@ -86,3 +86,10 @@ class MessageBuffer(SimObject):
                                      consumed by the network. Smaller value \
                                      means higher priority",
     )
+    credits = Param.Unsigned(0, "Credit pool size; 0 disables credits")
+    credit_return_latency = Param.Cycles(
+        1, "Cycles from downstream departure to upstream credit visibility"
+    )
+    enable_ooo_pop = Param.Bool(
+        False, "Allow oldest-eligible selection instead of head-only dequeue"
+    )

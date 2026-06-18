@@ -58,6 +58,220 @@ namespace ruby
 
 using stl_helpers::operator<<;
 
+class MessageBuffer::CreditState : public statistics::Group
+{
+  public:
+    CreditState(MessageBuffer &owner, unsigned buffer_size,
+                unsigned max_credits,
+                Cycles credit_return_latency);
+    ~CreditState();
+
+    bool hasCredit(unsigned slots = 1) const { return m_credits >= slots; }
+    unsigned availableCredits() const { return m_credits; }
+    unsigned maxCredits() const { return m_maxCredits; }
+    Cycles creditReturnLatency() const { return m_creditReturnLatency; }
+    unsigned pendingReturns() const { return m_pendingCreditReturns; }
+
+    void spendCredit(Tick enqueue_delta);
+    void recordCreditStall();
+    void registerCallback(std::function<void()> callback);
+    void unregisterCallback();
+    void scheduleReturn(Tick cur_time, Tick credit_return_delay,
+                        unsigned slots);
+    void clear();
+    void updateStats();
+
+  private:
+    void processReturn();
+    void scheduleNextReturn();
+
+    MessageBuffer &m_owner;
+    const unsigned m_maxCredits;
+    unsigned m_credits;
+    const Cycles m_creditReturnLatency;
+    std::function<void()> m_callback;
+    std::map<Tick, unsigned> m_returnEvents;
+    unsigned m_pendingCreditReturns = 0;
+    EventFunctionWrapper m_returnEvent;
+
+    statistics::Scalar creditStalls;
+    statistics::Scalar creditReturns;
+    statistics::Scalar creditReturnEventCount;
+    statistics::Scalar availableCreditsStat;
+    statistics::Scalar pendingReturnsStat;
+    statistics::Formula creditOccupancy;
+};
+
+MessageBuffer::CreditState::CreditState(
+    MessageBuffer &owner, unsigned buffer_size, unsigned max_credits,
+    Cycles credit_return_latency)
+    : statistics::Group(&owner, "credit"),
+      m_owner(owner),
+      m_maxCredits(max_credits),
+      m_credits(max_credits),
+      m_creditReturnLatency(credit_return_latency),
+      m_returnEvent(owner, [this] { processReturn(); },
+                    owner.name() + ".creditReturn", false,
+                    Event::Default_Pri - 1),
+      ADD_STAT(creditStalls, statistics::units::Count::get(),
+               "Number of failed credited-send attempts"),
+      ADD_STAT(creditReturns, statistics::units::Count::get(),
+               "Number of credits returned to the producer"),
+      ADD_STAT(creditReturnEventCount, statistics::units::Count::get(),
+               "Number of delayed credit-return events processed"),
+      ADD_STAT(availableCreditsStat, statistics::units::Count::get(),
+               "Current available producer-visible credits"),
+      ADD_STAT(pendingReturnsStat, statistics::units::Count::get(),
+               "Current credits scheduled to return later"),
+      ADD_STAT(creditOccupancy, statistics::units::Count::get(),
+               "Current occupied credit slots")
+{
+    fatal_if(buffer_size != 0 && buffer_size < m_maxCredits,
+             "%s: buffer_size (%u) must be >= credits (%u)",
+             owner.name(), buffer_size, m_maxCredits);
+    fatal_if(m_creditReturnLatency == Cycles(0),
+             "%s: credited links require non-zero credit_return_latency",
+             owner.name());
+
+    creditStalls.flags(statistics::nozero);
+    creditReturns.flags(statistics::nozero);
+    creditReturnEventCount.flags(statistics::nozero);
+    availableCreditsStat.flags(statistics::nozero);
+    pendingReturnsStat.flags(statistics::nozero);
+    creditOccupancy.flags(statistics::nozero);
+
+    creditOccupancy =
+        statistics::constant(m_maxCredits) - availableCreditsStat;
+    updateStats();
+}
+
+MessageBuffer::CreditState::~CreditState()
+{
+    if (m_returnEvent.scheduled()) {
+        m_owner.deschedule(m_returnEvent);
+    }
+}
+
+void
+MessageBuffer::CreditState::spendCredit(Tick enqueue_delta)
+{
+    fatal_if(enqueue_delta == 0,
+             "%s: credited enqueue requires non-zero forward latency",
+             m_owner.name());
+    if (!hasCredit()) {
+        recordCreditStall();
+        panic("%s: credited enqueue without an available credit",
+              m_owner.name());
+    }
+
+    --m_credits;
+    updateStats();
+}
+
+void
+MessageBuffer::CreditState::recordCreditStall()
+{
+    creditStalls++;
+    updateStats();
+}
+
+void
+MessageBuffer::CreditState::registerCallback(
+    std::function<void()> callback)
+{
+    m_callback = std::move(callback);
+}
+
+void
+MessageBuffer::CreditState::unregisterCallback()
+{
+    m_callback = nullptr;
+}
+
+void
+MessageBuffer::CreditState::scheduleReturn(Tick cur_time,
+                                           Tick credit_return_delay,
+                                           unsigned slots)
+{
+    if (slots == 0) {
+        return;
+    }
+
+    const Tick when = cur_time + credit_return_delay;
+    m_returnEvents[when] += slots;
+    m_pendingCreditReturns += slots;
+    updateStats();
+    scheduleNextReturn();
+}
+
+void
+MessageBuffer::CreditState::clear()
+{
+    if (m_returnEvent.scheduled()) {
+        m_owner.deschedule(m_returnEvent);
+    }
+
+    m_returnEvents.clear();
+    m_pendingCreditReturns = 0;
+    m_credits = m_maxCredits;
+    updateStats();
+}
+
+void
+MessageBuffer::CreditState::processReturn()
+{
+    const Tick now = curTick();
+    unsigned returned = 0;
+
+    auto it = m_returnEvents.begin();
+    while (it != m_returnEvents.end() && it->first <= now) {
+        returned += it->second;
+        it = m_returnEvents.erase(it);
+    }
+
+    if (returned != 0) {
+        gem5_assert(m_pendingCreditReturns >= returned,
+                    "MessageBuffer::CreditState::processReturn");
+        m_pendingCreditReturns -= returned;
+        m_credits += returned;
+        gem5_assert(m_credits <= m_maxCredits,
+                    "MessageBuffer::CreditState::processReturn");
+        creditReturns += returned;
+        creditReturnEventCount++;
+        updateStats();
+
+        if (m_callback) {
+            m_callback();
+        }
+    }
+
+    scheduleNextReturn();
+}
+
+void
+MessageBuffer::CreditState::scheduleNextReturn()
+{
+    if (m_returnEvents.empty()) {
+        return;
+    }
+
+    const Tick when = m_returnEvents.begin()->first;
+    if (m_returnEvent.scheduled()) {
+        if (when < m_returnEvent.when()) {
+            m_owner.reschedule(m_returnEvent, when, true);
+        }
+    } else {
+        m_owner.schedule(m_returnEvent, when);
+    }
+}
+
+void
+MessageBuffer::CreditState::updateStats()
+{
+    availableCreditsStat = m_credits;
+    pendingReturnsStat = m_pendingCreditReturns;
+}
+
 MessageBuffer::MessageBuffer(const Params &p)
     : SimObject(p), m_stall_map_size(0), m_max_size(p.buffer_size),
     m_max_dequeue_rate(p.max_dequeue_rate), m_dequeues_this_cy(0),
@@ -68,6 +282,10 @@ MessageBuffer::MessageBuffer(const Params &p)
     m_randomization(p.randomization),
     m_allow_zero_latency(p.allow_zero_latency),
     m_routing_priority(p.routing_priority),
+    m_enable_ooo_pop(p.enable_ooo_pop),
+    m_credit(p.credits == 0 ? nullptr :
+             std::make_unique<CreditState>(
+                 *this, p.buffer_size, p.credits, p.credit_return_latency)),
     ADD_STAT(m_not_avail_count, statistics::units::Count::get(),
              "Number of times this buffer did not have N slots available"),
     ADD_STAT(m_msg_count, statistics::units::Count::get(),
@@ -134,6 +352,17 @@ MessageBuffer::MessageBuffer(const Params &p)
     m_avg_stall_time = m_stall_time / m_msg_count;
 }
 
+MessageBuffer::~MessageBuffer() = default;
+
+void
+MessageBuffer::preDumpStats()
+{
+    if (m_credit) {
+        m_credit->updateStats();
+    }
+    SimObject::preDumpStats();
+}
+
 unsigned int
 MessageBuffer::getSize(Tick curTime)
 {
@@ -186,6 +415,12 @@ MessageBuffer::traceState() const
 bool
 MessageBuffer::areNSlotsAvailable(unsigned int n, Tick current_time)
 {
+    if (m_credit && !m_credit->hasCredit(n)) {
+        DPRINTF(RubyQueue, "n: %d, credits: %d, max credits: %d\n",
+                n, m_credit->availableCredits(), m_credit->maxCredits());
+        m_credit->recordCreditStall();
+        return false;
+    }
 
     // fast path when message buffers have infinite size
     if (m_max_size == 0) {
@@ -259,6 +494,10 @@ MessageBuffer::enqueue(MsgPtr message, Tick current_time, Tick delta,
                        bool ruby_is_random, bool ruby_warmup,
                        bool bypassStrictFIFO)
 {
+    if (m_credit) {
+        m_credit->spendCredit(delta);
+    }
+
     // record current time incase we have a pop that also adjusts my size
     if (m_time_last_time_enqueue < current_time) {
         m_msgs_this_cycle = 0;  // first msg this cycle
@@ -353,7 +592,11 @@ MessageBuffer::enqueue(MsgPtr message, Tick current_time, Tick delta,
 Tick
 MessageBuffer::dequeue(Tick current_time, bool decrement_messages)
 {
-    return dequeueAt(0, current_time, decrement_messages);
+    Tick delay = dequeueAt(0, current_time, decrement_messages);
+    if (decrement_messages && m_credit) {
+        m_credit->scheduleReturn(current_time, 0, 1);
+    }
+    return delay;
 }
 
 Tick
@@ -430,6 +673,22 @@ MessageBuffer::unregisterDequeueCallback()
 }
 
 void
+MessageBuffer::registerCreditCallback(std::function<void()> callback)
+{
+    if (m_credit) {
+        m_credit->registerCallback(std::move(callback));
+    }
+}
+
+void
+MessageBuffer::unregisterCreditCallback()
+{
+    if (m_credit) {
+        m_credit->unregisterCallback();
+    }
+}
+
+void
 MessageBuffer::clear()
 {
     m_prio_heap.clear();
@@ -440,6 +699,10 @@ MessageBuffer::clear()
     m_size_at_cycle_start = 0;
     m_stalled_at_cycle_start = 0;
     m_msgs_this_cycle = 0;
+
+    if (m_credit) {
+        m_credit->clear();
+    }
 }
 
 void
@@ -619,7 +882,8 @@ MessageBuffer::canDequeue(Tick current_time) const
 }
 
 size_t
-MessageBuffer::findReady(MessagePredicate predicate, Tick current_time) const
+MessageBuffer::findReady(const MessagePredicate &predicate,
+                         Tick current_time) const
 {
     if (!canDequeue(current_time)) {
         return invalidMessageIndex;
@@ -648,6 +912,81 @@ MessageBuffer::peekMsgPtrAt(size_t index) const
 {
     assert(index < m_prio_heap.size());
     return m_prio_heap[index];
+}
+
+bool
+MessageBuffer::hasCredit(unsigned slots) const
+{
+    return !m_credit || m_credit->hasCredit(slots);
+}
+
+unsigned
+MessageBuffer::availableCredits() const
+{
+    return m_credit ? m_credit->availableCredits() : 0;
+}
+
+unsigned
+MessageBuffer::maxCredits() const
+{
+    return m_credit ? m_credit->maxCredits() : 0;
+}
+
+Cycles
+MessageBuffer::creditReturnLatency() const
+{
+    return m_credit ? m_credit->creditReturnLatency() : Cycles(0);
+}
+
+unsigned
+MessageBuffer::pendingCreditReturns() const
+{
+    return m_credit ? m_credit->pendingReturns() : 0;
+}
+
+MessageBuffer::Handle
+MessageBuffer::selectEligible(const MessagePredicate &predicate,
+                              Tick cur_time) const
+{
+    if (!m_enable_ooo_pop) {
+        return selectHead(predicate, cur_time);
+    }
+    return Handle{findReady(predicate, cur_time)};
+}
+
+MessageBuffer::Handle
+MessageBuffer::selectHead(const MessagePredicate &predicate,
+                          Tick cur_time) const
+{
+    if (!canDequeue(cur_time) || isEmpty() || readyTime() > cur_time) {
+        return Handle{};
+    }
+
+    const MsgPtr &msg = peekMsgPtr();
+    if (predicate && !predicate(*msg)) {
+        return Handle{};
+    }
+    return Handle{0};
+}
+
+const MsgPtr&
+MessageBuffer::peekAt(Handle handle) const
+{
+    assert(handle.valid());
+    return peekMsgPtrAt(handle.index);
+}
+
+Tick
+MessageBuffer::popAt(Handle handle, Tick cur_time,
+                     Tick credit_return_delay, unsigned slots,
+                     bool decrement_messages)
+{
+    assert(handle.valid());
+    Tick delay = dequeueAt(handle.index, cur_time, decrement_messages);
+    if (decrement_messages && m_credit) {
+        m_credit->scheduleReturn(cur_time, credit_return_delay, slots);
+    }
+    return delay;
 }
 
 uint32_t

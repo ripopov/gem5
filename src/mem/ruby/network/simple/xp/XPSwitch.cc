@@ -73,8 +73,8 @@ XPSwitch::addXPOutPort(std::string link_name,
         buffer->setVnet(vnet);
         staging.push_back(buffer);
 
-        if (auto *credited = dynamic_cast<CreditedLinkBuffer*>(out[vnet])) {
-            credited->registerCreditCallback([this] {
+        if (out[vnet] != nullptr && out[vnet]->isCredited()) {
+            out[vnet]->registerCreditCallback([this] {
                 scheduleEvent(Cycles(0));
             });
         }
@@ -203,13 +203,11 @@ XPSwitch::driveOutput(OutputPort &out_port, int vnet)
         return DriveResult::Idle;
     }
 
-    auto *credited = dynamic_cast<CreditedLinkBuffer*>(downstream);
-    if (credited != nullptr) {
-        if (!credited->hasCredit()) {
+    if (!downstream->areNSlotsAvailable(1, current_time)) {
+        if (downstream->isCredited() && !downstream->hasCredit()) {
             xpStats.creditStallCycles++;
             return DriveResult::CreditBlocked;
         }
-    } else if (!downstream->areNSlotsAvailable(1, current_time)) {
         xpStats.outputBlockedCycles++;
         return DriveResult::OutputBlocked;
     }
@@ -251,40 +249,27 @@ XPSwitch::selectCandidate(int vnet, int output)
                    stagingAvailable(routes, vnet, current_time);
         };
 
-        CreditedLinkBuffer *credited =
-            dynamic_cast<CreditedLinkBuffer*>(buffer);
-        CreditedLinkBuffer::Handle handle;
-        MsgPtr msg_ptr;
-        bool ooo_skip = false;
-
-        if (credited != nullptr) {
-            handle = credited->selectEligible(predicate, current_time);
-            if (!handle.valid()) {
-                continue;
-            }
-            msg_ptr = credited->peekAt(handle);
-            ooo_skip = handle.index != 0;
-        } else {
-            if (!buffer->isReady(current_time)) {
-                continue;
-            }
-            msg_ptr = buffer->peekMsgPtr();
-            if (!predicate(*msg_ptr)) {
+        MessageBuffer::Handle handle =
+            buffer->selectEligible(predicate, current_time);
+        if (!handle.valid()) {
+            if (buffer->isReady(current_time)) {
+                MsgPtr head = buffer->peekMsgPtr();
                 std::vector<BaseRoutingUnit::RouteInfo> routes;
-                if (routesToOutput(*msg_ptr, vnet, output, routes)) {
+                if (routesToOutput(*head, vnet, output, routes) &&
+                    !stagingAvailable(routes, vnet, current_time)) {
                     xpStats.stagingFullCycles++;
                 }
-                continue;
             }
+            continue;
         }
 
+        MsgPtr msg_ptr = buffer->peekAt(handle);
         if (!selected.valid || selected.msg > msg_ptr) {
             selected.buffer = buffer;
-            selected.credited = credited;
-            selected.creditedHandle = handle;
+            selected.handle = handle;
             selected.msg = msg_ptr;
             selected.valid = true;
-            selected.oooSkip = ooo_skip;
+            selected.oooSkip = handle.index != 0;
             selected.routes.clear();
             routesToOutput(*msg_ptr, vnet, output, selected.routes);
         }
@@ -329,22 +314,20 @@ XPSwitch::stagingAvailable(
 void
 XPSwitch::grantCandidate(Candidate &candidate, int vnet, Tick current_time)
 {
-    MsgPtr msg_ptr = candidate.credited != nullptr ?
-        candidate.credited->peekAt(candidate.creditedHandle) :
-        candidate.buffer->peekMsgPtr();
+    MsgPtr msg_ptr = candidate.buffer->peekAt(candidate.handle);
 
     MsgPtr unmodified_msg_ptr;
     if (candidate.routes.size() > 1) {
         unmodified_msg_ptr = msg_ptr->clone();
     }
 
-    if (candidate.credited != nullptr) {
+    if (candidate.buffer->isCredited()) {
         Tick credit_return_delay = cyclesToTicks(
-            candidate.credited->creditReturnLatency());
-        candidate.credited->popAt(candidate.creditedHandle, current_time,
-                                  credit_return_delay);
+            candidate.buffer->creditReturnLatency());
+        candidate.buffer->popAt(candidate.handle, current_time,
+                                credit_return_delay);
     } else {
-        candidate.buffer->dequeue(current_time);
+        candidate.buffer->popAt(candidate.handle, current_time, 0);
     }
 
     xpStats.grants++;

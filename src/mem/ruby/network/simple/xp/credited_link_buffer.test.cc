@@ -16,11 +16,10 @@
 #include "enums/MessageRandomization.hh"
 #include "mem/ruby/common/Consumer.hh"
 #include "mem/ruby/network/MessageBuffer.hh"
-#include "mem/ruby/network/simple/xp/CreditedLinkBuffer.hh"
 #include "mem/ruby/slicc_interface/Message.hh"
 #include "params/ClockDomain.hh"
 #include "params/ClockedObject.hh"
-#include "params/CreditedLinkBuffer.hh"
+#include "params/MessageBuffer.hh"
 #include "sim/clock_domain.hh"
 #include "sim/clocked_object.hh"
 #include "sim/eventq.hh"
@@ -174,7 +173,7 @@ idIs(int id)
     };
 }
 
-class CreditedLinkBufferTest : public ::testing::Test
+class MessageBufferCreditTest : public ::testing::Test
 {
   protected:
     void
@@ -226,7 +225,7 @@ class CreditedLinkBufferTest : public ::testing::Test
     std::string
     name(const char *suffix) const
     {
-        return "credited_link_buffer_test." + std::to_string(testId) + "." +
+        return "message_buffer_credit_test." + std::to_string(testId) + "." +
                suffix;
     }
 
@@ -245,7 +244,7 @@ class CreditedLinkBufferTest : public ::testing::Test
         queue->serviceEvents(tick);
     }
 
-    CreditedLinkBuffer &
+    MessageBuffer &
     makeBuffer(unsigned credits, unsigned buffer_size,
                Cycles credit_return_latency,
                bool enable_ooo_pop = true,
@@ -271,7 +270,7 @@ class CreditedLinkBufferTest : public ::testing::Test
         bufferParams.credits = credits;
         bufferParams.enable_ooo_pop = enable_ooo_pop;
 
-        buffer = std::make_unique<CreditedLinkBuffer>(bufferParams);
+        buffer = std::make_unique<MessageBuffer>(bufferParams);
         buffer->setConsumer(consumer.get());
         return *buffer;
     }
@@ -283,8 +282,8 @@ class CreditedLinkBufferTest : public ::testing::Test
     }
 
     int
-    selectedId(CreditedLinkBuffer &buffer,
-               CreditedLinkBuffer::Handle handle)
+    selectedId(MessageBuffer &buffer,
+               MessageBuffer::Handle handle)
     {
         return asTestMessage(buffer.peekAt(handle)).id();
     }
@@ -295,15 +294,15 @@ class CreditedLinkBufferTest : public ::testing::Test
 
     ClockDomainParams clockDomainParams;
     ClockedObjectParams clockedObjectParams;
-    CreditedLinkBufferParams bufferParams;
+    MessageBufferParams bufferParams;
 
     std::unique_ptr<TestClockDomain> clockDomain;
     std::unique_ptr<ClockedObject> clockedObject;
     std::unique_ptr<TestConsumer> consumer;
-    std::unique_ptr<CreditedLinkBuffer> buffer;
+    std::unique_ptr<MessageBuffer> buffer;
 };
 
-TEST_F(CreditedLinkBufferTest, UncreditedConstructionHasInfiniteCredit)
+TEST_F(MessageBufferCreditTest, UncreditedConstructionHasInfiniteCredit)
 {
     auto &buf = makeBuffer(0, 0, Cycles(0));
 
@@ -317,13 +316,13 @@ TEST_F(CreditedLinkBufferTest, UncreditedConstructionHasInfiniteCredit)
     EXPECT_TRUE(buf.enableOooPop());
 }
 
-TEST_F(CreditedLinkBufferTest, RejectsInvalidCreditedConfiguration)
+TEST_F(MessageBufferCreditTest, RejectsInvalidCreditedConfiguration)
 {
     EXPECT_ANY_THROW(makeBuffer(2, 1, Cycles(1)));
     EXPECT_ANY_THROW(makeBuffer(2, 2, Cycles(0)));
 }
 
-TEST_F(CreditedLinkBufferTest, CreditedEnqueueConsumesCredits)
+TEST_F(MessageBufferCreditTest, CreditedEnqueueConsumesCredits)
 {
     auto &buf = makeBuffer(2, 2, Cycles(4));
 
@@ -348,7 +347,73 @@ TEST_F(CreditedLinkBufferTest, CreditedEnqueueConsumesCredits)
     EXPECT_EQ(buf.traceState().currentSize, 2);
 }
 
-TEST_F(CreditedLinkBufferTest, UncreditedDequeueDoesNotReturnCredits)
+TEST_F(MessageBufferCreditTest, CreditedAvailabilityWaitsForCreditReturn)
+{
+    auto &buf = makeBuffer(1, 2, Cycles(1));
+
+    EXPECT_TRUE(buf.areNSlotsAvailable(1, 0));
+    buf.enqueue(makeMessage(1), 0, 1, false, false);
+    EXPECT_FALSE(buf.areNSlotsAvailable(1, 0));
+
+    advanceTo(1);
+    auto selected = buf.selectEligible(MessagePredicate(), 1);
+    ASSERT_TRUE(selected.valid());
+    buf.popAt(selected, 1, 5);
+
+    EXPECT_FALSE(buf.areNSlotsAvailable(1, 1));
+    EXPECT_FALSE(buf.areNSlotsAvailable(1, 2));
+
+    advanceTo(6);
+    EXPECT_TRUE(buf.areNSlotsAvailable(1, 6));
+}
+
+TEST_F(MessageBufferCreditTest, StallMessageDoesNotReturnCredit)
+{
+    auto &buf = makeBuffer(1, 1, Cycles(1));
+
+    buf.enqueue(makeMessage(1), 0, 1, false, false);
+    EXPECT_EQ(buf.availableCredits(), 0);
+
+    advanceTo(1);
+    buf.stallMessage(0x100, 1);
+    EXPECT_EQ(buf.availableCredits(), 0);
+    EXPECT_EQ(buf.pendingCreditReturns(), 0);
+    EXPECT_TRUE(buf.hasStalledMsg(0x100));
+
+    buf.reanalyzeMessages(0x100, 2);
+    advanceTo(2);
+    ASSERT_TRUE(buf.isReady(2));
+    buf.dequeue(2);
+    EXPECT_EQ(buf.availableCredits(), 0);
+    EXPECT_EQ(buf.pendingCreditReturns(), 1);
+
+    advanceTo(2);
+    EXPECT_EQ(buf.availableCredits(), 1);
+    EXPECT_EQ(buf.pendingCreditReturns(), 0);
+}
+
+TEST_F(MessageBufferCreditTest, PopAtWithoutDecrementDoesNotReturnCredit)
+{
+    auto &buf = makeBuffer(1, 1, Cycles(1));
+
+    buf.enqueue(makeMessage(1), 0, 1, false, false);
+    EXPECT_EQ(buf.availableCredits(), 0);
+
+    advanceTo(1);
+    auto selected = buf.selectEligible(MessagePredicate(), 1);
+    ASSERT_TRUE(selected.valid());
+    buf.popAt(selected, 1, 5, 1, false);
+
+    EXPECT_TRUE(buf.isEmpty());
+    EXPECT_EQ(buf.availableCredits(), 0);
+    EXPECT_EQ(buf.pendingCreditReturns(), 0);
+
+    advanceTo(6);
+    EXPECT_EQ(buf.availableCredits(), 0);
+    EXPECT_EQ(buf.pendingCreditReturns(), 0);
+}
+
+TEST_F(MessageBufferCreditTest, UncreditedDequeueDoesNotReturnCredits)
 {
     auto &buf = makeBuffer(0, 0, Cycles(0));
     int callbacks = 0;
@@ -367,7 +432,7 @@ TEST_F(CreditedLinkBufferTest, UncreditedDequeueDoesNotReturnCredits)
     EXPECT_EQ(callbacks, 0);
 }
 
-TEST_F(CreditedLinkBufferTest, DequeueSchedulesImmediateCreditReturn)
+TEST_F(MessageBufferCreditTest, DequeueSchedulesImmediateCreditReturn)
 {
     auto &buf = makeBuffer(1, 1, Cycles(3));
     int callbacks = 0;
@@ -390,7 +455,7 @@ TEST_F(CreditedLinkBufferTest, DequeueSchedulesImmediateCreditReturn)
     EXPECT_EQ(callbacks, 1);
 }
 
-TEST_F(CreditedLinkBufferTest, PopAtSchedulesDelayedGroupedReturns)
+TEST_F(MessageBufferCreditTest, PopAtSchedulesDelayedGroupedReturns)
 {
     auto &buf = makeBuffer(3, 3, Cycles(1));
     int callbacks = 0;
@@ -429,7 +494,7 @@ TEST_F(CreditedLinkBufferTest, PopAtSchedulesDelayedGroupedReturns)
     EXPECT_EQ(callbacks, 2);
 }
 
-TEST_F(CreditedLinkBufferTest, UnregisteredCallbackIsNotCalled)
+TEST_F(MessageBufferCreditTest, UnregisteredCallbackIsNotCalled)
 {
     auto &buf = makeBuffer(1, 1, Cycles(1));
     int callbacks = 0;
@@ -446,7 +511,7 @@ TEST_F(CreditedLinkBufferTest, UnregisteredCallbackIsNotCalled)
     EXPECT_EQ(callbacks, 0);
 }
 
-TEST_F(CreditedLinkBufferTest, SelectHeadHonorsReadinessAndPredicate)
+TEST_F(MessageBufferCreditTest, SelectHeadHonorsReadinessAndPredicate)
 {
     auto &buf = makeBuffer(2, 2, Cycles(1));
 
@@ -464,7 +529,7 @@ TEST_F(CreditedLinkBufferTest, SelectHeadHonorsReadinessAndPredicate)
     EXPECT_TRUE(buf.selectHead(idIs(1), 5).valid());
 }
 
-TEST_F(CreditedLinkBufferTest, SelectEligibleCanPopMatchingMessageOutOfOrder)
+TEST_F(MessageBufferCreditTest, SelectEligibleCanPopMatchingMessageOutOfOrder)
 {
     auto &buf = makeBuffer(3, 3, Cycles(1));
 
@@ -485,7 +550,7 @@ TEST_F(CreditedLinkBufferTest, SelectEligibleCanPopMatchingMessageOutOfOrder)
     EXPECT_EQ(selectedId(buf, head), 1);
 }
 
-TEST_F(CreditedLinkBufferTest, SelectEligibleFallsBackToHeadWhenOooDisabled)
+TEST_F(MessageBufferCreditTest, SelectEligibleFallsBackToHeadWhenOooDisabled)
 {
     auto &buf = makeBuffer(2, 2, Cycles(1), false);
 
@@ -500,7 +565,7 @@ TEST_F(CreditedLinkBufferTest, SelectEligibleFallsBackToHeadWhenOooDisabled)
     EXPECT_EQ(selectedId(buf, selected), 1);
 }
 
-TEST_F(CreditedLinkBufferTest, MaxDequeueRateBlocksSameCycleSelection)
+TEST_F(MessageBufferCreditTest, MaxDequeueRateBlocksSameCycleSelection)
 {
     auto &buf = makeBuffer(2, 2, Cycles(1), true, 1);
 
@@ -518,9 +583,9 @@ TEST_F(CreditedLinkBufferTest, MaxDequeueRateBlocksSameCycleSelection)
     EXPECT_TRUE(buf.selectEligible(MessagePredicate(), 2).valid());
 }
 
-TEST_F(CreditedLinkBufferTest, FiniteCapacityUsesNextCyclePopVisibility)
+TEST_F(MessageBufferCreditTest, FiniteCapacityUsesNextCyclePopVisibility)
 {
-    auto &buf = makeBuffer(2, 2, Cycles(1));
+    auto &buf = makeBuffer(0, 2, Cycles(0));
 
     EXPECT_TRUE(buf.areNSlotsAvailable(2, 0));
     buf.enqueue(makeMessage(1), 0, 5, false, false);

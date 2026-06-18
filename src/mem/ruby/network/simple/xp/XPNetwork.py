@@ -16,20 +16,6 @@ from m5.proxy import *
 from m5.util import fatal
 
 
-class CreditedLinkBuffer(MessageBuffer):
-    type = "CreditedLinkBuffer"
-    cxx_header = "mem/ruby/network/simple/xp/CreditedLinkBuffer.hh"
-    cxx_class = "gem5::ruby::CreditedLinkBuffer"
-
-    credits = Param.Unsigned(0, "Credit pool size; 0 disables credits")
-    credit_return_latency = Param.Cycles(
-        1, "Cycles from downstream departure to upstream credit visibility"
-    )
-    enable_ooo_pop = Param.Bool(
-        True, "Allow oldest-eligible selection instead of head-only dequeue"
-    )
-
-
 class XPIntLink(SimpleIntLink):
     type = "XPIntLink"
     cxx_header = "mem/ruby/network/simple/xp/XPLink.hh"
@@ -76,7 +62,7 @@ class XPIntLink(SimpleIntLink):
             if credits == 0 and len(network.physical_vnets_channels) != 0:
                 buffer_size = channels(vnet) * (int(self.latency) + 1)
 
-            buf = CreditedLinkBuffer(
+            buf = MessageBuffer(
                 ordered=True,
                 buffer_size=buffer_size,
                 credits=credits,

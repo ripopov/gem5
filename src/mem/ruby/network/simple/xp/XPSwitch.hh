@@ -10,8 +10,8 @@
 #include <vector>
 
 #include "mem/ruby/common/Consumer.hh"
+#include "mem/ruby/network/MessageBuffer.hh"
 #include "mem/ruby/network/simple/Switch.hh"
-#include "mem/ruby/network/simple/xp/CreditedLinkBuffer.hh"
 #include "mem/ruby/slicc_interface/Message.hh"
 #include "params/XPSwitch.hh"
 
@@ -66,8 +66,7 @@ class XPSwitch : public Switch, public Consumer
     struct Candidate
     {
         MessageBuffer *buffer = nullptr;
-        CreditedLinkBuffer *credited = nullptr;
-        CreditedLinkBuffer::Handle creditedHandle;
+        MessageBuffer::Handle handle;
         MsgPtr msg;
         std::vector<BaseRoutingUnit::RouteInfo> routes;
         bool valid = false;

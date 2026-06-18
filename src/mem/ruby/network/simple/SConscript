@@ -46,23 +46,21 @@ if not env['CONF']['RUBY']:
 SimObject('SimpleLink.py', sim_objects=['SimpleExtLink', 'SimpleIntLink'])
 SimObject('SimpleNetwork.py', sim_objects=['SimpleNetwork', 'BaseRoutingUnit',
     'WeightBased', 'Switch'])
-SimObject('xp/XPNetwork.py', sim_objects=['CreditedLinkBuffer', 'XPIntLink',
-    'XPExtLink', 'XPSwitch', 'XPNetwork'])
+SimObject('xp/XPNetwork.py', sim_objects=['XPIntLink', 'XPExtLink',
+    'XPSwitch', 'XPNetwork'])
 
 Source('PerfectSwitch.cc')
 Source('SimpleLink.cc')
 Source('SimpleNetwork.cc')
 Source('Switch.cc')
 Source('Throttle.cc')
-Source('xp/CreditedLinkBuffer.cc')
 Source('xp/XPLink.cc')
 Source('xp/XPNetwork.cc')
 Source('xp/XPSwitch.cc')
 
 Source('routing/WeightBased.cc')
 
-credited_link_buffer_test_srcs = [
-    'xp/CreditedLinkBuffer.cc',
+message_buffer_credit_test_srcs = [
     '../MessageBuffer.cc',
     '../../common/Consumer.cc',
     '../../../../sim/port.cc',
@@ -74,5 +72,5 @@ credited_link_buffer_test_srcs = [
     '../../../../sim/clocked_object.cc',
 ]
 
-GTest('credited_link_buffer.test', 'xp/credited_link_buffer.test.cc',
-    *credited_link_buffer_test_srcs, with_tag('gem5 simobject'))
+GTest('message_buffer_credit.test', 'xp/credited_link_buffer.test.cc',
+    *message_buffer_credit_test_srcs, with_tag('gem5 simobject'))

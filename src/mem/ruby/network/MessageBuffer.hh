@@ -52,6 +52,8 @@
 #include <functional>
 #include <iostream>
 #include <limits>
+#include <map>
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -78,6 +80,18 @@ class MessageBuffer : public SimObject
   public:
     typedef MessageBufferParams Params;
     MessageBuffer(const Params &p);
+    ~MessageBuffer() override;
+
+    using MessagePredicate = std::function<bool(const Message&)>;
+    static constexpr size_t invalidMessageIndex =
+        std::numeric_limits<size_t>::max();
+
+    struct Handle
+    {
+        size_t index = invalidMessageIndex;
+
+        bool valid() const { return index != invalidMessageIndex; }
+    };
 
     void reanalyzeMessages(Addr addr, Tick current_time);
     void reanalyzeAllMessages(Tick current_time);
@@ -126,7 +140,7 @@ class MessageBuffer : public SimObject
 
     const MsgPtr &peekMsgPtr() const { return m_prio_heap.front(); }
 
-    virtual void enqueue(MsgPtr message, Tick curTime, Tick delta,
+    void enqueue(MsgPtr message, Tick curTime, Tick delta,
                 bool ruby_is_random, bool ruby_warmup,
                 bool bypassStrictFIFO = false);
 
@@ -145,10 +159,12 @@ class MessageBuffer : public SimObject
 
     //! Updates the delay cycles of the message at the head of the queue,
     //! removes it from the queue and returns its total delay.
-    virtual Tick dequeue(Tick current_time, bool decrement_messages = true);
+    Tick dequeue(Tick current_time, bool decrement_messages = true);
 
     void registerDequeueCallback(std::function<void()> callback);
     void unregisterDequeueCallback();
+    void registerCreditCallback(std::function<void()> callback);
+    void unregisterCreditCallback();
 
     void recycle(Tick current_time, Tick recycle_latency);
     bool isEmpty() const { return m_prio_heap.size() == 0; }
@@ -160,6 +176,8 @@ class MessageBuffer : public SimObject
     void clear();
     void print(std::ostream& out) const;
     void clearStats() { m_not_avail_count = 0; m_msg_counter = 0; }
+
+    void preDumpStats() override;
 
     void setIncomingLink(int link_id) { m_input_link_id = link_id; }
     void setVnet(int net) { m_vnet_id = net; }
@@ -225,13 +243,25 @@ class MessageBuffer : public SimObject
 
     int routingPriority() const { return m_routing_priority; }
 
-  protected:
-    using MessagePredicate = std::function<bool(const Message&)>;
-    static constexpr size_t invalidMessageIndex =
-        std::numeric_limits<size_t>::max();
+    bool isCredited() const { return m_credit != nullptr; }
+    bool hasCredit(unsigned slots = 1) const;
+    unsigned availableCredits() const;
+    unsigned maxCredits() const;
+    Cycles creditReturnLatency() const;
+    bool enableOooPop() const { return m_enable_ooo_pop; }
+    unsigned pendingCreditReturns() const;
 
+    Handle selectEligible(const MessagePredicate &predicate,
+                          Tick cur_time) const;
+    Handle selectHead(const MessagePredicate &predicate, Tick cur_time) const;
+    const MsgPtr& peekAt(Handle handle) const;
+    Tick popAt(Handle handle, Tick cur_time, Tick credit_return_delay,
+               unsigned slots = 1, bool decrement_messages = true);
+
+  protected:
     bool canDequeue(Tick current_time) const;
-    size_t findReady(MessagePredicate predicate, Tick current_time) const;
+    size_t findReady(const MessagePredicate &predicate,
+                     Tick current_time) const;
     const MsgPtr& peekMsgPtrAt(size_t index) const;
     Tick dequeueAt(size_t index, Tick current_time,
                    bool decrement_messages = true);
@@ -239,6 +269,9 @@ class MessageBuffer : public SimObject
     void reanalyzeList(std::list<MsgPtr> &, Tick);
 
     uint32_t functionalAccess(Packet *pkt, bool is_read, WriteMask *mask);
+
+  private:
+    class CreditState;
 
     // Data Members (m_ prefix)
     //! Consumer to signal a wakeup(), can be NULL
@@ -321,6 +354,9 @@ class MessageBuffer : public SimObject
     const bool m_allow_zero_latency;
 
     const int m_routing_priority;
+    const bool m_enable_ooo_pop;
+
+    std::unique_ptr<CreditState> m_credit;
 
     int m_input_link_id;
     int m_vnet_id;
