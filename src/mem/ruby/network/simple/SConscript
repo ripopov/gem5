@@ -74,3 +74,6 @@ message_buffer_credit_test_srcs = [
 
 GTest('message_buffer_credit.test', 'xp/credited_link_buffer.test.cc',
     *message_buffer_credit_test_srcs, with_tag('gem5 simobject'))
+
+GTest('message_buffer_ooo_bench.test', 'xp/message_buffer_ooo_bench.cc',
+    *message_buffer_credit_test_srcs, with_tag('gem5 simobject'))

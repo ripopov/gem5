@@ -271,6 +271,11 @@ class MessageBuffer : public SimObject
     Handle selectBest(const MessagePredicate &eligible,
                       const MessageRank &better, Tick cur_time) const;
     Handle selectHead(const MessagePredicate &predicate, Tick cur_time) const;
+    // Heap-allocated bytes held by the ready-selection data structures (the
+    // priority heap plus, in variants that keep one, an auxiliary matured-set
+    // container). Deterministic; used by the OoO-selection microbenchmark to
+    // compare the memory cost of selection strategies across implementations.
+    size_t selectorMemoryBytes() const;
     const MsgPtr& peekAt(Handle handle) const;
     Tick popAt(Handle handle, Tick cur_time, Tick credit_return_delay,
                unsigned slots = 1, bool decrement_messages = true);

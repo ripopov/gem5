@@ -1002,6 +1002,15 @@ MessageBuffer::selectHead(const MessagePredicate &predicate,
     return Handle{0};
 }
 
+size_t
+MessageBuffer::selectorMemoryBytes() const
+{
+    // Baseline / O(n) variants keep only the priority heap, so the selection
+    // footprint is just that vector's reserved storage. Two-container variants
+    // override this to add their auxiliary matured-set container.
+    return m_prio_heap.capacity() * sizeof(MsgPtr);
+}
+
 const MsgPtr&
 MessageBuffer::peekAt(Handle handle) const
 {
