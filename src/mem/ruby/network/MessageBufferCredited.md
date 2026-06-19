@@ -256,7 +256,10 @@ One caveat kept for honesty: **n is small.** These are link buffers sized to
 `credits` / `buffer_size` — typically a handful of entries — so at today's depths
 the win over the old flat scan is constant-factor. The pruned traversal still
 matters: selection is no longer the asymptotic bottleneck, and it pays off if a
-buffer is ever sized large.
+buffer is ever sized large. This is **measured** in
+[§9](#9-selection-strategy-benchmark-ooo-pop): at shallow depth the spread
+between strategies is ~13 ns/pop, while at N=1024 the pruned traversal is ~1.5×
+faster than the flat scan on low-maturity selection.
 
 ### QoS / custom pop policies: use `selectBest`
 
@@ -278,7 +281,10 @@ second, **persistent** container of already-matured messages — e.g. attach a
 maturity callback to `enqueue` that moves each message heap → ready-deque as its
 arrival time passes, and have `dequeue`/`popAt` operate on that deque. The
 intent is random access into a ready set and cheaper removal. It was considered
-and **rejected**; the reasoning, in case it comes up again:
+and **rejected**; the reasoning, in case it comes up again (and the cost is
+**measured** in [§9](#9-selection-strategy-benchmark-ooo-pop): the
+two-container variant is the slowest arm under mutation and costs +25–50%
+memory):
 
 - **It buys no selection win over `forEachReady`.** The predicate the consumer
   cares about is *routability / downstream room*, not maturity, so even with a
@@ -462,3 +468,92 @@ polling overhead it eliminates.
 | `0` | `True` | slot count only | oldest predicate-eligible (`selectEligible`) | n/a |
 | `>0` | `False` | slots **and** credits | head only | delayed by `credit_return_latency` |
 | `>0` | `True` | slots **and** credits | oldest predicate-eligible | delayed by `credit_return_latency` |
+
+---
+
+## 9. Selection-strategy benchmark (OoO pop)
+
+The selection-cost design in [§3](#3-out-of-order-pop-model) makes two claims:
+the pruned `forEachReady` traversal is the right way to select, and a separate
+persistent "ready" container ([§3, rejected alternative](#rejected-alternative-a-separate-ready-container))
+would not pay off. Both were **measured**, not just argued. Three interchangeable
+selection strategies were implemented behind the **same public API** (all pass
+the same 24 gtests in
+[`credited_link_buffer.test.cc`](simple/xp/credited_link_buffer.test.cc)) and run
+through one shared microbenchmark,
+[`message_buffer_ooo_bench.test`](simple/xp/message_buffer_ooo_bench.cc).
+
+Full write-up and raw CSVs:
+[`MessageBufferOooSelectionBenchmark.md`](MessageBufferOooSelectionBenchmark.md)
+and [`ooo_bench_data/`](ooo_bench_data/).
+
+### The three arms
+
+| Arm | Branch | Selection | Extra memory |
+| --- | --- | --- | --- |
+| **V1 pruned DFS** *(production, this branch)* | `message-buffer-credited-mode` | `forEachReady` DFS, prunes immature subtrees — **O(n_ready)** | none (heap only) |
+| **V2 flat scan** | `bench/ooo-v2` | flat **O(n)** scan over the whole heap (historical `findReady`) | none (heap only) |
+| **V3 two-container cache** | `bench/ooo-v3` | heap **+** a random-access vector caching matured heap indices; rebuilt lazily, **invalidated on every mutation** | heap + index cache |
+
+### Benchmark
+
+Two workloads. The **sweep** fills a buffer at occupancy `N ∈ {1…1024}` ×
+matured fraction `{30%, 70%, 100%}` and measures: `ns_per_select` (repeated
+selection on a *static* buffer), `ns_per_pop` (a `select + popAt` *drain*, i.e.
+the heap is mutated every step — the real OoO-pop op), and `selector_bytes`
+(active footprint). The **steady-state** workload models the actual simulator
+regime: hold the buffer at a *shallow* depth and run **1M
+enqueue→select→pop transactions**.
+
+Absolute ns are machine-specific; the **ratios between arms** are the result.
+Numbers below are from one idle-host session (see the report to reproduce).
+
+### Headline results
+
+**Selection vs. pop at N=1024** (ns, lower better):
+
+| metric | V1 pruned DFS | V2 flat scan | V3 cache |
+| --- | --: | --: | --: |
+| select, 30% matured | 703 | 856 | **427** |
+| select, 100% matured | 2174 | 1430 | **1424** |
+| **pop (drain), 30% matured** | **484** | 708 | 679 |
+| **pop (drain), 70% matured** | 963 | **835** | 1411 |
+| memory @ 100% (bytes) | **16384** | **16384** | 24576 |
+
+**Steady-state, shallow depth, 1M transactions** (ns/transaction, lower better):
+
+| depth | V1 pruned DFS | V2 flat scan | V3 cache |
+| --: | --: | --: | --: |
+| 10 | 79.3 | **73.6** | 86.6 |
+| 32 | 128.7 | **112.4** | 147.6 |
+
+### What it confirms (ties back to §3)
+
+1. **The two-container cache (V3) is a net loss** — slowest pops in the drain,
+   slowest in the 1M-transaction steady state, and **+25–50% memory**. Cache
+   invalidation on every pop erases any reuse. This is the
+   [rejected-alternative](#rejected-alternative-a-separate-ready-container)
+   argument, now measured: a separate ready container buys no selection win and
+   costs memory and bookkeeping.
+2. **The pruned DFS (V1) is the right default.** It wins the mutation-heavy drain
+   at low/partial maturity — the backpressured-link regime — with zero extra
+   memory, and stays robust as depth grows.
+3. **The "n is small → constant-factor" caveat holds.** At realistic shallow
+   depth the spread between strategies is only ~13 ns/transaction. The flat scan
+   (V2) is even marginally *faster* than V1 when the buffer is tiny or fully
+   matured (cache-resident, no DFS bookkeeping), but loses at large N / low
+   maturity where it scans slots it cannot use. V1 trades that small shallow-depth
+   lead for robustness across the whole depth range.
+
+### Reproduce
+
+```sh
+for br in message-buffer-credited-mode bench/ooo-v2 bench/ooo-v3; do
+  git switch $br
+  scons --ignore-style \
+    build/RISCV/mem/ruby/network/simple/message_buffer_ooo_bench.test.opt -j$(nproc)
+  ./util/run_with_timeout.sh \
+    ./build/RISCV/mem/ruby/network/simple/message_buffer_ooo_bench.test.opt \
+    2>/dev/null | grep -E '^MBBENCH|^MBSTEADY'
+done
+```
