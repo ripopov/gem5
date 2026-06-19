@@ -414,6 +414,66 @@ benchmark prefers, and leaves serialization / functional access / stalling on th
 single heap — while still letting a future adapter be an *opt-in* consumer-side
 choice rather than a buffer-wide commitment.
 
+### Functional access: the single-home invariant
+
+Both dual-container ideas above are constrained by **functional access**, so it
+is worth pinning down what that is and why it matters here.
+
+gem5 touches memory two ways. **Timing/atomic** access is the normal simulated
+path — modeled latency, drives the coherence protocol. **Functional** access is
+an out-of-band, *instantaneous* peek/poke that bypasses timing and the protocol:
+binary/image loading, `m5 readfile`, GDB reads, KVM and fast-forward memory sync,
+SE-mode memory ops, and `memWriteback` before a checkpoint.
+
+The wrinkle is coherence: the freshest copy of a line may be neither in a cache
+nor in memory but **in flight inside a coherence message** — a WriteBack/Data
+message carrying dirty bytes between controllers. So a functional **read** must
+search everywhere a valid copy could be, *including in-flight messages*, and a
+functional **write** must patch every in-flight copy or a stale value is later
+delivered.
+
+`MessageBuffer::functionalAccess` ([MessageBuffer.cc](MessageBuffer.cc)) is that
+search over the buffer's contents:
+
+```cpp
+// reads return at the first message that has the data (return 1);
+// writes update every matching message (return the count).
+for (msg : m_prio_heap)       msg->functionalRead/Write(pkt);  // in-flight
+for (msg : m_stall_msg_map)   msg->functionalRead/Write(pkt);  // stalled
+```
+
+Two properties matter:
+
+- It scans **both** homes the buffer owns — the priority heap **and** the stall
+  map.
+- It **ignores maturity**: a message carries its payload regardless of enqueue
+  time, so functional access visits the whole heap (immature entries included),
+  not just the ready set. This is the one operation that legitimately must touch
+  all `n`, not `n_ready`.
+
+Ruby's system-level functional path walks every controller, cache, and in-flight
+`MessageBuffer` and calls this on each, so **every in-flight message is
+reachable**. The invariant that makes it correct: *each in-flight message has
+exactly one home — some buffer's heap or stall map — and `functionalAccess`
+covers both.*
+
+Preserving that invariant is what the dual-container and adapter designs must do:
+
+- An **in-class second container** (heap + ready-deque) is the easy case: extend
+  the loop above to scan it too, exactly as it already scans the stall map.
+- A **cross-object adapter** is the hard case: functional access is dispatched
+  per-SimObject and the traversal walks `MessageBuffer`s, so an adapter that has
+  drained messages into its own container is **invisible** to it until the
+  adapter implements `functionalRead`/`functionalWrite` *and* is explicitly wired
+  into the traversal. Miss it and a functional read returns stale data, or a
+  functional write leaves a stale in-flight copy — a **silent** divergence that
+  surfaces only on functional paths (checkpoint restore, KVM switch, debugger),
+  the hardest to test.
+
+For the CPU-less XP NoC testbench this is moot (no real coherence payloads, no
+functional reads/writes of meaningful data); it is a correctness concern only
+when OoO/adapter buffers are reused under a real protocol.
+
 ---
 
 ## 4. Canonical consumer flow (XPSwitch)
