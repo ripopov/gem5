@@ -146,6 +146,47 @@ cache (`size_t` per matured entry, vector growth rounded to powers of two),
 costing **+25% to +50%** at full occupancy — the higher the maturity, the bigger
 the cache, exactly when the buffer is already largest.
 
+### Steady-state small buffer — 1M transactions (the simulator's real regime)
+
+The sweep above fills then drains in bulk. Real Ruby links instead keep a
+**shallow** buffer (a handful of credits) while **millions of clocks** tick. The
+`SteadyState` arm models that: at depth D it pre-fills to D, then runs **1M
+transactions**, each advancing time by one, enqueuing one message (forward
+latency 3, so ~3 in flight), servicing matured wakeup events, and selecting +
+popping one matured message out of order. The buffer is mutated **every**
+transaction, so V3's cache is invalidated every step. Event-queue and enqueue
+cost is identical across arms, so the gap is purely the selection bookkeeping.
+
+`ns_per_txn` over 1M transactions (mean of two back-to-back runs; lower is
+better, **bold** = fastest):
+
+| depth | V1 pruned DFS | V2 flat scan | V3 cache |
+| --: | --: | --: | --: |
+| 4 | 55.7 | 56.6 | 57.2 |
+| **10** | 79.3 | **73.6** | 86.6 |
+| 16 | 94.3 | **82.4** | 102.1 |
+| 32 | 128.7 | **112.4** | 147.6 |
+
+**Yes — there is a small but consistent, repeatable difference even at depth 10.**
+Over 1M transactions, depth 10 takes ≈79 ms (V1), ≈74 ms (V2), ≈87 ms (V3). The
+ordering is **V2 < V1 < V3** and widens with depth:
+
+- **V2 (flat scan) is fastest at shallow depth.** When the buffer is tiny
+  (≤ 32), scanning all slots is branch-predictable and cache-resident — cheaper
+  than V1's explicit-stack DFS or V3's per-step cache rebuild. This is the
+  *opposite* of the large-N sweep, where V2's wasted scanning hurts.
+- **V3 (two-container) is slowest everywhere** — every transaction invalidates
+  the cache, so it pays a rebuild **plus** the invalidation write with zero
+  reuse. At depth 10 it is ~18% slower than V2 and ~9% slower than V1; the gap
+  grows to ~30% by depth 32.
+- **At depth 4 the three are within noise** — the fixed per-transaction cost
+  (event queue, enqueue, heap push/pop) dominates a 2–3 element selection.
+
+In absolute terms the spread is ~13 ns/transaction at depth 10. Whether that
+matters depends on pop volume: at billions of pops it is a measurable constant
+factor on MessageBuffer time (itself a fraction of total sim time); at depth 4
+it is invisible.
+
 ## Conclusion
 
 **The production design (V1, pruned O(n_ready) DFS) is the right default**, and
@@ -165,13 +206,27 @@ the data justifies it specifically for the workload the buffer runs:
    selection with no intervening pop** — which is not a pattern the buffer
    exhibits (you select then immediately pop).
 
+The **steady-state, shallow-depth** regime (depth ~10, 1M transactions) — the
+one a real simulator actually runs — sharpens, but does not overturn, this:
+
+4. **V3 is also the slowest at shallow depth** (~9% behind V1, ~18% behind V2 at
+   depth 10), for the same reason: per-transaction mutation invalidates the
+   cache every step. The two-container idea loses in *both* the stress regime and
+   the realistic regime.
+5. **V2 is marginally fastest when the buffer stays tiny** (≤ 32), because a flat
+   scan of a few cache-resident slots beats V1's DFS bookkeeping. So if Ruby
+   buffers were *guaranteed* shallow, V2 would be a hair faster (~7% at depth 10,
+   ~13 ns/pop). But V1 loses that lead by only a small constant while remaining
+   robust as depth grows, where V2's wasted scanning becomes costly — V1 is the
+   safer default across the whole depth range.
+
 **If a future workload became selection-heavy and mutation-light** (e.g. many
 QoS re-evaluations per pop), V3's cache would pay off and the `selectBest`
 comparator hook (see `MessageBufferCredited.md` §3) is where it would plug in.
-A cheaper refinement than V3 for the high-maturity case would be to let V1 fall
-back to a flat scan once `n_ready` approaches `n` (capturing V2's locality win
-without V2's low-maturity penalty), but the measured gap is small and not worth
-the branch on the current evidence.
+A cheaper refinement than V3 would be to let V1 fall back to a flat scan once
+`n_ready` approaches `n` — capturing V2's shallow-buffer / high-maturity locality
+win without V2's low-maturity penalty — but the measured gap is small and not
+worth the branch on the current evidence.
 
 The experimental arms live on branches `bench/ooo-v2` and `bench/ooo-v3`; the
 benchmark itself ships on the production branch for future re-measurement.
