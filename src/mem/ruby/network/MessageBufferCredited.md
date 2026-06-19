@@ -328,6 +328,83 @@ handles) without the persistent-container cost. Revisit either option only if a
 profile of a large credited mesh shows the OoO pop *and* the selection scan as
 real hotspots.
 
+### Alternative design: a consumer-side OoO adapter
+
+A more radical alternative moves OoO out of `MessageBuffer` entirely instead of
+optimizing it in place:
+
+1. **Remove** the OoO / random-access feature from `MessageBuffer` (drop
+   `Handle`, `selectEligible`/`selectBest`/`selectHead`, interior removal /
+   `siftHeapEntry`) — the buffer goes back to upstream-clean FIFO + credits.
+2. Add a **separate wrapper/adapter object** that eagerly pops each message from
+   the `MessageBuffer` as it matures and stores it in the adapter's own internal
+   container. The router then selects/pops *out of the adapter*, where every
+   entry is already matured and ordering is the adapter's to define.
+3. Add an explicit **`returnCredit()`** method to `MessageBuffer`, decoupling
+   "credit returned" from "message popped."
+4. When the router pops from the adapter, the **adapter** calls
+   `MessageBuffer::returnCredit()`.
+
+This is the "persistent ready container" of the rejected alternative above, but
+promoted to a first-class consumer-side object with an explicit credit handshake.
+It is a legitimate option with a real tradeoff, not a clear win:
+
+**What it buys**
+
+- **`MessageBuffer` returns to upstream-clean.** Steps 1+3 shrink the
+  local-addition surface to just credits plus `returnCredit()`. The whole
+  `Handle`-invalidation hazard (above) disappears.
+- **Pop-by-identity in the adapter is invalidation-proof**, so multiple pops per
+  cycle are safe by construction — no "one live handle at a time" rule.
+- **The credit decoupling (steps 3+4) is sound and arguably better.** As long as
+  the adapter drains **without** returning credit and returns it only on
+  router-pop, the credit pool correctly bounds `buffer.size + adapter.size`
+  (admitted-but-not-yet-departed). An explicit `returnCredit()` separates "left
+  the buffer" from "actually departed downstream," which is more honest than
+  today's pop-couples-return.
+- The adapter's container has **no enqueue-time ordering constraint** (everything
+  in it is matured), so QoS structures (intrusive list, per-class queues) are
+  free of the heap's baggage.
+
+**What it costs**
+
+- **No performance win — measured.** This is the
+  [§9](#9-selection-strategy-benchmark-ooo-pop) two-container arm (the slowest
+  under the mutation-heavy pop workload and the 1M-transaction steady state),
+  made persistent and cross-object. It is in fact *more* work: every message is
+  removed **twice** (head-popped from the heap on drain, then removed from the
+  adapter on router-pop) versus **once** today (selected straight out of the
+  heap), plus the container insert and the extra `shared_ptr` storage (the same
+  +25–50% memory). If the motivation is speed, this is the wrong direction.
+- **Eager draining needs precise wakeups.** The adapter must be the buffer's
+  `Consumer` and drain newly-matured heads on each maturity event — doable
+  (`enqueue` already schedules `scheduleEventAbsolute(arrival_time)`), but it is
+  now two objects with coupled scheduling.
+- **The two rejected-alternative problems return:** serialization now spans two
+  homes plus the "spent-but-still-in-adapter" credit state (must round-trip
+  exactly), and `functionalRead`/`functionalWrite` / `stallMessage` /
+  `reanalyzeMessages` / `recycle` assume a message has one home on the heap — an
+  already-drained message is invisible to them. Harmless for the CPU-less XP NoC
+  testbench (no functional coherence, no stalls); a regression for general
+  `MessageBuffer` reuse.
+
+**When to pick it.** The deciding question is *does anything other than the XP
+switch use OoO pop?*
+- **Single consumer:** the adapter is an attractive refactor — push all OoO/QoS
+  policy into the switch's own adapter, keep `MessageBuffer` pristine, and accept
+  the small perf/serialize cost the testbench never exercises.
+- **OoO as a general `MessageBuffer` capability:** keep it in place; the adapter's
+  per-consumer plumbing and the functional/stall/serialize breakage make it
+  strictly worse.
+
+**Recommended middle path.** Adopt step 3 (and the spirit of step 4) *without*
+steps 1–2: add `returnCredit()` and let consumers `popAt(..., decrement_messages
+= false)` then return the credit later. That captures the cleaner credit
+handshake at near-zero risk, keeps the in-place O(n_ready) selection the
+benchmark prefers, and leaves serialization / functional access / stalling on the
+single heap — while still letting a future adapter be an *opt-in* consumer-side
+choice rather than a buffer-wide commitment.
+
 ---
 
 ## 4. Canonical consumer flow (XPSwitch)
