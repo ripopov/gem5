@@ -306,12 +306,18 @@ memory):
   `stallMessage`, `reanalyzeMessages`/`reanalyzeAllMessages`, `recycle`,
   `clear`, `functionalAccess`, `getAllMessages`/`print`. That is a large,
   permanent bug surface that does not exist today.
-- **Serialization is the worst of it.** Checkpoints would have to record which
-  container each message lives in (plus any pending maturity state) and restore
-  it faithfully. Today `serialize` just dumps messages with their times and the
-  heap rebuilds passively on `unserialize`; a dual-container buffer that lands a
-  message in the wrong container after a checkpoint round-trip is a silent
-  divergence.
+- **Drain, not serialization, is the real obligation — and it is lighter than
+  it looks.** Ruby does *not* checkpoint in-flight messages: `MessageBuffer` has
+  no `serialize`/`unserialize`, and `RubySystem::serialize`
+  ([../system/RubySystem.cc](../system/RubySystem.cc)) requires `memWriteback()`
+  and a prior **drain to a quiescent point** — all transactions complete, every
+  buffer empty — then saves only cache/memory contents as a replayable trace. So
+  no message ever survives a checkpoint inside a buffer, and a dual-container
+  buffer cannot "land a message in the wrong container after a round-trip." What
+  it *must* do instead is participate in drain correctly: every container has to
+  reach empty and be reflected in the controller's quiesce check, or a checkpoint
+  blocks (or proceeds with state still live). Smaller than a serialize round-trip,
+  but a new drain path to get right.
 
 A victim policy other than oldest-first is already served by `selectBest` with a
 custom `MessageRank` (see above) — no new container needed. If a policy ever
@@ -322,8 +328,8 @@ ready `MsgPtr`s (cheap, they are `shared_ptr`s) into a scratch vector the
 consumer indexes freely, paired with a `popMsg(MsgPtr)` that removes by
 *identity* (invalidation-proof, so multiple pops per cycle are safe by
 construction). Because the snapshot is rebuilt and discarded each arbitration, it
-touches none of the methods above and nothing in serialization — the heap stays
-the single source of truth. That keeps the same benefit (random access, no stale
+touches none of the methods above and is empty at every drain/checkpoint point —
+the heap stays the single source of truth. That keeps the same benefit (random access, no stale
 handles) without the persistent-container cost. Revisit either option only if a
 profile of a large credited mesh shows the OoO pop *and* the selection scan as
 real hotspots.
@@ -380,13 +386,16 @@ It is a legitimate option with a real tradeoff, not a clear win:
   `Consumer` and drain newly-matured heads on each maturity event — doable
   (`enqueue` already schedules `scheduleEventAbsolute(arrival_time)`), but it is
   now two objects with coupled scheduling.
-- **The two rejected-alternative problems return:** serialization now spans two
-  homes plus the "spent-but-still-in-adapter" credit state (must round-trip
-  exactly), and `functionalRead`/`functionalWrite` / `stallMessage` /
-  `reanalyzeMessages` / `recycle` assume a message has one home on the heap — an
-  already-drained message is invisible to them. Harmless for the CPU-less XP NoC
-  testbench (no functional coherence, no stalls); a regression for general
-  `MessageBuffer` reuse.
+- **The two rejected-alternative problems return** (one smaller than I first
+  framed it): Ruby checkpoints only drained, quiescent state, so the worry is
+  **drain, not serialization** — the adapter must reach empty and reconcile its
+  held credits before a checkpoint (a new drain path, but lighter than a
+  serialize round-trip). The runtime split is the real cost:
+  `functionalRead`/`functionalWrite` / `stallMessage` / `reanalyzeMessages` /
+  `recycle` assume a message has one home on the heap — an already-drained
+  message is invisible to them. Harmless for the CPU-less XP NoC testbench (no
+  functional coherence, no stalls); a regression for general `MessageBuffer`
+  reuse.
 
 **When to pick it.** The deciding question is *does anything other than the XP
 switch use OoO pop?*
