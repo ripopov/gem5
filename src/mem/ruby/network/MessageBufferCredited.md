@@ -169,6 +169,41 @@ Tick dequeue(Tick t, bool dec) {
 > reuse (e.g. `stallMessage`, which pops with `decrement_messages = false` and
 > therefore returns no credit).
 
+### Design note: out-of-order removal cost
+
+The messages live in a single binary min-heap (`m_prio_heap`, ordered by
+`(enqueue time, counter)`), the same structure upstream uses. Removing the
+**head** is the usual `pop_heap` + `pop_back` = O(log n). Removing an
+**interior** element (what OoO pop does) is the interesting case.
+
+`dequeueAt` removes an interior element by moving the last heap element into the
+hole and then **sifting that element up or down** to restore the invariant —
+O(log n) ([MessageBuffer.cc](MessageBuffer.cc), `siftHeapEntry`). An earlier
+version rebuilt the whole heap with `std::make_heap` after the swap, which is
+O(n); the sift replaces that. Only one sift direction ever does work (if the
+moved element rises it cannot also need to sink), so running both is correct and
+still O(log n).
+
+Two honest caveats on why this is a *modest* win, kept here so the next person
+doesn't over-invest:
+
+- **Selection is still O(n).** `selectEligible` → `findReady` linearly scans the
+  heap for the oldest predicate-matching, matured message. So a single OoO pop is
+  O(n) select + O(log n) remove; the sift only fixed the removal half.
+- **n is small.** These are link buffers sized to `credits` / `buffer_size` —
+  typically a handful of entries. The asymptotics matter far less than the
+  constant factors at these depths.
+
+A heavier alternative was considered and **rejected for now**: maintain a
+separate maturity-ordered "ready" container (e.g. a `std::list`) populated by a
+per-message maturity event, with `Handle` indexing into it, giving O(1) removal.
+It was rejected because (a) it does not remove the O(n) selection scan, (b) the
+win is bounded by the tiny `n`, and (c) it would split the buffer's single-queue
+invariant across `enqueue`, `stallMessage`, `reanalyzeMessages`, `recycle`,
+`clear`, `functionalAccess`, and serialization — a large bug surface for little
+gain. Revisit only if a profile of a large credited mesh shows the OoO pop *and*
+the selection scan as real hotspots.
+
 ---
 
 ## 4. Canonical consumer flow (XPSwitch)

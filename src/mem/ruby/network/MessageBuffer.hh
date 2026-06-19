@@ -270,6 +270,10 @@ class MessageBuffer : public SimObject
     const MsgPtr& peekMsgPtrAt(size_t index) const;
     Tick dequeueAt(size_t index, Tick current_time,
                    bool decrement_messages = true);
+    // Restore the heap invariant after an out-of-order removal replaced the
+    // element at `index`. Sifts that element up or down in O(log n) instead
+    // of rebuilding the whole heap with an O(n) std::make_heap.
+    void siftHeapEntry(size_t index);
     // </local-addition>
     // NOTE: upstream had a single `private:` section here; the `protected:`
     // label above is a LOCAL change so subclasses can reach the helpers.

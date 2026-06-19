@@ -8,6 +8,7 @@
 #include <functional>
 #include <memory>
 #include <ostream>
+#include <set>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -572,6 +573,80 @@ TEST_F(MessageBufferCreditTest, FiniteCapacityUsesNextCyclePopVisibility)
 
     EXPECT_FALSE(buf.areNSlotsAvailable(1, 5));
     EXPECT_TRUE(buf.areNSlotsAvailable(1, 6));
+}
+
+TEST_F(MessageBufferCreditTest, OutOfOrderRemovalPreservesHeapOrder)
+{
+    auto &buf = makeBuffer(8, 8, Cycles(1));
+
+    // Arrival time == id, so the oldest message is always the smallest id.
+    std::set<int> remaining;
+    for (int id = 1; id <= 8; ++id) {
+        buf.enqueue(makeMessage(id), 0, id, false, false);
+        remaining.insert(id);
+    }
+
+    advanceTo(8);
+
+    // Remove messages out of order from assorted interior heap positions.
+    // This drives siftHeapEntry in both directions; after each removal the
+    // head must still be the oldest remaining message, proving the heap
+    // invariant survived the O(log n) sift (vs. the old make_heap rebuild).
+    for (int id : {5, 2, 8, 3, 6}) {
+        auto selected = buf.selectEligible(idIs(id), 8);
+        ASSERT_TRUE(selected.valid()) << "select id " << id;
+        EXPECT_EQ(selectedId(buf, selected), id);
+        buf.popAt(selected, 8, 10);
+        remaining.erase(id);
+
+        auto head = buf.selectHead(MessagePredicate(), 8);
+        ASSERT_TRUE(head.valid()) << "after removing " << id;
+        EXPECT_EQ(selectedId(buf, head), *remaining.begin())
+            << "after removing " << id;
+    }
+
+    // Whatever is left must drain in strict ascending age order.
+    std::vector<int> drained;
+    for (;;) {
+        auto head = buf.selectHead(MessagePredicate(), 8);
+        if (!head.valid()) {
+            break;
+        }
+        drained.push_back(selectedId(buf, head));
+        buf.popAt(head, 8, 10);
+    }
+
+    EXPECT_EQ(drained, std::vector<int>({1, 4, 7}));
+}
+
+TEST_F(MessageBufferCreditTest, OutOfOrderRemovalOfLastHeapEntry)
+{
+    // Exercise the index == last branch (plain pop_back, no sift) by removing
+    // the youngest message, which is a heap leaf, then confirm the rest still
+    // drain oldest-first.
+    auto &buf = makeBuffer(4, 4, Cycles(1));
+
+    for (int id = 1; id <= 4; ++id) {
+        buf.enqueue(makeMessage(id), 0, id, false, false);
+    }
+
+    advanceTo(4);
+
+    auto youngest = buf.selectEligible(idIs(4), 4);
+    ASSERT_TRUE(youngest.valid());
+    buf.popAt(youngest, 4, 10);
+
+    std::vector<int> drained;
+    for (;;) {
+        auto head = buf.selectHead(MessagePredicate(), 4);
+        if (!head.valid()) {
+            break;
+        }
+        drained.push_back(selectedId(buf, head));
+        buf.popAt(head, 4, 10);
+    }
+
+    EXPECT_EQ(drained, std::vector<int>({1, 2, 3}));
 }
 
 } // anonymous namespace

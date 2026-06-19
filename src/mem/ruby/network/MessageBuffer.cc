@@ -615,10 +615,17 @@ MessageBuffer::dequeueAt(size_t index, Tick current_time,
                  std::greater<MsgPtr>());
         m_prio_heap.pop_back();
     } else {
-        m_prio_heap[index] = m_prio_heap.back();
-        m_prio_heap.pop_back();
-        std::make_heap(m_prio_heap.begin(), m_prio_heap.end(),
-                       std::greater<MsgPtr>());
+        // Out-of-order removal: move the last element into the hole and
+        // restore the heap in O(log n) by sifting it, rather than rebuilding
+        // the entire heap with an O(n) std::make_heap.
+        const size_t last = m_prio_heap.size() - 1;
+        if (index != last) {
+            m_prio_heap[index] = std::move(m_prio_heap[last]);
+            m_prio_heap.pop_back();
+            siftHeapEntry(index);
+        } else {
+            m_prio_heap.pop_back();
+        }
     }
 
     if (decrement_messages) {
@@ -638,6 +645,49 @@ MessageBuffer::dequeueAt(size_t index, Tick current_time,
     }
 
     return delay;
+}
+
+void
+MessageBuffer::siftHeapEntry(size_t index)
+{
+    // The heap is ordered with std::greater<MsgPtr>, i.e. the comparator
+    // reports comp(parent, child) == false for a well-formed heap, so each
+    // parent's (enqueue time, counter) is <= its children's and the earliest
+    // message sits at the root. After an out-of-order removal moved a fresh
+    // element into `index`, that element may belong higher or lower; sift it
+    // in whichever direction restores the invariant. Only one direction ever
+    // does work, so running both is correct and still O(log n).
+    const std::greater<MsgPtr> comp;
+    const size_t size = m_prio_heap.size();
+
+    // Sift up while the element ranks before its parent.
+    while (index > 0) {
+        const size_t parent = (index - 1) / 2;
+        if (!comp(m_prio_heap[parent], m_prio_heap[index])) {
+            break;
+        }
+        std::swap(m_prio_heap[parent], m_prio_heap[index]);
+        index = parent;
+    }
+
+    // Sift down while a child ranks before the element; swap with the
+    // earlier-ordered child.
+    for (;;) {
+        const size_t left = 2 * index + 1;
+        const size_t right = left + 1;
+        size_t smallest = index;
+        if (left < size && comp(m_prio_heap[smallest], m_prio_heap[left])) {
+            smallest = left;
+        }
+        if (right < size && comp(m_prio_heap[smallest], m_prio_heap[right])) {
+            smallest = right;
+        }
+        if (smallest == index) {
+            break;
+        }
+        std::swap(m_prio_heap[index], m_prio_heap[smallest]);
+        index = smallest;
+    }
 }
 
 void
