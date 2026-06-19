@@ -139,9 +139,6 @@ Tick popAt(Handle handle, Tick cur_time, Tick credit_return_delay,
 
 Notes:
 
-- A `Handle` is only valid within the cycle it was produced — it indexes into the
-  live priority heap, which is mutated by any pop. **Select → peek → pop within
-  the same cycle**; do not cache a handle across dequeues.
 - `predicate` may be empty (`MessagePredicate()`); an empty predicate matches
   every message. The XP switch passes a predicate that checks routability and
   downstream staging availability so it never grants a message it cannot forward.
@@ -149,6 +146,43 @@ Notes:
   readiness exactly like `isReady()` does.
 - `handle.index != 0` tells the consumer it skipped the head (the XP switch
   counts these as `holSkips`).
+
+### Handle invalidation (important)
+
+A `Handle` is **just a bare index** into the live priority heap
+(`struct Handle { size_t index; }`). It carries no generation/epoch tag, so it
+cannot detect that it has gone stale — `valid()` only checks for the sentinel
+`invalidMessageIndex`, not whether the index still points at the message you
+selected.
+
+Every `popAt`/`dequeue` mutates the heap: removing the head does `pop_heap` +
+`pop_back`, and removing an interior element moves the last entry into the hole
+and sifts it ([MessageBuffer.cc](MessageBuffer.cc), `dequeueAt` /
+`siftHeapEntry`). **A single pop can therefore relocate any number of other
+entries**, so the moment you pop, *every other outstanding handle is invalid* —
+its index may now refer to a different message or point past the end.
+
+Multiple OoO pops in the **same cycle are fully supported** (the buffer pins the
+network-visible size at `m_size_at_cycle_start` until the tick advances, and
+`m_dequeues_this_cy` only counts them — there is no per-cycle cap). But they must
+be done **one handle at a time**: keep exactly one live handle, and re-select
+after each pop. Do **not** select several handles up front and then pop them by
+their saved indices.
+
+```cpp
+// CORRECT — select → peek → pop → re-select, one handle live at a time.
+MessageBuffer::Handle h;
+while ((h = buf.selectEligible(pred, t)).valid()) {
+    const MsgPtr &m = buf.peekAt(h);   // use the message
+    buf.popAt(h, t, delay);            // h is now dead; loop re-selects
+}
+
+// WRONG — h2 is invalidated by popping h1; this pops the wrong message.
+auto h1 = buf.selectEligible(pred, t);
+auto h2 = buf.selectEligible(pred2, t);   // index captured against current heap
+buf.popAt(h1, t, delay);                  // heap reorders here
+buf.popAt(h2, t, delay);                  // h2.index is now stale -> bug
+```
 
 `dequeue(cur_time)` (head-only) and `popAt(...)` share the same underlying
 `dequeueAt(index, ...)`. The relationship:
@@ -194,15 +228,53 @@ doesn't over-invest:
   typically a handful of entries. The asymptotics matter far less than the
   constant factors at these depths.
 
-A heavier alternative was considered and **rejected for now**: maintain a
-separate maturity-ordered "ready" container (e.g. a `std::list`) populated by a
-per-message maturity event, with `Handle` indexing into it, giving O(1) removal.
-It was rejected because (a) it does not remove the O(n) selection scan, (b) the
-win is bounded by the tiny `n`, and (c) it would split the buffer's single-queue
-invariant across `enqueue`, `stallMessage`, `reanalyzeMessages`, `recycle`,
-`clear`, `functionalAccess`, and serialization — a large bug surface for little
-gain. Revisit only if a profile of a large credited mesh shows the OoO pop *and*
-the selection scan as real hotspots.
+### Rejected alternative: a separate "ready" container
+
+A recurring suggestion is to stop selecting over the heap and instead keep a
+second, **persistent** container of already-matured messages — e.g. attach a
+maturity callback to `enqueue` that moves each message heap → ready-deque as its
+arrival time passes, and have `dequeue`/`popAt` operate on that deque. The
+intent is random access into a ready set and cheaper removal. It was considered
+and **rejected**; the reasoning, in case it comes up again:
+
+- **It does not remove the O(n) selection scan.** The predicate the consumer
+  cares about is *routability / downstream room*, not maturity. So even with a
+  ready-only container you still linearly scan it for the victim. The only thing
+  a ready container removes from the scan is the maturity comparison
+  `getLastEnqueueTime() <= cur_time` — a single integer compare per entry, which
+  is already nearly free.
+- **Removal gets no asymptotic win, and often gets worse.** Arbitrary-position
+  erase from a `std::deque`/`std::vector` is O(n) (element shift) — worse than
+  the heap's O(log n) `siftHeapEntry`. Switching to a `std::list` for O(1)
+  removal throws away the random access that motivated the change.
+- **`n` is tiny.** These are credit-/`buffer_size`-sized link buffers — a handful
+  of entries — so neither the saved compare nor any amortization argument
+  ("don't re-scan matured entries each cycle") pays for the added machinery.
+- **It splits the single-queue invariant across the whole class.** A message's
+  home becomes "heap if immature, ready-container if matured," and *every* path
+  that touches messages must honor that split: `isReady`/`readyTime`,
+  `stallMessage`, `reanalyzeMessages`/`reanalyzeAllMessages`, `recycle`,
+  `clear`, `functionalAccess`, `getAllMessages`/`print`. That is a large,
+  permanent bug surface that does not exist today.
+- **Serialization is the worst of it.** Checkpoints would have to record which
+  container each message lives in (plus any pending maturity state) and restore
+  it faithfully. Today `serialize` just dumps messages with their times and the
+  heap rebuilds passively on `unserialize`; a dual-container buffer that lands a
+  message in the wrong container after a checkpoint round-trip is a silent
+  divergence.
+
+If random access into the ready set is ever genuinely needed (e.g. a second
+consumer wants a victim policy other than oldest-first), the cheap and safe way
+is an **ephemeral per-cycle snapshot** — one O(n) pass that copies the currently
+ready `MsgPtr`s (cheap, they are `shared_ptr`s) into a scratch vector the
+consumer indexes freely, paired with a `popMsg(MsgPtr)` that removes by
+*identity* (invalidation-proof, so multiple pops per cycle are safe by
+construction). Because the snapshot is rebuilt and discarded each arbitration, it
+touches none of the methods above and nothing in serialization — the heap stays
+the single source of truth. That keeps the same benefit (random access, no stale
+handles) without the persistent-container cost. Revisit either option only if a
+profile of a large credited mesh shows the OoO pop *and* the selection scan as
+real hotspots.
 
 ---
 
