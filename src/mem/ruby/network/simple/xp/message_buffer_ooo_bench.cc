@@ -331,6 +331,79 @@ TEST(MessageBufferOooBench, Sweep)
     EXPECT_NE(sink, 0xdeadbeefu);
 }
 
+// Steady-state small-buffer throughput: the realistic simulator pattern where
+// the buffer hovers at a shallow depth while millions of clocks tick. Each
+// transaction advances time by one, enqueues one message (which matures after a
+// short forward latency), services matured wakeup events so the event queue
+// stays bounded, then selects and pops one matured message out of order.
+// Reports ns per transaction over 1M of them at a few shallow depths. The
+// event-queue and enqueue overhead is identical across the three arms, so any
+// per-transaction gap here is purely the selection strategy's bookkeeping.
+TEST(MessageBufferOooBench, SteadyState)
+{
+    Harness h;
+    volatile size_t sink = 0;
+
+    const size_t depths[] = {4, 10, 16, 32};
+    constexpr Tick Latency = 3;           // ~Latency messages in flight
+    constexpr uint64_t Txns = 1000000;    // transactions (clocks) per depth
+
+    std::printf("MBSTEADY,depth,latency,transactions,ns_per_txn,total_ms\n");
+    std::fflush(stdout);
+
+    EventQueue *q = h.queue;
+    Tick now = 1;  // monotonic across depths: never drive the queue backwards
+    q->setCurTick(now);
+
+    for (size_t depth : depths) {
+        MessageBuffer &buf = h.makeBuffer();
+        size_t occ = 0;
+
+        // Warm up to ~depth occupancy before timing.
+        for (size_t i = 0; i < depth; ++i) {
+            buf.enqueue(std::make_shared<BenchMessage>(0), now, Latency,
+                        false, false);
+            ++occ;
+        }
+
+        auto start = Clock::now();
+        for (uint64_t t = 0; t < Txns; ++t) {
+            ++now;
+            q->setCurTick(now);
+            q->serviceEvents(now);  // fire matured (no-op) wakeups, bound queue
+
+            if (occ < depth) {
+                buf.enqueue(std::make_shared<BenchMessage>(0), now, Latency,
+                            false, false);
+                ++occ;
+            }
+
+            auto handle = buf.selectEligible(AcceptAll, now);
+            if (handle.valid()) {
+                sink += handle.index;
+                buf.popAt(handle, now, 0);
+                --occ;
+            }
+        }
+        double total_ns = toNs(Clock::now() - start);
+
+        std::printf("MBSTEADY,%zu,%lld,%llu,%.3f,%.3f\n",
+                    depth, (long long)Latency, (unsigned long long)Txns,
+                    total_ns / double(Txns), total_ns / 1.0e6);
+        std::fflush(stdout);
+
+        // Drain this buffer's remaining wakeups, advancing time monotonically
+        // so the next depth starts from a clean, empty event queue.
+        for (Tick k = 0; k <= Latency + 1; ++k) {
+            ++now;
+            q->setCurTick(now);
+            q->serviceEvents(now);
+        }
+    }
+
+    EXPECT_NE(sink, 0xdeadbeefu);
+}
+
 } // anonymous namespace
 } // namespace ruby
 } // namespace gem5
