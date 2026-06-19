@@ -116,6 +116,7 @@ The OoO-pop API is built around a small opaque `Handle`:
 ```cpp
 struct Handle { size_t index; bool valid() const; };
 using MessagePredicate = std::function<bool(const Message&)>;
+using MessageRank      = std::function<bool(const Message&, const Message&)>;
 ```
 
 ```cpp
@@ -123,7 +124,17 @@ using MessagePredicate = std::function<bool(const Message&)>;
 // with OoO enabled it returns the oldest heap entry that is ready
 // (enqueue time arrived), passes `predicate`, and respects the
 // per-cycle dequeue-rate limit. Returns an invalid Handle if none.
+// An empty predicate short-circuits to the head in O(1); otherwise
+// selection is O(n_ready) (see "selection cost" below).
 Handle selectEligible(const MessagePredicate &predicate, Tick cur_time) const;
+
+// Generalized selection: among the ready messages that pass `eligible`,
+// return the one no other out-ranks under `better` (true => first is
+// preferred). `selectEligible` is exactly this with an oldest-first rank.
+// An empty `better` returns an arbitrary eligible message. O(n_ready).
+// This is the sanctioned hook for QoS pop policies (see below).
+Handle selectBest(const MessagePredicate &eligible,
+                  const MessageRank &better, Tick cur_time) const;
 
 // Head-only variant (what selectEligible falls back to when OoO is off).
 Handle selectHead(const MessagePredicate &predicate, Tick cur_time) const;
@@ -203,30 +214,62 @@ Tick dequeue(Tick t, bool dec) {
 > reuse (e.g. `stallMessage`, which pops with `decrement_messages = false` and
 > therefore returns no credit).
 
-### Design note: out-of-order removal cost
+### Design note: selection and removal cost
 
 The messages live in a single binary min-heap (`m_prio_heap`, ordered by
-`(enqueue time, counter)`), the same structure upstream uses. Removing the
-**head** is the usual `pop_heap` + `pop_back` = O(log n). Removing an
-**interior** element (what OoO pop does) is the interesting case.
+`(enqueue time, counter)`), the same structure upstream uses. An OoO pop is two
+operations — *select* a victim, then *remove* it — and both are sub-linear.
 
-`dequeueAt` removes an interior element by moving the last heap element into the
-hole and then **sifting that element up or down** to restore the invariant —
-O(log n) ([MessageBuffer.cc](MessageBuffer.cc), `siftHeapEntry`). An earlier
+**Removal — O(log n).** Removing the **head** is the usual `pop_heap` +
+`pop_back`. Removing an **interior** element (what OoO pop does) moves the last
+heap element into the hole and then **sifts that element up or down** to restore
+the invariant ([MessageBuffer.cc](MessageBuffer.cc), `siftHeapEntry`). An earlier
 version rebuilt the whole heap with `std::make_heap` after the swap, which is
 O(n); the sift replaces that. Only one sift direction ever does work (if the
 moved element rises it cannot also need to sink), so running both is correct and
 still O(log n).
 
-Two honest caveats on why this is a *modest* win, kept here so the next person
-doesn't over-invest:
+**Selection — O(n_ready), via a pruned heap traversal.** `selectEligible` /
+`selectBest` do **not** scan the whole heap. They walk only the *matured* (ready)
+messages using `forEachReady` ([MessageBuffer.cc](MessageBuffer.cc) /
+[MessageBuffer.hh](MessageBuffer.hh)), which exploits a structural invariant:
 
-- **Selection is still O(n).** `selectEligible` → `findReady` linearly scans the
-  heap for the oldest predicate-matching, matured message. So a single OoO pop is
-  O(n) select + O(log n) remove; the sift only fixed the removal half.
-- **n is small.** These are link buffers sized to `credits` / `buffer_size` —
-  typically a handful of entries. The asymptotics matter far less than the
-  constant factors at these depths.
+> **Maturity is a heap prefix.** The heap is a min-heap on
+> `(getLastEnqueueTime, counter)`, so every node's enqueue time is `<=` its
+> children's. Therefore if a node is immature (`getLastEnqueueTime() > cur_time`)
+> its **entire subtree is immature** too. The matured messages form a connected
+> sub-heap rooted at index 0.
+
+`forEachReady` is a DFS from the root that **stops descending the moment it hits
+an immature node**. It visits exactly the `n_ready` matured entries (touching at
+most their immature boundary children), so selection is O(n_ready), not O(n) —
+the head fast path makes the no-predicate case O(1) on top of that. A small
+inline stack keeps the common shallow-buffer traversal allocation-free.
+
+`selectBest` is an argmax over that ready set under a caller-supplied
+`MessageRank`: O(n_ready) to select + O(log n) to remove. `selectEligible` is
+just `selectBest` with an oldest-first rank (plus the empty-predicate head
+short-circuit). Selecting the single best ready message is inherently at least
+O(n_ready), so this is optimal for the operation.
+
+One caveat kept for honesty: **n is small.** These are link buffers sized to
+`credits` / `buffer_size` — typically a handful of entries — so at today's depths
+the win over the old flat scan is constant-factor. The pruned traversal still
+matters: selection is no longer the asymptotic bottleneck, and it pays off if a
+buffer is ever sized large.
+
+### QoS / custom pop policies: use `selectBest`
+
+When a consumer needs a pop order other than oldest-first — strict priority,
+weighted/aged priority, deficit round-robin, etc. — express it as a
+`MessageRank` and call `selectBest(eligible, rank, cur_time)`. The ranking runs
+inside the single O(n_ready) traversal, so an arbitrary QoS argmax costs the same
+as plain oldest-first selection. Any per-class or anti-starvation **state lives
+in the consumer** (folded into the rank as a score); the buffer stays policy-free
+and keeps the heap as its single source of truth. This is the sanctioned
+extension point — reach for the ephemeral snapshot below only when a policy
+genuinely needs stateful cross-message bookkeeping that a pairwise rank cannot
+express.
 
 ### Rejected alternative: a separate "ready" container
 
@@ -237,12 +280,13 @@ arrival time passes, and have `dequeue`/`popAt` operate on that deque. The
 intent is random access into a ready set and cheaper removal. It was considered
 and **rejected**; the reasoning, in case it comes up again:
 
-- **It does not remove the O(n) selection scan.** The predicate the consumer
-  cares about is *routability / downstream room*, not maturity. So even with a
-  ready-only container you still linearly scan it for the victim. The only thing
-  a ready container removes from the scan is the maturity comparison
-  `getLastEnqueueTime() <= cur_time` — a single integer compare per entry, which
-  is already nearly free.
+- **It buys no selection win over `forEachReady`.** The predicate the consumer
+  cares about is *routability / downstream room*, not maturity, so even with a
+  ready-only container you still scan it for the victim. The one thing a
+  persistent ready container would save — visiting only matured entries — is
+  already what the pruned `forEachReady` traversal does (O(n_ready)), with the
+  heap as the sole container. So the persistent version adds machinery for a
+  benefit we already have.
 - **Removal gets no asymptotic win, and often gets worse.** Arbitrary-position
   erase from a `std::deque`/`std::vector` is O(n) (element shift) — worse than
   the heap's O(log n) `siftHeapEntry`. Switching to a `std::list` for O(1)
@@ -263,9 +307,11 @@ and **rejected**; the reasoning, in case it comes up again:
   message in the wrong container after a checkpoint round-trip is a silent
   divergence.
 
-If random access into the ready set is ever genuinely needed (e.g. a second
-consumer wants a victim policy other than oldest-first), the cheap and safe way
-is an **ephemeral per-cycle snapshot** — one O(n) pass that copies the currently
+A victim policy other than oldest-first is already served by `selectBest` with a
+custom `MessageRank` (see above) — no new container needed. If a policy ever
+needs true random access into the ready set (stateful cross-message bookkeeping a
+pairwise rank cannot express), the cheap and safe way is an **ephemeral per-cycle
+snapshot** — one O(n_ready) pass that copies the currently
 ready `MsgPtr`s (cheap, they are `shared_ptr`s) into a scratch vector the
 consumer indexes freely, paired with a `popMsg(MsgPtr)` that removes by
 *identity* (invalidation-proof, so multiple pops per cycle are safe by

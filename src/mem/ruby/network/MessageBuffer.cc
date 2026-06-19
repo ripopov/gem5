@@ -899,26 +899,42 @@ size_t
 MessageBuffer::findReady(const MessagePredicate &predicate,
                          Tick current_time) const
 {
-    if (!canDequeue(current_time)) {
-        return invalidMessageIndex;
+    // Oldest-eligible selection is just selectBest() ranked by
+    // (enqueue time, counter): the earliest matured message that satisfies
+    // `predicate` wins, exactly as the old O(n) flat scan did, but now in
+    // O(n_ready) via the pruned heap traversal.
+    Handle h = selectBest(
+        predicate,
+        [](const Message &a, const Message &b) {
+            if (a.getLastEnqueueTime() == b.getLastEnqueueTime()) {
+                return a.getMsgCounter() < b.getMsgCounter();
+            }
+            return a.getLastEnqueueTime() < b.getLastEnqueueTime();
+        },
+        current_time);
+    return h.index;
+}
+
+MessageBuffer::Handle
+MessageBuffer::selectBest(const MessagePredicate &eligible,
+                          const MessageRank &better, Tick cur_time) const
+{
+    if (!canDequeue(cur_time)) {
+        return Handle{};
     }
 
-    size_t selected = invalidMessageIndex;
-    for (size_t i = 0; i < m_prio_heap.size(); ++i) {
-        const MsgPtr &msg = m_prio_heap[i];
-        if (msg->getLastEnqueueTime() > current_time) {
-            continue;
+    size_t best = invalidMessageIndex;
+    forEachReady(cur_time, [&](size_t i, const MsgPtr &msg) {
+        if (eligible && !eligible(*msg)) {
+            return;
         }
-        if (predicate && !predicate(*msg)) {
-            continue;
+        if (best == invalidMessageIndex ||
+            (better && better(*msg, *m_prio_heap[best]))) {
+            best = i;
         }
-        if (selected == invalidMessageIndex ||
-            m_prio_heap[selected] > msg) {
-            selected = i;
-        }
-    }
+    });
 
-    return selected;
+    return Handle{best};
 }
 
 const MsgPtr&
@@ -962,7 +978,10 @@ MessageBuffer::Handle
 MessageBuffer::selectEligible(const MessagePredicate &predicate,
                               Tick cur_time) const
 {
-    if (!m_enable_ooo_pop) {
+    // Head-only when OoO is disabled. Also short-circuit the no-predicate
+    // case: with no filtering the oldest matured message is always the heap
+    // head, so selectHead answers in O(1) and we skip the O(n_ready) scan.
+    if (!m_enable_ooo_pop || !predicate) {
         return selectHead(predicate, cur_time);
     }
     return Handle{findReady(predicate, cur_time)};

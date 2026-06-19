@@ -84,6 +84,11 @@ class MessageBuffer : public SimObject
     ~MessageBuffer() override;
 
     using MessagePredicate = std::function<bool(const Message&)>;
+    // Ranking predicate for victim selection: returns true when the first
+    // message should be preferred over the second. selectBest() picks the
+    // message that no other ready message out-ranks, so this expresses
+    // oldest-first, strict-priority, or any QoS pop policy.
+    using MessageRank = std::function<bool(const Message&, const Message&)>;
     static constexpr size_t invalidMessageIndex =
         std::numeric_limits<size_t>::max();
 
@@ -258,6 +263,13 @@ class MessageBuffer : public SimObject
 
     Handle selectEligible(const MessagePredicate &predicate,
                           Tick cur_time) const;
+    // Generalized out-of-order selection: among the matured messages that
+    // pass `eligible` and respect the per-cycle dequeue-rate limit, return
+    // the one that no other out-ranks under `better`. An empty `better`
+    // yields an arbitrary eligible message. Runs in O(n_ready). This is the
+    // sanctioned hook for QoS pop policies (see MessageBufferCredited.md §3).
+    Handle selectBest(const MessagePredicate &eligible,
+                      const MessageRank &better, Tick cur_time) const;
     Handle selectHead(const MessagePredicate &predicate, Tick cur_time) const;
     const MsgPtr& peekAt(Handle handle) const;
     Tick popAt(Handle handle, Tick cur_time, Tick credit_return_delay,
@@ -265,6 +277,82 @@ class MessageBuffer : public SimObject
 
   protected:
     bool canDequeue(Tick current_time) const;
+
+    // <local-addition feature="credited MessageBuffer">
+    // Visit every matured (ready) message in the priority heap exactly once,
+    // calling visit(size_t heap_index, const MsgPtr &). Visitation order is
+    // unspecified.
+    //
+    // The heap is a min-heap on (getLastEnqueueTime, counter), so every
+    // node's enqueue time is <= its children's. Maturity
+    // (getLastEnqueueTime() <= cur_time) is therefore closed under descent:
+    // an immature node has an all-immature subtree. The matured messages form
+    // a connected sub-heap rooted at index 0, so a DFS that stops descending
+    // at the first immature node on each path enumerates exactly the ready
+    // set in O(n_ready) rather than scanning all O(n) entries. findReady()
+    // and selectBest() are built on this, so OoO-pop selection is O(n_ready).
+    template <class Visit>
+    void
+    forEachReady(Tick cur_time, Visit &&visit) const
+    {
+        const size_t n = m_prio_heap.size();
+        if (n == 0) {
+            return;
+        }
+
+        // A small inline stack avoids any heap allocation for the shallow
+        // link-buffer common case; deep heaps spill to a vector.
+        constexpr size_t InlineCap = 64;
+        size_t inline_stack[InlineCap];
+        std::vector<size_t> spill_stack;
+        bool spilled = false;
+        size_t sp = 0;
+
+        inline_stack[sp++] = 0;
+
+        auto push = [&](size_t idx) {
+            if (spilled) {
+                spill_stack.push_back(idx);
+            } else if (sp < InlineCap) {
+                inline_stack[sp++] = idx;
+            } else {
+                spill_stack.assign(inline_stack, inline_stack + sp);
+                spill_stack.push_back(idx);
+                spilled = true;
+            }
+        };
+        auto pop = [&]() -> size_t {
+            if (spilled) {
+                const size_t v = spill_stack.back();
+                spill_stack.pop_back();
+                return v;
+            }
+            return inline_stack[--sp];
+        };
+        auto empty = [&]() {
+            return spilled ? spill_stack.empty() : (sp == 0);
+        };
+
+        while (!empty()) {
+            const size_t i = pop();
+            if (m_prio_heap[i]->getLastEnqueueTime() > cur_time) {
+                // Immature node: its whole subtree is immature too. Prune.
+                continue;
+            }
+            visit(i, m_prio_heap[i]);
+
+            const size_t left = 2 * i + 1;
+            const size_t right = left + 1;
+            if (left < n) {
+                push(left);
+            }
+            if (right < n) {
+                push(right);
+            }
+        }
+    }
+    // </local-addition>
+
     size_t findReady(const MessagePredicate &predicate,
                      Tick current_time) const;
     const MsgPtr& peekMsgPtrAt(size_t index) const;

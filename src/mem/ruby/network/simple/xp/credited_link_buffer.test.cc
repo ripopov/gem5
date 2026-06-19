@@ -649,6 +649,216 @@ TEST_F(MessageBufferCreditTest, OutOfOrderRemovalOfLastHeapEntry)
     EXPECT_EQ(drained, std::vector<int>({1, 2, 3}));
 }
 
+TEST_F(MessageBufferCreditTest, SelectEligibleEmptyPredicateReturnsHead)
+{
+    // The no-predicate fast path must answer with the heap head (oldest
+    // matured message) without walking the ready set.
+    auto &buf = makeBuffer(3, 3, Cycles(1));
+
+    buf.enqueue(makeMessage(7), 0, 1, false, false);  // oldest -> head
+    buf.enqueue(makeMessage(8), 0, 2, false, false);
+    buf.enqueue(makeMessage(9), 0, 3, false, false);
+
+    advanceTo(3);
+    auto sel = buf.selectEligible(MessagePredicate(), 3);
+    ASSERT_TRUE(sel.valid());
+    EXPECT_EQ(sel.index, 0u);
+    EXPECT_EQ(selectedId(buf, sel), 7);
+}
+
+TEST_F(MessageBufferCreditTest, SelectEligibleSkipsRejectedHeadToOldestMatch)
+{
+    // Pruned-traversal parity with the old O(n) flat scan: a predicate that
+    // rejects the oldest entries must still yield the oldest *matching* one.
+    auto &buf = makeBuffer(5, 5, Cycles(1));
+
+    for (int id = 1; id <= 5; ++id) {
+        buf.enqueue(makeMessage(id), 0, id, false, false);
+    }
+
+    advanceTo(5);
+    auto pred = [](const Message &message) {
+        return asTestMessage(message).id() >= 4;
+    };
+    auto sel = buf.selectEligible(pred, 5);
+    ASSERT_TRUE(sel.valid());
+    EXPECT_EQ(selectedId(buf, sel), 4);
+}
+
+TEST_F(MessageBufferCreditTest, SelectEligibleFindsOldestAmongManyReady)
+{
+    // A multi-level heap with a mix of matured and immature messages. The
+    // O(n_ready) traversal must visit every matured node (so it finds the
+    // oldest even id) and must never descend into the immature subtree.
+    auto &buf = makeBuffer(0, 0, Cycles(0));
+
+    for (int id = 1; id <= 12; ++id) {
+        buf.enqueue(makeMessage(id), 0, id, false, false);
+    }
+
+    advanceTo(8);  // ids 1..8 matured; 9..12 still immature
+
+    auto evens = [](const Message &message) {
+        return (asTestMessage(message).id() % 2) == 0;
+    };
+    auto sel = buf.selectEligible(evens, 8);
+    ASSERT_TRUE(sel.valid());
+    EXPECT_EQ(selectedId(buf, sel), 2);
+
+    // id 10 matches the predicate but is immature: it must be pruned, not
+    // selected, until its arrival time passes.
+    EXPECT_FALSE(buf.selectEligible(idIs(10), 8).valid());
+
+    advanceTo(10);
+    auto ten = buf.selectEligible(idIs(10), 10);
+    ASSERT_TRUE(ten.valid());
+    EXPECT_EQ(selectedId(buf, ten), 10);
+}
+
+TEST_F(MessageBufferCreditTest, SelectEligibleNeverReturnsImmatureMessage)
+{
+    auto &buf = makeBuffer(4, 4, Cycles(1));
+
+    buf.enqueue(makeMessage(1), 0, 10, false, false);  // matures at 10
+    buf.enqueue(makeMessage(2), 0, 20, false, false);  // matures at 20
+
+    advanceTo(5);
+    EXPECT_FALSE(buf.selectEligible(MessagePredicate(), 5).valid());
+    EXPECT_FALSE(buf.selectBest(MessagePredicate(),
+                                MessageBuffer::MessageRank(), 5).valid());
+
+    advanceTo(10);
+    EXPECT_FALSE(buf.selectEligible(idIs(2), 10).valid());
+    auto sel = buf.selectEligible(idIs(1), 10);
+    ASSERT_TRUE(sel.valid());
+    EXPECT_EQ(selectedId(buf, sel), 1);
+}
+
+TEST_F(MessageBufferCreditTest, SelectBestPicksHighestPriorityThenOldest)
+{
+    // QoS-style ranking: prefer higher priority, break ties by age. Among the
+    // high-priority ready messages {id 2, id 3}, id 2 is older and must win,
+    // even though id 1 is the global oldest and id 3 is also high priority.
+    auto &buf = makeBuffer(6, 6, Cycles(1));
+
+    buf.enqueue(makeMessage(1), 0, 1, false, false);
+    buf.enqueue(makeMessage(2), 0, 2, false, false);
+    buf.enqueue(makeMessage(3), 0, 3, false, false);
+    buf.enqueue(makeMessage(4), 0, 4, false, false);
+
+    advanceTo(4);
+    auto priority = [](const Message &message) {
+        int id = asTestMessage(message).id();
+        return (id == 2 || id == 3) ? 2 : 1;
+    };
+    MessageBuffer::MessageRank rank =
+        [&](const Message &a, const Message &b) {
+            int pa = priority(a);
+            int pb = priority(b);
+            if (pa != pb) {
+                return pa > pb;
+            }
+            return a.getLastEnqueueTime() < b.getLastEnqueueTime();
+        };
+
+    auto best = buf.selectBest(MessagePredicate(), rank, 4);
+    ASSERT_TRUE(best.valid());
+    EXPECT_EQ(selectedId(buf, best), 2);
+}
+
+TEST_F(MessageBufferCreditTest, SelectBestRespectsMaxDequeueRate)
+{
+    auto &buf = makeBuffer(2, 2, Cycles(1), true, 1);
+
+    buf.enqueue(makeMessage(1), 0, 1, false, false);
+    buf.enqueue(makeMessage(2), 0, 1, false, false);
+
+    advanceTo(1);
+    MessageBuffer::MessageRank oldest =
+        [](const Message &a, const Message &b) {
+            return a.getLastEnqueueTime() < b.getLastEnqueueTime();
+        };
+
+    auto first = buf.selectBest(MessagePredicate(), oldest, 1);
+    ASSERT_TRUE(first.valid());
+    buf.popAt(first, 1, 10);
+
+    EXPECT_FALSE(buf.selectBest(MessagePredicate(), oldest, 1).valid());
+
+    advanceTo(2);
+    EXPECT_TRUE(buf.selectBest(MessagePredicate(), oldest, 2).valid());
+}
+
+TEST_F(MessageBufferCreditTest, SelectBestUnchangedWhenOooDisabled)
+{
+    // selectBest still walks the matured set regardless of enable_ooo_pop;
+    // the OoO toggle only governs selectEligible's head-vs-oldest behavior.
+    // Confirm selectEligible stays head-only while selectBest does not, so
+    // disabling OoO does not silently change either contract.
+    auto &buf = makeBuffer(3, 3, Cycles(1), false);
+
+    buf.enqueue(makeMessage(1), 0, 1, false, false);
+    buf.enqueue(makeMessage(2), 0, 2, false, false);
+    buf.enqueue(makeMessage(3), 0, 3, false, false);
+
+    advanceTo(3);
+
+    // OoO disabled: selectEligible cannot skip the head for id 3.
+    EXPECT_FALSE(buf.selectEligible(idIs(3), 3).valid());
+    auto head = buf.selectEligible(MessagePredicate(), 3);
+    ASSERT_TRUE(head.valid());
+    EXPECT_EQ(selectedId(buf, head), 1);
+
+    // selectBest is the explicit OoO primitive and still reaches id 3.
+    MessageBuffer::MessageRank oldest =
+        [](const Message &a, const Message &b) {
+            return a.getLastEnqueueTime() < b.getLastEnqueueTime();
+        };
+    auto picked = buf.selectBest(idIs(3), oldest, 3);
+    ASSERT_TRUE(picked.valid());
+    EXPECT_EQ(selectedId(buf, picked), 3);
+}
+
+TEST_F(MessageBufferCreditTest, MultiplePopsPerCycleReSelectOneHandleAtATime)
+{
+    // Selecting and popping repeatedly within one cycle (one live handle at a
+    // time) must drain the high-priority class first, then fall through to the
+    // rest, exercising several O(n_ready) selections after interior removals.
+    auto &buf = makeBuffer(6, 6, Cycles(1));
+
+    for (int id = 1; id <= 6; ++id) {
+        buf.enqueue(makeMessage(id), 0, id, false, false);
+    }
+
+    advanceTo(6);
+    auto priority = [](const Message &message) {
+        int id = asTestMessage(message).id();
+        return (id == 3 || id == 5) ? 2 : 1;  // high-priority class
+    };
+    MessageBuffer::MessageRank rank =
+        [&](const Message &a, const Message &b) {
+            int pa = priority(a);
+            int pb = priority(b);
+            if (pa != pb) {
+                return pa > pb;
+            }
+            return a.getLastEnqueueTime() < b.getLastEnqueueTime();
+        };
+
+    std::vector<int> popped;
+    for (;;) {
+        auto h = buf.selectBest(MessagePredicate(), rank, 6);
+        if (!h.valid()) {
+            break;
+        }
+        popped.push_back(selectedId(buf, h));
+        buf.popAt(h, 6, 10);  // h is dead after this; loop re-selects
+    }
+
+    // High priority (3 then 5) drains first, then the rest oldest-first.
+    EXPECT_EQ(popped, std::vector<int>({3, 5, 1, 2, 4, 6}));
+}
+
 } // anonymous namespace
 } // namespace ruby
 } // namespace gem5
