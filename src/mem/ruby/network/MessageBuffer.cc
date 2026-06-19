@@ -74,8 +74,6 @@ class MessageBuffer::CreditState : public statistics::Group
 
     void spendCredit(Tick enqueue_delta);
     void recordCreditStall();
-    void registerCallback(std::function<void()> callback);
-    void unregisterCallback();
     void scheduleReturn(Tick cur_time, Tick credit_return_delay,
                         unsigned slots);
     void clear();
@@ -89,7 +87,6 @@ class MessageBuffer::CreditState : public statistics::Group
     const unsigned m_maxCredits;
     unsigned m_credits;
     const Cycles m_creditReturnLatency;
-    std::function<void()> m_callback;
     std::map<Tick, unsigned> m_returnEvents;
     unsigned m_pendingCreditReturns = 0;
     EventFunctionWrapper m_returnEvent;
@@ -176,19 +173,6 @@ MessageBuffer::CreditState::recordCreditStall()
 }
 
 void
-MessageBuffer::CreditState::registerCallback(
-    std::function<void()> callback)
-{
-    m_callback = std::move(callback);
-}
-
-void
-MessageBuffer::CreditState::unregisterCallback()
-{
-    m_callback = nullptr;
-}
-
-void
 MessageBuffer::CreditState::scheduleReturn(Tick cur_time,
                                            Tick credit_return_delay,
                                            unsigned slots)
@@ -239,10 +223,6 @@ MessageBuffer::CreditState::processReturn()
         creditReturns += returned;
         creditReturnEventCount++;
         updateStats();
-
-        if (m_callback) {
-            m_callback();
-        }
     }
 
     scheduleNextReturn();
@@ -670,22 +650,6 @@ void
 MessageBuffer::unregisterDequeueCallback()
 {
     m_dequeue_callback = nullptr;
-}
-
-void
-MessageBuffer::registerCreditCallback(std::function<void()> callback)
-{
-    if (m_credit) {
-        m_credit->registerCallback(std::move(callback));
-    }
-}
-
-void
-MessageBuffer::unregisterCreditCallback()
-{
-    if (m_credit) {
-        m_credit->unregisterCallback();
-    }
 }
 
 void

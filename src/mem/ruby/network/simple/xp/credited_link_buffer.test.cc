@@ -416,8 +416,6 @@ TEST_F(MessageBufferCreditTest, PopAtWithoutDecrementDoesNotReturnCredit)
 TEST_F(MessageBufferCreditTest, UncreditedDequeueDoesNotReturnCredits)
 {
     auto &buf = makeBuffer(0, 0, Cycles(0));
-    int callbacks = 0;
-    buf.registerCreditCallback([&callbacks] { ++callbacks; });
 
     buf.enqueue(makeMessage(1), 0, 1, false, false);
     advanceTo(1);
@@ -426,17 +424,15 @@ TEST_F(MessageBufferCreditTest, UncreditedDequeueDoesNotReturnCredits)
     buf.dequeue(1);
     EXPECT_EQ(buf.availableCredits(), 0);
     EXPECT_EQ(buf.pendingCreditReturns(), 0);
-    EXPECT_EQ(callbacks, 0);
 
     advanceTo(10);
-    EXPECT_EQ(callbacks, 0);
+    EXPECT_EQ(buf.availableCredits(), 0);
+    EXPECT_EQ(buf.pendingCreditReturns(), 0);
 }
 
 TEST_F(MessageBufferCreditTest, DequeueSchedulesImmediateCreditReturn)
 {
     auto &buf = makeBuffer(1, 1, Cycles(3));
-    int callbacks = 0;
-    buf.registerCreditCallback([&callbacks] { ++callbacks; });
 
     buf.enqueue(makeMessage(1), 0, 5, false, false);
     EXPECT_EQ(buf.availableCredits(), 0);
@@ -447,19 +443,15 @@ TEST_F(MessageBufferCreditTest, DequeueSchedulesImmediateCreditReturn)
 
     EXPECT_EQ(buf.availableCredits(), 0);
     EXPECT_EQ(buf.pendingCreditReturns(), 1);
-    EXPECT_EQ(callbacks, 0);
 
     advanceTo(5);
     EXPECT_EQ(buf.availableCredits(), 1);
     EXPECT_EQ(buf.pendingCreditReturns(), 0);
-    EXPECT_EQ(callbacks, 1);
 }
 
 TEST_F(MessageBufferCreditTest, PopAtSchedulesDelayedGroupedReturns)
 {
     auto &buf = makeBuffer(3, 3, Cycles(1));
-    int callbacks = 0;
-    buf.registerCreditCallback([&callbacks] { ++callbacks; });
 
     buf.enqueue(makeMessage(1), 0, 1, false, false);
     buf.enqueue(makeMessage(2), 0, 1, false, false);
@@ -481,34 +473,14 @@ TEST_F(MessageBufferCreditTest, PopAtSchedulesDelayedGroupedReturns)
     advanceTo(4);
     EXPECT_EQ(buf.availableCredits(), 0);
     EXPECT_EQ(buf.pendingCreditReturns(), 3);
-    EXPECT_EQ(callbacks, 0);
 
     advanceTo(5);
     EXPECT_EQ(buf.availableCredits(), 1);
     EXPECT_EQ(buf.pendingCreditReturns(), 2);
-    EXPECT_EQ(callbacks, 1);
 
     advanceTo(7);
     EXPECT_EQ(buf.availableCredits(), 3);
     EXPECT_EQ(buf.pendingCreditReturns(), 0);
-    EXPECT_EQ(callbacks, 2);
-}
-
-TEST_F(MessageBufferCreditTest, UnregisteredCallbackIsNotCalled)
-{
-    auto &buf = makeBuffer(1, 1, Cycles(1));
-    int callbacks = 0;
-    buf.registerCreditCallback([&callbacks] { ++callbacks; });
-
-    buf.enqueue(makeMessage(1), 0, 1, false, false);
-    advanceTo(1);
-    buf.dequeue(1);
-    buf.unregisterCreditCallback();
-
-    advanceTo(1);
-    EXPECT_EQ(buf.availableCredits(), 1);
-    EXPECT_EQ(buf.pendingCreditReturns(), 0);
-    EXPECT_EQ(callbacks, 0);
 }
 
 TEST_F(MessageBufferCreditTest, SelectHeadHonorsReadinessAndPredicate)

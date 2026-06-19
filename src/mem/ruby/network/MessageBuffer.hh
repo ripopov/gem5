@@ -48,12 +48,12 @@
 
 #include <algorithm>
 #include <cassert>
-#include <cstdint>
+#include <cstdint>     // <local-addition feature="credited MessageBuffer"/>
 #include <functional>
 #include <iostream>
-#include <limits>
-#include <map>
-#include <memory>
+#include <limits>      // <local-addition feature="credited MessageBuffer"/>
+#include <map>         // <local-addition feature="credited MessageBuffer"/>
+#include <memory>      // <local-addition feature="credited MessageBuffer"/>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -80,6 +80,7 @@ class MessageBuffer : public SimObject
   public:
     typedef MessageBufferParams Params;
     MessageBuffer(const Params &p);
+    // <local-addition feature="credited MessageBuffer">
     ~MessageBuffer() override;
 
     using MessagePredicate = std::function<bool(const Message&)>;
@@ -92,6 +93,7 @@ class MessageBuffer : public SimObject
 
         bool valid() const { return index != invalidMessageIndex; }
     };
+    // </local-addition>
 
     void reanalyzeMessages(Addr addr, Tick current_time);
     void reanalyzeAllMessages(Tick current_time);
@@ -163,8 +165,6 @@ class MessageBuffer : public SimObject
 
     void registerDequeueCallback(std::function<void()> callback);
     void unregisterDequeueCallback();
-    void registerCreditCallback(std::function<void()> callback);
-    void unregisterCreditCallback();
 
     void recycle(Tick current_time, Tick recycle_latency);
     bool isEmpty() const { return m_prio_heap.size() == 0; }
@@ -177,7 +177,9 @@ class MessageBuffer : public SimObject
     void print(std::ostream& out) const;
     void clearStats() { m_not_avail_count = 0; m_msg_counter = 0; }
 
+    // <local-addition feature="credited MessageBuffer">
     void preDumpStats() override;
+    // </local-addition>
 
     void setIncomingLink(int link_id) { m_input_link_id = link_id; }
     void setVnet(int net) { m_vnet_id = net; }
@@ -185,6 +187,7 @@ class MessageBuffer : public SimObject
     int getIncomingLink() const { return m_input_link_id; }
     int getVnet() const { return m_vnet_id; }
 
+    // <local-addition feature="credited MessageBuffer">
     struct TraceState
     {
         uint64_t currentSize = 0;
@@ -211,6 +214,7 @@ class MessageBuffer : public SimObject
     };
 
     TraceState traceState() const;
+    // </local-addition>
 
     Port &
     getPort(const std::string &, PortID idx=InvalidPortID) override
@@ -243,6 +247,7 @@ class MessageBuffer : public SimObject
 
     int routingPriority() const { return m_routing_priority; }
 
+    // <local-addition feature="credited MessageBuffer">
     bool isCredited() const { return m_credit != nullptr; }
     bool hasCredit(unsigned slots = 1) const;
     unsigned availableCredits() const;
@@ -265,13 +270,18 @@ class MessageBuffer : public SimObject
     const MsgPtr& peekMsgPtrAt(size_t index) const;
     Tick dequeueAt(size_t index, Tick current_time,
                    bool decrement_messages = true);
+    // </local-addition>
+    // NOTE: upstream had a single `private:` section here; the `protected:`
+    // label above is a LOCAL change so subclasses can reach the helpers.
 
     void reanalyzeList(std::list<MsgPtr> &, Tick);
 
     uint32_t functionalAccess(Packet *pkt, bool is_read, WriteMask *mask);
 
   private:
+    // <local-addition feature="credited MessageBuffer">
     class CreditState;
+    // </local-addition>
 
     // Data Members (m_ prefix)
     //! Consumer to signal a wakeup(), can be NULL
@@ -354,9 +364,11 @@ class MessageBuffer : public SimObject
     const bool m_allow_zero_latency;
 
     const int m_routing_priority;
+    // <local-addition feature="credited MessageBuffer">
     const bool m_enable_ooo_pop;
 
     std::unique_ptr<CreditState> m_credit;
+    // </local-addition>
 
     int m_input_link_id;
     int m_vnet_id;

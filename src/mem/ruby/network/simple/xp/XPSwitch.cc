@@ -72,12 +72,6 @@ XPSwitch::addXPOutPort(std::string link_name,
         buffer->setIncomingLink(m_out.size());
         buffer->setVnet(vnet);
         staging.push_back(buffer);
-
-        if (out[vnet] != nullptr && out[vnet]->isCredited()) {
-            out[vnet]->registerCreditCallback([this] {
-                scheduleEvent(Cycles(0));
-            });
-        }
     }
 
     Tick routing_latency = is_external ?
@@ -168,7 +162,10 @@ XPSwitch::driveLinks()
                     continue;
                 }
 
-                if (result == DriveResult::OutputBlocked) {
+                // No credit-return callback exists, so a credit-blocked
+                // output must re-poll next cycle to notice returned credits.
+                if (result == DriveResult::OutputBlocked ||
+                    result == DriveResult::CreditBlocked) {
                     retry = true;
                 }
                 break;
