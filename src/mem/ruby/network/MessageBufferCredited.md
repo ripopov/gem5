@@ -353,10 +353,114 @@ optimizing it in place:
 
 This is the "persistent ready container" of the rejected alternative above, but
 promoted to a first-class consumer-side object with an explicit credit handshake.
+Judged purely on the benchmark it looks like a loss — but the benchmark is the
+wrong lens for it. Its real case is **separation of concerns**, developed next,
+followed by the honest cost/benefit ledger.
+
+#### The strongest argument: separation of concerns
+
+The benchmark framing above ("is the adapter faster?") undersells the design's
+real motivation, which is **responsibility**, not speed. Two concerns are
+tangled inside today's `MessageBuffer`:
+
+- **Flow control** — *may a producer admit a message, and when does the slot it
+  occupies free up?* This is the credit pool: `spendCredit` on `enqueue`,
+  `scheduleReturn` on pop, `hasCredit`/`areNSlotsAvailable` on the producer
+  side. It is a small, universal, single-meaning mechanism. It belongs on the
+  buffer; every credited link wants exactly this and nothing more.
+- **Ready-message selection** — *given the set of arrived messages, which one
+  does the consumer take next, and how are they organized while they wait?*
+  This is `selectEligible`/`selectBest`, the `Handle`, the predicate, the rank.
+  Unlike flow control, this has **many** valid shapes, and the buffer cannot
+  know which one its consumer wants.
+
+The selection concern is where the "one container, one policy" assumption stops
+paying. A real router does not want a single ordered pool of ready messages; it
+wants to *organize* them for the decision it is about to make:
+
+- **Split by routing direction.** A mesh switch routes each ready message toward
+  one of N output ports. Holding all of them in one heap means every per-output
+  arbiter re-scans the whole ready set filtering for "routes to *my* output."
+  An adapter is free to demultiplex on maturity into **per-direction
+  sub-queues**, so each output arbiter looks only at its own candidates — the
+  routing predicate becomes a container choice instead of a per-cycle filter.
+- **Split by QoS class.** Per-class queues, deficit counters, aging state — the
+  anti-starvation bookkeeping `selectBest` can only approximate through a
+  stateless pairwise rank — live naturally in the adapter as first-class
+  structures, not folded into a score.
+- **Anything else a future router wants.** Because the adapter owns the ready
+  set outright, its internal shape is unconstrained: VC-style per-flow FIFOs,
+  a priority tree, a small reorder window. The buffer does not need to grow an
+  API for each of these; it only needs to hand the message over once it matures.
+
+Framed this way the split is not "move the heap somewhere else for the same
+job." It is: **the buffer owns admission and slot accounting; the consumer owns
+how ready work is held and chosen.** That boundary adds flexibility precisely
+because the consumer side has many use cases and the buffer side has one.
+
+#### This boundary already exists in the simple network
+
+The SimpleNetwork switch is the proof that gem5 already wants two buffer tiers
+with two different jobs — the adapter idea is mostly *naming the second tier and
+giving it a clean credit handshake*, not inventing it.
+
+```
+   upstream                 Switch
+   credited      ┌───────────────────────────────────────┐
+   link          │  PerfectSwitch        Throttle(s)      │      downstream
+  ───────────▶ [ input buffer ] ──route──▶ [ port buffer ] ──BW/latency──▶ link
+   (in-port)      │   (admission,            (staging,     │     (next hop's
+                  │    credited)              QoS, drain)   │      input buffer)
+                  └───────────────────────────────────────┘
+```
+
+Two distinct kinds of buffer, with distinct owners and distinct functional-access
+paths (verified in code):
+
+- **Input buffers** — `simple_link->m_buffers`, registered into
+  `SimpleNetwork::m_int_link_buffers`
+  ([simple/SimpleNetwork.cc](simple/SimpleNetwork.cc), `makeInternalLink`, with
+  the telling comment *"global list of buffers (used for functional accesses
+  only)"*). These are the upstream-facing admission point — **this is the tier
+  that should carry credits.** A producer gates on the input buffer's credit
+  pool; the buffer's only job is "is there room, and account for the slot."
+- **Port buffers** — `Switch::m_port_buffers`
+  ([simple/Switch.cc](simple/Switch.cc)), the per-output intermediate staging
+  that `PerfectSwitch` routes *into* and `Throttle` drains *out of* under
+  bandwidth/latency limits. **This is exactly the consumer-side ready container**
+  the adapter generalizes: it already holds post-routing messages, already has a
+  natural owner (the `Throttle`), and is already the place QoS/bandwidth policy
+  is enforced.
+
+That structure makes the credit-return timing fall out cleanly, and it answers
+"when, precisely, is a credit returned?" better than today's pop-couples-return:
+
+> Return the input-buffer credit when the **Throttle actually moves the message
+> out of the port buffer** onto the downstream link — i.e. on real departure,
+> not on the intermediate routing hop into the port buffer.
+
+That is the honest definition of "the slot is free again": the message has left
+the switch, not merely shuffled between its internal stages. It requires exactly
+the `returnCredit()` decoupling (steps 3–4): the routing hop into the port buffer
+pops the input buffer **without** returning credit
+(`popAt(..., decrement_messages = false)` is already this shape — see
+[stallMessage](MessageBuffer.cc)), and the Throttle calls
+`inputBuffer.returnCredit()` when it dequeues from the port buffer. The credit
+pool then bounds `input_buffer.occupancy + port_buffer.occupancy` —
+admitted-but-not-yet-departed — which is the quantity a credited link is
+*supposed* to bound. And the QoS policy lives entirely in the port buffer, where
+the simple network already puts it, with no policy state on the credited input
+buffer at all.
+
 It is a legitimate option with a real tradeoff, not a clear win:
 
 **What it buys**
 
+- **Clean separation of concerns (the main point).** The credited buffer owns
+  flow control only; the consumer owns how ready work is organized and chosen.
+  The simple-network two-tier structure above stops being an accident of the
+  implementation and becomes the explicit contract: input buffer = credits,
+  port buffer = QoS/selection.
 - **`MessageBuffer` returns to upstream-clean.** Steps 1+3 shrink the
   local-addition surface to just credits plus `returnCredit()`. The whole
   `Handle`-invalidation hazard (above) disappears.
@@ -364,13 +468,14 @@ It is a legitimate option with a real tradeoff, not a clear win:
   cycle are safe by construction — no "one live handle at a time" rule.
 - **The credit decoupling (steps 3+4) is sound and arguably better.** As long as
   the adapter drains **without** returning credit and returns it only on
-  router-pop, the credit pool correctly bounds `buffer.size + adapter.size`
-  (admitted-but-not-yet-departed). An explicit `returnCredit()` separates "left
-  the buffer" from "actually departed downstream," which is more honest than
-  today's pop-couples-return.
+  real downstream departure, the credit pool correctly bounds
+  `buffer.size + adapter.size` (admitted-but-not-yet-departed). An explicit
+  `returnCredit()` separates "left the buffer" from "actually departed
+  downstream," which is more honest than today's pop-couples-return — and lines
+  up exactly with "return credit when the Throttle drains the port buffer."
 - The adapter's container has **no enqueue-time ordering constraint** (everything
-  in it is matured), so QoS structures (intrusive list, per-class queues) are
-  free of the heap's baggage.
+  in it is matured), so QoS structures (intrusive list, per-class queues,
+  per-direction sub-queues) are free of the heap's baggage.
 
 **What it costs**
 
@@ -381,43 +486,57 @@ It is a legitimate option with a real tradeoff, not a clear win:
   removed **twice** (head-popped from the heap on drain, then removed from the
   adapter on router-pop) versus **once** today (selected straight out of the
   heap), plus the container insert and the extra `shared_ptr` storage (the same
-  +25–50% memory). If the motivation is speed, this is the wrong direction.
+  +25–50% memory). If the motivation is speed, this is the wrong direction —
+  but separation of concerns, not speed, is the reason to do it.
 - **Eager draining needs precise wakeups.** The adapter must be the buffer's
   `Consumer` and drain newly-matured heads on each maturity event — doable
   (`enqueue` already schedules `scheduleEventAbsolute(arrival_time)`), but it is
   now two objects with coupled scheduling.
-- **The two rejected-alternative problems return** (one smaller than I first
-  framed it): Ruby checkpoints only drained, quiescent state, so the worry is
-  **drain, not serialization** — the adapter must reach empty and reconcile its
-  held credits before a checkpoint (a new drain path, but lighter than a
-  serialize round-trip). The runtime split is the real cost:
-  `functionalRead`/`functionalWrite` / `stallMessage` / `reanalyzeMessages` /
-  `recycle` assume a message has one home on the heap — an already-drained
-  message is invisible to them. Harmless for the CPU-less XP NoC testbench (no
-  functional coherence, no stalls); a regression for general `MessageBuffer`
-  reuse.
+- **The functional-access / checkpoint obligation is the real tax.** This is
+  large enough that it gets its own treatment in
+  [Functional access & the backdoor surface](#functional-access--the-backdoor-surface-what-a-new-container-must-implement)
+  below. In short: a cross-object adapter that holds drained-but-not-departed
+  messages is a *new home for in-flight data* that Ruby's functional path does
+  not know about, so it must be explicitly wired into the traversal and (for a
+  general protocol) into stall/recycle/reanalyze as well. Harmless for the
+  CPU-less XP NoC testbench (no functional coherence, no stalls); a real cost
+  for general `MessageBuffer` reuse.
 
 **When to pick it.** The deciding question is *does anything other than the XP
-switch use OoO pop?*
-- **Single consumer:** the adapter is an attractive refactor — push all OoO/QoS
-  policy into the switch's own adapter, keep `MessageBuffer` pristine, and accept
-  the small perf/serialize cost the testbench never exercises.
-- **OoO as a general `MessageBuffer` capability:** keep it in place; the adapter's
-  per-consumer plumbing and the functional/stall/serialize breakage make it
-  strictly worse.
+switch use OoO pop, and does it run a real coherence protocol?*
+- **Single consumer, no functional coherence (the testbench):** the adapter is
+  an attractive refactor — push all OoO/QoS/per-direction policy into the
+  switch's own adapter, keep `MessageBuffer` pristine and credit-only, and accept
+  the small perf/serialize cost the testbench never exercises. The
+  separation-of-concerns win is real and the functional tax is zero here.
+- **OoO as a general `MessageBuffer` capability under a real protocol:** the
+  adapter must re-implement the whole functional/stall/serialize surface in
+  §3 to stay correct; keeping selection in place is strictly less code to get
+  right.
 
 **Recommended middle path.** Adopt step 3 (and the spirit of step 4) *without*
-steps 1–2: add `returnCredit()` and let consumers `popAt(..., decrement_messages
-= false)` then return the credit later. That captures the cleaner credit
-handshake at near-zero risk, keeps the in-place O(n_ready) selection the
-benchmark prefers, and leaves serialization / functional access / stalling on the
-single heap — while still letting a future adapter be an *opt-in* consumer-side
-choice rather than a buffer-wide commitment.
+necessarily committing to steps 1–2 buffer-wide: add `returnCredit()` and let
+consumers `popAt(..., decrement_messages = false)` then return the credit on
+real departure. That captures the cleaner credit handshake — and the
+input-buffer-credited / port-buffer-QoS split — at near-zero risk, keeps the
+in-place O(n_ready) selection the benchmark prefers as the *default*, and leaves
+functional access / stalling / serialization on the single heap. A future
+per-consumer adapter then becomes an **opt-in** choice for a specific router that
+wants per-direction or per-class organization, layered on the same
+`returnCredit()` primitive — rather than a buffer-wide commitment that taxes
+every `MessageBuffer` user.
 
-### Functional access: the single-home invariant
+### Functional access & the backdoor surface: what a new container must implement
 
-Both dual-container ideas above are constrained by **functional access**, so it
-is worth pinning down what that is and why it matters here.
+Both dual-container ideas above are constrained by **functional access**, and
+more generally any new message-holding container added inside a router/switch
+inherits a list of obligations to stay a "fully featured" Ruby citizen
+(functional reads/writes, checkpoints, draining). This section pins down what
+those interfaces are, how the existing traversal finds buffers, and what it costs
+to add a new one — derived from the actual code paths, with `file:line`
+references so it can be used as an implementation checklist.
+
+#### What "functional" means and why in-flight messages must be searched
 
 gem5 touches memory two ways. **Timing/atomic** access is the normal simulated
 path — modeled latency, drives the coherence protocol. **Functional** access is
@@ -430,10 +549,81 @@ nor in memory but **in flight inside a coherence message** — a WriteBack/Data
 message carrying dirty bytes between controllers. So a functional **read** must
 search everywhere a valid copy could be, *including in-flight messages*, and a
 functional **write** must patch every in-flight copy or a stale value is later
-delivered.
+delivered. Any container you add that can hold a message holding line data is, by
+definition, one of those places.
 
-`MessageBuffer::functionalAccess` ([MessageBuffer.cc](MessageBuffer.cc)) is that
-search over the buffer's contents:
+#### The traversal, top to bottom
+
+Functional access is **driven top-down by `RubySystem`**, which knows every
+controller and every network, and dispatched down to each message-holding object.
+The order and the participants
+([system/RubySystem.cc](../system/RubySystem.cc)):
+
+1. **`RubySystem::functionalRead(pkt)`** (`RubySystem.cc:508`). It first ranks
+   controllers by coherence permission (`Read_Write`, `Read_Only`,
+   `Backing_Store`, `Busy`, `Maybe_Stale`) and reads stable cache/memory state
+   directly: `ctrl_rw->functionalRead(line_address, pkt)` etc.
+   (`RubySystem.cc:601,621,624`). Only if the freshest copy is *not* in a stable
+   cache (a `Busy`/`Maybe_Stale` line — i.e. a transaction is mid-flight) does it
+   fall through to the in-flight searches:
+   - **controller message queues:** `cntrl->functionalReadBuffers(pkt)`
+     (`RubySystem.cc:635`),
+   - then **network in-flight buffers:** `network->functionalRead(pkt)`
+     (`RubySystem.cc:642`).
+   First hit wins; a simple read returns `true` and stops.
+2. **`RubySystem::functionalWrite(pkt)`** (`RubySystem.cc:759`) has no "first hit
+   wins" — it must patch **every** copy, so it unconditionally calls, for every
+   controller in the line's network: `functionalWriteBuffers(pkt)` +
+   `functionalWrite(line_addr, pkt)` (cache state) + the sequencers'
+   `functionalWrite`, then every `network->functionalWrite(pkt)`
+   (`RubySystem.cc:775-797`). It returns the **count** of copies written.
+3. **Partial reads** (`RubySystem.cc:658`) exist for protocols whose messages
+   carry only a byte subset (`protocolInfo->getPartialFuncReads()`): the same
+   walk but accumulating into a `WriteMask` until every byte is covered.
+
+So there are exactly **three classes of in-flight holder** the system knows how
+to reach: *controller-owned buffers*, *sequencer queues*, and *network-owned
+buffers*. A new container must be reachable through one of these, or it is
+invisible.
+
+#### How buffers get *registered* (the part you must not forget)
+
+There is no global "list of all MessageBuffers." Reachability is hand-maintained
+at two layers:
+
+- **Controllers (SLICC-generated).** `functionalReadBuffers`/
+  `functionalWriteBuffers` are **code-generated** by the SLICC compiler
+  ([slicc/symbols/StateMachine.py:1304-1366](../../slicc/symbols/StateMachine.py)):
+  the generator loops over *every object whose type `isBuffer`* in the state
+  machine and emits one `if ($vid->functionalRead(pkt)) return true;` /
+  `num_functional_writes += $vid->functionalWrite(pkt);` per buffer. The payoff:
+  **any `MessageBuffer` declared as a SLICC controller member is covered
+  automatically** — you get functional access for free by declaring it in the
+  `.sm`. The flip side: a container that is *not* a SLICC `MessageBuffer` member
+  (a hand-written C++ container in a controller) is **not** generated into these
+  functions and must be added by hand.
+- **Networks (hand-registered).** The simple network keeps a **manual registry**:
+  `SimpleNetwork::m_int_link_buffers`, populated in `makeInternalLink` with the
+  blunt comment *"Maintain a global list of buffers (used for functional accesses
+  only)"* ([simple/SimpleNetwork.cc:158-160](simple/SimpleNetwork.cc)).
+  `SimpleNetwork::functionalRead/Write` (`SimpleNetwork.cc:175-218`) walks two
+  things: every `Switch` (`it.second->functionalRead(pkt)`) **and** every buffer
+  in `m_int_link_buffers`. Each `Switch::functionalRead`
+  ([simple/Switch.cc:144-173](simple/Switch.cc)) in turn walks its own
+  `m_port_buffers`. **Nothing is automatic here** — a buffer that is neither in
+  `m_int_link_buffers` nor scanned by a `Switch` is unreachable. (Garnet mirrors
+  this manually too: `GarnetNetwork::functionalRead/Write` walks routers, NIs,
+  links, and bridges.)
+
+This is the registration tax in one sentence: **controller buffers are covered by
+declaring them in SLICC; network buffers are covered only by adding them to a
+hand-maintained traversal.** A new container inside a router falls into the
+second category.
+
+#### Inside a single buffer: the single-home invariant
+
+`MessageBuffer::functionalAccess` ([MessageBuffer.cc:1035-1074](MessageBuffer.cc))
+is the leaf of the whole walk:
 
 ```cpp
 // reads return at the first message that has the data (return 1);
@@ -442,37 +632,126 @@ for (msg : m_prio_heap)       msg->functionalRead/Write(pkt);  // in-flight
 for (msg : m_stall_msg_map)   msg->functionalRead/Write(pkt);  // stalled
 ```
 
+(`functionalRead(pkt)` is `functionalAccess(pkt, true, nullptr) == 1`;
+`functionalWrite(pkt)` is `functionalAccess(pkt, false, nullptr)` — the count;
+see [MessageBuffer.hh](MessageBuffer.hh).) It bottoms out in the **protocol
+message's** own `Message::functionalRead/Write`
+([slicc_interface/Message.hh](../slicc_interface/Message.hh)), which each
+generated message subclass implements to match its address and copy its payload.
+
 Two properties matter:
 
 - It scans **both** homes the buffer owns — the priority heap **and** the stall
-  map.
+  map (`m_stall_msg_map`, where `stallMessage` parks a message that cannot yet be
+  handled — [MessageBuffer.cc:801-812](MessageBuffer.cc)).
 - It **ignores maturity**: a message carries its payload regardless of enqueue
   time, so functional access visits the whole heap (immature entries included),
   not just the ready set. This is the one operation that legitimately must touch
   all `n`, not `n_ready`.
 
-Ruby's system-level functional path walks every controller, cache, and in-flight
-`MessageBuffer` and calls this on each, so **every in-flight message is
-reachable**. The invariant that makes it correct: *each in-flight message has
+The invariant that makes the whole system correct: **each in-flight message has
 exactly one home — some buffer's heap or stall map — and `functionalAccess`
-covers both.*
+covers both.** The OoO selection design preserves this precisely because it never
+moves a message off the heap until it is popped for good.
 
-Preserving that invariant is what the dual-container and adapter designs must do:
+#### Checkpoints: drain, don't serialize
 
-- An **in-class second container** (heap + ready-deque) is the easy case: extend
-  the loop above to scan it too, exactly as it already scans the stall map.
-- A **cross-object adapter** is the hard case: functional access is dispatched
-  per-SimObject and the traversal walks `MessageBuffer`s, so an adapter that has
-  drained messages into its own container is **invisible** to it until the
-  adapter implements `functionalRead`/`functionalWrite` *and* is explicitly wired
-  into the traversal. Miss it and a functional read returns stale data, or a
-  functional write leaves a stale in-flight copy — a **silent** divergence that
-  surfaces only on functional paths (checkpoint restore, KVM switch, debugger),
-  the hardest to test.
+A crucial simplification — and the reason "add a new container" is cheaper than
+it first appears: **Ruby does not serialize in-flight messages.**
 
-For the CPU-less XP NoC testbench this is moot (no real coherence payloads, no
-functional reads/writes of meaningful data); it is a correctness concern only
-when OoO/adapter buffers are reused under a real protocol.
+- `MessageBuffer` implements **no** `serialize`/`unserialize` (confirmed: there is
+  no `Serializable` machinery on it — [MessageBuffer.hh](MessageBuffer.hh)).
+- `RubySystem::serialize` ([RubySystem.cc:333-358](../system/RubySystem.cc))
+  refuses to run unless `memWriteback()` was called first
+  (`fatal("Call memWriteback() before serialize()...")`, `RubySystem.cc:344-346`).
+  `memWriteback()` (`RubySystem.cc:224`) flushes cache contents into a
+  `CacheRecorder` trace; the checkpoint stores **only** the cache-block size and
+  that replayable trace (`RubySystem.cc:338-357`). On restore,
+  `RubySystem::unserialize` (`RubySystem.cc:403`) reloads the trace and the
+  controllers warm their caches by **re-issuing requests** — regenerating any
+  in-flight traffic from scratch rather than restoring buffer contents.
+
+The corollary: a checkpoint is only taken at a **quiescent point** — the
+simulator is drained, all transactions complete, every buffer empty. So **no
+message ever survives a checkpoint inside any buffer or adapter.** A new
+container therefore needs **no serialization code at all**; its obligation is
+purely to *be empty at the drain point*, so that `memWriteback`'s recorded cache
+state is the whole story.
+
+#### Draining: the obligation a new container actually has
+
+Because checkpointing relies on quiescence, the real obligation is **drain**, and
+it is enforced at the controller/sequencer level, not the buffer level:
+
+- Drain in Ruby is the standard gem5 `Drainable` protocol (`DrainState`,
+  `drain()`, `signalDrainDone()`). The `Sequencer` participates explicitly:
+  `testDrainComplete()` and `drainState() != DrainState::Draining` guards
+  ([system/Sequencer.cc:229,316,822](../system/Sequencer.cc)) — a sequencer
+  reports drained only when it has no outstanding requests.
+- `MessageBuffer` has no `drain()` of its own; it is drained *transitively* —
+  the controllers stop injecting and the network delivers everything in flight,
+  so buffers empty out as the system quiesces. A controller's "am I quiescent?"
+  check is what gates the global drain.
+
+For a **new container** the rule follows directly: it must **reach empty** as the
+system quiesces and that emptiness must be **reflected in whatever quiesce/drain
+check its owner reports**. If the container can hold a message while the owning
+controller/switch claims to be drained, a checkpoint can be taken with live state
+that `memWriteback` did not record — a silent corruption on restore. This is a
+new drain path to get right, but (per §"Checkpoints" above) it is strictly
+*lighter* than a serialize/unserialize round-trip: reach empty, report it, done.
+
+#### Memory backdoor (a different, narrower mechanism)
+
+Distinct from message functional access is the **memory backdoor**: the path by
+which a controller reaches the backing store directly, bypassing the network.
+`AbstractController::functionalMemoryRead/Write`
+([slicc_interface/AbstractController.cc:358-373](../slicc_interface/AbstractController.cc))
+first checks the controller's own memory request queue, then issues
+`memoryPort.sendFunctional(pkt)` straight to memory. This is relevant only to
+controllers that own a `memoryPort` (directories / memory controllers); a
+network-internal container does **not** participate in it. (gem5 also has a
+`MemBackdoor` fast-path object for caches to map a memory region for direct
+access, but that is a CPU-side/memory-side mechanism, not a Ruby-network buffer
+concern.) Listed here only so the full backdoor surface is on one page: a new
+router container touches *message* functional access, not the *memory* backdoor.
+
+#### The cost of adding a new container — checklist
+
+Putting it together, here is the full bill for adding a message-holding container
+inside a router/switch and keeping it a fully-featured Ruby citizen:
+
+| Interface | Required? | What to do | Where the existing code does it |
+| --- | --- | --- | --- |
+| `functionalRead(pkt)` / with `WriteMask` | **Yes** if it can hold line data | Scan held messages, call `msg->functionalRead`; return on first hit | [MessageBuffer.cc:1035](MessageBuffer.cc) |
+| `functionalWrite(pkt)` | **Yes** if it can hold line data | Scan **all** held messages, patch each, return count | [MessageBuffer.cc:1050](MessageBuffer.cc) |
+| **Registration into the traversal** | **Yes** | Add to the network's hand-maintained walk (`m_int_link_buffers`-style list, or a `Switch::functionalRead` scan); SLICC buffers get this free, custom containers do **not** | [SimpleNetwork.cc:158](simple/SimpleNetwork.cc), [Switch.cc:144](simple/Switch.cc), [StateMachine.py:1304](../../slicc/symbols/StateMachine.py) |
+| Single-home invariant | **Yes** | A message must have exactly one home; don't double-store, don't leave a copy behind on pop | invariant, [MessageBuffer.cc](MessageBuffer.cc) |
+| `serialize`/`unserialize` | **No** | Ruby checkpoints replay cache traces, not buffers | absent by design, [RubySystem.cc:333](../system/RubySystem.cc) |
+| Drain / quiesce | **Yes** | Reach empty at quiescence; reflect emptiness in the owner's drain check | [Sequencer.cc:822](../system/Sequencer.cc) |
+| Memory backdoor (`memoryPort`) | **No** (network containers) | N/A unless it owns backing store | [AbstractController.cc:358](../slicc_interface/AbstractController.cc) |
+| Stall/recycle/reanalyze coverage | Only under a real protocol | If the container can hold a message that later needs `stallMessage`/`reanalyzeMessages`/`recycle`, those paths must find it too | [MessageBuffer.cc:801](MessageBuffer.cc) |
+
+Mapping that back to the designs in this document:
+
+- An **in-class second container** (heap + ready-deque inside `MessageBuffer`) is
+  the easy case: extend `functionalAccess`'s loop to scan it too, exactly as it
+  already scans the stall map. Registration, drain, and single-home are all
+  inherited because the object is still one `MessageBuffer`.
+- A **cross-object consumer-side adapter** is the hard case: it is a *new
+  SimObject-ish home* for in-flight data. It must implement
+  `functionalRead`/`functionalWrite`, be **explicitly added** to the network's
+  hand-maintained traversal (it gets nothing from SLICC), reach empty at drain,
+  and — under a real protocol — be visible to stall/recycle/reanalyze. Miss the
+  registration step and a functional read returns stale data or a functional
+  write leaves a stale in-flight copy: a **silent** divergence that surfaces only
+  on functional paths (checkpoint restore, KVM switch, debugger), the hardest to
+  test.
+
+For the CPU-less XP NoC testbench all of this is moot (no real coherence
+payloads, no functional reads/writes of meaningful data, no stalls); the
+checklist is a correctness concern only when OoO/adapter/per-direction containers
+are reused under a real protocol.
 
 ---
 
