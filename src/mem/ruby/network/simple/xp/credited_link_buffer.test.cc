@@ -418,6 +418,31 @@ TEST_F(MessageBufferCreditTest, ReturnCreditSchedulesDelayedReturn)
     EXPECT_EQ(buf.pendingCreditReturns(), 0);
 }
 
+TEST_F(MessageBufferCreditTest, LazyRedemptionNeedsNoScheduledEvent)
+{
+    auto &buf = makeBuffer(1, 1, Cycles(2));
+
+    buf.enqueue(makeMessage(1), 0, 1, false, false);
+    advanceTo(1);
+    ASSERT_TRUE(buf.isReady(1));
+    buf.dequeue(1);
+    buf.returnCredit(1, 4);  // 1 credit visible at tick 5
+    EXPECT_EQ(buf.pendingCreditReturns(), 1);
+
+    // The credited buffer schedules no events of its own: a return is pulled
+    // by the next producer query, not pushed by a wakeup. Drain every pending
+    // event, jump time forward without servicing anything, and the credit
+    // still reappears on the next query.
+    drainQueue();
+    EXPECT_TRUE(queue->empty());
+
+    queue->setCurTick(5);
+    EXPECT_TRUE(buf.hasCredit());
+    EXPECT_EQ(buf.availableCredits(), 1);
+    EXPECT_EQ(buf.pendingCreditReturns(), 0);
+    EXPECT_TRUE(queue->empty());
+}
+
 TEST_F(MessageBufferCreditTest, ReturnCreditCoalescesGroupedDelays)
 {
     auto &buf = makeBuffer(3, 3, Cycles(1));
@@ -434,8 +459,11 @@ TEST_F(MessageBufferCreditTest, ReturnCreditCoalescesGroupedDelays)
     EXPECT_EQ(buf.availableCredits(), 0);
     EXPECT_EQ(buf.pendingCreditReturns(), 0);
 
-    buf.returnCredit(1, 6, 2);  // 2 credits visible at tick 7
+    // Maturity ticks are non-decreasing (a credited link uses a fixed return
+    // latency). Two returns landing on the same tick coalesce into one entry.
     buf.returnCredit(1, 4, 1);  // 1 credit  visible at tick 5
+    buf.returnCredit(1, 6, 1);  // 1 credit  visible at tick 7
+    buf.returnCredit(1, 6, 1);  // coalesces: 2 total visible at tick 7
     EXPECT_EQ(buf.availableCredits(), 0);
     EXPECT_EQ(buf.pendingCreditReturns(), 3);
 

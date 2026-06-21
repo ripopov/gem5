@@ -83,16 +83,27 @@ producer  --------------------------->  buffer  ----------------------------> co
   message departing downstream, so it does not free the upstream slot.
 - **Return (explicit, delayed):** the consumer calls
   `returnCredit(cur_time, credit_return_delay, slots)` when the message has
-  genuinely left — for the XP switch, when it grants the message onward. Returns
-  are coalesced per target tick in a `std::map<Tick, unsigned>` and processed by
-  a single `EventFunctionWrapper` (`Event::Default_Pri - 1`). Until that event
-  fires the credits are counted as *pending* (`pendingCreditReturns()`), not
-  available.
-- **Notice (polled):** there is **no** producer-side notification when credits
-  return. The return event only updates `m_credits`; a blocked producer learns
-  about the freed credit by polling `hasCredit()` / `areNSlotsAvailable()` again
-  on a later cycle (see [§4 Backpressure](#4-backpressure-handling-polling)). An
-  event-driven alternative is sketched in [§5 Future work](#5-future-work-credit-return-callback).
+  genuinely left — for the XP switch, when it grants the message onward. Each
+  return records the slots against their **maturity tick**
+  (`cur_time + credit_return_delay`). Because a credited link uses a fixed return
+  latency driven by a monotonic clock, maturity ticks are non-decreasing, so
+  returns are kept in a `std::deque<{maturityTick, slots}>` — appended at the
+  back (coalescing slots that share a tick) and redeemed from the front. Until a
+  return matures its slots are counted as *pending* (`pendingCreditReturns()`),
+  not available.
+- **Notice (polled, lazy redemption):** there is **no** producer-side
+  notification and **no scheduled event** when credits return. Matured returns
+  are *pulled* back into the available pool by `redeemMatured()` at the top of
+  every producer query — `hasCredit()`, `availableCredits()`,
+  `areNSlotsAvailable()`, `spendCredit()`. A blocked producer learns about the
+  freed credit by polling again on a later cycle (see
+  [§4 Backpressure](#4-backpressure-handling-polling)); whichever cycle it next
+  polls, any return whose maturity tick has passed is applied first. This is
+  correct because `credit_return_latency` is non-zero, so a credit never matures
+  in the tick it is queued, and under-counting between maturity and the next
+  poll can only delay a grant, never over-grant. A push/event-driven alternative
+  (needed only if a producer ever sleeps on a credit return) is sketched in
+  [§5 Future work](#5-future-work-credit-return-callback).
 
 Because the spend happens at admission and the return only on real departure,
 the credit pool bounds **admitted-but-not-yet-departed** messages — i.e.
@@ -297,10 +308,11 @@ There is **no** event-driven notification when a credit (or a normal buffer
 slot) frees up. Both the credited and the plain bounded-buffer paths rely on the
 producer **re-polling on a later cycle**.
 
-The credit-return event (`CreditState::processReturn`) only updates the credit
-count — it does not wake the producer. The XPSwitch keeps itself scheduled by
-treating a credit-blocked or output-blocked downstream exactly like ordinary
-backpressure and re-arming for next cycle ([`XPSwitch.cc`](simple/xp/XPSwitch.cc),
+A credit return is redeemed lazily — `CreditState::redeemMatured()` moves matured
+slots back into `m_credits` the next time the producer queries credit — and it
+does not wake the producer. The XPSwitch keeps itself scheduled by treating a
+credit-blocked or output-blocked downstream exactly like ordinary backpressure
+and re-arming for next cycle ([`XPSwitch.cc`](simple/xp/XPSwitch.cc),
 `driveLinks`):
 
 ```cpp
@@ -314,8 +326,8 @@ if (result == DriveResult::OutputBlocked ||
 }
 ```
 
-Because the credit count is updated unconditionally by the return event, the
-producer's next poll simply observes the freed credit. The `CreditBlocked`
+Because the producer's next poll redeems any matured returns before checking the
+count, it simply observes the freed credit. The `CreditBlocked`
 result is distinguished from `OutputBlocked` only so the switch can count credit
 stalls separately (`creditStallCycles`). A message parked in a `ready` deque
 because its output staging is full is likewise covered: the staging buffer is
@@ -337,8 +349,10 @@ implemented today to keep the buffer minimal, but it is a small, self-contained
 addition:
 
 1. Give `CreditState` an optional `std::function<void()> m_callback` plus
-   `registerCallback` / `unregisterCallback`, and invoke it at the end of
-   `processReturn()` *after* `m_credits` has been incremented.
+   `registerCallback` / `unregisterCallback`. To fire it at the right tick the
+   lazy redemption must become a scheduled push: arm an `EventFunctionWrapper`
+   for the front entry's maturity tick, and from that event redeem and invoke
+   the callback *after* `m_credits` has been incremented.
 2. Expose `MessageBuffer::registerCreditCallback` /
    `unregisterCreditCallback` thin wrappers that forward to `m_credit`.
 3. In the producer, register a callback on each credited downstream buffer that
@@ -354,14 +368,15 @@ it never changes the credit bookkeeping, which stays entirely inside
 
 ## 6. Lifecycle & statistics
 
-- `clear()` resets the credit pool to full, drops all pending returns, and
-  deschedules the return event.
+- `clear()` resets the credit pool to full and drops all pending returns. There
+  is no return event to deschedule.
 - `preDumpStats()` flushes the live credit counters into stats before a dump.
 - The `CreditState` is a `statistics::Group` named **`credit`** under the buffer,
-  exposing: `creditStalls`, `creditReturns`, `creditReturnEventCount`,
-  `availableCreditsStat`, `pendingReturnsStat`, and the derived `creditOccupancy`
+  exposing: `creditStalls`, `creditReturns`, `availableCreditsStat`,
+  `pendingReturnsStat`, and the derived `creditOccupancy`
   (`maxCredits - availableCredits`). All are `nozero`-flagged, so a non-credited
-  buffer emits nothing.
+  buffer emits nothing. (`creditReturns` is bumped inside `redeemMatured()`, so a
+  non-zero value confirms the lazy pull path is exercised.)
 - The XP switch's `xp` stat group exposes `grants`, `holSkips` (OoO skips),
   `creditStallCycles`, `outputBlockedCycles`, `stagingFullCycles`, and
   `linkSends`.

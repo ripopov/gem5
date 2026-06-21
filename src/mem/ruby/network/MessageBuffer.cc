@@ -41,6 +41,8 @@
 #include "mem/ruby/network/MessageBuffer.hh"
 
 #include <cassert>
+#include <deque>
+#include <utility>
 
 #include "base/cprintf.hh"
 #include "base/logging.hh"
@@ -66,36 +68,63 @@ class MessageBuffer::CreditState : public statistics::Group
                 Cycles credit_return_latency);
     ~CreditState();
 
-    bool hasCredit(unsigned slots = 1) const { return m_credits >= slots; }
-    unsigned availableCredits() const { return m_credits; }
+    bool hasCredit(unsigned slots = 1) const
+    {
+        redeemMatured();
+        return m_credits >= slots;
+    }
+    unsigned availableCredits() const
+    {
+        redeemMatured();
+        return m_credits;
+    }
     unsigned maxCredits() const { return m_maxCredits; }
     Cycles creditReturnLatency() const { return m_creditReturnLatency; }
-    unsigned pendingReturns() const { return m_pendingCreditReturns; }
+    unsigned pendingReturns() const
+    {
+        redeemMatured();
+        return m_pendingCreditReturns;
+    }
 
     void spendCredit(Tick enqueue_delta);
     void recordCreditStall();
     void scheduleReturn(Tick cur_time, Tick credit_return_delay,
                         unsigned slots);
     void clear();
-    void updateStats();
+    void updateStats() const;
+    // Redeem anything matured by now, then mirror into the stat scalars, so a
+    // stats dump reflects credits freed at the dump tick even if no producer
+    // has polled yet this cycle.
+    void flushStats() const { redeemMatured(); updateStats(); }
 
   private:
-    void processReturn();
-    void scheduleNextReturn();
+    // Move credits whose return latency has elapsed back into the available
+    // pool. Returns are redeemed lazily (pulled by the next producer query)
+    // rather than pushed by a scheduled event: credited producers poll every
+    // cycle while stalled, so a matured credit becomes visible on their next
+    // query. This is safe because credit_return_latency is non-zero, so a
+    // credit never matures in the tick it is queued, and under-counting
+    // between maturity and the next poll can only delay a grant, never
+    // over-grant. (A producer that descheduled itself to sleep on a credit
+    // return would instead need a pushed event -- no such consumer exists.)
+    void redeemMatured() const;
 
     MessageBuffer &m_owner;
     const unsigned m_maxCredits;
-    unsigned m_credits;
+    mutable unsigned m_credits;
     const Cycles m_creditReturnLatency;
-    std::map<Tick, unsigned> m_returnEvents;
-    unsigned m_pendingCreditReturns = 0;
-    EventFunctionWrapper m_returnEvent;
+    // Pending returns ordered by maturity tick. Maturity ticks are
+    // monotonically non-decreasing (fixed return latency from a monotonic
+    // clock), so entries are appended at the back and redeemed from the
+    // front. Each entry coalesces all slots maturing at the same tick:
+    // {maturityTick, slots}.
+    mutable std::deque<std::pair<Tick, unsigned>> m_returnQueue;
+    mutable unsigned m_pendingCreditReturns = 0;
 
     statistics::Scalar creditStalls;
-    statistics::Scalar creditReturns;
-    statistics::Scalar creditReturnEventCount;
-    statistics::Scalar availableCreditsStat;
-    statistics::Scalar pendingReturnsStat;
+    mutable statistics::Scalar creditReturns;
+    mutable statistics::Scalar availableCreditsStat;
+    mutable statistics::Scalar pendingReturnsStat;
     statistics::Formula creditOccupancy;
 };
 
@@ -107,15 +136,10 @@ MessageBuffer::CreditState::CreditState(
       m_maxCredits(max_credits),
       m_credits(max_credits),
       m_creditReturnLatency(credit_return_latency),
-      m_returnEvent(owner, [this] { processReturn(); },
-                    owner.name() + ".creditReturn", false,
-                    Event::Default_Pri - 1),
       ADD_STAT(creditStalls, statistics::units::Count::get(),
                "Number of failed credited-send attempts"),
       ADD_STAT(creditReturns, statistics::units::Count::get(),
                "Number of credits returned to the producer"),
-      ADD_STAT(creditReturnEventCount, statistics::units::Count::get(),
-               "Number of delayed credit-return events processed"),
       ADD_STAT(availableCreditsStat, statistics::units::Count::get(),
                "Current available producer-visible credits"),
       ADD_STAT(pendingReturnsStat, statistics::units::Count::get(),
@@ -132,7 +156,6 @@ MessageBuffer::CreditState::CreditState(
 
     creditStalls.flags(statistics::nozero);
     creditReturns.flags(statistics::nozero);
-    creditReturnEventCount.flags(statistics::nozero);
     availableCreditsStat.flags(statistics::nozero);
     pendingReturnsStat.flags(statistics::nozero);
     creditOccupancy.flags(statistics::nozero);
@@ -142,12 +165,9 @@ MessageBuffer::CreditState::CreditState(
     updateStats();
 }
 
-MessageBuffer::CreditState::~CreditState()
-{
-    if (m_returnEvent.scheduled()) {
-        m_owner.deschedule(m_returnEvent);
-    }
-}
+// Out-of-line (defaulted) to anchor the statistics::Group vtable in this
+// translation unit. Lazy redemption keeps no scheduled event to tear down.
+MessageBuffer::CreditState::~CreditState() = default;
 
 void
 MessageBuffer::CreditState::spendCredit(Tick enqueue_delta)
@@ -182,71 +202,52 @@ MessageBuffer::CreditState::scheduleReturn(Tick cur_time,
     }
 
     const Tick when = cur_time + credit_return_delay;
-    m_returnEvents[when] += slots;
+    gem5_assert(m_returnQueue.empty() || when >= m_returnQueue.back().first,
+                "MessageBuffer::CreditState::scheduleReturn: maturity ticks "
+                "must be monotonic (fixed return latency assumed)");
+    if (!m_returnQueue.empty() && m_returnQueue.back().first == when) {
+        m_returnQueue.back().second += slots;
+    } else {
+        m_returnQueue.emplace_back(when, slots);
+    }
     m_pendingCreditReturns += slots;
     updateStats();
-    scheduleNextReturn();
 }
 
 void
 MessageBuffer::CreditState::clear()
 {
-    if (m_returnEvent.scheduled()) {
-        m_owner.deschedule(m_returnEvent);
-    }
-
-    m_returnEvents.clear();
+    m_returnQueue.clear();
     m_pendingCreditReturns = 0;
     m_credits = m_maxCredits;
     updateStats();
 }
 
 void
-MessageBuffer::CreditState::processReturn()
+MessageBuffer::CreditState::redeemMatured() const
 {
     const Tick now = curTick();
     unsigned returned = 0;
 
-    auto it = m_returnEvents.begin();
-    while (it != m_returnEvents.end() && it->first <= now) {
-        returned += it->second;
-        it = m_returnEvents.erase(it);
+    while (!m_returnQueue.empty() && m_returnQueue.front().first <= now) {
+        returned += m_returnQueue.front().second;
+        m_returnQueue.pop_front();
     }
 
     if (returned != 0) {
         gem5_assert(m_pendingCreditReturns >= returned,
-                    "MessageBuffer::CreditState::processReturn");
+                    "MessageBuffer::CreditState::redeemMatured");
         m_pendingCreditReturns -= returned;
         m_credits += returned;
         gem5_assert(m_credits <= m_maxCredits,
-                    "MessageBuffer::CreditState::processReturn");
+                    "MessageBuffer::CreditState::redeemMatured");
         creditReturns += returned;
-        creditReturnEventCount++;
         updateStats();
     }
-
-    scheduleNextReturn();
 }
 
 void
-MessageBuffer::CreditState::scheduleNextReturn()
-{
-    if (m_returnEvents.empty()) {
-        return;
-    }
-
-    const Tick when = m_returnEvents.begin()->first;
-    if (m_returnEvent.scheduled()) {
-        if (when < m_returnEvent.when()) {
-            m_owner.reschedule(m_returnEvent, when, true);
-        }
-    } else {
-        m_owner.schedule(m_returnEvent, when);
-    }
-}
-
-void
-MessageBuffer::CreditState::updateStats()
+MessageBuffer::CreditState::updateStats() const
 {
     availableCreditsStat = m_credits;
     pendingReturnsStat = m_pendingCreditReturns;
@@ -337,7 +338,7 @@ void
 MessageBuffer::preDumpStats()
 {
     if (m_credit) {
-        m_credit->updateStats();
+        m_credit->flushStats();
     }
     SimObject::preDumpStats();
 }
