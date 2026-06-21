@@ -110,9 +110,9 @@ class Switch : public BasicRouter
     void init_net_ptr(SimpleNetwork* net_ptr) { m_network_ptr = net_ptr; }
     SimpleNetwork* getNetPtr() const { return m_network_ptr; }
 
-    bool functionalRead(Packet *);
-    bool functionalRead(Packet *, WriteMask&);
-    uint32_t functionalWrite(Packet *);
+    virtual bool functionalRead(Packet *);
+    virtual bool functionalRead(Packet *, WriteMask&);
+    virtual uint32_t functionalWrite(Packet *);
 
     BaseRoutingUnit& getRoutingUnit() { return m_routing_unit; }
 

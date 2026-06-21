@@ -90,6 +90,3 @@ class MessageBuffer(SimObject):
     credit_return_latency = Param.Cycles(
         1, "Cycles from downstream departure to upstream credit visibility"
     )
-    enable_ooo_pop = Param.Bool(
-        False, "Allow oldest-eligible selection instead of head-only dequeue"
-    )

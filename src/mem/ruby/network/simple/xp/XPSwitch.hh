@@ -6,6 +6,7 @@
 #ifndef __MEM_RUBY_NETWORK_SIMPLE_XP_XPSWITCH_HH__
 #define __MEM_RUBY_NETWORK_SIMPLE_XP_XPSWITCH_HH__
 
+#include <deque>
 #include <string>
 #include <vector>
 
@@ -43,15 +44,37 @@ class XPSwitch : public Switch, public Consumer
     void storeEventInfo(int info) override;
     void print(std::ostream& out) const override;
 
+    bool functionalRead(Packet *pkt) override;
+    bool functionalRead(Packet *pkt, WriteMask &mask) override;
+    uint32_t functionalWrite(Packet *pkt) override;
+
     bool hasCustomStats() const override { return true; }
     const statistics::Formula &getLinkUtilization() const override;
     const statistics::Formula &getMsgCount(unsigned int type) const override;
     const statistics::Formula &getMsgBytes(unsigned int type) const override;
 
   private:
+    // Consumer-side out-of-order adapter: a switch-local random-access
+    // container of matured messages drained, in arrival order, from one
+    // credited/in-order input MessageBuffer. The switch arbitrates
+    // out-of-order over `ready`, then returns the credit to `source` on grant.
+    // See MessageBufferCredited.md ("consumer-side OoO adapter").
+    struct ReadyQueue
+    {
+        MessageBuffer *source = nullptr;
+        std::deque<MsgPtr> ready;
+        // Reorder-window bound (0 == unbounded). Mirrors source->getMaxSize()
+        // so admission backpressure on `source` still bounds in-flight traffic
+        // when the input link is uncredited.
+        size_t capacity = 0;
+        // Grants issued from this (input, vnet) this cycle; capped at the
+        // per-vnet channel count to model input crossbar bandwidth.
+        unsigned grantsThisCycle = 0;
+    };
+
     struct InputPort
     {
-        std::vector<MessageBuffer*> buffers;
+        std::vector<ReadyQueue> vnets;
     };
 
     struct OutputPort
@@ -65,8 +88,8 @@ class XPSwitch : public Switch, public Consumer
 
     struct Candidate
     {
-        MessageBuffer *buffer = nullptr;
-        MessageBuffer::Handle handle;
+        ReadyQueue *queue = nullptr;
+        size_t index = 0;
         MsgPtr msg;
         std::vector<BaseRoutingUnit::RouteInfo> routes;
         bool valid = false;
@@ -81,6 +104,8 @@ class XPSwitch : public Switch, public Consumer
         OutputBlocked,
     };
 
+    void resetGrantBudget(Tick current_time);
+    void drainInputs(Tick current_time);
     void operateVnet(int vnet);
     bool driveLinks();
     DriveResult driveOutput(OutputPort &out_port, int vnet);
@@ -93,6 +118,9 @@ class XPSwitch : public Switch, public Consumer
     void grantCandidate(Candidate &candidate, int vnet, Tick current_time);
     void recordSend(const Message &msg, int vnet, Tick wait_time);
     int getChannelCnt(int vnet) const;
+
+    const bool m_enable_ooo_pop;
+    Tick m_grant_cycle = MaxTick;
 
     std::vector<InputPort> m_in;
     std::vector<OutputPort> m_out;

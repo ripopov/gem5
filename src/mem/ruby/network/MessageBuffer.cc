@@ -262,7 +262,6 @@ MessageBuffer::MessageBuffer(const Params &p)
     m_randomization(p.randomization),
     m_allow_zero_latency(p.allow_zero_latency),
     m_routing_priority(p.routing_priority),
-    m_enable_ooo_pop(p.enable_ooo_pop),
     m_credit(p.credits == 0 ? nullptr :
              std::make_unique<CreditState>(
                  *this, p.buffer_size, p.credits, p.credit_return_latency)),
@@ -572,23 +571,12 @@ MessageBuffer::enqueue(MsgPtr message, Tick current_time, Tick delta,
 Tick
 MessageBuffer::dequeue(Tick current_time, bool decrement_messages)
 {
-    Tick delay = dequeueAt(0, current_time, decrement_messages);
-    if (decrement_messages && m_credit) {
-        m_credit->scheduleReturn(current_time, 0, 1);
-    }
-    return delay;
-}
-
-Tick
-MessageBuffer::dequeueAt(size_t index, Tick current_time,
-                         bool decrement_messages)
-{
     DPRINTF(RubyQueue, "Popping\n");
     assert(isReady(current_time));
-    assert(index < m_prio_heap.size());
 
-    // get MsgPtr of the message about to be dequeued
-    MsgPtr message = m_prio_heap[index];
+    // get MsgPtr of the message about to be dequeued (always the head: the
+    // buffer is strict-FIFO, out-of-order selection lives in the consumer)
+    MsgPtr message = m_prio_heap.front();
 
     // get the delay cycles
     message->updateDelayedTicks(current_time);
@@ -610,23 +598,8 @@ MessageBuffer::dequeueAt(size_t index, Tick current_time,
                         current_time);
     }
 
-    if (index == 0) {
-        pop_heap(m_prio_heap.begin(), m_prio_heap.end(),
-                 std::greater<MsgPtr>());
-        m_prio_heap.pop_back();
-    } else {
-        // Out-of-order removal: move the last element into the hole and
-        // restore the heap in O(log n) by sifting it, rather than rebuilding
-        // the entire heap with an O(n) std::make_heap.
-        const size_t last = m_prio_heap.size() - 1;
-        if (index != last) {
-            m_prio_heap[index] = std::move(m_prio_heap[last]);
-            m_prio_heap.pop_back();
-            siftHeapEntry(index);
-        } else {
-            m_prio_heap.pop_back();
-        }
-    }
+    pop_heap(m_prio_heap.begin(), m_prio_heap.end(), std::greater<MsgPtr>());
+    m_prio_heap.pop_back();
 
     if (decrement_messages) {
         // Record how much time is passed since the message was enqueued
@@ -645,49 +618,6 @@ MessageBuffer::dequeueAt(size_t index, Tick current_time,
     }
 
     return delay;
-}
-
-void
-MessageBuffer::siftHeapEntry(size_t index)
-{
-    // The heap is ordered with std::greater<MsgPtr>, i.e. the comparator
-    // reports comp(parent, child) == false for a well-formed heap, so each
-    // parent's (enqueue time, counter) is <= its children's and the earliest
-    // message sits at the root. After an out-of-order removal moved a fresh
-    // element into `index`, that element may belong higher or lower; sift it
-    // in whichever direction restores the invariant. Only one direction ever
-    // does work, so running both is correct and still O(log n).
-    const std::greater<MsgPtr> comp;
-    const size_t size = m_prio_heap.size();
-
-    // Sift up while the element ranks before its parent.
-    while (index > 0) {
-        const size_t parent = (index - 1) / 2;
-        if (!comp(m_prio_heap[parent], m_prio_heap[index])) {
-            break;
-        }
-        std::swap(m_prio_heap[parent], m_prio_heap[index]);
-        index = parent;
-    }
-
-    // Sift down while a child ranks before the element; swap with the
-    // earlier-ordered child.
-    for (;;) {
-        const size_t left = 2 * index + 1;
-        const size_t right = left + 1;
-        size_t smallest = index;
-        if (left < size && comp(m_prio_heap[smallest], m_prio_heap[left])) {
-            smallest = left;
-        }
-        if (right < size && comp(m_prio_heap[smallest], m_prio_heap[right])) {
-            smallest = right;
-        }
-        if (smallest == index) {
-            break;
-        }
-        std::swap(m_prio_heap[index], m_prio_heap[smallest]);
-        index = smallest;
-    }
 }
 
 void
@@ -895,55 +825,6 @@ MessageBuffer::canDequeue(Tick current_time) const
            (m_dequeues_this_cy < m_max_dequeue_rate);
 }
 
-size_t
-MessageBuffer::findReady(const MessagePredicate &predicate,
-                         Tick current_time) const
-{
-    // Oldest-eligible selection is just selectBest() ranked by
-    // (enqueue time, counter): the earliest matured message that satisfies
-    // `predicate` wins, exactly as the old O(n) flat scan did, but now in
-    // O(n_ready) via the pruned heap traversal.
-    Handle h = selectBest(
-        predicate,
-        [](const Message &a, const Message &b) {
-            if (a.getLastEnqueueTime() == b.getLastEnqueueTime()) {
-                return a.getMsgCounter() < b.getMsgCounter();
-            }
-            return a.getLastEnqueueTime() < b.getLastEnqueueTime();
-        },
-        current_time);
-    return h.index;
-}
-
-MessageBuffer::Handle
-MessageBuffer::selectBest(const MessagePredicate &eligible,
-                          const MessageRank &better, Tick cur_time) const
-{
-    if (!canDequeue(cur_time)) {
-        return Handle{};
-    }
-
-    size_t best = invalidMessageIndex;
-    forEachReady(cur_time, [&](size_t i, const MsgPtr &msg) {
-        if (eligible && !eligible(*msg)) {
-            return;
-        }
-        if (best == invalidMessageIndex ||
-            (better && better(*msg, *m_prio_heap[best]))) {
-            best = i;
-        }
-    });
-
-    return Handle{best};
-}
-
-const MsgPtr&
-MessageBuffer::peekMsgPtrAt(size_t index) const
-{
-    assert(index < m_prio_heap.size());
-    return m_prio_heap[index];
-}
-
 bool
 MessageBuffer::hasCredit(unsigned slots) const
 {
@@ -974,61 +855,13 @@ MessageBuffer::pendingCreditReturns() const
     return m_credit ? m_credit->pendingReturns() : 0;
 }
 
-MessageBuffer::Handle
-MessageBuffer::selectEligible(const MessagePredicate &predicate,
-                              Tick cur_time) const
+void
+MessageBuffer::returnCredit(Tick cur_time, Tick credit_return_delay,
+                            unsigned slots)
 {
-    // Head-only when OoO is disabled. Also short-circuit the no-predicate
-    // case: with no filtering the oldest matured message is always the heap
-    // head, so selectHead answers in O(1) and we skip the O(n_ready) scan.
-    if (!m_enable_ooo_pop || !predicate) {
-        return selectHead(predicate, cur_time);
-    }
-    return Handle{findReady(predicate, cur_time)};
-}
-
-MessageBuffer::Handle
-MessageBuffer::selectHead(const MessagePredicate &predicate,
-                          Tick cur_time) const
-{
-    if (!canDequeue(cur_time) || isEmpty() || readyTime() > cur_time) {
-        return Handle{};
-    }
-
-    const MsgPtr &msg = peekMsgPtr();
-    if (predicate && !predicate(*msg)) {
-        return Handle{};
-    }
-    return Handle{0};
-}
-
-size_t
-MessageBuffer::selectorMemoryBytes() const
-{
-    // Baseline / O(n) variants keep only the priority heap, so the selection
-    // footprint is just that vector's reserved storage. Two-container variants
-    // override this to add their auxiliary matured-set container.
-    return m_prio_heap.capacity() * sizeof(MsgPtr);
-}
-
-const MsgPtr&
-MessageBuffer::peekAt(Handle handle) const
-{
-    assert(handle.valid());
-    return peekMsgPtrAt(handle.index);
-}
-
-Tick
-MessageBuffer::popAt(Handle handle, Tick cur_time,
-                     Tick credit_return_delay, unsigned slots,
-                     bool decrement_messages)
-{
-    assert(handle.valid());
-    Tick delay = dequeueAt(handle.index, cur_time, decrement_messages);
-    if (decrement_messages && m_credit) {
+    if (m_credit) {
         m_credit->scheduleReturn(cur_time, credit_return_delay, slots);
     }
-    return delay;
 }
 
 uint32_t

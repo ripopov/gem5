@@ -24,7 +24,8 @@ namespace ruby
 {
 
 XPSwitch::XPSwitch(const Params &p)
-    : Switch(p), Consumer(this, XP_EV_PRI), xpStats(this)
+    : Switch(p), Consumer(this, XP_EV_PRI),
+      m_enable_ooo_pop(p.enable_ooo_pop), xpStats(this)
 {
     m_portBuffers.reserve(p.port_buffers.size());
     for (auto &buffer : p.port_buffers) {
@@ -42,7 +43,9 @@ void
 XPSwitch::addXPInPort(const std::vector<MessageBuffer*>& in)
 {
     const NodeID port = m_in.size();
-    m_in.push_back({in});
+    m_in.emplace_back();
+    InputPort &in_port = m_in.back();
+    in_port.vnets.resize(in.size());
 
     for (int vnet = 0; vnet < in.size(); ++vnet) {
         MessageBuffer *buffer = in[vnet];
@@ -52,6 +55,13 @@ XPSwitch::addXPInPort(const std::vector<MessageBuffer*>& in)
         buffer->setConsumer(this);
         buffer->setIncomingLink(port);
         buffer->setVnet(vnet);
+
+        ReadyQueue &queue = in_port.vnets[vnet];
+        queue.source = buffer;
+        // Bound the reorder window to the input buffer's capacity so that,
+        // when uncredited, a full window leaves messages parked in `source`
+        // and its slot-based backpressure still throttles the producer.
+        queue.capacity = buffer->getMaxSize();
     }
 }
 
@@ -86,14 +96,57 @@ XPSwitch::addXPOutPort(std::string link_name,
 void
 XPSwitch::wakeup()
 {
+    Tick current_time = clockEdge();
+    resetGrantBudget(current_time);
+
+    // 1. Drive matured staging messages onto the downstream links.
     bool retry = driveLinks();
 
+    // 2. Pull matured messages out of the in-order input buffers into the
+    //    per-input random-access ready containers (returns no credit yet).
+    drainInputs(current_time);
+
+    // 3. Arbitrate the ready containers into the output staging buffers.
     for (int vnet = params().virt_nets - 1; vnet >= 0; --vnet) {
         operateVnet(vnet);
     }
 
     if (retry) {
         scheduleEvent(Cycles(1));
+    }
+}
+
+void
+XPSwitch::resetGrantBudget(Tick current_time)
+{
+    if (m_grant_cycle == current_time) {
+        return;
+    }
+    m_grant_cycle = current_time;
+    for (auto &in_port : m_in) {
+        for (auto &queue : in_port.vnets) {
+            queue.grantsThisCycle = 0;
+        }
+    }
+}
+
+void
+XPSwitch::drainInputs(Tick current_time)
+{
+    for (auto &in_port : m_in) {
+        for (auto &queue : in_port.vnets) {
+            if (queue.source == nullptr) {
+                continue;
+            }
+            // In-order (head-only) consumption of the input buffer; the
+            // out-of-order choice is made later, over `ready`.
+            while ((queue.capacity == 0 ||
+                    queue.ready.size() < queue.capacity) &&
+                   queue.source->isReady(current_time)) {
+                queue.ready.push_back(queue.source->peekMsgPtr());
+                queue.source->dequeue(current_time);
+            }
+        }
     }
 }
 
@@ -106,6 +159,57 @@ void
 XPSwitch::print(std::ostream& out) const
 {
     out << "[XPSwitch]";
+}
+
+// The ready containers hold in-flight messages drained from the input
+// buffers but not yet forwarded, so they are a home for line data that
+// functional access must reach. The base Switch handles the staging buffers;
+// the input buffers themselves are reached via the network's
+// m_int_link_buffers list (internal links) or the owning controller
+// (external injection).
+bool
+XPSwitch::functionalRead(Packet *pkt)
+{
+    for (auto &in_port : m_in) {
+        for (auto &queue : in_port.vnets) {
+            for (auto &msg : queue.ready) {
+                if (msg->functionalRead(pkt)) {
+                    return true;
+                }
+            }
+        }
+    }
+    return Switch::functionalRead(pkt);
+}
+
+bool
+XPSwitch::functionalRead(Packet *pkt, WriteMask &mask)
+{
+    bool read = Switch::functionalRead(pkt, mask);
+    for (auto &in_port : m_in) {
+        for (auto &queue : in_port.vnets) {
+            for (auto &msg : queue.ready) {
+                if (msg->functionalRead(pkt, mask)) {
+                    read = true;
+                }
+            }
+        }
+    }
+    return read;
+}
+
+uint32_t
+XPSwitch::functionalWrite(Packet *pkt)
+{
+    uint32_t num_functional_writes = Switch::functionalWrite(pkt);
+    for (auto &in_port : m_in) {
+        for (auto &queue : in_port.vnets) {
+            for (auto &msg : queue.ready) {
+                num_functional_writes += msg->functionalWrite(pkt);
+            }
+        }
+    }
+    return num_functional_writes;
 }
 
 const statistics::Formula&
@@ -228,47 +332,51 @@ XPSwitch::selectCandidate(int vnet, int output)
 {
     Candidate selected;
     Tick current_time = clockEdge();
+    const unsigned channel_cnt = getChannelCnt(vnet);
 
     for (auto &in_port : m_in) {
-        if (vnet >= in_port.buffers.size()) {
+        if (vnet >= in_port.vnets.size()) {
             continue;
         }
 
-        MessageBuffer *buffer = in_port.buffers[vnet];
-        if (buffer == nullptr) {
+        ReadyQueue &queue = in_port.vnets[vnet];
+        if (queue.source == nullptr || queue.ready.empty() ||
+            queue.grantsThisCycle >= channel_cnt) {
             continue;
         }
 
-        auto predicate = [this, vnet, output, current_time](
-            const Message &msg) {
+        // Scan the matured messages oldest-first for the oldest one that
+        // routes to `output` and whose downstream staging has room. With OoO
+        // disabled only the head (front) of the container is eligible.
+        const size_t limit = m_enable_ooo_pop ? queue.ready.size() : 1;
+        bool eligible_found = false;
+        bool routing_match_staging_full = false;
+
+        for (size_t i = 0; i < limit; ++i) {
+            const MsgPtr &msg_ptr = queue.ready[i];
             std::vector<BaseRoutingUnit::RouteInfo> routes;
-            return routesToOutput(msg, vnet, output, routes) &&
-                   stagingAvailable(routes, vnet, current_time);
-        };
-
-        MessageBuffer::Handle handle =
-            buffer->selectEligible(predicate, current_time);
-        if (!handle.valid()) {
-            if (buffer->isReady(current_time)) {
-                MsgPtr head = buffer->peekMsgPtr();
-                std::vector<BaseRoutingUnit::RouteInfo> routes;
-                if (routesToOutput(*head, vnet, output, routes) &&
-                    !stagingAvailable(routes, vnet, current_time)) {
-                    xpStats.stagingFullCycles++;
-                }
+            if (!routesToOutput(*msg_ptr, vnet, output, routes)) {
+                continue;
             }
-            continue;
+            if (!stagingAvailable(routes, vnet, current_time)) {
+                routing_match_staging_full = true;
+                continue;
+            }
+
+            eligible_found = true;
+            if (!selected.valid || selected.msg > msg_ptr) {
+                selected.queue = &queue;
+                selected.index = i;
+                selected.msg = msg_ptr;
+                selected.valid = true;
+                selected.oooSkip = i != 0;
+                selected.routes = std::move(routes);
+            }
+            break;
         }
 
-        MsgPtr msg_ptr = buffer->peekAt(handle);
-        if (!selected.valid || selected.msg > msg_ptr) {
-            selected.buffer = buffer;
-            selected.handle = handle;
-            selected.msg = msg_ptr;
-            selected.valid = true;
-            selected.oooSkip = handle.index != 0;
-            selected.routes.clear();
-            routesToOutput(*msg_ptr, vnet, output, selected.routes);
+        if (!eligible_found && routing_match_staging_full) {
+            xpStats.stagingFullCycles++;
         }
     }
 
@@ -311,25 +419,32 @@ XPSwitch::stagingAvailable(
 void
 XPSwitch::grantCandidate(Candidate &candidate, int vnet, Tick current_time)
 {
-    MsgPtr msg_ptr = candidate.buffer->peekAt(candidate.handle);
+    ReadyQueue &queue = *candidate.queue;
+    MessageBuffer *source = queue.source;
 
-    MsgPtr unmodified_msg_ptr;
-    if (candidate.routes.size() > 1) {
-        unmodified_msg_ptr = msg_ptr->clone();
-    }
+    // Remove the granted message from the ready container by position. This is
+    // invalidation-proof because exactly one candidate is live at a time: the
+    // caller re-selects after every grant.
+    assert(candidate.index < queue.ready.size());
+    MsgPtr msg_ptr = queue.ready[candidate.index];
+    queue.ready.erase(queue.ready.begin() + candidate.index);
+    queue.grantsThisCycle++;
 
-    if (candidate.buffer->isCredited()) {
-        Tick credit_return_delay = cyclesToTicks(
-            candidate.buffer->creditReturnLatency());
-        candidate.buffer->popAt(candidate.handle, current_time,
-                                credit_return_delay);
-    } else {
-        candidate.buffer->popAt(candidate.handle, current_time, 0);
+    // The message has departed the switch's input stage, so the slot it
+    // occupied upstream is now free: return the credit after the link latency.
+    if (source->isCredited()) {
+        source->returnCredit(current_time,
+                             cyclesToTicks(source->creditReturnLatency()));
     }
 
     xpStats.grants++;
     if (candidate.oooSkip) {
         xpStats.holSkips++;
+    }
+
+    MsgPtr unmodified_msg_ptr;
+    if (candidate.routes.size() > 1) {
+        unmodified_msg_ptr = msg_ptr->clone();
     }
 
     for (int i = 0; i < candidate.routes.size(); ++i) {
@@ -348,7 +463,7 @@ XPSwitch::grantCandidate(Candidate &candidate, int vnet, Tick current_time)
 
         DPRINTF(RubyNetwork, "XP enqueue inport[%d][%d] to "
                 "outport[%d][%d]\n",
-                candidate.buffer->getIncomingLink(), vnet, outgoing, vnet);
+                source->getIncomingLink(), vnet, outgoing, vnet);
 
         out_port.staging[vnet]->enqueue(
             msg_ptr, current_time, out_port.routingLatency,

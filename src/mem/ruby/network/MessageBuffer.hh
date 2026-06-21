@@ -51,7 +51,6 @@
 #include <cstdint>     // <local-addition feature="credited MessageBuffer"/>
 #include <functional>
 #include <iostream>
-#include <limits>      // <local-addition feature="credited MessageBuffer"/>
 #include <map>         // <local-addition feature="credited MessageBuffer"/>
 #include <memory>      // <local-addition feature="credited MessageBuffer"/>
 #include <string>
@@ -82,22 +81,6 @@ class MessageBuffer : public SimObject
     MessageBuffer(const Params &p);
     // <local-addition feature="credited MessageBuffer">
     ~MessageBuffer() override;
-
-    using MessagePredicate = std::function<bool(const Message&)>;
-    // Ranking predicate for victim selection: returns true when the first
-    // message should be preferred over the second. selectBest() picks the
-    // message that no other ready message out-ranks, so this expresses
-    // oldest-first, strict-priority, or any QoS pop policy.
-    using MessageRank = std::function<bool(const Message&, const Message&)>;
-    static constexpr size_t invalidMessageIndex =
-        std::numeric_limits<size_t>::max();
-
-    struct Handle
-    {
-        size_t index = invalidMessageIndex;
-
-        bool valid() const { return index != invalidMessageIndex; }
-    };
     // </local-addition>
 
     void reanalyzeMessages(Addr addr, Tick current_time);
@@ -258,118 +241,23 @@ class MessageBuffer : public SimObject
     unsigned availableCredits() const;
     unsigned maxCredits() const;
     Cycles creditReturnLatency() const;
-    bool enableOooPop() const { return m_enable_ooo_pop; }
     unsigned pendingCreditReturns() const;
 
-    Handle selectEligible(const MessagePredicate &predicate,
-                          Tick cur_time) const;
-    // Generalized out-of-order selection: among the matured messages that
-    // pass `eligible` and respect the per-cycle dequeue-rate limit, return
-    // the one that no other out-ranks under `better`. An empty `better`
-    // yields an arbitrary eligible message. Runs in O(n_ready). This is the
-    // sanctioned hook for QoS pop policies (see MessageBufferCredited.md §3).
-    Handle selectBest(const MessagePredicate &eligible,
-                      const MessageRank &better, Tick cur_time) const;
-    Handle selectHead(const MessagePredicate &predicate, Tick cur_time) const;
-    // Heap-allocated bytes held by the ready-selection data structures (the
-    // priority heap plus, in variants that keep one, an auxiliary matured-set
-    // container). Deterministic; used by the OoO-selection microbenchmark to
-    // compare the memory cost of selection strategies across implementations.
-    size_t selectorMemoryBytes() const;
-    const MsgPtr& peekAt(Handle handle) const;
-    Tick popAt(Handle handle, Tick cur_time, Tick credit_return_delay,
-               unsigned slots = 1, bool decrement_messages = true);
+    // Buffer capacity (0 == unbounded). Exposed so a consumer that drains
+    // matured messages into its own staging container can size that container
+    // to this buffer.
+    unsigned getMaxSize() const { return m_max_size; }
 
-  protected:
+    // Return `slots` credit(s) to the producer, becoming visible
+    // `credit_return_delay` ticks from `cur_time`. This is decoupled from
+    // dequeue(): a credited consumer that pops a message into its own staging
+    // returns the credit later, when the message actually departs downstream.
+    // No-op on a non-credited buffer. See MessageBufferCredited.md.
+    void returnCredit(Tick cur_time, Tick credit_return_delay,
+                      unsigned slots = 1);
+
+  private:
     bool canDequeue(Tick current_time) const;
-
-    // <local-addition feature="credited MessageBuffer">
-    // Visit every matured (ready) message in the priority heap exactly once,
-    // calling visit(size_t heap_index, const MsgPtr &). Visitation order is
-    // unspecified.
-    //
-    // The heap is a min-heap on (getLastEnqueueTime, counter), so every
-    // node's enqueue time is <= its children's. Maturity
-    // (getLastEnqueueTime() <= cur_time) is therefore closed under descent:
-    // an immature node has an all-immature subtree. The matured messages form
-    // a connected sub-heap rooted at index 0, so a DFS that stops descending
-    // at the first immature node on each path enumerates exactly the ready
-    // set in O(n_ready) rather than scanning all O(n) entries. findReady()
-    // and selectBest() are built on this, so OoO-pop selection is O(n_ready).
-    template <class Visit>
-    void
-    forEachReady(Tick cur_time, Visit &&visit) const
-    {
-        const size_t n = m_prio_heap.size();
-        if (n == 0) {
-            return;
-        }
-
-        // A small inline stack avoids any heap allocation for the shallow
-        // link-buffer common case; deep heaps spill to a vector.
-        constexpr size_t InlineCap = 64;
-        size_t inline_stack[InlineCap];
-        std::vector<size_t> spill_stack;
-        bool spilled = false;
-        size_t sp = 0;
-
-        inline_stack[sp++] = 0;
-
-        auto push = [&](size_t idx) {
-            if (spilled) {
-                spill_stack.push_back(idx);
-            } else if (sp < InlineCap) {
-                inline_stack[sp++] = idx;
-            } else {
-                spill_stack.assign(inline_stack, inline_stack + sp);
-                spill_stack.push_back(idx);
-                spilled = true;
-            }
-        };
-        auto pop = [&]() -> size_t {
-            if (spilled) {
-                const size_t v = spill_stack.back();
-                spill_stack.pop_back();
-                return v;
-            }
-            return inline_stack[--sp];
-        };
-        auto empty = [&]() {
-            return spilled ? spill_stack.empty() : (sp == 0);
-        };
-
-        while (!empty()) {
-            const size_t i = pop();
-            if (m_prio_heap[i]->getLastEnqueueTime() > cur_time) {
-                // Immature node: its whole subtree is immature too. Prune.
-                continue;
-            }
-            visit(i, m_prio_heap[i]);
-
-            const size_t left = 2 * i + 1;
-            const size_t right = left + 1;
-            if (left < n) {
-                push(left);
-            }
-            if (right < n) {
-                push(right);
-            }
-        }
-    }
-    // </local-addition>
-
-    size_t findReady(const MessagePredicate &predicate,
-                     Tick current_time) const;
-    const MsgPtr& peekMsgPtrAt(size_t index) const;
-    Tick dequeueAt(size_t index, Tick current_time,
-                   bool decrement_messages = true);
-    // Restore the heap invariant after an out-of-order removal replaced the
-    // element at `index`. Sifts that element up or down in O(log n) instead
-    // of rebuilding the whole heap with an O(n) std::make_heap.
-    void siftHeapEntry(size_t index);
-    // </local-addition>
-    // NOTE: upstream had a single `private:` section here; the `protected:`
-    // label above is a LOCAL change so subclasses can reach the helpers.
 
     void reanalyzeList(std::list<MsgPtr> &, Tick);
 
@@ -462,8 +350,6 @@ class MessageBuffer : public SimObject
 
     const int m_routing_priority;
     // <local-addition feature="credited MessageBuffer">
-    const bool m_enable_ooo_pop;
-
     std::unique_ptr<CreditState> m_credit;
     // </local-addition>
 

@@ -62,15 +62,16 @@ class XPIntLink(SimpleIntLink):
             if credits == 0 and len(network.physical_vnets_channels) != 0:
                 buffer_size = channels(vnet) * (int(self.latency) + 1)
 
+            # The input buffer is a plain in-order credited FIFO. Out-of-order
+            # selection lives in the XP switch's per-input ready container, so
+            # the buffer needs neither enable_ooo_pop nor a dequeue-rate cap
+            # (the switch caps grants per input/cycle at the channel count).
             buf = MessageBuffer(
                 ordered=True,
                 buffer_size=buffer_size,
                 credits=credits,
                 credit_return_latency=credit_return_latency,
-                enable_ooo_pop=network.xp_enable_ooo_pop,
             )
-            if len(network.physical_vnets_channels) != 0:
-                buf.max_dequeue_rate = channels(vnet)
             buffers.append(buf)
 
         self.buffers = buffers
@@ -91,9 +92,17 @@ class XPSwitch(Switch):
     cxx_header = "mem/ruby/network/simple/xp/XPSwitch.hh"
     cxx_class = "gem5::ruby::XPSwitch"
 
+    enable_ooo_pop = Param.Bool(
+        True,
+        "Allow the switch to skip a head blocked on a congested output and "
+        "grant an oldest-eligible younger message from the same input",
+    )
+
     def setup_buffers(self, network):
         if len(self.port_buffers) > 0:
             fatal("User should not manually set XP routers' port_buffers")
+
+        self.enable_ooo_pop = network.xp_enable_ooo_pop
 
         vnets = int(network.number_of_virtual_networks)
         if len(network.physical_vnets_channels) not in (0, vnets):
