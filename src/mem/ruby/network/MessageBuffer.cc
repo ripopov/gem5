@@ -42,6 +42,7 @@
 
 #include <cassert>
 
+#include "base/circular_queue.hh" // <Credited>
 #include "base/cprintf.hh"
 #include "base/logging.hh"
 #include "base/random.hh"
@@ -55,6 +56,91 @@ namespace ruby
 {
 
 using stl_helpers::operator<<;
+
+// <Credited>
+// Credit pool for a credited link buffer. Holds the available-credit count and
+// a fixed-capacity ring of returned-but-not-yet-matured credits, ordered by
+// maturity tick. The number of live ring entries can never exceed the pool size
+// (conservation: available + spent + pending == m_max_credits), so the ring is
+// sized to m_max_credits once and never reallocates. Returns are redeemed lazily
+// (pulled on the next producer query) rather than via a scheduled event.
+// See MessageBufferCredited.md.
+class MessageBuffer::CreditState
+{
+  public:
+    CreditState(unsigned max_credits, unsigned buffer_size,
+                const std::string &owner)
+        : m_max_credits(max_credits),
+          m_available(max_credits),
+          m_pending(max_credits)
+    {
+        fatal_if(buffer_size != 0 && buffer_size < max_credits,
+                 "%s: buffer_size (%u) must be >= credits (%u)",
+                 owner, buffer_size, max_credits);
+    }
+
+    // Are >= `slots` credits available at `now` (after redeeming matured ones)?
+    bool
+    hasCredit(unsigned slots, Tick now)
+    {
+        redeem(now);
+        return m_available >= slots;
+    }
+
+    // Consume one credit (caller must have gated on hasCredit()).
+    void
+    spend(Tick now)
+    {
+        redeem(now);
+        panic_if(m_available == 0,
+                 "credited enqueue without an available credit");
+        --m_available;
+    }
+
+    // Record `slots` credits returning at absolute tick `maturity`.
+    void
+    scheduleReturn(Tick maturity, unsigned slots)
+    {
+        if (slots == 0)
+            return;
+        // Fixed return latency off a monotonic clock => non-decreasing
+        // maturity, so coalesce at the tail and append in order. The ring is
+        // sized to never fill under a correct (non-over-returning) consumer.
+        gem5_assert(!m_pending.full());
+        gem5_assert(m_pending.empty() ||
+                    maturity >= m_pending.back().maturity);
+        if (!m_pending.empty() && m_pending.back().maturity == maturity)
+            m_pending.back().slots += slots;
+        else
+            m_pending.push_back({maturity, slots});
+    }
+
+    // Reset to a full pool and drop all pending returns.
+    void
+    reset()
+    {
+        m_available = m_max_credits;
+        m_pending.flush();
+    }
+
+  private:
+    struct Entry { Tick maturity; unsigned slots; };
+
+    // Move every return whose maturity has passed back into the pool.
+    void
+    redeem(Tick now)
+    {
+        while (!m_pending.empty() && m_pending.front().maturity <= now) {
+            m_available += m_pending.front().slots;
+            m_pending.pop_front();
+        }
+    }
+
+    const unsigned m_max_credits;
+    unsigned m_available;
+    CircularQueue<Entry> m_pending;
+};
+// </Credited>
 
 MessageBuffer::MessageBuffer(const Params &p)
     : SimObject(p),
@@ -140,7 +226,19 @@ MessageBuffer::MessageBuffer(const Params &p)
     }
 
     m_avg_stall_time = m_stall_time / m_msg_count;
+
+    // <Credited>
+    if (p.credits > 0) {
+        m_credit = std::make_unique<CreditState>(p.credits, m_max_size,
+                                                 name());
+    }
+    // </Credited>
 }
+
+// <Credited>
+// Out-of-line (defaulted) so CreditState is complete here for unique_ptr.
+MessageBuffer::~MessageBuffer() = default;
+// </Credited>
 
 unsigned int
 MessageBuffer::getSize(Tick curTime)
@@ -156,6 +254,14 @@ MessageBuffer::getSize(Tick curTime)
 bool
 MessageBuffer::areNSlotsAvailable(unsigned int n, Tick current_time)
 {
+    // <Credited>
+    // Credit-aware gate: a credited buffer admits only when it also has the
+    // credits, checked before the slot/size logic below.
+    if (m_credit && !m_credit->hasCredit(n, current_time)) {
+        m_not_avail_count++;
+        return false;
+    }
+    // </Credited>
 
     // fast path when message buffers have infinite size
     if (m_max_size == 0) {
@@ -229,6 +335,14 @@ MessageBuffer::enqueue(MsgPtr message, Tick current_time, Tick delta,
                        bool ruby_is_random, bool ruby_warmup,
                        bool bypassStrictFIFO)
 {
+    // <Credited>
+    // Admission spends a credit; the producer must have gated on
+    // areNSlotsAvailable(). dequeue() never returns it -- returnCredit() does.
+    if (m_credit) {
+        m_credit->spend(current_time);
+    }
+    // </Credited>
+
     // record current time incase we have a pop that also adjusts my size
     if (m_time_last_time_enqueue < current_time) {
         m_msgs_this_cycle = 0;  // first msg this cycle
@@ -377,7 +491,25 @@ MessageBuffer::clear()
     m_size_at_cycle_start = 0;
     m_stalled_at_cycle_start = 0;
     m_msgs_this_cycle = 0;
+
+    // <Credited>
+    if (m_credit) {
+        m_credit->reset();
+    }
+    // </Credited>
 }
+
+// <Credited>
+void
+MessageBuffer::returnCredit(Tick cur_time, Tick credit_return_delay,
+                            unsigned slots)
+{
+    if (m_credit) {
+        gem5_assert(credit_return_delay > 0);
+        m_credit->scheduleReturn(cur_time + credit_return_delay, slots);
+    }
+}
+// </Credited>
 
 void
 MessageBuffer::recycle(Tick current_time, Tick recycle_latency)

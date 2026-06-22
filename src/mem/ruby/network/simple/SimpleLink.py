@@ -64,6 +64,15 @@ class SimpleIntLink(BasicIntLink):
     # set these manually.
     buffers = VectorParam.MessageBuffer([], "Buffers for int_links")
 
+    # <Credited>
+    credit_return_latency = Param.Cycles(
+        0,
+        "Credit-return latency in cycles (0 == non-credited link). When > 0 "
+        "this link's buffers run in credited mode and require per-vnet "
+        "physical channels.",
+    )
+    # </Credited>
+
     def setup_buffers(self, network):
         if len(self.buffers) > 0:
             fatal("User should not manually set links' \
@@ -84,14 +93,36 @@ class SimpleIntLink(BasicIntLink):
         # X will available for enqueuing another message at cycle X+1. So
         # for a 1 cy enqueue latency, 2 entries are needed. For any latency,
         # the size should be at least latency+1.
+        # <Credited>
+        # Credited links require per-vnet physical channels (the credit pool is
+        # sized per channel). Checked here as defense-in-depth; the config layer
+        # enforces it too. (Cycles params need int() to compare/add with ints.)
+        credit_latency = int(self.credit_return_latency)
+        if credit_latency > 0:
+            assert len(network.physical_vnets_channels) != 0, (
+                "credited int links require per-vnet physical channels "
+                "(--simple-physical-channels)"
+            )
+        # </Credited>
+
         if len(network.physical_vnets_channels) != 0:
             assert len(network.physical_vnets_channels) == int(
                 network.number_of_virtual_networks
             )
             for i in range(int(network.number_of_virtual_networks)):
-                buffers[i].buffer_size = network.physical_vnets_channels[i] * (
-                    self.latency + 1
-                )
+                depth = network.physical_vnets_channels[i] * (self.latency + 1)
+                # <Credited>
+                # A credited link must size its buffer (and credit pool) to
+                # cover the whole credit round-trip (forward + return latency),
+                # not just the forward latency, or it stalls below line rate.
+                # See MessageBufferCredited.md.
+                if credit_latency > 0:
+                    depth = network.physical_vnets_channels[i] * (
+                        int(self.latency) + credit_latency + 1
+                    )
+                    buffers[i].credits = depth
+                # </Credited>
+                buffers[i].buffer_size = depth
                 buffers[i].max_dequeue_rate = network.physical_vnets_channels[
                     i
                 ]

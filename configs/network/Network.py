@@ -149,6 +149,18 @@ def define_options(parser):
         default=False,
         help="""SimpleNetwork traces latency for all routes""",
     )
+    # <Credited>
+    parser.add_argument(
+        "--simple-link-credit-return-latency",
+        action="store",
+        type=int,
+        default=0,
+        help="""Credit-return latency (cycles) for SimpleNetwork internal
+            links. 0 (default) disables credits and the network behaves like
+            upstream. A non-zero value enables credited int links and requires
+            --simple-physical-channels.""",
+    )
+    # </Credited>
 
 
 def create_network(options, ruby):
@@ -296,6 +308,19 @@ def init_network(options, network, InterfaceClass):
             network.physical_vnets_channels = [1] * int(
                 network.number_of_virtual_networks
             )
+        # <Credited>
+        # Enable credited mode on every internal link when requested. Credits
+        # are sized per physical channel, so per-vnet channels are mandatory.
+        if options.simple_link_credit_return_latency > 0:
+            assert options.simple_physical_channels, (
+                "--simple-link-credit-return-latency requires "
+                "--simple-physical-channels"
+            )
+            for int_link in network.int_links:
+                int_link.credit_return_latency = (
+                    options.simple_link_credit_return_latency
+                )
+        # </Credited>
         network.setup_buffers()
         network.trace_routes = options.simple_trace_routes
 

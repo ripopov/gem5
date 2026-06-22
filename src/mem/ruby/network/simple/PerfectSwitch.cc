@@ -47,6 +47,7 @@
 #include "base/random.hh"
 #include "debug/RubyNetwork.hh"
 #include "mem/ruby/network/MessageBuffer.hh"
+#include "mem/ruby/network/simple/SimpleLink.hh" // <Credited>
 #include "mem/ruby/network/simple/SimpleNetwork.hh"
 #include "mem/ruby/network/simple/Switch.hh"
 #include "mem/ruby/slicc_interface/Message.hh"
@@ -247,6 +248,18 @@ PerfectSwitch::operateMessageBuffer(MessageBuffer *buffer, int vnet)
         // Dequeue msg
         buffer->dequeue(current_time);
         m_pending_message_count[vnet]--;
+
+        // <Credited>
+        // The message has departed this credited input link, so return its
+        // upstream slot after the link's credit-return latency. Non-credited
+        // input buffers (e.g. external links) are a cheap no-op here.
+        if (buffer->isCredited()) {
+            auto *int_link =
+                safe_cast<SimpleIntLink*>(buffer->getIntLink());
+            buffer->returnCredit(current_time,
+                m_switch->cyclesToTicks(int_link->getCreditReturnLatency()));
+        }
+        // </Credited>
 
         // Enqueue it - for all outgoing queues
         for (int i=0; i<output_links.size(); i++) {

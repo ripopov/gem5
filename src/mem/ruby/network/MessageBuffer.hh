@@ -50,6 +50,7 @@
 #include <cassert>
 #include <functional>
 #include <iostream>
+#include <memory> // <Credited> (std::unique_ptr<CreditState>)
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -78,6 +79,10 @@ class MessageBuffer : public SimObject
   public:
     typedef MessageBufferParams Params;
     MessageBuffer(const Params &p);
+    // <Credited>
+    // Out-of-line so std::unique_ptr<CreditState> can hold an incomplete type.
+    ~MessageBuffer() override;
+    // </Credited>
 
     void reanalyzeMessages(Addr addr, Tick current_time);
     void reanalyzeAllMessages(Tick current_time);
@@ -200,6 +205,18 @@ class MessageBuffer : public SimObject
 
     int routingPriority() const { return m_routing_priority; }
 
+    // <Credited>
+    // Does this buffer participate in credit flow control? (credits > 0)
+    bool isCredited() const { return m_credit != nullptr; }
+
+    // Return `slots` credit(s) to the producer, becoming visible
+    // `credit_return_delay` ticks from `cur_time`. Decoupled from dequeue():
+    // the consumer calls this when a message actually departs downstream.
+    // No-op on a non-credited buffer. See MessageBufferCredited.md.
+    void returnCredit(Tick cur_time, Tick credit_return_delay,
+                      unsigned slots = 1);
+    // </Credited>
+
     bool
     isInport()
     {
@@ -223,6 +240,11 @@ class MessageBuffer : public SimObject
     void reanalyzeList(std::list<MsgPtr> &, Tick);
 
     uint32_t functionalAccess(Packet *pkt, bool is_read, WriteMask *mask);
+
+    // <Credited>
+    // Credit pool + delayed-return bookkeeping; defined in MessageBuffer.cc.
+    class CreditState;
+    // </Credited>
 
   private:
     // Data Members (m_ prefix)
@@ -306,6 +328,11 @@ class MessageBuffer : public SimObject
     const bool m_allow_zero_latency;
 
     const int m_routing_priority;
+
+    // <Credited>
+    // nullptr exactly when credits == 0 (non-credited); see isCredited().
+    std::unique_ptr<CreditState> m_credit;
+    // </Credited>
 
     bool m_is_inport;
 

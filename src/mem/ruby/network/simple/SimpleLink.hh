@@ -86,6 +86,15 @@ class SimpleIntLink : public BasicIntLink
 
     int m_bw_multiplier;
     const std::vector<MessageBuffer*> m_buffers;
+
+    // <Credited>
+    // Credit-return latency for this credited link (0 == non-credited). Read by
+    // the consuming switch, converted to ticks, and passed to returnCredit().
+    Cycles getCreditReturnLatency() const { return m_credit_return_latency; }
+
+  private:
+    const Cycles m_credit_return_latency;
+    // </Credited>
 };
 
 inline std::ostream&

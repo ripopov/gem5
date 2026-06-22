@@ -86,3 +86,6 @@ class MessageBuffer(SimObject):
                                      consumed by the network. Smaller value \
                                      means higher priority",
     )
+    # <Credited>
+    credits = Param.Unsigned(0, "Credit pool size; 0 disables credits")
+    # </Credited>

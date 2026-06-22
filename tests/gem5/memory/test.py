@@ -133,6 +133,50 @@ null_tests = [
             "--num-cpus=4",
         ],
     ),
+    # <Credited>
+    # Credited-mode variants of the two -extra tests above: same config plus
+    # credit-based flow control on SimpleNetwork internal links
+    # (--simple-link-credit-return-latency requires per-vnet physical channels).
+    #
+    # --suppress-func-errors works around a pre-existing *test-side* limitation,
+    # not a credited-mode bug. MI_example does not implement
+    # functionalReadPriority, so a functional probe (~10% of accesses) of a line
+    # mid-writeback fails even though the data still exists; the strict baseline
+    # tests only avoid this by timing luck, and credited backpressure shifts
+    # timing enough to expose it. The normal (timed) reads still fully check
+    # coherence -- only the fragile functional probe is suppressed.
+    (
+        "ruby_mem_test-simple-credited",
+        "ruby_mem_test",
+        [
+            "--abs-max-tick",
+            "20000000",
+            "--functional",
+            "10",
+            "--network=simple",
+            "--simple-physical-channels",
+            "--simple-link-credit-return-latency",
+            "10",
+            "--suppress-func-errors",
+        ],
+    ),
+    (
+        "ruby_mem_test-simple-credited-multicore",
+        "ruby_mem_test",
+        [
+            "--abs-max-tick",
+            "20000000",
+            "--functional",
+            "10",
+            "--network=simple",
+            "--simple-physical-channels",
+            "--num-cpus=4",
+            "--simple-link-credit-return-latency",
+            "10",
+            "--suppress-func-errors",
+        ],
+    ),
+    # </Credited>
     ("ruby_random_test", None, ["--maxloads", "5000"]),
     ("ruby_direct_test", None, ["--requests", "50000"]),
 ]
