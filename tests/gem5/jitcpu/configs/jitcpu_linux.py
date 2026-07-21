@@ -2,6 +2,7 @@ import argparse
 import os
 
 import m5
+from m5.defines import buildEnv
 from m5.objects import (
     AddrRange,
     Bridge,
@@ -19,6 +20,7 @@ from m5.objects import (
     SystemXBar,
     VoltageDomain,
 )
+from m5.util import addToPath
 from m5.util.fdthelper import (
     Fdt,
     FdtNode,
@@ -27,6 +29,12 @@ from m5.util.fdthelper import (
     FdtState,
 )
 from m5.objects.RiscvCPU import RiscvNonCachingSimpleCPU, RiscvO3CPU
+from m5.stats.gem5stats import get_simstat
+
+addToPath(os.path.join(m5.util.repoPath(), "configs"))
+
+from common import Options
+from ruby import Ruby
 
 
 def generate_dtb(system, output):
@@ -60,6 +68,31 @@ def generate_dtb(system, output):
     fdt.writeDtbFile(output)
 
 
+def ruby_options():
+    parser = argparse.ArgumentParser(add_help=False)
+    Options.addCommonOptions(parser)
+    Ruby.define_options(parser)
+    options = parser.parse_args([])
+    options.num_cpus = 1
+    options.num_dirs = 1
+    options.num_l3caches = 1
+    options.topology = "Crossbar"
+    return options
+
+
+def ruby_router_messages(ruby_system):
+    network_stats = get_simstat(ruby_system.network)
+    routers = network_stats["routers"].values["value"]
+    return int(
+        sum(
+            group["total_msg_count"].value
+            for router in routers
+            for name, group in router.values.items()
+            if name.startswith("throttle")
+        )
+    )
+
+
 parser = argparse.ArgumentParser()
 parser.add_argument("linux_image")
 parser.add_argument("backend")
@@ -68,30 +101,40 @@ parser.add_argument("--rtc-frequency", default="1MHz")
 parser.add_argument("--max-ticks", type=int, default=2_000_000_000_000)
 parser.add_argument("--switch-to-o3", action="store_true")
 parser.add_argument("--o3-ticks", type=int, default=10_000_000)
+parser.add_argument("--ruby-chi", action="store_true")
 args = parser.parse_args()
+
+if args.ruby_chi and buildEnv["PROTOCOL"] != "CHI":
+    parser.error("--ruby-chi requires a gem5 binary built with PROTOCOL=CHI")
 
 system = RiscvSystem()
 system.mem_mode = "atomic_noncaching"
 system.mem_ranges = [AddrRange(start=0x80000000, size="256MiB")]
 
 system.iobus = IOXBar()
-system.membus = SystemXBar()
-system.system_port = system.membus.cpu_side_ports
+if not args.ruby_chi:
+    system.membus = SystemXBar()
+    system.system_port = system.membus.cpu_side_ports
 
 system.platform = HiFive()
 system.platform.rtc = RiscvRTC(frequency=args.rtc_frequency)
 system.platform.clint.int_pin = system.platform.rtc.int_pin
 system.platform.pci_host.internal_connect()
 system.platform.pci_host.connect_upper_bus(system.iobus, True)
-system.platform.attachOnChipIO(system.membus)
-system.platform.attachOffChipIO(system.iobus)
+if args.ruby_chi:
+    system.platform.attachOnChipIO(system.iobus)
+    system.platform.attachOffChipIO(system.iobus)
+else:
+    system.platform.attachOnChipIO(system.membus)
+    system.platform.attachOffChipIO(system.iobus)
 system.platform.attachPlic()
 system.platform.setNumCores(1)
 
-system.bridge = Bridge(delay="50ns")
-system.bridge.mem_side_port = system.iobus.cpu_side_ports
-system.bridge.cpu_side_port = system.membus.mem_side_ports
-system.bridge.ranges = system.platform._off_chip_ranges()
+if not args.ruby_chi:
+    system.bridge = Bridge(delay="50ns")
+    system.bridge.mem_side_port = system.iobus.cpu_side_ports
+    system.bridge.cpu_side_port = system.membus.mem_side_ports
+    system.bridge.ranges = system.platform._off_chip_ranges()
 
 system.cache_line_size = 64
 system.voltage_domain = VoltageDomain(voltage="1V")
@@ -128,7 +171,7 @@ if args.switch_to_o3:
     cpus.append(system.o3)
 
 for cpu in cpus:
-    if cpu is system.cpu:
+    if cpu is system.cpu and not args.ruby_chi:
         cpu.icache_port = system.membus.cpu_side_ports
         cpu.dcache_port = system.membus.cpu_side_ports
         cpu.mmu.connectWalkerPorts(
@@ -146,9 +189,27 @@ for cpu in cpus:
         ]
     )
 
-system.mem_ctrl = MemCtrl()
-system.mem_ctrl.dram = DDR3_1600_8x8(range=system.mem_ranges[0])
-system.mem_ctrl.port = system.membus.mem_side_ports
+if args.ruby_chi:
+    ruby_args = ruby_options()
+    Ruby.create_system(
+        ruby_args,
+        True,
+        system,
+        system.iobus,
+        dma_ports=[],
+        bootmem=None,
+        cpus=[system.cpu],
+    )
+    system.ruby.clk_domain = SrcClockDomain(
+        clock=ruby_args.ruby_clock,
+        voltage_domain=system.voltage_domain,
+    )
+    system.iobus.mem_side_ports = system.ruby._io_port.in_ports
+    system.ruby._cpu_ports[0].connectCpuPorts(system.cpu)
+else:
+    system.mem_ctrl = MemCtrl()
+    system.mem_ctrl.dram = DDR3_1600_8x8(range=system.mem_ranges[0])
+    system.mem_ctrl.port = system.membus.mem_side_ports
 
 dtb_path = os.path.join(m5.options.outdir, "device.dtb")
 generate_dtb(system, dtb_path)
@@ -172,7 +233,22 @@ if args.switch_to_o3:
     if exit_event.getCause() != "m5_exit instruction encountered":
         raise RuntimeError("Linux did not reach its userspace m5 exit")
 
-    m5.switchCpus(system, [(system.cpu, system.o3)])
+    if args.ruby_chi:
+        jit_ruby_messages = ruby_router_messages(system.ruby)
+        print(
+            "JitCPU generated "
+            f"{jit_ruby_messages} timing Ruby CHI messages"
+        )
+        if jit_ruby_messages != 0:
+            raise RuntimeError(
+                "JitCPU unexpectedly populated CHI during uncached boot"
+            )
+
+    m5.switchCpus(
+        system,
+        [(system.cpu, system.o3)],
+        is_ruby=args.ruby_chi,
+    )
     print(
         f"Switched JitCPU -> O3CPU @ tick {m5.curTick()}, "
         f"memory mode {system.getMemoryMode()}"
@@ -183,3 +259,23 @@ if args.switch_to_o3:
         f"O3CPU continued @ tick {m5.curTick()}: "
         f"{exit_event.getCause()}"
     )
+    if exit_event.getCause() != "simulate() limit reached":
+        raise RuntimeError("O3CPU did not complete its validation interval")
+
+    o3_user_insts = int(
+        Root.getInstance()
+        .resolveStat("system.o3.commitStats0.numUserInsts")
+        .value
+    )
+    print(f"O3CPU committed {o3_user_insts} userspace instructions")
+    if o3_user_insts == 0:
+        raise RuntimeError("O3CPU made no userspace progress after takeover")
+
+    if args.ruby_chi:
+        ruby_messages = ruby_router_messages(system.ruby)
+        print(
+            "Ruby CHI carried "
+            f"{ruby_messages} router-link messages after takeover"
+        )
+        if ruby_messages == 0:
+            raise RuntimeError("Ruby CHI carried no post-takeover traffic")

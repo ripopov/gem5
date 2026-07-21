@@ -200,6 +200,28 @@ then verifies that O3 continues committing instructions for the requested
 interval. The 1 MHz test RTC is intentional: a higher interrupt rate imposes
 frequent translation-block exits and obscures JIT throughput.
 
+For the Ruby+CHI gate, enable CHI in the RISC-V build and add `--ruby-chi` to
+the same Linux switch test:
+
+```sh
+scons setconfig build/RISCV \
+  USE_JITCPU=y PROTOCOL=CHI RUBY_PROTOCOL_CHI=y
+scons build/RISCV/gem5.opt -j"$(nproc)"
+
+build/RISCV/gem5.opt -d m5out/jitcpu-linux-chi \
+  tests/gem5/jitcpu/configs/jitcpu_linux.py \
+  /path/to/riscv-boot-exit-nodisk \
+  "$QEMU_JIT_LIBRARY" \
+  --ruby-chi --switch-to-o3 --o3-ticks 10000000
+```
+
+This topology attaches JitCPU to CHI's split instruction/data sequencers and
+keeps O3's ports disconnected until takeover. JitCPU boots through Ruby's
+`atomic_noncaching` path; the Ruby-aware switch changes the system to timing
+mode and transfers those live ports to O3. The test requires zero timing CHI
+traffic before takeover, then fails unless O3 commits userspace instructions
+and CHI records post-takeover router-link traffic.
+
 To verify build isolation, set `USE_JITCPU=n`, rebuild, and check that the gem5
 binary neither exports `RiscvJitCPU` nor links to the QEMU adapter. Restore
 `USE_JITCPU=y` before running the tests above.
