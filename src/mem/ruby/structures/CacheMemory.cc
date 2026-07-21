@@ -210,6 +210,22 @@ CacheMemory::getAddressAtIdx(int idx) const
     return entry->m_Address;
 }
 
+int
+CacheMemory::getNumValidEntries() const
+{
+    int entries = 0;
+    for (const auto &set : m_cache) {
+        for (const auto *entry : set) {
+            if (entry &&
+                entry->m_Permission != AccessPermission_Invalid &&
+                entry->m_Permission != AccessPermission_NotPresent) {
+                ++entries;
+            }
+        }
+    }
+    return entries;
+}
+
 bool
 CacheMemory::tryCacheAccess(Addr address, RubyRequestType type,
                             DataBlock*& data_ptr)

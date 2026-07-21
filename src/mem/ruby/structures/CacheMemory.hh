@@ -164,6 +164,7 @@ class CacheMemory : public SimObject
     int getCacheSize() const { return m_cache_size; }
     int getCacheAssoc() const { return m_cache_assoc; }
     int getNumBlocks() const { return m_cache_num_sets * m_cache_assoc; }
+    int getNumValidEntries() const;
     Addr getAddressAtIdx(int idx) const;
 
   private:

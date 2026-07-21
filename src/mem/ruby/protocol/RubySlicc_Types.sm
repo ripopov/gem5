@@ -56,6 +56,7 @@ structure(MessageBuffer, buffer="yes", inport="yes", outport="yes",
   bool areNSlotsAvailable(int n, Tick curTime);
   int getSize(Tick curTime);
   Tick oldestMsgStallTicks(Tick current_time);
+  bool isStallMapEmpty();
 }
 
 external_type(Scalar, primitive="yes");
@@ -238,6 +239,7 @@ structure (CacheMemory, external = "yes") {
 
   int getCacheSize();
   int getNumBlocks();
+  int getNumValidEntries();
   Addr getAddressAtIdx(int);
 
   void profileDemandHit();

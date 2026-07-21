@@ -27,6 +27,7 @@ config HAVE_CAPSTONE
     def_bool $(HAVE_CAPSTONE)
 
 rsource "kvm/Kconfig"
+rsource "jit/Kconfig"
 
 config USE_CAPSTONE
     depends on HAVE_CAPSTONE

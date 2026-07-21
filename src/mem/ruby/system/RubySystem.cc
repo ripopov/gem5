@@ -44,7 +44,6 @@
 #include <zlib.h>
 
 #include <cstdio>
-#include <list>
 
 #include "base/compiler.hh"
 #include "base/intmath.hh"
@@ -57,6 +56,7 @@
 #include "mem/ruby/system/Sequencer.hh"
 #include "mem/simple_mem.hh"
 #include "sim/eventq.hh"
+#include "sim/sim_events.hh"
 #include "sim/simulate.hh"
 #include "sim/system.hh"
 
@@ -173,6 +173,7 @@ RubySystem::registerRequestorIDs()
 
 RubySystem::~RubySystem()
 {
+    delete m_cache_recorder;
     delete m_profiler;
 }
 
@@ -223,7 +224,8 @@ RubySystem::makeCacheRecorder(uint8_t *uncompressed_trace,
 void
 RubySystem::memWriteback()
 {
-    m_cooldown_enabled = true;
+    fatal_if(!coherenceQuiescent(),
+             "Ruby memWriteback requires a fully quiescent hierarchy");
 
     // Make the trace so we know what to write back.
     DPRINTF(RubyCacheTrace, "Recording Cache Trace\n");
@@ -233,71 +235,60 @@ RubySystem::memWriteback()
     }
     DPRINTF(RubyCacheTrace, "Cache Trace Complete\n");
 
-    // If there is no dirty block, we don't need to flush the cache
+    // If there is no cached block, there is nothing to flush. Keep the empty
+    // recorder for checkpoint serialization and let memInvalidate verify that
+    // no directory-only state escaped the trace worklist.
     if (m_cache_recorder->getNumRecords() == 0)
     {
-        m_cooldown_enabled = false;
         return;
     }
 
-    // save the current tick value
-    Tick curtick_original = curTick();
-    DPRINTF(RubyCacheTrace, "Recording current tick %ld\n", curtick_original);
-
-    // Deschedule all prior events on the event queue, but record the tick they
-    // were scheduled at so they can be restored correctly later.
-    std::list<std::pair<Event*, Tick> > original_events;
-    while (!eventq->empty()) {
-        Event *curr_head = eventq->getHead();
-        if (curr_head->isAutoDelete()) {
-            DPRINTF(RubyCacheTrace, "Event %s auto-deletes when descheduled,"
-                    " not recording\n", curr_head->name());
-        } else {
-            original_events.push_back(
-                    std::make_pair(curr_head, curr_head->when()));
-        }
-        eventq->deschedule(curr_head);
-    }
-
-    // Schedule an event to start cache cooldown
-    DPRINTF(RubyCacheTrace, "Starting cache flush\n");
+    // Run the existing sequential CacheRecorder FlushReq stream while the
+    // rest of the system remains drained. Simulated time advances normally;
+    // no events are removed and curTick is never rewound.
+    m_cooldown_enabled = true;
+    DPRINTF(RubyCacheTrace, "Starting trace-driven cache flush\n");
     enqueueRubyEvent(curTick());
-    simulate();
-    DPRINTF(RubyCacheTrace, "Cache flush complete\n");
+    GlobalSimLoopExitEvent *exit_event = simulate();
 
-    // Deschedule any events left on the event queue.
-    while (!eventq->empty()) {
-        eventq->deschedule(eventq->getHead());
-    }
-
-    // Restore curTick
-    setCurTick(curtick_original);
-
-    // Restore all events that were originally on the event queue.  This is
-    // done after setting curTick back to its original value so that events do
-    // not seem to be scheduled in the past.
-    while (!original_events.empty()) {
-        std::pair<Event*, Tick> event = original_events.back();
-        eventq->schedule(event.first, event.second);
-        original_events.pop_back();
-    }
-
-    // No longer flushing back to memory.
     m_cooldown_enabled = false;
-
-    // There are several issues with continuing simulation after calling
-    // memWriteback() at the moment, that stem from taking events off the
-    // queue, simulating again, and then putting them back on, whilst
-    // pretending that no time has passed.  One is that some events will have
-    // been deleted, so can't be put back.  Another is that any object
-    // recording the tick something happens may end up storing a tick in the
-    // future.  A simple warning here alerts the user that things may not work
-    // as expected.
-    warn_once("Ruby memory writeback is experimental.  Continuing simulation "
-              "afterwards may not always work as intended.");
+    fatal_if(exit_event->getCause() != "Finished Drain",
+             "Ruby cache flush interrupted by: %s", exit_event->getCause());
+    DPRINTF(RubyCacheTrace, "Trace-driven cache flush complete\n");
 
     // Keep the cache recorder around so that we can dump the trace if a
     // checkpoint is immediately taken.
+}
+
+bool
+RubySystem::coherenceQuiescent() const
+{
+    for (auto *controller : m_abs_cntrl_vec) {
+        if (!controller->coherenceQuiescent()) {
+            return false;
+        }
+    }
+    for (const auto &network : m_networks) {
+        if (!network->isEmpty()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void
+RubySystem::memInvalidate()
+{
+    fatal_if(m_cooldown_enabled || !coherenceQuiescent(),
+             "Ruby cache invalidation requested before FLUSH completed");
+    for (auto *controller : m_abs_cntrl_vec) {
+        fatal_if(!controller->cacheAndDirectoryEmpty(),
+                 "Trace-driven FLUSH left cache or directory state in %s; "
+                 "the cache-trace coverage invariant was violated",
+                 controller->name());
+    }
+    delete m_cache_recorder;
+    m_cache_recorder = nullptr;
 }
 
 void
@@ -357,15 +348,31 @@ RubySystem::serialize(CheckpointOut &cp) const
     SERIALIZE_SCALAR(cache_trace_size);
 }
 
+/*
+ * A cache trace is only a complete worklist at a protocol-quiescent instant.
+ * In particular, an internal eviction must not be able to remove the sole RN
+ * copy after that RN was traced but before the HNF installs its replacement
+ * state. Keep Ruby in the drain set until controller transactions and network
+ * traffic have settled.
+ */
+DrainState
+RubySystem::drain()
+{
+    if (coherenceQuiescent()) {
+        return DrainState::Drained;
+    }
+
+    if (!m_draining) {
+        m_draining = true;
+        enqueueRubyEvent(clockEdge(Cycles(1)));
+    }
+    return DrainState::Draining;
+}
+
 void
 RubySystem::drainResume()
 {
-    // Delete the cache recorder if it was created in memWriteback()
-    // to checkpoint the current cache state.
-    if (m_cache_recorder) {
-        delete m_cache_recorder;
-        m_cache_recorder = NULL;
-    }
+    m_draining = false;
 }
 
 void
@@ -491,6 +498,13 @@ RubySystem::processRubyEvent()
         m_cache_recorder->enqueueNextFetchRequest();
     } else if (getCooldownEnabled()) {
         m_cache_recorder->enqueueNextFlushRequest();
+    } else if (m_draining) {
+        if (coherenceQuiescent()) {
+            m_draining = false;
+            signalDrainDone();
+        } else {
+            enqueueRubyEvent(clockEdge(Cycles(1)));
+        }
     }
 }
 

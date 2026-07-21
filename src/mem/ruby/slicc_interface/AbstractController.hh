@@ -119,6 +119,13 @@ class AbstractController : public ClockedObject, public Consumer
     virtual void regStats();
 
     virtual void recordCacheTrace(int cntrl, CacheRecorder* tr) = 0;
+
+    /** Whether protocol-internal work can still move coherent cache state. */
+    virtual bool coherenceQuiescent() { return true; }
+
+    /** Verify that protocol cache and directory state is empty. */
+    virtual bool cacheAndDirectoryEmpty() { return true; }
+
     virtual Sequencer* getCPUSequencer() const = 0;
     virtual DMASequencer* getDMASequencer() const = 0;
     virtual GPUCoalescer* getGPUCoalescer() const = 0;

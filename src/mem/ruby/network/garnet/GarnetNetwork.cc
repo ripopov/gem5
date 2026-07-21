@@ -372,6 +372,30 @@ GarnetNetwork::getNumRouters()
     return m_routers.size();
 }
 
+bool
+GarnetNetwork::isEmpty() const
+{
+    if (!Network::isEmpty() || m_packets_in_flight != 0) {
+        return false;
+    }
+
+    // A packet is counted as received when its tail reaches the destination
+    // NI, but its credits can still be traversing the reverse links.  Waiting
+    // for every data and credit link (including its source queue) prevents a
+    // later drain from seeing residual Garnet activity.
+    for (const auto *link : m_networklinks) {
+        if (!link->isEmpty()) {
+            return false;
+        }
+    }
+    for (const auto *link : m_creditlinks) {
+        if (!link->isEmpty()) {
+            return false;
+        }
+    }
+    return true;
+}
+
 // Get ID of router connected to a NI.
 int
 GarnetNetwork::get_router_id(int global_ni, int vnet)

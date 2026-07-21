@@ -57,6 +57,22 @@ parser.add_argument(
     default=10,
     help="Wakeup every N cycles",
 )
+parser.add_argument(
+    "--check-flush",
+    action="store_true",
+    help="inject acknowledged FLUSH traffic while running the random checker",
+)
+parser.add_argument(
+    "--flush-period",
+    type=int,
+    default=0,
+    help="issue a deterministic FLUSH every N checker wakeups",
+)
+parser.add_argument(
+    "--flush-duplicates",
+    action="store_true",
+    help="issue each FLUSH concurrently from two tester ports",
+)
 
 #
 # Add the ruby specific and protocol specific options
@@ -96,9 +112,17 @@ if buildEnv["PROTOCOL"] == "MOESI_hammer":
     check_flush = True
 if buildEnv["PROTOCOL"] == "MESI_Three_Level":
     check_flush = True
+if args.flush_period < 0:
+    parser.error("--flush-period must not be negative")
+if args.flush_duplicates and args.num_cpus < 2:
+    parser.error("--flush-duplicates requires at least two CPUs")
+if args.check_flush or args.flush_period or args.flush_duplicates:
+    check_flush = True
 
 tester = RubyTester(
     check_flush=check_flush,
+    flush_period=args.flush_period,
+    flush_duplicates=args.flush_duplicates,
     checks_to_complete=args.maxloads,
     wakeup_frequency=args.wakeup_freq,
 )
@@ -117,12 +141,15 @@ system.clk_domain = SrcClockDomain(
     clock=args.sys_clock, voltage_domain=system.voltage_domain
 )
 
-# the ruby tester reuses num_cpus to specify the
-# number of cpu ports connected to the tester object, which
-# is stored in system.cpu. because there is only ever one
-# tester object, num_cpus is not necessarily equal to the
-# size of system.cpu
-cpu_list = [system.cpu] * args.num_cpus
+# The Ruby tester reuses num_cpus to specify its number of ports. CHI attaches
+# split cache controllers and sequencers as children of each supplied CPU-like
+# object, so reusing the tester object would overwrite those children. Give
+# each CHI requester a distinct owner while retaining the one tester below.
+if buildEnv["PROTOCOL"] == "CHI":
+    system.chi_tester_nodes = [SubSystem() for _ in range(args.num_cpus)]
+    cpu_list = system.chi_tester_nodes
+else:
+    cpu_list = [system.cpu] * args.num_cpus
 Ruby.create_system(args, False, system, cpus=cpu_list)
 
 # Create a seperate clock domain for Ruby

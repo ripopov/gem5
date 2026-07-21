@@ -300,7 +300,8 @@ bool fromSequencer(CHIRequestType reqType) {
          reqType == CHIRequestType:Store ||
          reqType == CHIRequestType:StoreLine ||
          reqType == CHIRequestType:AtomicLoad ||
-         reqType == CHIRequestType:AtomicStore;
+         reqType == CHIRequestType:AtomicStore ||
+         reqType == CHIRequestType:Flush;
 }
 
 void regProbePoints() {
@@ -373,6 +374,39 @@ void flushController() {
 
   // Flush the cache
   cache.flushEntries();
+}
+
+// Generic Ruby drain uses this to prevent cache-trace capture while an
+// internal eviction is moving the only copy of a line between controllers.
+public bool coherenceQuiescent() {
+  return (storTBEs.size() == 0) &&
+         (storTBEs.reserved() == 0) &&
+         (storReplTBEs.size() == 0) &&
+         (storReplTBEs.reserved() == 0) &&
+         (storSnpTBEs.size() == 0) &&
+         (storSnpTBEs.reserved() == 0) &&
+         (storDvmTBEs.size() == 0) &&
+         (storDvmTBEs.reserved() == 0) &&
+         (storDvmSnpTBEs.size() == 0) &&
+         (storDvmSnpTBEs.reserved() == 0) &&
+         retryQueue.empty() &&
+         (mandatoryQueue.getSize(clockEdge()) == 0) &&
+         (triggerQueue.getSize(clockEdge()) == 0) &&
+         triggerQueue.isStallMapEmpty() &&
+         (retryTriggerQueue.getSize(clockEdge()) == 0) &&
+         (reqRdy.getSize(clockEdge()) == 0) &&
+         reqRdy.isStallMapEmpty() &&
+         (snpRdy.getSize(clockEdge()) == 0) &&
+         snpRdy.isStallMapEmpty() &&
+         (replTriggerQueue.getSize(clockEdge()) == 0) &&
+         (prefetchQueue.getSize(clockEdge()) == 0);
+}
+
+// Called only after trace-driven FLUSH has completed. Directory-only HNF
+// entries make this check enforce the stable trace-coverage invariant.
+public bool cacheAndDirectoryEmpty() {
+  return (cache.getNumValidEntries() == 0) &&
+         (directory.getNumEntries() == 0);
 }
 
 
@@ -1270,6 +1304,14 @@ Event reqToEvent(CHIRequestType type, bool is_prefetch) {
     return Event:AtomicLoad;
   } else if (type == CHIRequestType:AtomicStore){
     return Event:AtomicStore;
+  } else if (type == CHIRequestType:Flush) {
+    return Event:Flush;
+  } else if (type == CHIRequestType:FlushLine) {
+    if (is_HN) {
+      return Event:Flush_PoC;
+    } else {
+      return Event:Flush;
+    }
   } else if (type == CHIRequestType:ReadShared) {
     return Event:ReadShared;
   } else if (type == CHIRequestType:ReadNotSharedDirty) {
@@ -1343,7 +1385,9 @@ Event reqToEvent(CHIRequestType type, bool is_prefetch) {
 
 Event respToEvent (CHIResponseType type, TBE tbe) {
   bool on_hazard := is_valid(tbe) && (tbe.is_req_hazard || tbe.is_repl_hazard);
-  if (type == CHIResponseType:Comp_I) {
+  if (type == CHIResponseType:FlushAck) {
+    return Event:FlushAck;
+  } else if (type == CHIResponseType:Comp_I) {
     return Event:Comp_I;
   } else if (type == CHIResponseType:Comp_UC) {
     return Event:Comp_UC;
