@@ -1,8 +1,9 @@
 # Standalone RTL Co-simulation Runtime
 
-This directory contains Stage 1 of the RTL co-simulation framework. It loads
-vendor V1 shared libraries, validates discovered interfaces, transacts APB,
-AXI3, and AXI4 in both directions, and exercises models without gem5 or SCR1.
+This directory contains the standalone RTL co-simulation runtime. Stage 1
+loads vendor V1 shared libraries, validates discovered interfaces, transacts
+APB, AXI3, and AXI4 in both directions, and exercises models without gem5.
+Stage 2 adds the SCR1 reference vendor integration under `ext/rtl/scr1`.
 AXI3-ACE support is intentionally limited to structural profile validation.
 
 The vendor ABI is the self-contained header
@@ -49,6 +50,25 @@ slave, AXI4 master, and AXI4 slave. The tests run each library through
 slave through the neutral transaction interfaces. No gem5 or SCR1 library is
 linked. If Verilator's CMake integration selects an unusable `ccache`, add
 `-DOBJCACHE_ENABLED=OFF` when configuring.
+
+Enable the SCR1 reference adapter and its bare-metal scenarios after
+initializing the pinned submodule:
+
+```bash
+git submodule update --init ext/rtl/scr1/repo
+cmake -S src/rtl -B build/rtl-cosim-scr1 \
+  -DRTL_COSIM_BUILD_TESTS=ON \
+  -DRTL_COSIM_BUILD_SCR1=ON \
+  -DOBJCACHE_ENABLED=OFF \
+  -DCMAKE_BUILD_TYPE=RelWithDebInfo
+cmake --build build/rtl-cosim-scr1 -j
+ctest --test-dir build/rtl-cosim-scr1 --output-on-failure
+```
+
+This requires Verilator and a `riscv64-unknown-elf-gcc` or
+`riscv32-unknown-elf-gcc` toolchain. The SCR1 shared library itself also has
+an independent CMake build that needs neither the runtime nor gem5; see
+`ext/rtl/scr1/README.md`.
 
 For AddressSanitizer and UndefinedBehaviorSanitizer:
 

@@ -1,0 +1,13 @@
+{
+  "core": {"config": {"instance_name": "checker-riscv-unit"}},
+  "reset": {"assert_cycles": 5},
+  "inputs": {"fuse_mhartid": 0, "fuse_idcode": "0xdeadbeef"},
+  "memory": {
+    "base": 0,
+    "size": 16777216,
+    "latency_cycles": 1,
+    "max_pending": 16,
+    "images": [{"path": "@SCR1_UNIT_ELF@", "format": "elf"}]
+  },
+  "run": {"max_cycles": 2000, "stop_on_idle": true}
+}
