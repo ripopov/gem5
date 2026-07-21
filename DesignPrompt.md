@@ -63,22 +63,44 @@ The API should use abstract interfaces based on virtual methods or propose a saf
 ### `RtlCoreManager`
 
 ```cpp
+#include <cstdint>
+
+class RtlCore;
+
 class RtlCoreManager
 {
   public:
-    virtual ~RtlCoreManager() = default;
+    virtual std::uint32_t apiVersion() const = 0;
 
-    // Creates and manages RTL model instances.
+    // Creates one RTL instance from a null-terminated JSON configuration.
+    // Returns nullptr on failure.
+    virtual RtlCore* createCore(const char* configJson) = 0;
+
+    // Destroys a core created by this manager.
+    virtual void destroyCore(RtlCore* core) = 0;
+
+    // Returns a description of the most recent error. The returned string is
+    // owned by the implementation.
+    virtual const char* getLastError() const = 0;
+
+  protected:
+    virtual ~RtlCoreManager() = default;
 };
 ```
 
-`RtlCoreManager` is the root object returned by the shared library. It must provide APIs to:
+`RtlCoreManager` is the root object returned by the shared library. For the proof of concept, one shared library represents one RTL model type. The manager only needs to report its API version, create and destroy `RtlCore` instances, and report construction errors. Model enumeration, capability discovery, and structured diagnostics can be added after the SCR1 integration is working.
 
-- Query API and model versions.
-- Enumerate available RTL model types.
-- Query model capabilities.
-- Create and destroy `RtlCore` instances.
-- Report errors and diagnostic information.
+The shared library must export two C entry points to avoid C++ symbol-name mangling:
+
+```cpp
+extern "C" RtlCoreManager*
+createRtlCoreManager();
+
+extern "C" void
+destroyRtlCoreManager(RtlCoreManager* manager);
+```
+
+Core and manager objects must be destroyed by the shared library that created them. For the proof of concept, gem5 and the RTL adapter library may be required to use compatible C++ compiler ABIs.
 
 ### `RtlCore`
 
