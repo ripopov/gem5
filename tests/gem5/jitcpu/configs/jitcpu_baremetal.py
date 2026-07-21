@@ -140,3 +140,7 @@ if args.switch_to_o3:
         f"O3CPU switch smoke stopped @ tick {m5.curTick()}: "
         f"{exit_event.getCause()}"
     )
+    if exit_event.getCause() != "m5_exit instruction encountered":
+        raise RuntimeError(
+            "O3CPU did not complete the S-mode PMP takeover regression"
+        )

@@ -168,6 +168,14 @@ class PMP : public SimObject
      */
     void pmpReset();
 
+    /**
+     * Copy the effective PMP state from another CPU model during takeover.
+     *
+     * The architectural PMP CSRs and this decoded enforcement table are
+     * separate state in gem5. Both must move together when switching CPUs.
+     */
+    void takeOverFrom(const PMP *old);
+
   private:
     /**
      * createAddrfault creates an address fault
