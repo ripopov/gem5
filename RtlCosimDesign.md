@@ -1010,8 +1010,8 @@ packet backends remain outside `ext/rtl/scr1`; the pure C++ protocol transactors
   data, ID, and USER widths. ATOP remains tied to zero and is not added to V1.
 - Keep C910-specific ACE response handling, evict absorption, wrapping-burst conversion, and decrementing-burst conversion inside the upstream wrapper;
   the framework sees only standard AXI4 and reuses the Stage 1 initiator transactor unchanged.
-- Map reset, RTC, interrupt, debug, and JTAG signals. Add a minimal wrapper output for `biu_pad_lpmd_b` so `isIdle()` can require drained WFI state,
-  an idle AXI port, and no pending raw interrupt or debug wake source.
+- Map reset, RTC, interrupt, debug, and JTAG signals. Add a minimal wrapper output for the connected internal CP0 `lpmd_b` signal so `isIdle()` can
+  require drained WFI state, an idle AXI port, and no pending raw interrupt or debug wake source; the generated public monitor is undriven.
 - Add standalone tests for discovery, reset, RV64 boot, wide AXI traffic, errors, interrupts, idle clock suppression, and wakeup that ungates the main
   clock before the core samples the interrupt; keep RTC activity independent of main-core clock suppression.
 - Run deterministic bare-metal and `rtl-cosim-check` scenarios without gem5, including stop-at-WFI and interrupt-resume coverage.

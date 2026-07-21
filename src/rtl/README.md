@@ -4,6 +4,7 @@ This directory contains the standalone RTL co-simulation runtime. Stage 1
 loads vendor V1 shared libraries, validates discovered interfaces, transacts
 APB, AXI3, and AXI4 in both directions, and exercises models without gem5.
 Stage 2 adds the SCR1 reference vendor integration under `ext/rtl/scr1`.
+Stage 3 adds the wider PULP C910 reference under `ext/rtl/pulp-c910`.
 AXI3-ACE support is intentionally limited to structural profile validation.
 
 The vendor ABI is the self-contained header
@@ -69,6 +70,26 @@ This requires Verilator and a `riscv64-unknown-elf-gcc` or
 `riscv32-unknown-elf-gcc` toolchain. The SCR1 shared library itself also has
 an independent CMake build that needs neither the runtime nor gem5; see
 `ext/rtl/scr1/README.md`.
+
+Enable the PULP C910 reference adapter and its RV64 scenarios after
+initializing its pinned RTL dependencies:
+
+```bash
+git submodule update --init \
+  ext/rtl/pulp-c910/repo ext/rtl/pulp/axi \
+  ext/rtl/pulp/common_cells ext/rtl/pulp/tech_cells_generic
+cmake -S src/rtl -B build/rtl-cosim-pulp-c910 \
+  -DRTL_COSIM_BUILD_TESTS=ON \
+  -DRTL_COSIM_BUILD_PULP_C910=ON \
+  -DOBJCACHE_ENABLED=OFF \
+  -DCMAKE_BUILD_TYPE=RelWithDebInfo
+cmake --build build/rtl-cosim-pulp-c910 -j
+ctest --test-dir build/rtl-cosim-pulp-c910 --output-on-failure
+```
+
+This requires a 64-bit RISC-V bare-metal GCC. The independently buildable C910
+DLL, signal map, low-power contract, and test inventory are documented in
+`ext/rtl/pulp-c910/README.md`.
 
 For AddressSanitizer and UndefinedBehaviorSanitizer:
 

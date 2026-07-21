@@ -7,3 +7,12 @@
 [submodule "ext/rtl/pulp/apb"]
 	path = ext/rtl/pulp/apb
 	url = https://github.com/pulp-platform/apb.git
+[submodule "ext/rtl/pulp-c910/repo"]
+	path = ext/rtl/pulp-c910/repo
+	url = https://github.com/pulp-platform/pulp-c910.git
+[submodule "ext/rtl/pulp/common_cells"]
+	path = ext/rtl/pulp/common_cells
+	url = https://github.com/pulp-platform/common_cells.git
+[submodule "ext/rtl/pulp/tech_cells_generic"]
+	path = ext/rtl/pulp/tech_cells_generic
+	url = https://github.com/pulp-platform/tech_cells_generic.git
