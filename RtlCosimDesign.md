@@ -31,33 +31,110 @@ The shared library must expose a well-defined entry point that returns the root 
 
 ## gem5 Integration
 
-From the gem5 model developer's perspective, an RTL model must appear as a conventional `SimObject`.
+From the gem5 model developer's perspective, an RTL model appears as a `ClockedObject`-derived SimObject. The SimObject accepts:
 
-The `SimObject` should accept:
-
-- A path to the RTL shared library.
+- A path to the vendor shared library.
 - A JSON configuration file or JSON configuration object.
-- Optional clock, reset, tracing, and model-specific parameters.
+- A gem5 clock domain.
+- Optional tracing and model-specific parameters.
 
-At runtime, the framework must:
+Python-visible SimObject ports cannot be created after C++ runtime initialization. The RTL SimObject therefore declares a fixed set of vector-port
+families, while the number of connected elements is determined by the Python configuration. Standalone vector I/O uses a gem5-internal value type:
 
-1. Load the shared library.
-2. Validate API and ABI compatibility.
-3. Create the requested RTL model instance.
-4. Discover all exported signals and interfaces.
-5. Classify signal groups as known protocols such as AXI, ACE, APB, interrupts, GPIO, clock, or reset.
-6. Instantiate the appropriate signal-to-TLM transactors.
-7. Expose corresponding gem5 interfaces, such as:
-   - `RequestPort`
-   - `ResponsePort`
-   - `IntSourcePin`
-   - `IntSinkPin`
-   - Reset-related ports
-   - GPIO or other protocol-specific ports
-8. Connect model events to gem5's event-driven simulation infrastructure.
+```cpp
+namespace gem5::rtl_cosim
+{
 
-The framework should contain all protocol-specific transactors. Neither the vendor library nor the gem5 model developer should need to implement
-or understand pin-level handshaking.
+struct SignalValue
+{
+    std::uint32_t bitWidth;
+    std::vector<std::uint8_t> data;
+
+    bool operator==(const SignalValue& other) const noexcept
+    {
+        return bitWidth == other.bitWidth && data == other.data;
+    }
+};
+
+} // namespace gem5::rtl_cosim
+```
+
+`SignalValue::data` uses the same little-endian byte and bit ordering as the vendor-facing `Signal` API. It exists only inside gem5 and does not
+cross the shared-library boundary. The corresponding C++ port elements use `SignalSinkPort<SignalValue>` and `SignalSourcePort<SignalValue>`.
+
+```python
+RtlSignalSinkPort = VectorSignalSinkPort("gem5::rtl_cosim::SignalValue")
+RtlSignalSourcePort = VectorSignalSourcePort("gem5::rtl_cosim::SignalValue")
+
+class RtlCoreSimObject(ClockedObject):
+    initiator_ports = VectorRequestPort("RTL initiator buses")
+    target_ports = VectorResponsePort("RTL target buses")
+
+    interrupt_inputs = VectorIntSinkPin("Interrupts driven into RTL")
+    interrupt_outputs = VectorIntSourcePin("Interrupts driven by RTL")
+
+    reset_inputs = VectorResetResponsePort("Reset inputs to RTL")
+    reset_outputs = VectorResetRequestPort("Reset requests from RTL")
+
+    io_inputs = RtlSignalSinkPort("Standalone scalar and vector inputs to RTL")
+    io_outputs = RtlSignalSourcePort("Standalone scalar and vector outputs from RTL")
+```
+
+Discovered RTL interfaces map to these port families as follows:
+
+| RTL interface | gem5 SimObject port |
+| --- | --- |
+| `BusRole::Initiator` | `VectorRequestPort` |
+| `BusRole::Target` | `VectorResponsePort` |
+| Interrupt input to RTL | `VectorIntSinkPin` |
+| Interrupt output from RTL | `VectorIntSourcePin` |
+| Reset input to RTL | `VectorResetResponsePort` |
+| Reset request from RTL | `VectorResetRequestPort` |
+| Standalone scalar or vector input to RTL | `VectorSignalSinkPort("gem5::rtl_cosim::SignalValue")` |
+| Standalone scalar or vector output from RTL | `VectorSignalSourcePort("gem5::rtl_cosim::SignalValue")` |
+
+The JSON configuration identifies discovered interfaces by their API names and maps each interface to a vector index. The Python configuration
+connects those vector elements before C++ object construction. After loading the vendor library, the framework validates that every configured
+interface exists, each discovered interface maps to exactly one compatible vector element, and there are no missing or duplicate bindings.
+
+Runtime initialization proceeds as follows:
+
+1. Resolve the configured shared-library path and load it.
+2. Look up the versioned `createRtlCoreManagerV1` and `destroyRtlCoreManagerV1` symbols.
+3. Create `RtlCoreManager` and `RtlCore` using the JSON model configuration.
+4. Enumerate buses, standalone signals, and backdoor-accessible memories.
+5. Validate bus protocol profiles, signal roles, directions, widths, active levels, names, and configured vector indices.
+6. Create the C++ transactor behind each connected vector-port element.
+7. Register callbacks on subscribed RTL output signals, including interrupt, reset-request, and generic I/O outputs.
+8. Sample initial output values and synchronize the corresponding gem5 signal ports.
+9. Schedule the first clock event unless the model reports that it is idle.
+
+An RTL initiator transactor presents a gem5 `RequestPort` and converts pin-level requests into gem5 packets. It handles timing requests, responses,
+backpressure, and retry callbacks. An RTL target transactor presents a `ResponsePort` and performs the inverse conversion. Protocol-specific state
+machines for AHB-Lite, AXI, APB, and future protocols remain entirely inside the framework.
+
+The same `RequestPort` connects to either memory-system implementation:
+
+- With the classic memory system, connect it to an XBar response-side port such as `cpu_side_ports`.
+- With Ruby, connect it to `RubySequencer.in_ports`, which is a `VectorResponsePort`.
+
+No Ruby-specific vendor interface or RTL SimObject port is required. Coherent protocols may require snoop handling in the gem5 transactor, but they
+still use gem5 `RequestPort` and `ResponsePort` types.
+
+Interrupt and reset gem5 ports carry logical assertion state. The framework uses `CoreSignalBinding::activeLevel` to convert between that logical
+state and the actual, non-normalized RTL signal value. Generic I/O values are transferred without polarity conversion. Each I/O vector-port element
+represents one standalone RTL `Signal` and may carry any positive bit width supported by the vendor API. Initialization fails if connected endpoints
+or the configured metadata disagree with `Signal::bitWidth()`.
+
+Reset-vector addresses, hart IDs, fuse values, clock enables, debug controls, and GPIO are generic I/O rather than reset ports. For example, a 32-bit
+reset-vector input is exposed through one `io_inputs` element carrying a 32-bit `SignalValue`; `reset_inputs` remains reserved for reset assertion.
+
+Clocking, TCM backdoor access, and idle state do not require SimObject ports. The gem5 clock domain schedules `RtlCore::clock()`, object-file loading
+uses the memory backdoor API directly, and `RtlCore::isIdle()` controls whether future clock events are scheduled.
+
+The SCR1 PoC requires two `VectorRequestPort` elements for its instruction and data AHB-Lite initiator buses, interrupt sink elements, and reset
+response elements. A reset-request element is required only when the optional SCR1 system-reset output is exposed. Target-bus, interrupt-source,
+and generic I/O port families remain part of the framework contract but are not required for the first SCR1 execution milestone.
 
 ## Vendor-Facing PoC API
 
@@ -137,7 +214,7 @@ enum class CoreSignalRole : std::uint32_t
 {
     Reset,
     Interrupt,
-    Gpio
+    Io
 };
 
 enum class ActiveLevel : std::uint32_t
@@ -150,10 +227,10 @@ struct CoreSignalBinding
 {
     CoreSignalRole role;
 
-    // Index within a signal group, such as interrupt 0 or GPIO 3.
+    // Index within a signal group, such as interrupt 0 or I/O 3.
     std::uint32_t index;
 
-    // Assertion level for reset and interrupt signals. Ignored for GPIO.
+    // Assertion level for reset and interrupt signals. Ignored for I/O.
     ActiveLevel activeLevel;
 
     // Exposes the actual, non-normalized RTL signal value.
@@ -194,7 +271,7 @@ class RtlCore
     // Returns nullptr if index is out of range.
     virtual Bus* bus(std::size_t index) noexcept = 0;
 
-    // Enumerates standalone reset, interrupt, and GPIO signals.
+    // Enumerates standalone reset, interrupt, and generic I/O signals.
     virtual std::size_t signalCount() const noexcept = 0;
 
     // Returns a binding with signal == nullptr if index is out of range.
@@ -243,7 +320,7 @@ and remains valid until the next API call on the core or any of its child object
 
 `CoreSignalBinding` supplies the semantic role, group index, and assertion level for each standalone signal. `Signal` always exposes the actual RTL
 value without polarity normalization. For example, setting an active-low reset signal to zero asserts reset. `Signal::direction()` determines
-whether an interrupt, reset, or GPIO is driven by gem5 or by the RTL model.
+whether an interrupt, reset, or generic I/O signal is driven by gem5 or by the RTL model.
 
 `clock()` must advance one complete RTL clock cycle and return only after outputs have stabilized. It evaluates the inactive phase, active clock
 edge, and final inactive phase, generating callbacks for subscribed outputs after their final values are available. No gem5 simulation time passes
@@ -254,7 +331,8 @@ inside `clock()`; the gem5 adapter controls clock-event scheduling. `ClockResult
 signal callbacks by passing `nullptr`, and destroy the core. It must not clock the model, change signal values, or access backdoor memories.
 
 The meaning of `isIdle()` is strict: it returns true only when further clock cycles with unchanged inputs cannot change externally observable RTL
-state. gem5 may then stop scheduling clock events until it changes an input, such as an interrupt, reset, GPIO, memory response, or bus wait signal.
+state. gem5 may then stop scheduling clock events until it changes an input, such as an interrupt, reset, generic I/O, memory response, or bus wait
+signal.
 The vendor implementation must return false whenever it cannot safely prove that the model is idle.
 
 The memory backdoor enumerates code and data TCM regions using their configured architectural base addresses. `readMemory()` and `writeMemory()`
@@ -403,7 +481,8 @@ class Signal
 while `setValue()` must fail for output signals. For the proof of concept, values use two-state logic and little-endian byte order: RTL bit 0 is bit 0
 of `data[0]`, and unused high bits in the final byte are zero. `dataSize` must equal `(bitWidth() + 7) / 8`; otherwise, the operation returns false.
 
-The signal-change callback provides event-driven notification for signals such as GPIO and interrupt outputs without polling. Its contract is:
+The signal-change callback provides event-driven notification for signals such as generic I/O and interrupt outputs without polling. Its contract
+is:
 
 - Each signal has at most one registered callback.
 - Registering another callback replaces the previous callback.
