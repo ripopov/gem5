@@ -4,6 +4,7 @@
 #ifndef __RTL_TEST_CONTROLLER_HH__
 #define __RTL_TEST_CONTROLLER_HH__
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -14,7 +15,12 @@
 #include "sim/eventq.hh"
 #include "sim/signal.hh"
 
-namespace gem5::rtl_cosim
+namespace gem5
+{
+
+class System;
+
+namespace rtl_cosim
 {
 
 class RtlCoreSimObject;
@@ -49,10 +55,14 @@ class RtlCosimTestController final : public ClockedObject
   private:
     void tick();
     bool allCoresIdle() const noexcept;
+    bool signatureMatches();
     void setPulse(bool asserted);
     void finish(const std::string &cause, int status);
 
     std::vector<RtlCoreSimObject *> _cores;
+    System *_system;
+    Addr _signatureAddress;
+    std::vector<std::uint8_t> _expectedSignature;
     std::vector<std::unique_ptr<IntSourcePinBase>> _interruptPorts;
     std::vector<std::unique_ptr<SignalSourcePort<bool>>> _resetPorts;
     EventFunctionWrapper _tickEvent;
@@ -65,6 +75,7 @@ class RtlCosimTestController final : public ClockedObject
     Cycles _elapsed = Cycles(0);
 };
 
-} // namespace gem5::rtl_cosim
+} // namespace rtl_cosim
+} // namespace gem5
 
 #endif // __RTL_TEST_CONTROLLER_HH__

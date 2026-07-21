@@ -94,13 +94,17 @@ Gem5InitiatorBackend::makePacket(const MemoryRequest &request,
 
     auto *packet = new Packet(
         gem5Request, request.write ? MemCmd::WriteReq : MemCmd::ReadReq);
-    packet->allocate();
-    std::fill(packet->getPtr<std::uint8_t>(),
-              packet->getPtr<std::uint8_t>() + request.beatBytes, 0);
+    // getPtr() and setData() intentionally reject masked writes. Populate an
+    // owned buffer before attaching it so arbitrary AMBA byte strobes remain
+    // valid gem5 WriteReq packets.
+    auto *payload = new std::uint8_t[request.beatBytes]{};
     if (request.write) {
         const std::size_t offset = beat * request.beatBytes;
-        packet->setData(request.data.data() + offset);
+        std::copy(request.data.begin() + offset,
+                  request.data.begin() + offset + request.beatBytes,
+                  payload);
     }
+    packet->dataDynamic(payload);
     packet->pushSenderState(new PacketState(request.token, beat));
     return packet;
 }

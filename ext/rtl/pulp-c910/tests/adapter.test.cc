@@ -1,14 +1,14 @@
 /* Copyright (c) 2026 The gem5 Authors. SPDX-License-Identifier: BSD-3-Clause
  */
 
+#include <gtest/gtest.h>
+
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
-
-#include <gtest/gtest.h>
 
 #include "rtl/checker/memory_backend.hh"
 #include "rtl/runtime/image_loader.hh"
@@ -28,6 +28,9 @@
 #endif
 #ifndef RTL_COSIM_PULP_C910_C_INTEGRATION_ELF
 #error "RTL_COSIM_PULP_C910_C_INTEGRATION_ELF must be defined"
+#endif
+#ifndef RTL_COSIM_PULP_C910_GEM5_BENCHMARK_ELF
+#error "RTL_COSIM_PULP_C910_GEM5_BENCHMARK_ELF must be defined"
 #endif
 
 namespace gem5::rtl_cosim
@@ -444,6 +447,38 @@ TEST(PulpC910Adapter, RunsFreestandingCAndInitializesBss)
                              reinterpret_cast<std::uint8_t *>(&marker),
                              sizeof(marker)));
     EXPECT_EQ(marker, UINT64_C(0x1828384858687888));
+}
+
+TEST(PulpC910Adapter, RunsGem5ComputeAndMemoryBenchmark)
+{
+    ModelLoader loader;
+    ASSERT_TRUE(loader.open(RTL_COSIM_PULP_C910_PATH)) << loader.error();
+    ASSERT_TRUE(loader.createCore("{}")) << loader.error();
+    RtlCore &core = *loader.core();
+    const ValidationResult validation = validateModel(core);
+    ASSERT_TRUE(validation.ok());
+
+    auto memory = std::make_shared<SparseMemory>(0, 64 * 1024 * 1024);
+    std::string error;
+    ASSERT_TRUE(loadProgram(
+        *memory, RTL_COSIM_PULP_C910_GEM5_BENCHMARK_ELF, error))
+        << error;
+    ASSERT_TRUE(driveBusInputsToZero(validation, error)) << error;
+    ASSERT_TRUE(setResets(core, true, error)) << error;
+    ASSERT_TRUE(core.settle()) << core.getLastError();
+    for (unsigned cycle = 0; cycle < 8; ++cycle) {
+        ASSERT_EQ(core.clock(), ClockResult::Completed)
+            << core.getLastError();
+    }
+    ASSERT_TRUE(setResets(core, false, error)) << error;
+
+    CoreRunner runner(core, validation.buses[0], memory);
+    ASSERT_TRUE(runner.runUntilIdle(500000, error)) << error;
+    std::uint64_t signature = 0;
+    ASSERT_TRUE(memory->read(0x01800020,
+                             reinterpret_cast<std::uint8_t *>(&signature),
+                             sizeof(signature)));
+    EXPECT_EQ(signature, UINT64_C(0xdc2efb8acc3994ff));
 }
 
 } // anonymous namespace

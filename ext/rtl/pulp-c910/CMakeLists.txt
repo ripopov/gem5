@@ -229,6 +229,7 @@ if(RTL_COSIM_PULP_C910_ENABLE_TESTS)
     add_c910_program(error_trap error_trap.S)
     add_c910_program(interrupt_wfi interrupt_wfi.S)
     add_c910_program(c_integration crt0.S c_integration.c)
+    add_c910_program(gem5_benchmark crt0.S gem5_benchmark.c)
 
     add_executable(rtl_cosim_pulp_c910_tests tests/adapter.test.cc)
     target_link_libraries(rtl_cosim_pulp_c910_tests PRIVATE
@@ -238,11 +239,12 @@ if(RTL_COSIM_PULP_C910_ENABLE_TESTS)
         "RTL_COSIM_PULP_C910_BOOT_WFI_ELF=\"${boot_wfi_ELF}\""
         "RTL_COSIM_PULP_C910_ERROR_TRAP_ELF=\"${error_trap_ELF}\""
         "RTL_COSIM_PULP_C910_C_INTEGRATION_ELF=\"${c_integration_ELF}\""
+        "RTL_COSIM_PULP_C910_GEM5_BENCHMARK_ELF=\"${gem5_benchmark_ELF}\""
         "RTL_COSIM_PULP_C910_INTERRUPT_WFI_ELF=\"${interrupt_wfi_ELF}\"")
     add_dependencies(rtl_cosim_pulp_c910_tests
         rtl_cosim_pulp_c910 c910_boot_wfi_program
         c910_error_trap_program c910_c_integration_program
-        c910_interrupt_wfi_program)
+        c910_gem5_benchmark_program c910_interrupt_wfi_program)
     if(MSVC)
         target_compile_options(rtl_cosim_pulp_c910_tests PRIVATE
             /W4 /permissive-)

@@ -55,6 +55,22 @@ WFI detection; main-clock suppression; timer-interrupt wakeup; and return to
 idle. Checker scenarios run assembly boot/WFI, exception-on-AXI-error, and
 freestanding C programs from external memory.
 
+## gem5 single-core validation
+
+Stage 5 uses `configs/example/rtl_cosim/c910_single_core.py` to instantiate
+the vendor library as one `RtlCoreSimObject`. Its unified AXI4 initiator is
+connected through a noncoherent xbar to one gem5 memory controller. The
+configuration maps every discovered reset, interrupt, JTAG, debug, RTC, and
+low-power signal by name; all C910-specific knowledge remains here and in the
+configuration, outside the generic packet backend and transactor.
+
+The `gem5_benchmark` RV64 image exercises compiled C arithmetic and repeated
+reads and writes to external memory before storing the little-endian signature
+`0xdc2efb8acc3994ff` at `0x01800020` and entering drained WFI. The generic
+validation controller checks the expected bytes only after the RTL core,
+transactor, and packet backend are all idle. See `src/rtl/README.md` for the
+direct command and gem5 test-infrastructure command.
+
 ## Exposed model
 
 The adapter discovers one AXI4 initiator bus named `memory`. It maps the full

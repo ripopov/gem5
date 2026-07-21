@@ -6,6 +6,7 @@ APB, AXI3, and AXI4 in both directions, and exercises models without gem5.
 Stage 2 adds the SCR1 reference vendor integration under `ext/rtl/scr1`.
 Stage 3 adds the wider PULP C910 reference under `ext/rtl/pulp-c910`.
 Stage 4 adds the gem5 adapter and a two-core SCR1 validation system.
+Stage 5 adds a direct-memory, single-core C910 portability test.
 AXI3-ACE support is intentionally limited to structural profile validation.
 
 The vendor ABI is the self-contained header
@@ -126,6 +127,25 @@ test infrastructure with:
 tests/main.py run --length long --isa RISCV --variant opt \
   tests/gem5/rtl_cosim
 ```
+
+The same test directory also builds and runs the Stage 5 C910 system. It
+connects the model's single 128-bit AXI4 initiator through a noncoherent xbar
+to one memory controller, without using the SCR1 standard-library wrapper or
+any core-specific gem5 code. The RV64 C benchmark performs deterministic
+compute and external-memory traffic, writes an eight-byte signature, and
+enters drained WFI. Run it directly with:
+
+```bash
+build/RISCV/gem5.opt configs/example/rtl_cosim/c910_single_core.py \
+  --library \
+    build/rtl-cosim-pulp-c910/pulp-c910/librtl_cosim_pulp_c910.so \
+  --image \
+    build/rtl-cosim-pulp-c910/pulp-c910/programs/gem5_benchmark.elf
+```
+
+Success prints `RTL_COSIM_C910_PASS`. The validation controller exits with a
+nonzero status on timeout or a byte-exact signature mismatch; packet or
+transactor protocol failures remain fatal simulation errors.
 
 For AddressSanitizer and UndefinedBehaviorSanitizer:
 

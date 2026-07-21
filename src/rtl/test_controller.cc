@@ -3,11 +3,14 @@
 
 #include "rtl/test_controller.hh"
 
+#include <iomanip>
+#include <sstream>
 #include <utility>
 
 #include "base/logging.hh"
 #include "rtl/rtl_core.hh"
 #include "sim/sim_exit.hh"
+#include "sim/system.hh"
 
 namespace gem5::rtl_cosim
 {
@@ -33,7 +36,9 @@ parseMode(const std::string &mode)
 } // anonymous namespace
 
 RtlCosimTestController::RtlCosimTestController(const Params &params)
-    : ClockedObject(params), _cores(params.cores),
+    : ClockedObject(params), _cores(params.cores), _system(params.system),
+      _signatureAddress(params.signature_address),
+      _expectedSignature(params.expected_signature),
       _tickEvent([this] { tick(); }, name() + ".tick"),
       _mode(parseMode(params.mode)), _pollInterval(params.poll_interval),
       _pulseRemaining(params.pulse_cycles),
@@ -41,6 +46,7 @@ RtlCosimTestController::RtlCosimTestController(const Params &params)
       _timeoutCycles(params.timeout_cycles)
 {
     fatal_if(_cores.empty(), "%s: cores must not be empty", name());
+    fatal_if(!_system, "%s: system must not be null", name());
     fatal_if(_pollInterval == Cycles(0),
              "%s: poll_interval must be positive", name());
     fatal_if(_timeoutCycles == Cycles(0),
@@ -106,6 +112,34 @@ RtlCosimTestController::allCoresIdle() const noexcept
     return true;
 }
 
+bool
+RtlCosimTestController::signatureMatches()
+{
+    if (_expectedSignature.empty()) {
+        return true;
+    }
+
+    std::vector<std::uint8_t> actual(_expectedSignature.size());
+    _system->physProxy.readBlob(
+        _signatureAddress, actual.data(), actual.size());
+    if (actual == _expectedSignature) {
+        return true;
+    }
+
+    auto format = [](const std::vector<std::uint8_t> &bytes) {
+        std::ostringstream stream;
+        stream << std::hex << std::setfill('0');
+        for (const std::uint8_t byte : bytes) {
+            stream << std::setw(2) << static_cast<unsigned>(byte);
+        }
+        return stream.str();
+    };
+    warn("%s: signature mismatch at %#llx: expected %s, observed %s",
+         name(), static_cast<unsigned long long>(_signatureAddress),
+         format(_expectedSignature), format(actual));
+    return false;
+}
+
 void
 RtlCosimTestController::setPulse(bool asserted)
 {
@@ -142,7 +176,11 @@ RtlCosimTestController::tick()
             break;
         }
         if (_mode == Mode::Idle) {
-            finish("rtl-cosim validation passed", 0);
+            if (signatureMatches()) {
+                finish("rtl-cosim validation passed", 0);
+            } else {
+                finish("rtl-cosim signature mismatch", 1);
+            }
             return;
         }
         setPulse(true);
@@ -162,7 +200,11 @@ RtlCosimTestController::tick()
 
       case Phase::WaitFinalIdle:
         if (allCoresIdle()) {
-            finish("rtl-cosim validation passed", 0);
+            if (signatureMatches()) {
+                finish("rtl-cosim validation passed", 0);
+            } else {
+                finish("rtl-cosim signature mismatch", 1);
+            }
             return;
         }
         break;
