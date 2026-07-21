@@ -1,0 +1,19 @@
+# Copyright (c) 2026 The gem5 Authors
+# SPDX-License-Identifier: BSD-3-Clause
+
+Import("*")
+
+SimObject("RtlCore.py", sim_objects=["RtlCoreSimObject"])
+
+Source("gem5_backend.cc")
+Source("rtl_core.cc")
+Source("runtime/image_loader.cc")
+Source("runtime/json.cc")
+Source("runtime/model_loader.cc")
+Source("runtime/model_validator.cc")
+Source("runtime/protocol/apb.cc")
+Source("runtime/protocol/axi.cc")
+Source("runtime/signal_access.cc")
+Source("runtime/transaction.cc")
+
+DebugFlag("RtlCosim", "RTL co-simulation integration activity")
