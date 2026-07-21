@@ -899,29 +899,37 @@ packet backends remain outside `ext/rtl/scr1`; the pure C++ protocol transactors
 
 ## Implementation Stages
 
-### Stage 1: Standalone Vendor API and SCR1 Validation
+### Stage 1: Standalone AMBA Transactor Validation
 
-- Implement and freeze the V1 vendor API in `include/gem5/rtl_cosim/api_v1.hh`, together with its ownership, error, and ABI contracts.
-- Build the Verilated `scr1_top_axi` reference DLL under `ext/rtl/scr1`, including signal discovery, reset, interrupts, idle detection, and TCM access.
-- Implement `rtl_cosim_runtime`, APB and AXI3/AXI4 transactors, loopback memory backend, image loader, and `rtl-cosim-check` without gem5 dependencies.
-- Use CMake for all Stage 1 libraries, tools, examples, and tests; gem5's SCons build is intentionally outside this stage.
-- Organize GoogleTest suites by API lifetime, validation, signals, APB and AXI3/AXI4 channels, bursts, IDs, backpressure, errors, images, memory, and
-  idle behavior. AXI3-ACE tests cover only its canonical signal profile.
-- Add documented end-to-end checker tests that load small RISC-V programs, use deterministic seeds and timeouts, and terminate in a known idle state.
-- Stage 1 is complete only when unit tests and checker scenarios are reproducible, documented, sanitizer-clean, and require no gem5 code.
+- Select high-quality, permissively licensed AXI4 and APB master and slave RTL implementations with strong tests, Verilator compatibility, and active
+  maintenance; document the selection and pin exact revisions.
+- Implement the candidate V1 vendor API and both neutral transaction directions: RTL initiator to backend and transaction source to RTL target.
+- Implement `rtl_cosim_runtime`, APB and AXI3/AXI4 initiator and target transactors, memory and transaction-driver backends, and `rtl-cosim-check`
+  without SCR1 or gem5 dependencies.
+- Use CMake and organize GoogleTest suites around deterministic C++ protocol fixtures, malformed behavior, reset, idle, errors, bursts, IDs, ordering,
+  variable widths, backpressure, and handshake-gated sampling.
+- Add end-to-end tests using independent Verilated master and slave RTL endpoints, including master-to-slave loop tests through the runtime.
+- Limit AXI3-ACE work to canonical signal-profile validation; do not implement or behaviorally test ACE transactions or coherence.
+- Stage 1 is complete when both protocol directions are documented, reproducible, sanitizer-clean, and independently validated; then freeze API V1.
 
-### Stage 2: gem5 Integration and Two-Core System Validation
+### Stage 2: SCR1 Reference Vendor Integration
+
+- Build the Verilated `scr1_top_axi` reference DLL under `ext/rtl/scr1` using only the frozen vendor API and the selected RTL-to-C++ tool runtime.
+- Map both SCR1 AXI4 initiator buses and its reset, interrupt, fuse, and other standalone signals using automatic discovery and width validation.
+- Implement SCR1 clocking, callbacks, idle detection, error reporting, and backdoor access to its unified instruction/data TCM.
+- Reuse the Stage 1 runtime and AXI4 initiator transactor unchanged; SCR1-specific code must remain inside the reference vendor adapter.
+- Add CMake and GoogleTest coverage for adapter lifetime, discovery, reset sequencing, TCM image loading, interrupts, idle wake-up, and failure paths.
+- Run documented `rtl-cosim-check` scenarios with RISC-V unit and bare-metal programs, deterministic timeouts, and known completion or idle states.
+- Stage 2 is complete when the SCR1 DLL passes all standalone tests without gem5 and serves as a reproducible reference implementation for vendors.
+
+### Stage 3: gem5 Integration and Two-Core System Validation
 
 - Implement `RtlCoreSimObject`, the gem5 packet backend, vector-port mapping, callbacks, clock scheduling, reset handling, and configuration validation.
 - Reuse the Stage 1 runtime and APB and AXI3/AXI4 transactors unchanged; gem5-specific code is limited to SimObject, event, signal-port, and packet
-  integration.
-- Keep AXI3-ACE transaction execution, coherence integration, and behavioral testing outside Stage 2; only its canonical signal profile is validated.
+  integration. AXI3-ACE remains structural-validation-only and outside Stage 3 execution and testing.
 - Add a configuration system that creates two SCR1 `RtlCoreSimObject` instances and connects each core's instruction and data ports by API name.
-- Provide one configurable two-core test system that selects either a classic coherent cache hierarchy or Ruby `MESI_Two_Level` with
-  `SimpleNetwork` and shared memory.
-- Run bare-metal RISC-V unit tests to validate boot, memory traffic, interrupts, reset, errors, idle wake-up, and deterministic multicore execution.
-- Run a shared-memory dining-philosophers workload to exercise synchronization, contention, forward progress, and sustained two-core interaction.
-  SCR1 does not implement the RISC-V A extension, so this test must not rely on LR/SC or AMOs. Use a software mutual-exclusion algorithm based on
-  coherent loads and stores, such as Peterson's algorithm for two cores.
-- Stage 2 is complete when the same configurable system passes the test suite in both memory-system modes through gem5's test infrastructure, with
-  documented commands and expected results.
+- Provide one configurable two-core system that selects either a classic coherent cache hierarchy or Ruby `MESI_Two_Level` with `SimpleNetwork`.
+- Run bare-metal RISC-V unit tests for boot, memory traffic, interrupts, reset, errors, idle wake-up, and deterministic multicore execution.
+- Run dining philosophers using Peterson's algorithm with the required compiler barriers and RISC-V fences; SCR1 has no LR/SC or AMOs.
+- Stage 3 is complete when the same configurable system passes both memory-system modes through gem5's test infrastructure, with documented commands
+  and expected results.
