@@ -132,9 +132,47 @@ if(RTL_COSIM_SCR1_ENABLE_TESTS)
         set(${name}_ELF "${output}" PARENT_SCOPE)
     endfunction()
 
+    function(add_scr1_gem5_program name)
+        set(output "${SCR1_PROGRAM_DIR}/${name}.elf")
+        set(sources)
+        foreach(source IN LISTS ARGN)
+            list(APPEND sources
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/programs/${source}")
+        endforeach()
+        set(linker_script
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/programs/gem5_link.ld")
+        add_custom_command(
+            OUTPUT "${output}"
+            COMMAND "${CMAKE_COMMAND}" -E make_directory "${SCR1_PROGRAM_DIR}"
+            COMMAND "${SCR1_RISCV_GCC}"
+                -march=rv32imc_zicsr -mabi=ilp32 -mno-relax
+                -msmall-data-limit=0 -O2 -ffreestanding -fno-builtin
+                -fno-stack-protector -Wall -Wextra -Werror
+                -nostdlib -nostartfiles -Wl,--build-id=none
+                -Wl,-T,${linker_script} ${sources} -o "${output}"
+            DEPENDS
+                ${sources}
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/programs/gem5_test.h"
+                "${linker_script}"
+            VERBATIM
+        )
+        add_custom_target(scr1_${name}_program ALL DEPENDS "${output}")
+    endfunction()
+
     add_scr1_program(riscv_unit riscv_unit.S)
     add_scr1_program(baremetal_tcm baremetal_tcm.S)
     add_scr1_program(c_integration crt0.S c_integration.c)
+    add_scr1_gem5_program(gem5_boot_memory
+        gem5_crt0.S gem5_boot_memory.c)
+    add_scr1_gem5_program(gem5_deterministic_multicore
+        gem5_crt0.S gem5_deterministic_multicore.c)
+    add_scr1_gem5_program(gem5_dining_philosophers
+        gem5_crt0.S gem5_dining_philosophers.c)
+    add_scr1_gem5_program(gem5_interrupt
+        gem5_crt0.S gem5_interrupt.c gem5_interrupt_trap.S)
+    add_scr1_gem5_program(gem5_reset gem5_crt0.S gem5_reset.c)
+    add_scr1_gem5_program(gem5_error
+        gem5_crt0.S gem5_error.c gem5_error_trap.S)
 
     add_executable(rtl_cosim_scr1_tests tests/adapter.test.cc)
     target_link_libraries(rtl_cosim_scr1_tests PRIVATE

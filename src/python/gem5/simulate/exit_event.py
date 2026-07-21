@@ -56,6 +56,7 @@ class ExitEvent(Enum):
     PERF_COUNTER_INTERRUPT = "performance counter interrupt"
     KERNEL_PANIC = "kernel panic in simulated system"
     KERNEL_OOPS = "kernel oops in simulated system"
+    RTL_COSIM = "RTL co-simulation validation"
     # GPU model specific exit events
     KERNEL_START = "GPU Kernel Started"
     KERNEL_END = "GPU Kernel Completed"
@@ -115,6 +116,8 @@ class ExitEvent(Enum):
             return ExitEvent.KERNEL_PANIC
         elif exit_string == "Kernel oops in simulated system.":
             return ExitEvent.KERNEL_OOPS
+        elif exit_string.startswith("rtl-cosim validation "):
+            return ExitEvent.RTL_COSIM
         elif exit_string.endswith("will terminate the simulation.\n"):
             # This is for the traffic generator exit event
             return ExitEvent.EXIT

@@ -5,6 +5,7 @@ loads vendor V1 shared libraries, validates discovered interfaces, transacts
 APB, AXI3, and AXI4 in both directions, and exercises models without gem5.
 Stage 2 adds the SCR1 reference vendor integration under `ext/rtl/scr1`.
 Stage 3 adds the wider PULP C910 reference under `ext/rtl/pulp-c910`.
+Stage 4 adds the gem5 adapter and a two-core SCR1 validation system.
 AXI3-ACE support is intentionally limited to structural profile validation.
 
 The vendor ABI is the self-contained header
@@ -90,6 +91,41 @@ ctest --test-dir build/rtl-cosim-pulp-c910 --output-on-failure
 This requires a 64-bit RISC-V bare-metal GCC. The independently buildable C910
 DLL, signal map, low-power contract, and test inventory are documented in
 `ext/rtl/pulp-c910/README.md`.
+
+## gem5 integration
+
+Build gem5 with the Ruby protocol used by the common two-core configuration:
+
+```bash
+scons setconfig build/RISCV RUBY_PROTOCOL_MESI_Two_Level=y
+scons build/RISCV/gem5.opt -j
+```
+
+The same `configs/example/rtl_cosim/scr1_two_core.py` script selects either
+`--memory-system classic` or `--memory-system ruby`. It creates two SCR1
+cores, connects their named instruction and data AXI4 buses, and uses either
+private classic L1 caches with a shared L2 or Ruby `MESI_Two_Level` with
+`SimpleNetwork`.
+
+For example:
+
+```bash
+build/RISCV/gem5.opt configs/example/rtl_cosim/scr1_two_core.py \
+  --library build/rtl-cosim-scr1/scr1/librtl_cosim_scr1.so \
+  --image build/rtl-cosim-scr1/scr1/programs/gem5_boot_memory.elf \
+  --memory-system ruby --validation idle
+```
+
+The validation images cover boot and memory traffic, deterministic multicore
+execution, Peterson mutual exclusion, interrupt wake-up, reset, and AXI error
+propagation. Success prints `RTL_COSIM_PASS memory_system=classic` or
+`RTL_COSIM_PASS memory_system=ruby`. Run the complete matrix through gem5's
+test infrastructure with:
+
+```bash
+tests/main.py run --length long --isa RISCV --variant opt \
+  tests/gem5/rtl_cosim
+```
 
 For AddressSanitizer and UndefinedBehaviorSanitizer:
 

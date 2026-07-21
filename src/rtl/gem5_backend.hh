@@ -10,6 +10,7 @@
 #include <functional>
 #include <memory>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "base/addr_range.hh"
@@ -58,6 +59,8 @@ class Gem5InitiatorBackend final : public TransactionBackend
   public:
     Gem5InitiatorBackend(const std::string &name, PortID id,
                          RequestorID requestorId, std::size_t maxPending,
+                         std::size_t cacheLineSize,
+                         std::vector<AddrRange> errorRanges,
                          std::function<void()> wakeup);
 
     bool canAccept(const MemoryRequest &request) const override;
@@ -72,6 +75,8 @@ class Gem5InitiatorBackend final : public TransactionBackend
 
   private:
     bool receiveTimingResponse(PacketPtr packet);
+    void completeBeat(std::uint64_t token, std::size_t beat, bool error,
+                      const std::uint8_t *data);
     void retryRequest();
     void pump();
     PacketPtr makePacket(const MemoryRequest &request, std::size_t beat);
@@ -79,10 +84,13 @@ class Gem5InitiatorBackend final : public TransactionBackend
     InitiatorPort _port;
     RequestorID _requestorId;
     std::size_t _maxPending;
+    std::size_t _cacheLineSize;
     std::function<void()> _wakeup;
     std::unordered_map<std::uint64_t, PendingTransaction> _transactions;
     std::deque<PacketPtr> _requests;
+    std::deque<std::pair<std::uint64_t, std::size_t>> _errorBeats;
     std::deque<MemoryResponse> _responses;
+    std::vector<AddrRange> _errorRanges;
     bool _waitingForRetry = false;
 };
 

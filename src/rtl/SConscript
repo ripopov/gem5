@@ -4,9 +4,13 @@
 Import("*")
 
 SimObject("RtlCore.py", sim_objects=["RtlCoreSimObject"])
+SimObject(
+    "RtlCosimTestController.py", sim_objects=["RtlCosimTestController"]
+)
 
 Source("gem5_backend.cc")
 Source("rtl_core.cc")
+Source("test_controller.cc")
 Source("runtime/image_loader.cc")
 Source("runtime/json.cc")
 Source("runtime/model_loader.cc")

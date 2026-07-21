@@ -68,6 +68,23 @@ external data read and write, and reaches an interrupt-wakeable WFI state. The
 freestanding C scenario additionally establishes a TCM stack, verifies `.data`
 and `.bss` loading, and runs compiled C loops over external AXI memory.
 
+## gem5 two-core validation
+
+The Stage 4 build also creates six shared-memory images under
+`build/rtl-cosim-scr1/scr1/programs`: boot/memory, deterministic multicore,
+dining philosophers, interrupt, reset, and error-response tests. The dining
+test uses Peterson's two-core algorithm with compiler barriers and RISC-V
+`fence rw,rw`; it does not use LR/SC or AMOs because SCR1 lacks the A
+extension.
+
+`configs/example/rtl_cosim/scr1_two_core.py` runs the same pair of SCR1 vendor
+models with either classic coherent caches or Ruby `MESI_Two_Level` and
+`SimpleNetwork`. The interrupt and reset modes drive the discovered vector
+ports after both cores become idle. The error test checks a real classic
+bad-address response and a local error range in front of Ruby, which cannot
+route unmapped addresses to a default responder. See `src/rtl/README.md` for
+commands and expected output.
+
 ## Exposed model
 
 The adapter discovers two AXI4 initiator buses named `instruction` and `data`.

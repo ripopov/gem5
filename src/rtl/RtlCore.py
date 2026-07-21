@@ -81,6 +81,9 @@ class RtlCoreSimObject(ClockedObject):
     max_pending_transactions = Param.Unsigned(
         64, "Maximum neutral transactions pending per bus"
     )
+    error_ranges = VectorParam.AddrRange(
+        [], "Optional initiator ranges completed locally with an error"
+    )
 
     image = Param.String("", "Optional ELF, COFF, or raw image")
     image_format = Param.String("auto", "auto, elf, coff, or raw")

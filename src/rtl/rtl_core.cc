@@ -222,6 +222,7 @@ RtlCoreSimObject::buildBusMappings(const Params &params)
             name() + ".initiator_ports[" + std::to_string(index) + "]",
             static_cast<PortID>(index),
             params.system->getRequestorId(this, apiName), _maxPending,
+            params.system->cacheLineSize(), params.error_ranges,
             [this] { wake(); });
         const TransactorLimits limits{_maxPending, 256,
                                       (index + 1) << 48};
@@ -296,9 +297,10 @@ RtlCoreSimObject::buildSignalMappings(const Params &params)
 
     for (std::size_t index = 0; index < params.interrupt_input_names.size();
          ++index) {
-        StandaloneBinding binding{findSignal(
-            params.interrupt_input_names[index], CoreSignalRole::Interrupt,
-            SignalDirection::Input)};
+        StandaloneBinding binding{
+            findSignal(params.interrupt_input_names[index],
+                       CoreSignalRole::Interrupt, SignalDirection::Input),
+            {}};
         _interruptInputs.push_back(std::move(binding));
         auto port = std::make_unique<SignalSinkPort<bool>>(
             name() + ".interrupt_inputs[" + std::to_string(index) + "]",
@@ -310,18 +312,20 @@ RtlCoreSimObject::buildSignalMappings(const Params &params)
     }
     for (std::size_t index = 0; index < params.interrupt_output_names.size();
          ++index) {
-        _interruptOutputs.push_back({findSignal(
-            params.interrupt_output_names[index], CoreSignalRole::Interrupt,
-            SignalDirection::Output)});
+        _interruptOutputs.push_back(
+            {findSignal(params.interrupt_output_names[index],
+                        CoreSignalRole::Interrupt, SignalDirection::Output),
+             {}});
         _interruptOutputPorts.push_back(std::make_unique<IntSourcePinBase>(
             name() + ".interrupt_outputs[" + std::to_string(index) + "]",
             static_cast<PortID>(index)));
     }
     for (std::size_t index = 0; index < params.reset_input_names.size();
          ++index) {
-        _resetInputs.push_back({findSignal(
-            params.reset_input_names[index], CoreSignalRole::Reset,
-            SignalDirection::Input)});
+        _resetInputs.push_back(
+            {findSignal(params.reset_input_names[index], CoreSignalRole::Reset,
+                        SignalDirection::Input),
+             {}});
         auto port = std::make_unique<SignalSinkPort<bool>>(
             name() + ".reset_inputs[" + std::to_string(index) + "]",
             static_cast<PortID>(index));
@@ -332,9 +336,10 @@ RtlCoreSimObject::buildSignalMappings(const Params &params)
     }
     for (std::size_t index = 0; index < params.reset_output_names.size();
          ++index) {
-        _resetOutputs.push_back({findSignal(
-            params.reset_output_names[index], CoreSignalRole::Reset,
-            SignalDirection::Output)});
+        _resetOutputs.push_back(
+            {findSignal(params.reset_output_names[index],
+                        CoreSignalRole::Reset, SignalDirection::Output),
+             {}});
         _resetOutputPorts.push_back(
             std::make_unique<SignalSourcePort<bool>>(
                 name() + ".reset_outputs[" + std::to_string(index) + "]",
@@ -342,9 +347,10 @@ RtlCoreSimObject::buildSignalMappings(const Params &params)
     }
     for (std::size_t index = 0; index < params.io_input_names.size();
          ++index) {
-        StandaloneBinding binding{findSignal(
-            params.io_input_names[index], CoreSignalRole::Io,
-            SignalDirection::Input)};
+        StandaloneBinding binding{
+            findSignal(params.io_input_names[index], CoreSignalRole::Io,
+                       SignalDirection::Input),
+            {}};
         const std::string value = params.io_input_values.empty()
                                       ? "0"
                                       : params.io_input_values[index];
@@ -364,9 +370,10 @@ RtlCoreSimObject::buildSignalMappings(const Params &params)
     }
     for (std::size_t index = 0; index < params.io_output_names.size();
          ++index) {
-        _ioOutputs.push_back({findSignal(
-            params.io_output_names[index], CoreSignalRole::Io,
-            SignalDirection::Output)});
+        _ioOutputs.push_back(
+            {findSignal(params.io_output_names[index], CoreSignalRole::Io,
+                        SignalDirection::Output),
+             {}});
         _ioOutputPorts.push_back(
             std::make_unique<SignalSourcePort<SignalValue>>(
                 name() + ".io_outputs[" + std::to_string(index) + "]",

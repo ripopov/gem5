@@ -53,12 +53,17 @@ Gem5InitiatorBackend::InitiatorPort::recvReqRetry()
 
 Gem5InitiatorBackend::Gem5InitiatorBackend(
     const std::string &name, PortID id, RequestorID requestorId,
-    std::size_t maxPending, std::function<void()> wakeup)
+    std::size_t maxPending, std::size_t cacheLineSize,
+    std::vector<AddrRange> errorRanges, std::function<void()> wakeup)
     : _port(name, id, *this), _requestorId(requestorId),
-      _maxPending(maxPending), _wakeup(std::move(wakeup))
+      _maxPending(maxPending), _cacheLineSize(cacheLineSize),
+      _wakeup(std::move(wakeup)),
+      _errorRanges(std::move(errorRanges))
 {
     fatal_if(maxPending == 0,
              "%s: max pending transactions must be positive", name);
+    fatal_if(cacheLineSize == 0,
+             "%s: cache line size must be positive", name);
 }
 
 bool
@@ -94,7 +99,7 @@ Gem5InitiatorBackend::makePacket(const MemoryRequest &request,
               packet->getPtr<std::uint8_t>() + request.beatBytes, 0);
     if (request.write) {
         const std::size_t offset = beat * request.beatBytes;
-        packet->writeData(request.data.data() + offset);
+        packet->setData(request.data.data() + offset);
     }
     packet->pushSenderState(new PacketState(request.token, beat));
     return packet;
@@ -118,7 +123,20 @@ Gem5InitiatorBackend::submit(const MemoryRequest &request)
     }
     _transactions.emplace(request.token, std::move(pending));
     for (std::size_t beat = 0; beat < request.beatCount(); ++beat) {
-        _requests.push_back(makePacket(request, beat));
+        const Addr address = beatAddress(request, beat);
+        panic_if(request.beatBytes - 1 > MaxAddr - address,
+                 "%s received an overflowing beat address", _port.name());
+        const Addr last = address + request.beatBytes - 1;
+        const bool injectError = std::any_of(
+            _errorRanges.begin(), _errorRanges.end(),
+            [address, last](const AddrRange &range) {
+                return range.contains(address) && range.contains(last);
+            });
+        if (injectError) {
+            _errorBeats.emplace_back(request.token, beat);
+        } else {
+            _requests.push_back(makePacket(request, beat));
+        }
     }
     return true;
 }
@@ -151,6 +169,11 @@ void
 Gem5InitiatorBackend::advance()
 {
     pump();
+    while (!_errorBeats.empty()) {
+        const auto [token, beat] = _errorBeats.front();
+        _errorBeats.pop_front();
+        completeBeat(token, beat, true, nullptr);
+    }
 }
 
 void
@@ -174,6 +197,19 @@ Gem5InitiatorBackend::receiveTimingResponse(PacketPtr packet)
     const std::size_t beat = state->beat;
     delete state;
 
+    const bool error = packet->isError();
+    const std::uint8_t *data = error
+                                   ? nullptr
+                                   : packet->getConstPtr<std::uint8_t>();
+    completeBeat(token, beat, error, data);
+    delete packet;
+    return true;
+}
+
+void
+Gem5InitiatorBackend::completeBeat(std::uint64_t token, std::size_t beat,
+                                   bool error, const std::uint8_t *data)
+{
     auto transaction = _transactions.find(token);
     panic_if(transaction == _transactions.end(),
              "%s received a packet with unknown RTL token %llu",
@@ -182,30 +218,27 @@ Gem5InitiatorBackend::receiveTimingResponse(PacketPtr packet)
     panic_if(beat >= pending.request.beatCount(),
              "%s received an invalid RTL beat index", _port.name());
 
-    pending.response.error |= packet->isError();
-    if (!pending.request.write && !packet->isError()) {
+    pending.response.error |= error;
+    if (!pending.request.write && !error) {
+        panic_if(!data, "%s completed a read beat without data", _port.name());
         const std::size_t offset = beat * pending.request.beatBytes;
-        std::copy(packet->getConstPtr<std::uint8_t>(),
-                  packet->getConstPtr<std::uint8_t>() +
-                      pending.request.beatBytes,
+        std::copy(data, data + pending.request.beatBytes,
                   pending.response.data.begin() + offset);
     }
     ++pending.completedBeats;
-    delete packet;
 
     if (pending.completedBeats == pending.request.beatCount()) {
         _responses.push_back(std::move(pending.response));
         _transactions.erase(transaction);
     }
     _wakeup();
-    return true;
 }
 
 bool
 Gem5InitiatorBackend::isIdle() const noexcept
 {
-    return _transactions.empty() && _requests.empty() && _responses.empty() &&
-           !_waitingForRetry;
+    return _transactions.empty() && _requests.empty() &&
+           _errorBeats.empty() && _responses.empty() && !_waitingForRetry;
 }
 
 void
@@ -213,9 +246,10 @@ Gem5InitiatorBackend::sendFunctional(Addr address,
                                      const std::uint8_t *data,
                                      std::size_t size)
 {
-    constexpr std::size_t MaxChunk = 64 * 1024;
     while (size != 0) {
-        const std::size_t chunk = std::min(size, MaxChunk);
+        const std::size_t lineOffset = address % _cacheLineSize;
+        const std::size_t chunk = std::min(
+            size, _cacheLineSize - lineOffset);
         auto request = std::make_shared<Request>(
             address, static_cast<unsigned>(chunk), Request::Flags(),
             _requestorId);
@@ -347,7 +381,7 @@ Gem5TargetSource::submitResponse(const MemoryResponse &response)
         return false;
     }
     if (packet->isRead() && !response.error) {
-        packet->writeData(response.data.data());
+        packet->setData(response.data.data());
     }
     packet->makeResponse();
     if (response.error) {

@@ -202,7 +202,7 @@ class SConsFixture(UniqueFixture):
                 "--no-compress-debug",
                 "setconfig",
                 self.target_dir,
-                f"RUBY_PROTOCOL_{self.protocol.upper()}=y",
+                f"RUBY_PROTOCOL_{self.protocol}=y",
             ]
             log_call(
                 log.test_log, setconfig_command, time=None, stderr=sys.stderr

@@ -597,6 +597,7 @@ class ClassicGeneratorExitHandler(ExitHandler, hypercall_num=0):
             )(),
             ExitEvent.KERNEL_PANIC: exit_generator(),
             ExitEvent.KERNEL_OOPS: exit_generator(),
+            ExitEvent.RTL_COSIM: exit_generator(),
         }
 
         if on_exit_event:
