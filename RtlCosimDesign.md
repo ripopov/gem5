@@ -515,14 +515,21 @@ initialization error.
 
 #### AXI4 Validation Profile
 
-The V1 AXI4 profile represents a full read/write AXI4 interface rather than AXI4-Lite. The base channel roles `AwId` through `RReady`, except `WId`,
-are required. `WId` is prohibited because AXI4 removed write-data interleaving. The AXI4 sideband roles `AwRegion`, `AwQos`, `AwUser`, `WUser`,
-`BUser`, `ArRegion`, `ArQos`, `ArUser`, and `RUser` are optional.
+The V1 AXI4 profile represents a full read/write AXI4 interface rather than AXI4-Lite. The base channel roles `AwId` through `RReady` are required
+except for these rules:
+
+- `WId` is prohibited because AXI4 removed write-data interleaving.
+- `AwId` and `BId` are an optional matched pair; `ArId` and `RId` are another optional matched pair. An absent pair uses implicit ID zero, while a
+  partially present pair is a validation error.
+- `AwLock`, `ArLock`, `AwCache`, `ArCache`, `AwProt`, and `ArProt` are optional and default to zero when absent.
+
+The AXI4 sideband roles `AwRegion`, `AwQos`, `AwUser`, `WUser`, `BUser`, `ArRegion`, `ArQos`, `ArUser`, and `RUser` are optional and default to zero
+when absent. An absent optional role has no `SignalBinding`; the vendor must enumerate only real RTL pins and must not synthesize constant signals.
 
 All non-fixed AXI4 widths are discovered independently for each bus instance. For example, the two SCR1 buses are handled as discovered 32-bit
 address and data interfaces; supporting a model with another valid address, data, ID, or USER width requires no source-code change.
 
-The profile enforces these widths and relationships:
+The profile enforces these widths and relationships for required signals and for optional signals when present:
 
 - VALID, READY, LAST, and LOCK signals are one bit.
 - `AwLen` and `ArLen` are 8 bits; `AwSize` and `ArSize` are 3 bits; `AwBurst` and `ArBurst` are 2 bits.
@@ -531,15 +538,16 @@ The profile enforces these widths and relationships:
 - `BResp` and `RResp` are 2 bits.
 - `AwAddr` and `ArAddr` have the same nonzero width, which must not exceed 64 bits in V1.
 - `WData` and `RData` have the same power-of-two width between 8 and 1024 bits. `WStrb` has one bit per data byte.
-- `AwId`, `BId`, `ArId`, and `RId` have the same width, between 1 and 32 bits.
+- Each present ID pair has equal widths between 1 and 32 bits. Write and read ID pairs may have different widths.
 - USER signal widths are implementation-defined positive values and have no required relationship across channels.
 
 For an RTL initiator, AW, W, and AR payload and VALID signals, plus `BReady` and `RReady`, are outputs; the corresponding READY, B, and R response
 signals are inputs. An RTL target uses the inverse directions. Optional sideband signals follow the direction of their channel.
 
-The initial neutral transaction backend does not carry REGION, QOS, or USER metadata. A transactor samples and ignores such RTL-driven sidebands
-only when their channel handshakes, and drives zero on sidebands directed into the RTL. Their presence must never cause eager payload sampling on an
-idle or stalled channel. This behavior preserves functional SCR1 execution while keeping the canonical AXI4 signal mapping complete.
+The initial neutral transaction backend does not carry CACHE, PROT, REGION, QOS, or USER metadata. A transactor samples and ignores such RTL-driven
+sidebands only when their channel handshakes, and drives zero on sidebands directed into the RTL. A present, asserted LOCK is an unsupported exclusive
+access and must produce an explicit runtime error. Optional signals must never cause eager payload sampling on an idle or stalled channel. This
+behavior preserves functional SCR1 execution while keeping the canonical AXI4 signal mapping complete.
 
 ### `Signal`
 
