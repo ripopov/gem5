@@ -55,6 +55,16 @@ pin the QEMU revision and record a file-by-file license audit. A build linked
 with GPL-covered QEMU RISC-V code must be treated and distributed as a
 GPL-compliant build; the normal non-JIT gem5 build must remain unaffected.
 
+### QEMU source
+
+The upstream QEMU source is pinned as the [`ext/qemu`](ext/qemu) submodule.
+The parent repository's gitlink is the authoritative revision; builds must not
+silently follow QEMU `master` or use an unrelated system installation. Limit
+the integration to the RISC-V translator, TCG runtime/backends, and the minimum
+support code required by the C adapter. Record every imported file and its
+license. Commit required QEMU-side changes in a maintained fork, then update
+the parent gitlink deliberately.
+
 ## Implementation stages
 
 1. **Baseline and skeleton**
@@ -97,19 +107,42 @@ GPL-compliant build; the normal non-JIT gem5 build must remain unaffected.
    - Verify that O3 begins with cold caches and produces expected CHI/cache/DRAM
      traffic after the switch.
 
-## Verification
+## Testing strategy
 
-- Unit tests for block exits, register synchronization, invalidation, MMIO,
-  faults, interrupts, and instruction limits.
-- RISC-V ISA and privileged tests restricted to the advertised PoC ISA.
-- Differential JIT-versus-Atomic runs with state and memory comparison at each
-  block boundary.
-- Full-system Linux boot, m5op switch, O3 benchmark completion, and checkpoint
-  smoke tests.
-- Repeat the switch test with Ruby+CHI and confirm coherent memory contents and
-  nonzero CHI traffic only after O3 takeover.
-- Benchmark optimized builds with tracing/debug flags disabled and report
-  `hostInstRate`, wall time, translation-cache hit rate, and exit reasons.
+Testing proceeds in gates; a later gate is enabled only after the earlier one
+is stable.
+
+1. **Build and isolation:** build gem5 with JIT disabled and enabled, verify the
+   non-JIT build has no QEMU dependency, and check that the configured QEMU
+   revision matches the `ext/qemu` gitlink.
+2. **Directed execution:** run small bare-metal tests for each supported opcode
+   class plus block exits, register synchronization, invalidation, MMIO,
+   faults, interrupts, instruction limits, LR/SC, AMOs, and fences. Unsupported
+   instructions must take a controlled fallback or illegal-instruction exit.
+3. **Differential testing:** execute deterministic and generated RV64 programs
+   under JitCPU and AtomicSimpleCPU. At every translation-block exit compare
+   integer/FP registers, PC, privilege state, relevant CSRs, exception state,
+   instruction count, and modified memory. AtomicSimpleCPU is the PoC oracle.
+4. **Full-system testing:** boot one fixed, RV64GC-constrained Linux image to a
+   userspace pass marker; cover timer/external interrupts, page faults, system
+   calls, `WFI`, and all required m5ops. Use deterministic inputs and bounded
+   timeouts so failures are reproducible.
+5. **Switch testing:** boot with JitCPU, execute `m5_switch_cpu`, compare state
+   immediately before takeover, and complete benchmark warm-up and ROI under
+   O3. Check the result marker, exit cause, statistics reset boundary, memory
+   mode, and a checkpoint smoke test.
+6. **Ruby+CHI testing:** repeat the switch test with CHI present from startup.
+   Confirm coherent memory contents, cold O3 caches at takeover, no unintended
+   timing-cache traffic during JIT execution, and nonzero CHI/cache/DRAM traffic
+   during the O3 ROI.
+7. **Performance testing:** use optimized builds with tracing disabled, run at
+   least three repetitions, and report the median wall time, `hostInstRate`,
+   translation-cache hit rate, generated-code size, and exit-reason counts.
+   Gate the PoC on the agreed CPU-bound speedup over NonCachingSimpleCPU while
+   keeping correctness tests outside the timed region.
+
+Keep short directed and differential tests in presubmit CI. Run Linux boot,
+Ruby+CHI, and performance suites as scheduled or explicit extended tests.
 
 ## Deferred work
 
