@@ -178,8 +178,11 @@ build/RISCV/gem5.opt -d m5out/jitcpu-switch \
   --max-ticks 10000000 --switch-to-o3
 ```
 
-The terminal output must contain `JIT` followed by `O3`; gem5 must report a
-`switchcpu` exit before takeover and an `m5_exit` exit afterward.
+The payload configures an all-memory PMP rule, enters S-mode, and only then
+executes the switch. The terminal output must contain `JIT` followed by `O3`;
+gem5 must report a `switchcpu` exit before takeover and an `m5_exit` exit
+afterward. An empty or stale O3 PMP table traps to a distinct `m5_fail`, making
+the directed test a regression for effective PMP-state transfer.
 
 For the Linux gate, obtain the gem5 `riscv-boot-exit-nodisk` resource and pass
 its local image path to:

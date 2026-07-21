@@ -101,10 +101,10 @@ class MMU : public BaseMMU
     void
     takeOverFrom(BaseMMU *old_mmu) override
     {
-      MMU *ommu = dynamic_cast<MMU*>(old_mmu);
-      BaseMMU::takeOverFrom(ommu);
-      pma->takeOverFrom(ommu->pma);
-
+        MMU *ommu = dynamic_cast<MMU*>(old_mmu);
+        BaseMMU::takeOverFrom(ommu);
+        pma->takeOverFrom(ommu->pma);
+        getPMP()->takeOverFrom(ommu->getPMP());
     }
 
     void
