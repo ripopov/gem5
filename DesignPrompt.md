@@ -131,32 +131,81 @@ The `isIdle()` method is an important performance optimization. It should report
 ### `Bus`
 
 ```cpp
+#include <cstddef>
+#include <cstdint>
+
+class Signal;
+
+enum class BusProtocol : std::uint32_t
+{
+    Unknown = 0,
+    AhbLite,
+    Axi4,
+    Apb
+};
+
+enum class BusRole : std::uint32_t
+{
+    Initiator,
+    Target
+};
+
+using SignalRoleId = std::uint32_t;
+
+namespace AhbLiteSignal
+{
+constexpr SignalRoleId HAddr  = 1;
+constexpr SignalRoleId HBurst = 2;
+constexpr SignalRoleId HProt  = 3;
+constexpr SignalRoleId HSize  = 4;
+constexpr SignalRoleId HTrans = 5;
+constexpr SignalRoleId HWData = 6;
+constexpr SignalRoleId HWrite = 7;
+constexpr SignalRoleId HRData = 8;
+constexpr SignalRoleId HReady = 9;
+constexpr SignalRoleId HResp  = 10;
+}
+
+struct SignalBinding
+{
+    SignalRoleId role;
+    Signal* signal;
+};
+
 class Bus
 {
   public:
-    virtual ~Bus() = default;
+    // Bus instance name, for example "instruction" or "data".
+    virtual const char* name() const = 0;
 
-    // Bus metadata and constituent signal discovery.
+    virtual BusProtocol protocol() const = 0;
+
+    // Role of the RTL module on this bus.
+    virtual BusRole role() const = 0;
+
+    virtual std::size_t signalCount() const = 0;
+
+    // Enumerates the semantic role and Signal object for each binding.
+    // Returns {0, nullptr} when index is out of range.
+    virtual SignalBinding signal(std::size_t index) = 0;
+
+  protected:
+    virtual ~Bus() = default;
 };
 ```
 
-`Bus` represents a logical group of signals implementing a protocol such as:
+`Bus` represents a logical group of signals implementing a protocol such as AXI4, AHB-Lite, or APB. Signal bindings must use canonical semantic role IDs defined by the framework; the framework must never infer protocol semantics from vendor-specific RTL signal names. `Signal::name()` remains available for diagnostics and waveform tracing.
 
-- AXI3 or AXI4
-- ACE
-- AHB or AHB-Lite
-- APB
-- A custom vendor-defined protocol
+The vendor adapter maps its physical RTL signals to these semantic roles. `RtlCore` owns all returned `Bus` and `Signal` objects, and their names and pointers remain valid for the lifetime of the core.
 
-It must expose:
+The framework must define a validation profile for every supported protocol and role. Each profile specifies:
 
-- Bus name and instance identifier.
-- Protocol type and version.
-- Initiator or target role.
-- Protocol parameters such as address, data, and ID widths.
-- Constituent signals.
-- Optional protocol-specific metadata.
-- Clock and reset domain associations.
+- Required and optional semantic signal roles.
+- Expected signal directions from the RTL model's perspective.
+- Fixed signal widths.
+- Width relationships between signals.
+
+Before constructing a transactor, the framework must enumerate and validate all bindings, reject null or duplicate bindings, check required signals, and verify their directions and widths. Automatic discovery means consuming this structured metadata rather than guessing interfaces from signal names. For the initial single-clock proof of concept, clock and reset remain core-level signals.
 
 ### `Signal`
 
