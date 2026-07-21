@@ -448,6 +448,29 @@ constexpr SignalRoleId ArRegion = 42;
 constexpr SignalRoleId ArQos    = 43;
 constexpr SignalRoleId ArUser   = 44;
 constexpr SignalRoleId RUser    = 45;
+
+// AXI3-ACE additions. V1 validates these roles structurally but does not
+// execute coherent transactions.
+constexpr SignalRoleId AwDomain = 46;
+constexpr SignalRoleId AwSnoop  = 47;
+constexpr SignalRoleId AwBar    = 48;
+constexpr SignalRoleId ArDomain = 49;
+constexpr SignalRoleId ArSnoop  = 50;
+constexpr SignalRoleId ArBar    = 51;
+constexpr SignalRoleId AcAddr   = 52;
+constexpr SignalRoleId AcSnoop  = 53;
+constexpr SignalRoleId AcProt   = 54;
+constexpr SignalRoleId AcValid  = 55;
+constexpr SignalRoleId AcReady  = 56;
+constexpr SignalRoleId CrResp   = 57;
+constexpr SignalRoleId CrValid  = 58;
+constexpr SignalRoleId CrReady  = 59;
+constexpr SignalRoleId CdData   = 60;
+constexpr SignalRoleId CdLast   = 61;
+constexpr SignalRoleId CdValid  = 62;
+constexpr SignalRoleId CdReady  = 63;
+constexpr SignalRoleId Rack     = 64;
+constexpr SignalRoleId Wack     = 65;
 }
 
 struct SignalBinding
@@ -630,10 +653,10 @@ Pure C++ RTL runtime
 ├── APB, AXI4, and AXI3 protocol engines
 ├── clock and reset sequencing
 ├── transaction queues and ordering
-└── neutral transaction backend
+└── neutral transaction interfaces
         │
-        ├── Standalone memory backend ──► rtl-cosim-check
-        └── gem5 packet backend ────────► RequestPort and ResponsePort
+        ├── TransactionBackend ◄── RTL initiator
+        └── TransactionSource  ──► RTL target
 ```
 
 ### Pure C++ Runtime
@@ -670,6 +693,10 @@ struct MemoryRequest
     std::uint64_t address;
     bool write;
 
+    // Bytes transferred per beat and the protocol burst shape.
+    std::size_t beatBytes;
+    BurstType burst;
+
     std::vector<std::uint8_t> data;
     std::vector<std::uint8_t> byteEnable;
 };
@@ -677,6 +704,7 @@ struct MemoryRequest
 struct MemoryResponse
 {
     std::uint64_t token;
+    std::uint32_t id;
     std::vector<std::uint8_t> data;
     bool error;
 };
@@ -691,10 +719,25 @@ class TransactionBackend
 
     virtual ~TransactionBackend() = default;
 };
+
+class TransactionSource
+{
+  public:
+    virtual bool getRequest(MemoryRequest& request) = 0;
+    virtual bool canAcceptResponse(
+        const MemoryResponse& response) const = 0;
+    virtual bool submitResponse(const MemoryResponse& response) = 0;
+    virtual void advance() = 0;
+
+    virtual ~TransactionSource() = default;
+};
 ```
 
-The standalone backend implements a sparse or flat byte-addressable memory. The gem5 backend converts `MemoryRequest` objects into gem5 packets,
-queues asynchronous packet responses as `MemoryResponse` objects, and translates gem5 retry notifications into backend availability.
+`TransactionBackend` consumes requests produced by an RTL initiator. `TransactionSource` produces requests for an RTL target and consumes its
+responses. Both use compact beat data in increasing-address order; transactors expand or extract bus lanes using the discovered data width.
+
+The standalone backend implements sparse byte-addressable memory. The gem5 adapters convert neutral transactions into gem5 packets, queue
+asynchronous responses, and translate gem5 retry notifications into backend or source availability.
 
 ### Protocol Transactor Cycle Interface
 
@@ -808,7 +851,9 @@ A representative configuration is:
   "memory": {
     "base": 0,
     "size": 67108864,
-    "image": "test.elf",
+    "images": [
+      {"path": "test.elf", "format": "auto"}
+    ],
     "latency_cycles": 1
   },
   "run": {
@@ -827,16 +872,15 @@ memory, image loading, traffic behavior, and termination conditions.
 The initial SCR1 test uses shared fixed-latency memory and a small program that reaches an idle state. The checker architecture also supports:
 
 - Zero or fixed memory latency.
-- Deterministic randomized latency using a recorded seed.
-- Randomized READY backpressure.
+- Capacity-driven READY backpressure with deterministic pending limits.
 - Burst and narrow transfers.
 - Address-range error responses.
 - Multiple outstanding AXI IDs.
-- Out-of-order responses where the selected protocol permits them.
+- Out-of-order responses across AXI IDs while preserving order within each ID.
 
-The initial checker attaches memories only to RTL initiator buses. A later checker mode may drive RTL target buses with a synthetic transaction
-initiator. For AXI3-ACE, the checker validates only the canonical signal list, directions, and widths; it does not instantiate an ACE transactor or
-drive the interface. ACE transaction behavior and coherence testing require a future dedicated backend and gem5 coherence adapter.
+The checker attaches shared memory to RTL initiator buses and uses configured transaction scripts to drive RTL target buses. Response expectations
+may check data and error status. For AXI3-ACE, the checker validates only the canonical signal list, directions, and widths; it does not instantiate
+an ACE transactor or drive the interface. ACE transaction behavior and coherence testing require a future dedicated backend and gem5 adapter.
 
 ### Checker Scope and Diagnostics
 
@@ -858,8 +902,8 @@ command-line or JSON errors, library or API errors, validation errors, runtime o
 
 ```text
 src/rtl/
-├── SConscript
 ├── CMakeLists.txt
+├── README.md
 ├── runtime/
 │   ├── model_loader.{hh,cc}
 │   ├── model_validator.{hh,cc}
@@ -867,20 +911,20 @@ src/rtl/
 │   ├── image_loader.{hh,cc}
 │   └── protocol/
 │       ├── apb.{hh,cc}
-│       ├── axi3.{hh,cc}
-│       └── axi4.{hh,cc}
+│       └── axi.{hh,cc}
 ├── checker/
 │   ├── main.cc
 │   ├── memory_backend.{hh,cc}
 │   └── checker_config.{hh,cc}
-└── gem5/
-    ├── rtl_core.{hh,cc}
-    ├── packet_backend.{hh,cc}
-    └── RtlCore.py
+├── fixtures/pulp/
+│   ├── fixture_adapter.cc
+│   ├── rtl/
+│   └── config/
+└── tests/
 ```
 
-CMake builds `rtl_cosim_runtime` and `rtl-cosim-check` without gem5. gem5's SCons build compiles the same runtime and protocol sources together with
-the gem5 adapter. Protocol behavior must not be duplicated in the checker and gem5 layers.
+CMake builds `rtl_cosim_runtime`, `rtl_cosim_checker_support`, and `rtl-cosim-check` without gem5. Stage 3 will compile the same runtime and protocol
+sources with the gem5 adapter. Protocol behavior must not be duplicated in checker and gem5 layers.
 
 ## SCR1 Reference Vendor Implementation
 
