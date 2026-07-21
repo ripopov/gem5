@@ -836,6 +836,32 @@ callbacks, expose optional TCM backdoors, and export the versioned manager facto
 This integration is the reference vendors can copy and adapt for Verilator or commercial RTL-to-C++ models. gem5-specific loading, ports, and
 packet backends remain outside `ext/rtl/scr1`; the pure C++ protocol transactors are supplied by `rtl_cosim_runtime`.
 
+## Implementation Stages
+
+### Stage 1: Standalone Vendor API and SCR1 Validation
+
+- Implement and freeze the V1 vendor API in `include/gem5/rtl_cosim/api_v1.hh`, together with its ownership, error, and ABI contracts.
+- Build the Verilated `scr1_top_axi` reference DLL under `ext/rtl/scr1`, including signal discovery, reset, interrupts, idle detection, and TCM access.
+- Implement `rtl_cosim_runtime`, the AXI protocol transactors, loopback memory backend, image loader, and `rtl-cosim-check` without gem5 dependencies.
+- Use CMake for all Stage 1 libraries, tools, examples, and tests; gem5's SCons build is intentionally outside this stage.
+- Organize GoogleTest suites by API lifetime, validation, signals, AXI channels, bursts, IDs, backpressure, errors, images, memory, and idle behavior.
+- Add documented end-to-end checker tests that load small RISC-V programs, use deterministic seeds and timeouts, and terminate in a known idle state.
+- Stage 1 is complete only when unit tests and checker scenarios are reproducible, documented, sanitizer-clean, and require no gem5 code.
+
+### Stage 2: gem5 Integration and Two-Core System Validation
+
+- Implement `RtlCoreSimObject`, the gem5 packet backend, vector-port mapping, callbacks, clock scheduling, reset handling, and configuration validation.
+- Reuse the Stage 1 runtime and AXI transactors unchanged; gem5-specific code is limited to SimObject, event, signal-port, and packet integration.
+- Add a configuration system that creates two SCR1 `RtlCoreSimObject` instances and connects each core's instruction and data ports by API name.
+- Provide one configurable two-core test system that selects either a classic coherent cache hierarchy or Ruby `MESI_Two_Level` with
+  `SimpleNetwork` and shared memory.
+- Run bare-metal RISC-V unit tests to validate boot, memory traffic, interrupts, reset, errors, idle wake-up, and deterministic multicore execution.
+- Run a shared-memory dining-philosophers workload to exercise synchronization, contention, forward progress, and sustained two-core interaction.
+  SCR1 does not implement the RISC-V A extension, so this test must not rely on LR/SC or AMOs. Use a software mutual-exclusion algorithm based on
+  coherent loads and stores, such as Peterson's algorithm for two cores.
+- Stage 2 is complete when the same configurable system passes the test suite in both memory-system modes through gem5's test infrastructure, with
+  documented commands and expected results.
+
 ## Required Design Output
 
 Provide:
@@ -856,5 +882,5 @@ Provide:
 14. Debugging, tracing, and waveform-generation support.
 15. Error handling and diagnostics.
 16. Thread-safety and reentrancy requirements.
-17. A phased implementation plan beginning with a Verilator-based proof of concept.
+17. The two-stage implementation plan and completion gates defined above.
 18. Example integration using the SCR1 RISC-V core with both gem5's classic memory system and Ruby.
