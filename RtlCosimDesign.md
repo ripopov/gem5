@@ -63,6 +63,12 @@ or understand pin-level handshaking.
 
 The API should use abstract interfaces based on virtual methods or propose a safer ABI-compatible alternative where appropriate.
 
+No exception may cross the shared-library boundary. Every vendor-facing virtual method and exported entry point must be `noexcept`; failures are
+reported through return values and `getLastError()`.
+
+For the proof of concept, all manager, core, bus, signal, memory, and callback operations occur on the gem5 simulation thread. The vendor
+implementation is not required to be thread-safe.
+
 ### `RtlCoreManager`
 
 ```cpp
@@ -73,21 +79,21 @@ class RtlCore;
 class RtlCoreManager
 {
   public:
-    virtual std::uint32_t apiVersion() const = 0;
+    virtual std::uint32_t apiVersion() const noexcept = 0;
 
     // Creates one RTL instance from a null-terminated JSON configuration.
     // Returns nullptr on failure.
-    virtual RtlCore* createCore(const char* configJson) = 0;
+    virtual RtlCore* createCore(const char* configJson) noexcept = 0;
 
     // Destroys a core created by this manager.
-    virtual void destroyCore(RtlCore* core) = 0;
+    virtual void destroyCore(RtlCore* core) noexcept = 0;
 
     // Returns a description of the most recent error. The returned string is
     // owned by the implementation.
-    virtual const char* getLastError() const = 0;
+    virtual const char* getLastError() const noexcept = 0;
 
   protected:
-    virtual ~RtlCoreManager() = default;
+    virtual ~RtlCoreManager() noexcept = default;
 };
 ```
 
@@ -95,14 +101,17 @@ class RtlCoreManager
 manager only needs to report its API version, create and destroy `RtlCore` instances, and report construction errors. Model enumeration, capability
 discovery, and structured diagnostics can be added after the SCR1 integration is working.
 
+`RtlCoreManager::getLastError()` returns the error from the most recent failed manager operation. The returned string is owned by the implementation
+and remains valid until the next manager API call. It returns `nullptr` or an empty string when no error is available.
+
 The shared library must export two C entry points to avoid C++ symbol-name mangling:
 
 ```cpp
 extern "C" RtlCoreManager*
-createRtlCoreManager();
+createRtlCoreManager() noexcept;
 
 extern "C" void
-destroyRtlCoreManager(RtlCoreManager* manager);
+destroyRtlCoreManager(RtlCoreManager* manager) noexcept;
 ```
 
 Core and manager objects must be destroyed by the shared library that created them. For the proof of concept, gem5 and the RTL adapter library may
@@ -168,54 +177,59 @@ class RtlCore
 {
   public:
     // Instance name used for diagnostics and waveform hierarchy.
-    virtual const char* name() const = 0;
+    virtual const char* name() const noexcept = 0;
 
-    virtual std::size_t busCount() const = 0;
+    virtual std::size_t busCount() const noexcept = 0;
 
     // Returns nullptr if index is out of range.
-    virtual Bus* bus(std::size_t index) = 0;
+    virtual Bus* bus(std::size_t index) noexcept = 0;
 
     // Enumerates standalone reset, interrupt, and GPIO signals.
-    virtual std::size_t signalCount() const = 0;
+    virtual std::size_t signalCount() const noexcept = 0;
 
     // Returns a binding with signal == nullptr if index is out of range.
-    virtual CoreSignalBinding signal(std::size_t index) = 0;
+    virtual CoreSignalBinding signal(std::size_t index) noexcept = 0;
 
     // Enumerates memories that support backdoor access.
-    virtual std::size_t memoryCount() const = 0;
+    virtual std::size_t memoryCount() const noexcept = 0;
 
     // Returns nullptr if index is out of range.
-    virtual const MemoryRegion* memory(std::size_t index) const = 0;
+    virtual const MemoryRegion* memory(
+        std::size_t index) const noexcept = 0;
 
     // Accesses a memory using a byte offset relative to its base address.
     virtual bool readMemory(
         std::size_t memoryIndex,
         std::uint64_t offset,
         std::uint8_t* data,
-        std::size_t dataSize) const = 0;
+        std::size_t dataSize) const noexcept = 0;
 
     virtual bool writeMemory(
         std::size_t memoryIndex,
         std::uint64_t offset,
         const std::uint8_t* data,
-        std::size_t dataSize) = 0;
+        std::size_t dataSize) noexcept = 0;
 
     // Advances the RTL model by one complete clock cycle.
-    virtual ClockResult clock() = 0;
+    virtual ClockResult clock() noexcept = 0;
 
     // True when gem5 may stop clock events until an input changes.
-    virtual bool isIdle() const = 0;
+    virtual bool isIdle() const noexcept = 0;
 
     // Describes the most recent failed operation or ClockResult::Error.
-    virtual const char* getLastError() const = 0;
+    virtual const char* getLastError() const noexcept = 0;
 
   protected:
-    virtual ~RtlCore() = default;
+    virtual ~RtlCore() noexcept = default;
 };
 ```
 
-`RtlCore` represents one instantiated RTL core or subsystem. It owns all returned `Bus` and `Signal` objects. Their pointers and names remain valid
-until `RtlCoreManager::destroyCore()` is called, and the framework must unregister all signal callbacks before destroying the core.
+`RtlCore` represents one instantiated RTL core or subsystem. Enumeration indices are contiguous from zero through `count - 1`, and discovery results
+must remain stable for the core's lifetime. The core owns all returned `Bus`, `Signal`, and `MemoryRegion` objects. Their pointers and names remain
+valid until `RtlCoreManager::destroyCore()` is called, and the framework must unregister all signal callbacks before destroying the core.
+
+`RtlCore::getLastError()` reports the most recent failed core, memory, or child `Signal` operation. Its returned string is owned by the implementation
+and remains valid until the next API call on the core or any of its child objects. It returns `nullptr` or an empty string when no error is available.
 
 `CoreSignalBinding` supplies the semantic role, group index, and assertion level for each standalone signal. `Signal` always exposes the actual RTL
 value without polarity normalization. For example, setting an active-low reset signal to zero asserts reset. `Signal::direction()` determines
@@ -225,6 +239,9 @@ whether an interrupt, reset, or GPIO is driven by gem5 or by the RTL model.
 edge, and final inactive phase, generating callbacks for subscribed outputs after their final values are available. No gem5 simulation time passes
 inside `clock()`; the gem5 adapter controls clock-event scheduling. `ClockResult::Finished` reports an RTL termination request, while
 `ClockResult::Error` indicates an evaluation failure or fatal RTL condition.
+
+`ClockResult::Finished` and `ClockResult::Error` are terminal states. After either result, the framework may only query `getLastError()`, unregister
+signal callbacks by passing `nullptr`, and destroy the core. It must not clock the model, change signal values, or access backdoor memories.
 
 The meaning of `isIdle()` is strict: it returns true only when further clock cycles with unchanged inputs cannot change externally observable RTL
 state. gem5 may then stop scheduling clock events until it changes an input, such as an interrupt, reset, GPIO, memory response, or bus wait signal.
@@ -291,21 +308,21 @@ class Bus
 {
   public:
     // Bus instance name, for example "instruction" or "data".
-    virtual const char* name() const = 0;
+    virtual const char* name() const noexcept = 0;
 
-    virtual BusProtocol protocol() const = 0;
+    virtual BusProtocol protocol() const noexcept = 0;
 
     // Role of the RTL module on this bus.
-    virtual BusRole role() const = 0;
+    virtual BusRole role() const noexcept = 0;
 
-    virtual std::size_t signalCount() const = 0;
+    virtual std::size_t signalCount() const noexcept = 0;
 
     // Enumerates the semantic role and Signal object for each binding.
     // Returns {0, nullptr} when index is out of range.
-    virtual SignalBinding signal(std::size_t index) = 0;
+    virtual SignalBinding signal(std::size_t index) noexcept = 0;
 
   protected:
-    virtual ~Bus() = default;
+    virtual ~Bus() noexcept = default;
 };
 ```
 
@@ -315,6 +332,9 @@ available for diagnostics and waveform tracing.
 
 The vendor adapter maps its physical RTL signals to these semantic roles. `RtlCore` owns all returned `Bus` and `Signal` objects, and their names and
 pointers remain valid for the lifetime of the core.
+
+For each bus, signal-binding indices are contiguous from zero through `signalCount() - 1`. The set of bindings and every returned `Signal` pointer
+must remain stable for the lifetime of the core.
 
 The framework must define a validation profile for every supported protocol and role. Each profile specifies:
 
@@ -339,39 +359,39 @@ enum class SignalDirection : std::uint32_t
 class SignalChangeCallback
 {
   public:
-    virtual ~SignalChangeCallback() = default;
+    virtual ~SignalChangeCallback() noexcept = default;
 
-    virtual void update() = 0;
+    virtual void update() noexcept = 0;
 };
 
 class Signal
 {
   public:
-    virtual const char* name() const = 0;
-    virtual std::size_t bitWidth() const = 0;
-    virtual SignalDirection direction() const = 0;
+    virtual const char* name() const noexcept = 0;
+    virtual std::size_t bitWidth() const noexcept = 0;
+    virtual SignalDirection direction() const noexcept = 0;
 
     virtual bool getValue(
         std::uint8_t* data,
-        std::size_t dataSize) const = 0;
+        std::size_t dataSize) const noexcept = 0;
 
     virtual bool setValue(
         const std::uint8_t* data,
-        std::size_t dataSize) = 0;
+        std::size_t dataSize) noexcept = 0;
 
     // Installs or replaces the callback. Signal does not own the callback.
     // Passing nullptr unregisters the current callback.
     virtual void setChangeCallback(
-        SignalChangeCallback* callback) = 0;
+        SignalChangeCallback* callback) noexcept = 0;
 
   protected:
-    virtual ~Signal() = default;
+    virtual ~Signal() noexcept = default;
 };
 ```
 
 `Signal` represents a single scalar or vector RTL signal. Directions are defined from the RTL model's perspective. `getValue()` may read any signal,
 while `setValue()` must fail for output signals. For the proof of concept, values use two-state logic and little-endian byte order: RTL bit 0 is bit 0
-of `data[0]`, and unused high bits in the final byte are zero. The buffer size must be at least `(bitWidth() + 7) / 8` bytes.
+of `data[0]`, and unused high bits in the final byte are zero. `dataSize` must equal `(bitWidth() + 7) / 8`; otherwise, the operation returns false.
 
 The signal-change callback provides event-driven notification for signals such as GPIO and interrupt outputs without polling. Its contract is:
 
