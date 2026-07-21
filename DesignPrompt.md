@@ -1,6 +1,7 @@
 # Design Prompt: Generic RTL-to-gem5 Integration Framework
 
-Design a generic framework for integrating RTL models compiled to C++ into gem5. The framework must support multiple RTL-to-C++ toolchains, including Verilator and commercial simulators.
+Design a generic framework for integrating RTL models compiled to C++ into gem5. The framework must support multiple RTL-to-C++ toolchains,
+including Verilator and commercial simulators.
 
 ## Objectives
 
@@ -15,7 +16,8 @@ The framework must:
 
 ## RTL Vendor Interface
 
-From the RTL vendor's perspective, the framework must provide a standard, versioned C++ interface. The vendor implements this interface and packages the compiled RTL model as a shared library.
+From the RTL vendor's perspective, the framework must provide a standard, versioned C++ interface. The vendor implements this interface and
+packages the compiled RTL model as a shared library.
 
 The vendor-facing API must:
 
@@ -54,7 +56,8 @@ At runtime, the framework must:
    - GPIO or other protocol-specific ports
 8. Connect model events to gem5's event-driven simulation infrastructure.
 
-The framework should contain all protocol-specific transactors. Neither the vendor library nor the gem5 model developer should need to implement or understand pin-level handshaking.
+The framework should contain all protocol-specific transactors. Neither the vendor library nor the gem5 model developer should need to implement
+or understand pin-level handshaking.
 
 ## Proposed Vendor-Facing API
 
@@ -88,7 +91,9 @@ class RtlCoreManager
 };
 ```
 
-`RtlCoreManager` is the root object returned by the shared library. For the proof of concept, one shared library represents one RTL model type. The manager only needs to report its API version, create and destroy `RtlCore` instances, and report construction errors. Model enumeration, capability discovery, and structured diagnostics can be added after the SCR1 integration is working.
+`RtlCoreManager` is the root object returned by the shared library. For the proof of concept, one shared library represents one RTL model type. The
+manager only needs to report its API version, create and destroy `RtlCore` instances, and report construction errors. Model enumeration, capability
+discovery, and structured diagnostics can be added after the SCR1 integration is working.
 
 The shared library must export two C entry points to avoid C++ symbol-name mangling:
 
@@ -100,7 +105,8 @@ extern "C" void
 destroyRtlCoreManager(RtlCoreManager* manager);
 ```
 
-Core and manager objects must be destroyed by the shared library that created them. For the proof of concept, gem5 and the RTL adapter library may be required to use compatible C++ compiler ABIs.
+Core and manager objects must be destroyed by the shared library that created them. For the proof of concept, gem5 and the RTL adapter library may
+be required to use compatible C++ compiler ABIs.
 
 ### `RtlCore`
 
@@ -126,7 +132,9 @@ class RtlCore
 8. Enable optional tracing and diagnostic facilities.
 9. Report supported capabilities so optional APIs can be used safely.
 
-The `isIdle()` method is an important performance optimization. It should report when the model does not need to be evaluated—for example, while halted waiting for an interrupt, held in reset, blocked by an external wait condition, or fully clock-gated. The design must explain how the model is reactivated when an external input changes.
+The `isIdle()` method is an important performance optimization. It should report when the model does not need to be evaluated—for example, while
+halted waiting for an interrupt, held in reset, blocked by an external wait condition, or fully clock-gated. The design must explain how the model
+is reactivated when an external input changes.
 
 ### `Bus`
 
@@ -194,9 +202,12 @@ class Bus
 };
 ```
 
-`Bus` represents a logical group of signals implementing a protocol such as AXI4, AHB-Lite, or APB. Signal bindings must use canonical semantic role IDs defined by the framework; the framework must never infer protocol semantics from vendor-specific RTL signal names. `Signal::name()` remains available for diagnostics and waveform tracing.
+`Bus` represents a logical group of signals implementing a protocol such as AXI4, AHB-Lite, or APB. Signal bindings must use canonical semantic role
+IDs defined by the framework; the framework must never infer protocol semantics from vendor-specific RTL signal names. `Signal::name()` remains
+available for diagnostics and waveform tracing.
 
-The vendor adapter maps its physical RTL signals to these semantic roles. `RtlCore` owns all returned `Bus` and `Signal` objects, and their names and pointers remain valid for the lifetime of the core.
+The vendor adapter maps its physical RTL signals to these semantic roles. `RtlCore` owns all returned `Bus` and `Signal` objects, and their names and
+pointers remain valid for the lifetime of the core.
 
 The framework must define a validation profile for every supported protocol and role. Each profile specifies:
 
@@ -205,43 +216,71 @@ The framework must define a validation profile for every supported protocol and 
 - Fixed signal widths.
 - Width relationships between signals.
 
-Before constructing a transactor, the framework must enumerate and validate all bindings, reject null or duplicate bindings, check required signals, and verify their directions and widths. Automatic discovery means consuming this structured metadata rather than guessing interfaces from signal names. For the initial single-clock proof of concept, clock and reset remain core-level signals.
+Before constructing a transactor, the framework must enumerate and validate all bindings, reject null or duplicate bindings, check required signals,
+and verify their directions and widths. Automatic discovery means consuming this structured metadata rather than guessing interfaces from signal
+names. For the initial single-clock proof of concept, clock and reset remain core-level signals.
 
 ### `Signal`
 
 ```cpp
+enum class SignalDirection : std::uint32_t
+{
+    Input,
+    Output
+};
+
+class SignalChangeCallback
+{
+  public:
+    virtual ~SignalChangeCallback() = default;
+
+    virtual void update() = 0;
+};
+
 class Signal
 {
   public:
-    virtual ~Signal() = default;
-
     virtual const char* name() const = 0;
     virtual std::size_t bitWidth() const = 0;
     virtual SignalDirection direction() const = 0;
 
-    virtual void getValue(
-        unsigned char* data,
+    virtual bool getValue(
+        std::uint8_t* data,
         std::size_t dataSize) const = 0;
 
-    virtual void setValue(
-        const unsigned char* data,
+    virtual bool setValue(
+        const std::uint8_t* data,
         std::size_t dataSize) = 0;
 
-    virtual void registerSignalChangeCallback(
+    // Installs or replaces the callback. Signal does not own the callback.
+    // Passing nullptr unregisters the current callback.
+    virtual void setChangeCallback(
         SignalChangeCallback* callback) = 0;
+
+  protected:
+    virtual ~Signal() = default;
 };
 ```
 
-`Signal` represents a single scalar or vector RTL signal. Its specification must define:
+`Signal` represents a single scalar or vector RTL signal. Directions are defined from the RTL model's perspective. `getValue()` may read any signal,
+while `setValue()` must fail for output signals. For the proof of concept, values use two-state logic and little-endian byte order: RTL bit 0 is bit 0
+of `data[0]`, and unused high bits in the final byte are zero. The buffer size must be at least `(bitWidth() + 7) / 8` bytes.
 
-- Direction semantics.
-- Byte order and bit ordering.
-- Representation of values wider than 64 bits.
-- Handling of two-state versus four-state logic.
-- Input validation and error reporting.
-- Callback ownership, registration, and removal.
-- Callback ordering and thread-safety requirements.
-- Signal lifetime guarantees.
+The signal-change callback provides event-driven notification for signals such as GPIO and interrupt outputs without polling. Its contract is:
+
+- Each signal has at most one registered callback.
+- Registering another callback replaces the previous callback.
+- Passing `nullptr` unregisters the callback.
+- The framework owns the callback, which must remain alive while registered.
+- `update()` takes no arguments because each callback instance is associated with one specific signal.
+- `update()` runs synchronously on the RTL evaluation thread after the new value is available.
+- A signal generates at most one callback per `RtlCore::clock()` call after its output has stabilized.
+- Installing a callback does not generate an initial notification; the framework samples the initial value explicitly.
+- Input changes made through `setValue()` do not generate callbacks.
+- No callback may occur after it is unregistered or after core destruction begins.
+- `update()` must not throw, re-enter the RTL model, or destroy the core. It should schedule deferred gem5 processing.
+
+`RtlCore` owns all `Signal` objects. Signal names and pointers remain valid for the lifetime of the core.
 
 ## Required Design Output
 
