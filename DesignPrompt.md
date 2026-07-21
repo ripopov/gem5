@@ -111,30 +111,137 @@ be required to use compatible C++ compiler ABIs.
 ### `RtlCore`
 
 ```cpp
+class Bus;
+class Signal;
+
+enum class CoreSignalRole : std::uint32_t
+{
+    Reset,
+    Interrupt,
+    Gpio
+};
+
+enum class ActiveLevel : std::uint32_t
+{
+    Low,
+    High
+};
+
+struct CoreSignalBinding
+{
+    CoreSignalRole role;
+
+    // Index within a signal group, such as interrupt 0 or GPIO 3.
+    std::uint32_t index;
+
+    // Assertion level for reset and interrupt signals. Ignored for GPIO.
+    ActiveLevel activeLevel;
+
+    // Exposes the actual, non-normalized RTL signal value.
+    Signal* signal;
+};
+
+enum class MemoryRole : std::uint32_t
+{
+    CodeTcm,
+    DataTcm
+};
+
+struct MemoryRegion
+{
+    const char* name;
+    MemoryRole role;
+
+    // Architectural base address and size in bytes.
+    std::uint64_t baseAddress;
+    std::uint64_t size;
+};
+
+enum class ClockResult : std::uint32_t
+{
+    Completed,
+    Finished,
+    Error
+};
+
 class RtlCore
 {
   public:
-    virtual ~RtlCore() = default;
+    // Instance name used for diagnostics and waveform hierarchy.
+    virtual const char* name() const = 0;
 
-    // Interface discovery, execution, and backdoor access.
+    virtual std::size_t busCount() const = 0;
+
+    // Returns nullptr if index is out of range.
+    virtual Bus* bus(std::size_t index) = 0;
+
+    // Enumerates standalone reset, interrupt, and GPIO signals.
+    virtual std::size_t signalCount() const = 0;
+
+    // Returns a binding with signal == nullptr if index is out of range.
+    virtual CoreSignalBinding signal(std::size_t index) = 0;
+
+    // Enumerates memories that support backdoor access.
+    virtual std::size_t memoryCount() const = 0;
+
+    // Returns nullptr if index is out of range.
+    virtual const MemoryRegion* memory(std::size_t index) const = 0;
+
+    // Accesses a memory using a byte offset relative to its base address.
+    virtual bool readMemory(
+        std::size_t memoryIndex,
+        std::uint64_t offset,
+        std::uint8_t* data,
+        std::size_t dataSize) const = 0;
+
+    virtual bool writeMemory(
+        std::size_t memoryIndex,
+        std::uint64_t offset,
+        const std::uint8_t* data,
+        std::size_t dataSize) = 0;
+
+    // Advances the RTL model by one complete clock cycle.
+    virtual ClockResult clock() = 0;
+
+    // True when gem5 may stop clock events until an input changes.
+    virtual bool isIdle() const = 0;
+
+    // Describes the most recent failed operation or ClockResult::Error.
+    virtual const char* getLastError() const = 0;
+
+  protected:
+    virtual ~RtlCore() = default;
 };
 ```
 
-`RtlCore` represents one instantiated RTL core or subsystem. It must provide APIs to:
+`RtlCore` represents one instantiated RTL core or subsystem. It owns all returned `Bus` and `Signal` objects. Their pointers and names remain valid
+until `RtlCoreManager::destroyCore()` is called, and the framework must unregister all signal callbacks before destroying the core.
 
-1. Discover all exported buses and individual signals.
-2. Advance the model by one clock cycle or clock phase.
-3. Determine whether the model is idle.
-4. Read and write tightly coupled memories through optional backdoor access.
-5. Initialize code or data memories from ELF, COFF, or raw binary images.
-6. Read and write architectural or implementation-specific registers through optional backdoor access.
-7. Control reset and other lifecycle operations.
-8. Enable optional tracing and diagnostic facilities.
-9. Report supported capabilities so optional APIs can be used safely.
+`CoreSignalBinding` supplies the semantic role, group index, and assertion level for each standalone signal. `Signal` always exposes the actual RTL
+value without polarity normalization. For example, setting an active-low reset signal to zero asserts reset. `Signal::direction()` determines
+whether an interrupt, reset, or GPIO is driven by gem5 or by the RTL model.
 
-The `isIdle()` method is an important performance optimization. It should report when the model does not need to be evaluated—for example, while
-halted waiting for an interrupt, held in reset, blocked by an external wait condition, or fully clock-gated. The design must explain how the model
-is reactivated when an external input changes.
+`clock()` must advance one complete RTL clock cycle and return only after outputs have stabilized. It evaluates the inactive phase, active clock
+edge, and final inactive phase, generating callbacks for subscribed outputs after their final values are available. No gem5 simulation time passes
+inside `clock()`; the gem5 adapter controls clock-event scheduling. `ClockResult::Finished` reports an RTL termination request, while
+`ClockResult::Error` indicates an evaluation failure or fatal RTL condition.
+
+The meaning of `isIdle()` is strict: it returns true only when further clock cycles with unchanged inputs cannot change externally observable RTL
+state. gem5 may then stop scheduling clock events until it changes an input, such as an interrupt, reset, GPIO, memory response, or bus wait signal.
+The vendor implementation must return false whenever it cannot safely prove that the model is idle.
+
+The memory backdoor enumerates code and data TCM regions using their configured architectural base addresses. `readMemory()` and `writeMemory()`
+transfer bytes in increasing address order and must reject an operation whose complete range does not fit within the selected region. Access is
+untimed, bypasses the modeled bus, and is only permitted when `clock()` is not executing. A library that has no backdoor-accessible memory returns
+zero from `memoryCount()`.
+
+ELF and COFF parsing belongs to the framework rather than the vendor library. To initialize a code TCM, the framework loads each applicable image
+section, locates the `MemoryRegion` containing its architectural address, converts that address to a region-relative offset, and calls
+`writeMemory()`. It also zero-fills image sections such as BSS through the same API. This keeps object-file support out of vendor adapters.
+
+For the single-clock proof of concept, the physical clock is owned and toggled by the vendor adapter inside `clock()` rather than exposed as a
+`Signal`. Register access, checkpointing, tracing controls, and multiple clock domains should be separate optional interfaces added after the SCR1
+execution path is working.
 
 ### `Bus`
 
