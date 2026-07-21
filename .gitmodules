@@ -16,6 +16,6 @@
 [submodule "ext/rtl/pulp/tech_cells_generic"]
 	path = ext/rtl/pulp/tech_cells_generic
 	url = https://github.com/pulp-platform/tech_cells_generic.git
-[submodule "ext/qemu"]
-	path = ext/qemu
+[submodule "ext/qemu/repo"]
+	path = ext/qemu/repo
 	url = https://gitlab.com/qemu-project/qemu.git

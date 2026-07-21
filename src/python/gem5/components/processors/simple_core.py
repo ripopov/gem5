@@ -83,6 +83,7 @@ class SimpleCore(BaseCPUCore):
             CPUTypes.TIMING: "TimingSimpleCPU",
             CPUTypes.KVM: "KvmCPU",
             CPUTypes.MINOR: "MinorCPU",
+            CPUTypes.JIT: "JitCPU",
         }
 
         if isa not in _isa_string_map:
@@ -98,9 +99,12 @@ class SimpleCore(BaseCPUCore):
                 "`AbstractCore.cpu_simobject_factory._cpu_types_string_map`"
             )
 
-        if cpu_type == CPUTypes.KVM:
+        if cpu_type == CPUTypes.JIT and isa != ISA.RISCV:
+            raise NotImplementedError("JitCPU currently supports only RISC-V")
+
+        if cpu_type in (CPUTypes.KVM, CPUTypes.JIT):
             # For some reason, the KVM CPU is under "m5.objects" not the
-            # "m5.objects.{ISA}CPU".
+            # "m5.objects.{ISA}CPU". JitCPU is also a standalone SimObject.
             module_str = f"m5.objects"
         else:
             module_str = f"m5.objects.{_isa_string_map[isa]}CPU"

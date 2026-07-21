@@ -57,13 +57,20 @@ GPL-compliant build; the normal non-JIT gem5 build must remain unaffected.
 
 ### QEMU source
 
-The upstream QEMU source is pinned as the [`ext/qemu`](ext/qemu) submodule.
-The parent repository's gitlink is the authoritative revision; builds must not
-silently follow QEMU `master` or use an unrelated system installation. Limit
-the integration to the RISC-V translator, TCG runtime/backends, and the minimum
-support code required by the C adapter. Record every imported file and its
-license. Commit required QEMU-side changes in a maintained fork, then update
-the parent gitlink deliberately.
+The upstream QEMU source is pinned as the
+[`ext/qemu/repo`](ext/qemu/repo) submodule. The gem5-owned adapter, smoke test,
+and minimal QEMU integration patch live separately in
+[`ext/qemu/gem5-jit`](ext/qemu/gem5-jit). The build helper applies that patch
+to a Git-metadata-free source snapshot rather than modifying the submodule
+checkout.
+
+The parent repository's gitlink is the authoritative QEMU revision; builds
+must not silently follow QEMU `master` or use an unrelated system
+installation. Limit the integration to the RISC-V translator, TCG
+runtime/backends, and minimum support code required by the C adapter. Record
+every imported file and its license. If the integration eventually requires
+larger or generally useful QEMU changes, upstream them or commit them in a
+maintained fork and update the parent gitlink deliberately.
 
 ## Implementation stages
 
@@ -114,7 +121,7 @@ is stable.
 
 1. **Build and isolation:** build gem5 with JIT disabled and enabled, verify the
    non-JIT build has no QEMU dependency, and check that the configured QEMU
-   revision matches the `ext/qemu` gitlink.
+   revision matches the `ext/qemu/repo` gitlink.
 2. **Directed execution:** run small bare-metal tests for each supported opcode
    class plus block exits, register synchronization, invalidation, MMIO,
    faults, interrupts, instruction limits, LR/SC, AMOs, and fences. Unsupported
@@ -143,6 +150,56 @@ is stable.
 
 Keep short directed and differential tests in presubmit CI. Run Linux boot,
 Ruby+CHI, and performance suites as scheduled or explicit extended tests.
+
+## Build and run the current PoC
+
+Initialize the pinned QEMU source and build its adapter:
+
+```sh
+git submodule update --init ext/qemu/repo
+QEMU_JIT_LIBRARY=$(util/jitcpu/build-qemu-jit.sh | tail -n 1)
+```
+
+Enable JitCPU and build gem5, then build the directed RV64 payloads:
+
+```sh
+scons setconfig build/RISCV USE_JITCPU=y
+scons build/RISCV/gem5.opt -j"$(nproc)"
+make -C tests/test-progs/jitcpu-smoke/src
+```
+
+Run the directed JIT-to-O3 takeover test:
+
+```sh
+build/RISCV/gem5.opt -d m5out/jitcpu-switch \
+  tests/gem5/jitcpu/configs/jitcpu_baremetal.py \
+  tests/test-progs/jitcpu-smoke/src/jitcpu-switch \
+  "$QEMU_JIT_LIBRARY" \
+  --max-ticks 10000000 --switch-to-o3
+```
+
+The terminal output must contain `JIT` followed by `O3`; gem5 must report a
+`switchcpu` exit before takeover and an `m5_exit` exit afterward.
+
+For the Linux gate, obtain the gem5 `riscv-boot-exit-nodisk` resource and pass
+its local image path to:
+
+```sh
+build/RISCV/gem5.opt -d m5out/jitcpu-linux \
+  tests/gem5/jitcpu/configs/jitcpu_linux.py \
+  /path/to/riscv-boot-exit-nodisk \
+  "$QEMU_JIT_LIBRARY" \
+  --switch-to-o3 --o3-ticks 10000000
+```
+
+The test requires Linux to reach its userspace `m5_exit`, switches to O3, and
+then verifies that O3 continues committing instructions for the requested
+interval. The 1 MHz test RTC is intentional: a higher interrupt rate imposes
+frequent translation-block exits and obscures JIT throughput.
+
+To verify build isolation, set `USE_JITCPU=n`, rebuild, and check that the gem5
+binary neither exports `RiscvJitCPU` nor links to the QEMU adapter. Restore
+`USE_JITCPU=y` before running the tests above.
 
 ## Deferred work
 
