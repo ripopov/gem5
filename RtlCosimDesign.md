@@ -12,7 +12,8 @@ The framework must:
 - Allow RTL vendors to distribute their compiled models as shared libraries.
 - Require no gem5 knowledge or dependency in vendor-provided code.
 - Support automatic discovery and connection of buses, interrupts, GPIOs, reset signals, and other interfaces.
-- Support APB, AXI4, AXI3, and AXI3-ACE bus protocols.
+- Implement APB, AXI4, and AXI3 protocol transactors.
+- Define canonical AXI3-ACE signal discovery and validation, while leaving coherent transaction integration to future work.
 - Provide a standalone checker that validates vendor libraries and protocol transactors without gem5.
 - Minimize simulation overhead, particularly when an RTL model is idle.
 
@@ -113,15 +114,17 @@ Runtime initialization proceeds as follows:
 
 An RTL initiator transactor presents a gem5 `RequestPort` and converts pin-level requests into gem5 packets. It handles timing requests, responses,
 backpressure, and retry callbacks. An RTL target transactor presents a `ResponsePort` and performs the inverse conversion. Protocol-specific state
-machines for APB, AXI4, AXI3, and AXI3-ACE live in a pure C++ runtime shared by gem5 and the standalone checker.
+machines for APB, AXI4, and AXI3 live in a pure C++ runtime shared by gem5 and the standalone checker.
 
 The same `RequestPort` connects to either memory-system implementation:
 
 - With the classic memory system, connect it to an XBar response-side port such as `cpu_side_ports`.
 - With Ruby, connect it to `RubySequencer.in_ports`, which is a `VectorResponsePort`.
 
-No Ruby-specific vendor interface or RTL SimObject port is required. AXI3-ACE requires snoop handling in the gem5 transactor and support from the
-selected memory system, but it still uses gem5 `RequestPort` and `ResponsePort` types.
+No Ruby-specific vendor interface or RTL SimObject port is required for APB, AXI4, or AXI3. AXI3-ACE support in this design is limited to canonical
+signal-role definitions, discovery, and profile validation. `RubySequencer.in_ports` does not forward the required snoops to its requestor, and
+classic gem5 snoop packets over a plain `RequestPort` cannot represent the complete ACE snoop-channel semantics. ACE transaction execution,
+coherence integration, and behavioral testing are out of scope. A future implementation requires a dedicated gem5 coherence adapter.
 
 Interrupt and reset gem5 ports carry logical assertion state. The framework uses `CoreSignalBinding::activeLevel` to convert between that logical
 state and the actual, non-normalized RTL signal value. Generic I/O values are transferred without polarity conversion. Each I/O vector-port element
@@ -569,7 +572,7 @@ Vendor-Facing PoC API
 Pure C++ RTL runtime
 ├── API and protocol-profile validation
 ├── signal bindings and callbacks
-├── APB, AXI4, AXI3, and AXI3-ACE protocol engines
+├── APB, AXI4, and AXI3 protocol engines
 ├── clock and reset sequencing
 ├── transaction queues and ordering
 └── neutral transaction backend
@@ -588,7 +591,8 @@ The reusable `rtl_cosim_runtime` library implements:
 - Protocol-profile, direction, width, role, and binding validation.
 - Reset sequencing and initial signal sampling.
 - Signal callback registration and teardown.
-- APB, AXI4, AXI3, and AXI3-ACE protocol state machines.
+- APB, AXI4, and AXI3 protocol state machines.
+- AXI3-ACE canonical signal-role and profile validation without transaction execution.
 - Burst assembly, byte enables, response generation, AXI ID tracking, ordering, and backpressure.
 - Transaction request and response queues.
 - ELF, COFF, and raw-image loading into TCM or external memory.
@@ -644,10 +648,10 @@ Protocol transactors are independent of both backends and use a cycle-oriented i
 class BusTransactor
 {
   public:
-    // Drive RTL inputs for the upcoming active clock edge.
+    // Drive RTL inputs and capture any payload accepted at the upcoming edge.
     virtual bool beforeClock() = 0;
 
-    // Commit handshakes and sample outputs for the next active edge.
+    // Commit captured handshakes and sample controls for the next active edge.
     virtual bool afterClock() = 0;
 
     virtual bool isIdle() const = 0;
@@ -657,9 +661,15 @@ class BusTransactor
 };
 ```
 
-Each transactor retains a snapshot of the RTL outputs prepared for the upcoming active edge. `beforeClock()` drives READY, response, and data inputs.
-After `RtlCore::clock()` completes, `afterClock()` commits handshakes using the retained pre-edge snapshot and samples stabilized outputs for the
-next edge. This prevents a transfer from being missed when RTL deasserts VALID during the active edge.
+Each transactor retains the handshake state prepared for the upcoming active edge. `beforeClock()` drives READY, response, and data inputs,
+determines which channels will handshake, and captures payload outputs only for those active handshakes. After `RtlCore::clock()`
+completes, `afterClock()` commits the captured handshakes, then samples the stabilized VALID, READY, and other control signals needed for the next
+edge. This prevents a transfer from being missed when RTL deasserts VALID or changes its payload during the active edge.
+
+Signal sampling must be handshake-gated. For each channel, inspect VALID and READY first and call `Signal::getValue()` for address, data, ID,
+attributes, response, or other payload signals only when that channel's handshake is active. Do not eagerly sample payload for an idle or stalled
+channel. Payload driven by RTL must be captured before the active edge rather than reconstructed from post-edge values. This rule avoids most virtual
+signal reads on idle buses without changing the vendor API or protocol behavior.
 
 ### Checker Command and Execution
 
@@ -675,14 +685,17 @@ It performs the following sequence:
 2. Load the vendor library and resolve `createRtlCoreManagerV1` and `destroyRtlCoreManagerV1`.
 3. Create one manager and one core.
 4. Enumerate and validate all buses, standalone signals, and backdoor-accessible memories.
-5. Create the appropriate pure C++ transactor for every supported bus.
-6. Attach every RTL initiator bus to a shared memory backend unless JSON assigns it to a separate address space.
+5. Create the appropriate pure C++ transactor for every APB, AXI4, or AXI3 bus; AXI3-ACE buses receive structural validation only.
+6. Attach every transacted RTL initiator bus to a shared memory backend unless JSON assigns it to a separate address space.
 7. Load configured ELF, COFF, or raw images into a matching TCM region or the standalone memory backend.
 8. Drive configured generic inputs such as reset vector, hart ID, and fuse values.
 9. Apply the configured reset sequence.
 10. Clock until the core and all transactors are idle, the model finishes, an error occurs, or the cycle limit is reached.
 11. Print discovered interfaces, validation results, traffic statistics, stop reason, and errors.
 12. Destroy the core and manager, unload the vendor library, and return a meaningful process status.
+
+If an AXI3-ACE bus is discovered, the checker completes structural profile validation and stops before reset or clock execution. It must not clock a
+model while an ACE interface is undriven.
 
 Instruction and data initiator buses share one memory address space by default. This allows instruction fetches and data accesses to observe the
 same loaded program. JSON may explicitly assign an interface to a different memory backend when the RTL memory map requires it.
@@ -766,8 +779,8 @@ The initial SCR1 test uses shared fixed-latency memory and a small program that 
 - Out-of-order responses where the selected protocol permits them.
 
 The initial checker attaches memories only to RTL initiator buses. A later checker mode may drive RTL target buses with a synthetic transaction
-initiator. A simple memory backend validates ordinary AXI3-ACE reads and writes but does not prove coherent snoop behavior; coherence testing requires
-a dedicated backend that generates snoop traffic and checks coherent responses.
+initiator. For AXI3-ACE, the checker validates only the canonical signal list, directions, and widths; it does not instantiate an ACE transactor or
+drive the interface. ACE transaction behavior and coherence testing require a future dedicated backend and gem5 coherence adapter.
 
 ### Checker Scope and Diagnostics
 
@@ -777,12 +790,13 @@ The checker validates:
 - Vendor object construction and destruction.
 - Interface discovery and protocol-profile compliance.
 - Signal roles, directions, widths, active levels, values, and callbacks.
-- APB and AXI channel handshakes, ordering, bursts, backpressure, and errors.
+- APB, AXI3, and AXI4 channel handshakes, ordering, bursts, backpressure, and errors.
+- AXI3-ACE canonical signal roles, directions, and widths, without transaction execution.
 - Reset sequencing, TCM programming, external-memory traffic, and idle reporting.
 
-It does not validate gem5 event scheduling, packet semantics, Classic XBar integration, Ruby integration, or complete AXI3-ACE coherence. Those remain
-gem5 integration tests. The checker should use distinct nonzero exit codes for command-line or JSON errors, library or API errors, validation errors,
-runtime or protocol errors, and cycle-limit timeouts.
+It does not validate gem5 event scheduling, packet semantics, Classic XBar integration, Ruby integration, or any AXI3-ACE transaction behavior.
+ACE coherence is future work rather than a gem5 integration test in the current design. The checker should use distinct nonzero exit codes for
+command-line or JSON errors, library or API errors, validation errors, runtime or protocol errors, and cycle-limit timeouts.
 
 ### Source and Build Layout
 
@@ -798,8 +812,7 @@ src/rtl/
 │   └── protocol/
 │       ├── apb.{hh,cc}
 │       ├── axi3.{hh,cc}
-│       ├── axi4.{hh,cc}
-│       └── axi3_ace.{hh,cc}
+│       └── axi4.{hh,cc}
 ├── checker/
 │   ├── main.cc
 │   ├── memory_backend.{hh,cc}
@@ -842,16 +855,19 @@ packet backends remain outside `ext/rtl/scr1`; the pure C++ protocol transactors
 
 - Implement and freeze the V1 vendor API in `include/gem5/rtl_cosim/api_v1.hh`, together with its ownership, error, and ABI contracts.
 - Build the Verilated `scr1_top_axi` reference DLL under `ext/rtl/scr1`, including signal discovery, reset, interrupts, idle detection, and TCM access.
-- Implement `rtl_cosim_runtime`, the AXI protocol transactors, loopback memory backend, image loader, and `rtl-cosim-check` without gem5 dependencies.
+- Implement `rtl_cosim_runtime`, APB and AXI3/AXI4 transactors, loopback memory backend, image loader, and `rtl-cosim-check` without gem5 dependencies.
 - Use CMake for all Stage 1 libraries, tools, examples, and tests; gem5's SCons build is intentionally outside this stage.
-- Organize GoogleTest suites by API lifetime, validation, signals, AXI channels, bursts, IDs, backpressure, errors, images, memory, and idle behavior.
+- Organize GoogleTest suites by API lifetime, validation, signals, APB and AXI3/AXI4 channels, bursts, IDs, backpressure, errors, images, memory, and
+  idle behavior. AXI3-ACE tests cover only its canonical signal profile.
 - Add documented end-to-end checker tests that load small RISC-V programs, use deterministic seeds and timeouts, and terminate in a known idle state.
 - Stage 1 is complete only when unit tests and checker scenarios are reproducible, documented, sanitizer-clean, and require no gem5 code.
 
 ### Stage 2: gem5 Integration and Two-Core System Validation
 
 - Implement `RtlCoreSimObject`, the gem5 packet backend, vector-port mapping, callbacks, clock scheduling, reset handling, and configuration validation.
-- Reuse the Stage 1 runtime and AXI transactors unchanged; gem5-specific code is limited to SimObject, event, signal-port, and packet integration.
+- Reuse the Stage 1 runtime and APB and AXI3/AXI4 transactors unchanged; gem5-specific code is limited to SimObject, event, signal-port, and packet
+  integration.
+- Keep AXI3-ACE transaction execution, coherence integration, and behavioral testing outside Stage 2; only its canonical signal profile is validated.
 - Add a configuration system that creates two SCR1 `RtlCoreSimObject` instances and connects each core's instruction and data ports by API name.
 - Provide one configurable two-core test system that selects either a classic coherent cache hierarchy or Ruby `MESI_Two_Level` with
   `SimpleNetwork` and shared memory.
