@@ -13,6 +13,7 @@ The framework must:
 - Require no gem5 knowledge or dependency in vendor-provided code.
 - Support automatic discovery and connection of buses, interrupts, GPIOs, reset signals, and other interfaces.
 - Support APB, AXI4, AXI3, and AXI3-ACE bus protocols.
+- Provide a standalone checker that validates vendor libraries and protocol transactors without gem5.
 - Minimize simulation overhead, particularly when an RTL model is idle.
 
 ## RTL Vendor Interface
@@ -112,7 +113,7 @@ Runtime initialization proceeds as follows:
 
 An RTL initiator transactor presents a gem5 `RequestPort` and converts pin-level requests into gem5 packets. It handles timing requests, responses,
 backpressure, and retry callbacks. An RTL target transactor presents a `ResponsePort` and performs the inverse conversion. Protocol-specific state
-machines for APB, AXI4, AXI3, and AXI3-ACE remain entirely inside the framework.
+machines for APB, AXI4, AXI3, and AXI3-ACE live in a pure C++ runtime shared by gem5 and the standalone checker.
 
 The same `RequestPort` connects to either memory-system implementation:
 
@@ -553,6 +554,265 @@ is:
 
 `RtlCore` owns all `Signal` objects. Signal names and pointers remain valid for the lifetime of the core.
 
+## Standalone API Checker and Pure C++ Runtime
+
+The framework provides a standalone `rtl-cosim-check` executable that loads and exercises a vendor shared library without gem5. It is both a
+vendor-library conformance checker and an end-to-end integration test for the shared protocol transactors.
+
+```text
+Vendor shared library
+        │
+        ▼
+Vendor-Facing PoC API
+        │
+        ▼
+Pure C++ RTL runtime
+├── API and protocol-profile validation
+├── signal bindings and callbacks
+├── APB, AXI4, AXI3, and AXI3-ACE protocol engines
+├── clock and reset sequencing
+├── transaction queues and ordering
+└── neutral transaction backend
+        │
+        ├── Standalone memory backend ──► rtl-cosim-check
+        └── gem5 packet backend ────────► RequestPort and ResponsePort
+```
+
+### Pure C++ Runtime
+
+The reusable `rtl_cosim_runtime` library implements:
+
+- Platform-independent shared-library loading.
+- V1 entry-point resolution and object lifetime management.
+- Bus, signal, and memory discovery.
+- Protocol-profile, direction, width, role, and binding validation.
+- Reset sequencing and initial signal sampling.
+- Signal callback registration and teardown.
+- APB, AXI4, AXI3, and AXI3-ACE protocol state machines.
+- Burst assembly, byte enables, response generation, AXI ID tracking, ordering, and backpressure.
+- Transaction request and response queues.
+- ELF, COFF, and raw-image loading into TCM or external memory.
+- Clock-loop coordination and idle detection.
+
+The runtime depends only on `include/gem5/rtl_cosim/api_v1.hh`, the C++ standard library, a small JSON parser, and platform shared-library APIs. It
+must not depend on gem5, SystemC, Verilator, or any commercial RTL tool. SystemC TLM types are not used at this boundary; the runtime defines a small
+tool-independent transaction interface.
+
+```cpp
+struct MemoryRequest
+{
+    // Runtime-generated token used to match an asynchronous response.
+    std::uint64_t token;
+
+    // Protocol transaction ID, such as an AXI ID. Zero when unused.
+    std::uint32_t id;
+
+    std::uint64_t address;
+    bool write;
+
+    std::vector<std::uint8_t> data;
+    std::vector<std::uint8_t> byteEnable;
+};
+
+struct MemoryResponse
+{
+    std::uint64_t token;
+    std::vector<std::uint8_t> data;
+    bool error;
+};
+
+class TransactionBackend
+{
+  public:
+    virtual bool canAccept(const MemoryRequest& request) const = 0;
+    virtual bool submit(const MemoryRequest& request) = 0;
+    virtual bool getResponse(MemoryResponse& response) = 0;
+    virtual void advance() = 0;
+
+    virtual ~TransactionBackend() = default;
+};
+```
+
+The standalone backend implements a sparse or flat byte-addressable memory. The gem5 backend converts `MemoryRequest` objects into gem5 packets,
+queues asynchronous packet responses as `MemoryResponse` objects, and translates gem5 retry notifications into backend availability.
+
+### Protocol Transactor Cycle Interface
+
+Protocol transactors are independent of both backends and use a cycle-oriented interface:
+
+```cpp
+class BusTransactor
+{
+  public:
+    // Drive RTL inputs for the upcoming active clock edge.
+    virtual bool beforeClock() = 0;
+
+    // Commit handshakes and sample outputs for the next active edge.
+    virtual bool afterClock() = 0;
+
+    virtual bool isIdle() const = 0;
+    virtual const char* getLastError() const = 0;
+
+    virtual ~BusTransactor() = default;
+};
+```
+
+Each transactor retains a snapshot of the RTL outputs prepared for the upcoming active edge. `beforeClock()` drives READY, response, and data inputs.
+After `RtlCore::clock()` completes, `afterClock()` commits handshakes using the retained pre-edge snapshot and samples stabilized outputs for the
+next edge. This prevents a transfer from being missed when RTL deasserts VALID during the active edge.
+
+### Checker Command and Execution
+
+The checker is built with CMake and accepts the vendor library path and checker JSON as positional arguments:
+
+```bash
+rtl-cosim-check ./libscr1.so scr1-check.json
+```
+
+It performs the following sequence:
+
+1. Parse and validate the checker JSON.
+2. Load the vendor library and resolve `createRtlCoreManagerV1` and `destroyRtlCoreManagerV1`.
+3. Create one manager and one core.
+4. Enumerate and validate all buses, standalone signals, and backdoor-accessible memories.
+5. Create the appropriate pure C++ transactor for every supported bus.
+6. Attach every RTL initiator bus to a shared memory backend unless JSON assigns it to a separate address space.
+7. Load configured ELF, COFF, or raw images into a matching TCM region or the standalone memory backend.
+8. Drive configured generic inputs such as reset vector, hart ID, and fuse values.
+9. Apply the configured reset sequence.
+10. Clock until the core and all transactors are idle, the model finishes, an error occurs, or the cycle limit is reached.
+11. Print discovered interfaces, validation results, traffic statistics, stop reason, and errors.
+12. Destroy the core and manager, unload the vendor library, and return a meaningful process status.
+
+Instruction and data initiator buses share one memory address space by default. This allows instruction fetches and data accesses to observe the
+same loaded program. JSON may explicitly assign an interface to a different memory backend when the RTL memory map requires it.
+
+The clock loop is logically equivalent to:
+
+```cpp
+while (cycles < maxCycles) {
+    for (auto& transactor : transactors) {
+        if (!transactor->beforeClock())
+            fail(transactor->getLastError());
+    }
+
+    const ClockResult result = core->clock();
+    if (result == ClockResult::Error)
+        fail(core->getLastError());
+    if (result == ClockResult::Finished)
+        break;
+
+    for (auto& transactor : transactors) {
+        if (!transactor->afterClock())
+            fail(transactor->getLastError());
+    }
+
+    memory.advance();
+    ++cycles;
+
+    if (core->isIdle() && allTransactorsIdle())
+        break;
+}
+```
+
+A maximum cycle count is mandatory. A CPU may never become idle when memory is empty, the loaded program traps repeatedly, or the program never
+executes a wait-for-interrupt instruction. Tests that expect an idle stop must load a program that reaches a defined idle state.
+
+### Checker JSON
+
+A representative configuration is:
+
+```json
+{
+  "core": {
+    "config": {
+      "implementation": "scr1-axi"
+    }
+  },
+  "reset": {
+    "assert_cycles": 10
+  },
+  "inputs": {
+    "fuse_mhartid": "0x0",
+    "reset_vector": "0x0"
+  },
+  "memory": {
+    "base": 0,
+    "size": 67108864,
+    "image": "test.elf",
+    "latency_cycles": 1
+  },
+  "run": {
+    "max_cycles": 1000000,
+    "stop_on_idle": true,
+    "stop_on_finish": true
+  }
+}
+```
+
+The `core.config` object is serialized and passed to `RtlCoreManager::createCore()`. The checker-specific fields configure reset, generic inputs,
+memory, image loading, traffic behavior, and termination conditions.
+
+### Memory Test Modes
+
+The initial SCR1 test uses shared fixed-latency memory and a small program that reaches an idle state. The checker architecture also supports:
+
+- Zero or fixed memory latency.
+- Deterministic randomized latency using a recorded seed.
+- Randomized READY backpressure.
+- Burst and narrow transfers.
+- Address-range error responses.
+- Multiple outstanding AXI IDs.
+- Out-of-order responses where the selected protocol permits them.
+
+The initial checker attaches memories only to RTL initiator buses. A later checker mode may drive RTL target buses with a synthetic transaction
+initiator. A simple memory backend validates ordinary AXI3-ACE reads and writes but does not prove coherent snoop behavior; coherence testing requires
+a dedicated backend that generates snoop traffic and checks coherent responses.
+
+### Checker Scope and Diagnostics
+
+The checker validates:
+
+- Shared-library and V1 entry-point compatibility.
+- Vendor object construction and destruction.
+- Interface discovery and protocol-profile compliance.
+- Signal roles, directions, widths, active levels, values, and callbacks.
+- APB and AXI channel handshakes, ordering, bursts, backpressure, and errors.
+- Reset sequencing, TCM programming, external-memory traffic, and idle reporting.
+
+It does not validate gem5 event scheduling, packet semantics, Classic XBar integration, Ruby integration, or complete AXI3-ACE coherence. Those remain
+gem5 integration tests. The checker should use distinct nonzero exit codes for command-line or JSON errors, library or API errors, validation errors,
+runtime or protocol errors, and cycle-limit timeouts.
+
+### Source and Build Layout
+
+```text
+src/rtl/
+├── SConscript
+├── CMakeLists.txt
+├── runtime/
+│   ├── model_loader.{hh,cc}
+│   ├── model_validator.{hh,cc}
+│   ├── transaction.{hh,cc}
+│   ├── image_loader.{hh,cc}
+│   └── protocol/
+│       ├── apb.{hh,cc}
+│       ├── axi3.{hh,cc}
+│       ├── axi4.{hh,cc}
+│       └── axi3_ace.{hh,cc}
+├── checker/
+│   ├── main.cc
+│   ├── memory_backend.{hh,cc}
+│   └── checker_config.{hh,cc}
+└── gem5/
+    ├── rtl_core.{hh,cc}
+    ├── packet_backend.{hh,cc}
+    └── RtlCore.py
+```
+
+CMake builds `rtl_cosim_runtime` and `rtl-cosim-check` without gem5. gem5's SCons build compiles the same runtime and protocol sources together with
+the gem5 adapter. Protocol behavior must not be duplicated in the checker and gem5 layers.
+
 ## SCR1 Reference Vendor Implementation
 
 The SCR1 integration under `ext/rtl/scr1` serves as the reference vendor implementation of the PoC API. The pristine upstream SCR1 repository is
@@ -574,7 +834,7 @@ headers or link against gem5. It demonstrates how vendors map physical RTL signa
 callbacks, expose optional TCM backdoors, and export the versioned manager factory and destructor symbols.
 
 This integration is the reference vendors can copy and adapt for Verilator or commercial RTL-to-C++ models. gem5-specific loading, ports, and
-signal-to-TLM transactors remain outside `ext/rtl/scr1`.
+packet backends remain outside `ext/rtl/scr1`; the pure C++ protocol transactors are supplied by `rtl_cosim_runtime`.
 
 ## Required Design Output
 
@@ -587,12 +847,14 @@ Provide:
 5. JSON configuration schema and representative examples.
 6. Interface-discovery and protocol-classification mechanisms.
 7. gem5 `SimObject`, port, event, clock, and reset integration.
-8. Signal-to-TLM transactor architecture.
-9. Idle detection and wake-up behavior.
-10. Support for multiple clocks and reset domains.
-11. Checkpointing, serialization, and restore behavior.
-12. Debugging, tracing, and waveform-generation support.
-13. Error handling and diagnostics.
-14. Thread-safety and reentrancy requirements.
-15. A phased implementation plan beginning with a Verilator-based proof of concept.
-16. Example integration using the SCR1 RISC-V core with both gem5's classic memory system and Ruby.
+8. Pure C++ protocol-transactor and neutral transaction-backend architecture.
+9. Standalone checker CLI, JSON schema, loopback memory, diagnostics, and exit status.
+10. gem5 packet-backend integration.
+11. Idle detection and wake-up behavior.
+12. Support for multiple clocks and reset domains.
+13. Checkpointing, serialization, and restore behavior.
+14. Debugging, tracing, and waveform-generation support.
+15. Error handling and diagnostics.
+16. Thread-safety and reentrancy requirements.
+17. A phased implementation plan beginning with a Verilator-based proof of concept.
+18. Example integration using the SCR1 RISC-V core with both gem5's classic memory system and Ruby.
