@@ -1,0 +1,23 @@
+{
+  "core": {"config": {"fixture": "apb-slave"}},
+  "reset": {"assert_cycles": 3},
+  "memory": {"base": 0, "size": 4096},
+  "transactions": {
+    "amba": [
+      {
+        "address": 16,
+        "write": true,
+        "beat_bytes": 4,
+        "data": "11223344",
+        "byte_enable": [1, 0, 1, 0]
+      },
+      {
+        "address": 16,
+        "write": false,
+        "beat_bytes": 4,
+        "expect_data": "11003300"
+      }
+    ]
+  },
+  "run": {"max_cycles": 1000, "stop_on_idle": true}
+}

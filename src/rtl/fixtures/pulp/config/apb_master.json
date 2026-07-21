@@ -1,0 +1,6 @@
+{
+  "core": {"config": {"fixture": "apb-master"}},
+  "reset": {"assert_cycles": 3},
+  "memory": {"base": 0, "size": 4096, "latency_cycles": 2},
+  "run": {"max_cycles": 1000, "stop_on_idle": true}
+}

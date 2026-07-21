@@ -1,0 +1,28 @@
+{
+  "core": {"config": {"fixture": "axi-slave"}},
+  "reset": {"assert_cycles": 3},
+  "memory": {"base": 0, "size": 4096, "max_pending": 1},
+  "transactions": {
+    "amba": [
+      {
+        "token": 100,
+        "id": 3,
+        "address": 64,
+        "write": true,
+        "beat_bytes": 4,
+        "beats": 2,
+        "data": "0102030405060708"
+      },
+      {
+        "token": 101,
+        "id": 3,
+        "address": 64,
+        "write": false,
+        "beat_bytes": 4,
+        "beats": 2,
+        "expect_data": "0102030405060708"
+      }
+    ]
+  },
+  "run": {"max_cycles": 2000, "stop_on_idle": true}
+}

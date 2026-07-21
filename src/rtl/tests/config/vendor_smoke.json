@@ -1,0 +1,7 @@
+{
+  "core": {"config": {"fixture": "cpp"}},
+  "reset": {"assert_cycles": 2},
+  "inputs": {"vector_input": "0x090807060504030201"},
+  "memory": {"base": 0, "size": 4096},
+  "run": {"max_cycles": 10, "stop_on_idle": true}
+}

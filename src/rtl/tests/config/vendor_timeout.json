@@ -1,0 +1,6 @@
+{
+  "core": {"config": {"fixture": "cpp"}},
+  "reset": {"assert_cycles": 1},
+  "memory": {"base": 0, "size": 4096},
+  "run": {"max_cycles": 2, "stop_on_idle": false}
+}
