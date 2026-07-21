@@ -942,7 +942,7 @@ src/rtl/
 └── tests/
 ```
 
-CMake builds `rtl_cosim_runtime`, `rtl_cosim_checker_support`, and `rtl-cosim-check` without gem5. Stage 3 will compile the same runtime and protocol
+CMake builds `rtl_cosim_runtime`, `rtl_cosim_checker_support`, and `rtl-cosim-check` without gem5. Stage 4 will compile the same runtime and protocol
 sources with the gem5 adapter. Protocol behavior must not be duplicated in checker and gem5 layers.
 
 ## SCR1 Reference Vendor Implementation
@@ -1002,14 +1002,30 @@ packet backends remain outside `ext/rtl/scr1`; the pure C++ protocol transactors
 - Run documented `rtl-cosim-check` scenarios with RISC-V unit and bare-metal programs, deterministic timeouts, and known completion or idle states.
 - Stage 2 is complete when the SCR1 DLL passes all standalone tests without gem5 and serves as a reproducible reference implementation for vendors.
 
-### Stage 3: gem5 Integration and Two-Core System Validation
+### Stage 3: PULP C910 Reference Vendor Integration
+
+- Pin `pulp-platform/pulp-c910` under `ext/rtl/pulp-c910/repo`; keep the adapter, tests, documentation, and independent CMake shared-library build in
+  `ext/rtl/pulp-c910`, following the SCR1 reference integration layout.
+- Verilate `c910_axi_wrap` and expose its normalized external AXI4 initiator port through the frozen V1 API with automatically discovered address,
+  data, ID, and USER widths. ATOP remains tied to zero and is not added to V1.
+- Keep C910-specific ACE response handling, evict absorption, wrapping-burst conversion, and decrementing-burst conversion inside the upstream wrapper;
+  the framework sees only standard AXI4 and reuses the Stage 1 initiator transactor unchanged.
+- Map reset, RTC, interrupt, debug, and JTAG signals. Add a minimal wrapper output for `biu_pad_lpmd_b` so `isIdle()` can require drained WFI state,
+  an idle AXI port, and no pending raw interrupt or debug wake source.
+- Add standalone tests for discovery, reset, RV64 boot, wide AXI traffic, errors, interrupts, idle clock suppression, and wakeup that ungates the main
+  clock before the core samples the interrupt; keep RTC activity independent of main-core clock suppression.
+- Run deterministic bare-metal and `rtl-cosim-check` scenarios without gem5, including stop-at-WFI and interrupt-resume coverage.
+- Stage 3 is complete when the C910 DLL passes documented sanitizer-clean tests without framework API or C910-specific transactor changes, providing
+  a second, materially wider and more complex vendor integration proof point.
+
+### Stage 4: gem5 Integration and Two-Core System Validation
 
 - Implement `RtlCoreSimObject`, the gem5 packet backend, vector-port mapping, callbacks, clock scheduling, reset handling, and configuration validation.
 - Reuse the Stage 1 runtime and APB and AXI3/AXI4 transactors unchanged; gem5-specific code is limited to SimObject, event, signal-port, and packet
-  integration. AXI3-ACE remains structural-validation-only and outside Stage 3 execution and testing.
+  integration. AXI3-ACE remains structural-validation-only and outside Stage 4 execution and testing.
 - Add a configuration system that creates two SCR1 `RtlCoreSimObject` instances and connects each core's instruction and data ports by API name.
 - Provide one configurable two-core system that selects either a classic coherent cache hierarchy or Ruby `MESI_Two_Level` with `SimpleNetwork`.
 - Run bare-metal RISC-V unit tests for boot, memory traffic, interrupts, reset, errors, idle wake-up, and deterministic multicore execution.
 - Run dining philosophers using Peterson's algorithm with the required compiler barriers and RISC-V fences; SCR1 has no LR/SC or AMOs.
-- Stage 3 is complete when the same configurable system passes both memory-system modes through gem5's test infrastructure, with documented commands
+- Stage 4 is complete when the same configurable system passes both memory-system modes through gem5's test infrastructure, with documented commands
   and expected results.
