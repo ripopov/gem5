@@ -909,8 +909,15 @@ packet backends remain outside `ext/rtl/scr1`; the pure C++ protocol transactors
 
 ### Stage 1: Standalone AMBA Transactor Validation
 
-- Select high-quality, permissively licensed AXI4 and APB master and slave RTL implementations with strong tests, Verilator compatibility, and active
-  maintenance; document the selection and pin exact revisions.
+- Use the PULP Platform SystemVerilog implementations for the independent Verilog/Verilator endpoints. Keep AXI at
+  `ext/rtl/pulp/axi`, pinned to `v0.39.10`, and APB at `ext/rtl/pulp/apb`. The submodule gitlinks provide the authoritative
+  exact revisions. Both projects use the Solderpad Hardware License 0.51, whose license text permits treating the work as Apache License 2.0.
+- Keep PULP entirely on the reference RTL endpoint side. Thin Stage 1 wrappers flatten PULP interfaces and structs into canonical V1 signal bindings,
+  tie unsupported AXI atomic-operation inputs to zero, and package the endpoints as Verilated vendor libraries. `rtl_cosim_runtime` and
+  `rtl-cosim-check` must not include PULP headers, use PULP types, or depend on PULP build infrastructure.
+- Qualify every selected PULP master, slave, memory, delay, and error-response component with the pinned Verilator version before relying on it in an
+  end-to-end fixture. Simulation-only PULP drivers require compile-and-execute coverage; successful lint of the synthesizable RTL alone is not
+  sufficient.
 - Implement the candidate V1 vendor API and both neutral transaction directions: RTL initiator to backend and transaction source to RTL target.
 - Implement `rtl_cosim_runtime`, APB and AXI3/AXI4 initiator and target transactors, memory and transaction-driver backends, and `rtl-cosim-check`
   without SCR1 or gem5 dependencies.
