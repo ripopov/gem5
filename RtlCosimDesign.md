@@ -12,6 +12,7 @@ The framework must:
 - Allow RTL vendors to distribute their compiled models as shared libraries.
 - Require no gem5 knowledge or dependency in vendor-provided code.
 - Support automatic discovery and connection of buses, interrupts, GPIOs, reset signals, and other interfaces.
+- Support APB, AXI4, AXI3, and AXI3-ACE bus protocols.
 - Minimize simulation overhead, particularly when an RTL model is idle.
 
 ## RTL Vendor Interface
@@ -111,15 +112,15 @@ Runtime initialization proceeds as follows:
 
 An RTL initiator transactor presents a gem5 `RequestPort` and converts pin-level requests into gem5 packets. It handles timing requests, responses,
 backpressure, and retry callbacks. An RTL target transactor presents a `ResponsePort` and performs the inverse conversion. Protocol-specific state
-machines for AHB-Lite, AXI, APB, and future protocols remain entirely inside the framework.
+machines for APB, AXI4, AXI3, and AXI3-ACE remain entirely inside the framework.
 
 The same `RequestPort` connects to either memory-system implementation:
 
 - With the classic memory system, connect it to an XBar response-side port such as `cpu_side_ports`.
 - With Ruby, connect it to `RubySequencer.in_ports`, which is a `VectorResponsePort`.
 
-No Ruby-specific vendor interface or RTL SimObject port is required. Coherent protocols may require snoop handling in the gem5 transactor, but they
-still use gem5 `RequestPort` and `ResponsePort` types.
+No Ruby-specific vendor interface or RTL SimObject port is required. AXI3-ACE requires snoop handling in the gem5 transactor and support from the
+selected memory system, but it still uses gem5 `RequestPort` and `ResponsePort` types.
 
 Interrupt and reset gem5 ports carry logical assertion state. The framework uses `CoreSignalBinding::activeLevel` to convert between that logical
 state and the actual, non-normalized RTL signal value. Generic I/O values are transferred without polarity conversion. Each I/O vector-port element
@@ -132,9 +133,9 @@ reset-vector input is exposed through one `io_inputs` element carrying a 32-bit 
 Clocking, TCM backdoor access, and idle state do not require SimObject ports. The gem5 clock domain schedules `RtlCore::clock()`, object-file loading
 uses the memory backdoor API directly, and `RtlCore::isIdle()` controls whether future clock events are scheduled.
 
-The SCR1 PoC requires two `VectorRequestPort` elements for its instruction and data AHB-Lite initiator buses, interrupt sink elements, and reset
-response elements. A reset-request element is required only when the optional SCR1 system-reset output is exposed. Target-bus, interrupt-source,
-and generic I/O port families remain part of the framework contract but are not required for the first SCR1 execution milestone.
+The SCR1 PoC uses `scr1_top_axi` and requires two `VectorRequestPort` elements for its instruction and data AXI4 initiator buses, interrupt sink
+elements, and reset response elements. A reset-request element is required only when the optional SCR1 system-reset output is exposed. Target-bus,
+interrupt-source, and generic I/O port families remain part of the framework contract but are not required for the first SCR1 execution milestone.
 
 ## Vendor-Facing PoC API
 
@@ -359,9 +360,10 @@ class Signal;
 enum class BusProtocol : std::uint32_t
 {
     Unknown = 0,
-    AhbLite,
-    Axi4,
-    Apb
+    Apb,
+    Axi3,
+    Axi3Ace,
+    Axi4
 };
 
 enum class BusRole : std::uint32_t
@@ -372,18 +374,64 @@ enum class BusRole : std::uint32_t
 
 using SignalRoleId = std::uint32_t;
 
-namespace AhbLiteSignal
+namespace ApbSignal
 {
-constexpr SignalRoleId HAddr  = 1;
-constexpr SignalRoleId HBurst = 2;
-constexpr SignalRoleId HProt  = 3;
-constexpr SignalRoleId HSize  = 4;
-constexpr SignalRoleId HTrans = 5;
-constexpr SignalRoleId HWData = 6;
-constexpr SignalRoleId HWrite = 7;
-constexpr SignalRoleId HRData = 8;
-constexpr SignalRoleId HReady = 9;
-constexpr SignalRoleId HResp  = 10;
+constexpr SignalRoleId PAddr   = 1;
+constexpr SignalRoleId PSel    = 2;
+constexpr SignalRoleId PEnable = 3;
+constexpr SignalRoleId PWrite  = 4;
+constexpr SignalRoleId PWData  = 5;
+constexpr SignalRoleId PStrb   = 6;
+constexpr SignalRoleId PProt   = 7;
+constexpr SignalRoleId PReady  = 8;
+constexpr SignalRoleId PRData  = 9;
+constexpr SignalRoleId PSlvErr = 10;
+}
+
+// Base AXI3 channel roles. AXI4 and AXI3-ACE reuse applicable IDs and add
+// protocol-specific roles in the same namespace.
+namespace AxiSignal
+{
+constexpr SignalRoleId AwId    = 1;
+constexpr SignalRoleId AwAddr  = 2;
+constexpr SignalRoleId AwLen   = 3;
+constexpr SignalRoleId AwSize  = 4;
+constexpr SignalRoleId AwBurst = 5;
+constexpr SignalRoleId AwLock  = 6;
+constexpr SignalRoleId AwCache = 7;
+constexpr SignalRoleId AwProt  = 8;
+constexpr SignalRoleId AwValid = 9;
+constexpr SignalRoleId AwReady = 10;
+
+constexpr SignalRoleId WId     = 11;
+constexpr SignalRoleId WData   = 12;
+constexpr SignalRoleId WStrb   = 13;
+constexpr SignalRoleId WLast   = 14;
+constexpr SignalRoleId WValid  = 15;
+constexpr SignalRoleId WReady  = 16;
+
+constexpr SignalRoleId BId     = 17;
+constexpr SignalRoleId BResp   = 18;
+constexpr SignalRoleId BValid  = 19;
+constexpr SignalRoleId BReady  = 20;
+
+constexpr SignalRoleId ArId    = 21;
+constexpr SignalRoleId ArAddr  = 22;
+constexpr SignalRoleId ArLen   = 23;
+constexpr SignalRoleId ArSize  = 24;
+constexpr SignalRoleId ArBurst = 25;
+constexpr SignalRoleId ArLock  = 26;
+constexpr SignalRoleId ArCache = 27;
+constexpr SignalRoleId ArProt  = 28;
+constexpr SignalRoleId ArValid = 29;
+constexpr SignalRoleId ArReady = 30;
+
+constexpr SignalRoleId RId     = 31;
+constexpr SignalRoleId RData   = 32;
+constexpr SignalRoleId RResp   = 33;
+constexpr SignalRoleId RLast   = 34;
+constexpr SignalRoleId RValid  = 35;
+constexpr SignalRoleId RReady  = 36;
 }
 
 struct SignalBinding
@@ -414,9 +462,16 @@ class Bus
 };
 ```
 
-`Bus` represents a logical group of signals implementing a protocol such as AXI4, AHB-Lite, or APB. Signal bindings must use canonical semantic role
-IDs defined by the framework; the framework must never infer protocol semantics from vendor-specific RTL signal names. `Signal::name()` remains
-available for diagnostics and waveform tracing.
+`Bus` represents a logical group of signals implementing APB, AXI4, AXI3, or AXI3-ACE. Signal bindings must use canonical semantic role IDs defined
+by the framework; the framework must never infer protocol semantics from vendor-specific RTL signal names. `Signal::name()` remains available for
+diagnostics and waveform tracing.
+
+The V1 header defines complete canonical role-ID sets in `ApbSignal` and `AxiSignal`. AXI4, AXI3, and AXI3-ACE share IDs for common channel signals,
+while their validation profiles determine which roles are required, optional, or prohibited. AXI3-specific roles include write-data IDs, and the
+AXI3-ACE profile adds coherent address attributes, snoop channels, response channels, data channels, and acknowledge signals.
+
+Role IDs are interpreted together with `Bus::protocol()`. APB and AXI may therefore use overlapping numeric ID values without ambiguity. The actual
+RTL signal names remain vendor-defined and do not affect role matching.
 
 The vendor adapter maps its physical RTL signals to these semantic roles. `RtlCore` owns all returned `Bus` and `Signal` objects, and their names and
 pointers remain valid for the lifetime of the core.
@@ -503,6 +558,8 @@ is:
 The SCR1 integration under `ext/rtl/scr1` serves as the reference vendor implementation of the PoC API. The pristine upstream SCR1 repository is
 kept as a submodule at `ext/rtl/scr1/repo`, while the parent directory contains the adapter source, documentation, and independent shared-library
 build used to produce the vendor DLL.
+
+The reference model compiles only `scr1_top_axi` and maps its separate instruction and data AXI4 initiator interfaces to the framework.
 
 ```text
 ext/rtl/scr1/
