@@ -59,9 +59,9 @@ At runtime, the framework must:
 The framework should contain all protocol-specific transactors. Neither the vendor library nor the gem5 model developer should need to implement
 or understand pin-level handshaking.
 
-## Proposed Vendor-Facing API
+## Vendor-Facing PoC API
 
-The API should use abstract interfaces based on virtual methods or propose a safer ABI-compatible alternative where appropriate.
+The PoC API uses abstract interfaces based on virtual methods.
 
 No exception may cross the shared-library boundary. Every vendor-facing virtual method and exported entry point must be `noexcept`; failures are
 reported through return values and `getLastError()`.
@@ -79,8 +79,6 @@ class RtlCore;
 class RtlCoreManager
 {
   public:
-    virtual std::uint32_t apiVersion() const noexcept = 0;
-
     // Creates one RTL instance from a null-terminated JSON configuration.
     // Returns nullptr on failure.
     virtual RtlCore* createCore(const char* configJson) noexcept = 0;
@@ -98,8 +96,8 @@ class RtlCoreManager
 ```
 
 `RtlCoreManager` is the root object returned by the shared library. For the proof of concept, one shared library represents one RTL model type. The
-manager only needs to report its API version, create and destroy `RtlCore` instances, and report construction errors. Model enumeration, capability
-discovery, and structured diagnostics can be added after the SCR1 integration is working.
+manager only needs to create and destroy `RtlCore` instances and report construction errors. Model enumeration, capability discovery, and structured
+diagnostics can be added after the SCR1 integration is working.
 
 `RtlCoreManager::getLastError()` returns the error from the most recent failed manager operation. The returned string is owned by the implementation
 and remains valid until the next manager API call. It returns `nullptr` or an empty string when no error is available.
@@ -107,12 +105,21 @@ and remains valid until the next manager API call. It returns `nullptr` or an em
 The shared library must export two C entry points to avoid C++ symbol-name mangling:
 
 ```cpp
+inline constexpr std::uint32_t RtlCosimApiVersion = 1;
+
 extern "C" RtlCoreManager*
-createRtlCoreManager() noexcept;
+createRtlCoreManagerV1() noexcept;
 
 extern "C" void
-destroyRtlCoreManager(RtlCoreManager* manager) noexcept;
+destroyRtlCoreManagerV1(RtlCoreManager* manager) noexcept;
 ```
+
+gem5 negotiates the API version by looking up the versioned factory symbol before creating or calling a C++ object. Successfully locating
+`createRtlCoreManagerV1` identifies the V1 interface and vtable layout; no manager-level version method is needed.
+
+The suffix is the major API and ABI version. Every V1 virtual interface is immutable: methods must not be added, removed, reordered, or have their
+signatures changed. Any such change introduces V2 factory and destructor symbols with corresponding V2 interfaces. A library may export multiple
+major versions during migration, while compatible implementation changes continue to use V1.
 
 Core and manager objects must be destroyed by the shared library that created them. For the proof of concept, gem5 and the RTL adapter library may
 be required to use compatible C++ compiler ABIs.
