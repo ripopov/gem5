@@ -1029,3 +1029,14 @@ packet backends remain outside `ext/rtl/scr1`; the pure C++ protocol transactors
 - Run dining philosophers using Peterson's algorithm with the required compiler barriers and RISC-V fences; SCR1 has no LR/SC or AMOs.
 - Stage 4 is complete when the same configurable system passes both memory-system modes through gem5's test infrastructure, with documented commands
   and expected results.
+
+### Stage 5: C910 Testing
+
+- Configure one `RtlCoreSimObject` with the PULP C910 vendor library produced in Stage 3, treating C910 as an independent portability test.
+- Fixes to `RtlCoreSimObject`, the runtime, and protocol transactors are allowed when they are generic and benefit any compatible AMBA RTL model.
+- Keep C910-specific signal mappings, reset and low-power behavior, and RTL-tool details confined to the C910 vendor adapter.
+- Build a minimal single-core gem5 system and connect the C910 AXI4 initiator to one memory controller using the Stage 4 packet backend.
+- Boot a deterministic RV64 bare-metal image, run a small compute-and-memory benchmark, and terminate in a known idle state.
+- Validate the benchmark using an expected memory signature or checksum, and fail explicitly on timeout, protocol error, or incorrect output.
+- Add the test to gem5's infrastructure and rerun the SCR1 and standalone AMBA suites to ensure generic fixes introduce no regressions.
+- Stage 5 is complete when C910 passes reproducibly and the framework supports both reference cores without core-specific integration logic.
