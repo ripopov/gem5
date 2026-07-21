@@ -1,3 +1,9 @@
 [submodule "ext/rtl/scr1"]
 	path = ext/rtl/scr1/repo
 	url = https://github.com/syntacore/scr1.git
+[submodule "ext/rtl/pulp/axi"]
+	path = ext/rtl/pulp/axi
+	url = https://github.com/pulp-platform/axi.git
+[submodule "ext/rtl/pulp/apb"]
+	path = ext/rtl/pulp/apb
+	url = https://github.com/pulp-platform/apb.git
