@@ -861,26 +861,3 @@ packet backends remain outside `ext/rtl/scr1`; the pure C++ protocol transactors
   coherent loads and stores, such as Peterson's algorithm for two cores.
 - Stage 2 is complete when the same configurable system passes the test suite in both memory-system modes through gem5's test infrastructure, with
   documented commands and expected results.
-
-## Required Design Output
-
-Provide:
-
-1. A high-level architecture and component diagram.
-2. A recommended source directory structure within gem5.
-3. The complete vendor-facing PoC API specification.
-4. Shared-library entry-point and ABI-versioning conventions.
-5. JSON configuration schema and representative examples.
-6. Interface-discovery and protocol-classification mechanisms.
-7. gem5 `SimObject`, port, event, clock, and reset integration.
-8. Pure C++ protocol-transactor and neutral transaction-backend architecture.
-9. Standalone checker CLI, JSON schema, loopback memory, diagnostics, and exit status.
-10. gem5 packet-backend integration.
-11. Idle detection and wake-up behavior.
-12. Support for multiple clocks and reset domains.
-13. Checkpointing, serialization, and restore behavior.
-14. Debugging, tracing, and waveform-generation support.
-15. Error handling and diagnostics.
-16. Thread-safety and reentrancy requirements.
-17. The two-stage implementation plan and completion gates defined above.
-18. Example integration using the SCR1 RISC-V core with both gem5's classic memory system and Ruby.
