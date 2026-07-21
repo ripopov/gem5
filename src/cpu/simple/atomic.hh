@@ -68,7 +68,7 @@ class AtomicSimpleCPU : public BaseSimpleCPU
     const bool simulate_inst_stalls;
 
     // main simulation loop (one cycle)
-    void tick();
+    virtual void tick();
 
     /**
      * Check if a system is in a drained state.

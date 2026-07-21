@@ -1,0 +1,8 @@
+config USE_JITCPU
+    depends on USE_RISCV_ISA
+    bool "Enable the RISC-V QEMU/TCG JitCPU model"
+    default n
+    help
+      Build the GPL-covered, RISC-V-only JitCPU integration. The backend
+      shared library is built separately from the pinned ext/qemu/repo
+      submodule and the adapter sources in ext/qemu/gem5-jit.
