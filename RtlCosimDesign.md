@@ -69,6 +69,9 @@ reported through return values and `getLastError()`.
 For the proof of concept, all manager, core, bus, signal, memory, and callback operations occur on the gem5 simulation thread. The vendor
 implementation is not required to be thread-safe.
 
+The complete vendor-facing PoC API is defined in the standalone header `include/gem5/rtl_cosim/api_v1.hh`. This file is the single source of truth
+for the V1 interface and contains no gem5-specific types or dependencies, allowing RTL vendors to copy it directly into their own codebases.
+
 ### `RtlCoreManager`
 
 ```cpp
@@ -416,13 +419,34 @@ The signal-change callback provides event-driven notification for signals such a
 
 `RtlCore` owns all `Signal` objects. Signal names and pointers remain valid for the lifetime of the core.
 
+## SCR1 Reference Vendor Implementation
+
+The SCR1 integration under `ext/rtl/scr1` serves as the reference vendor implementation of the PoC API. The pristine upstream SCR1 repository is
+kept as a submodule at `ext/rtl/scr1/repo`, while the parent directory contains the adapter source, documentation, and independent shared-library
+build used to produce the vendor DLL.
+
+```text
+ext/rtl/scr1/
+├── repo/              # Pristine upstream SCR1 submodule
+├── src/               # Vendor-facing PoC API implementation
+├── CMakeLists.txt      # Independent shared-library build
+└── README.md           # Build, configuration, and integration guide
+```
+
+The adapter must depend only on `include/gem5/rtl_cosim/api_v1.hh`, SCR1, and the selected RTL-to-C++ tool runtime; it must not include gem5-internal
+headers or link against gem5. It demonstrates how vendors map physical RTL signals to semantic bus and core bindings, implement clocking and signal
+callbacks, expose optional TCM backdoors, and export the versioned manager factory and destructor symbols.
+
+This integration is the reference vendors can copy and adapt for Verilator or commercial RTL-to-C++ models. gem5-specific loading, ports, and
+signal-to-TLM transactors remain outside `ext/rtl/scr1`.
+
 ## Required Design Output
 
 Provide:
 
 1. A high-level architecture and component diagram.
 2. A recommended source directory structure within gem5.
-3. The complete vendor-facing API proposal.
+3. The complete vendor-facing PoC API specification.
 4. Shared-library entry-point and ABI-versioning conventions.
 5. JSON configuration schema and representative examples.
 6. Interface-discovery and protocol-classification mechanisms.
