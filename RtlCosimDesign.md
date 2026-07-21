@@ -12,6 +12,7 @@ The framework must:
 - Allow RTL vendors to distribute their compiled models as shared libraries.
 - Require no gem5 knowledge or dependency in vendor-provided code.
 - Support automatic discovery and connection of buses, interrupts, GPIOs, reset signals, and other interfaces.
+- Discover and support protocol-defined variable signal widths automatically, without model-specific transactor code or duplicated JSON settings.
 - Implement APB, AXI4, and AXI3 protocol transactors.
 - Define canonical AXI3-ACE signal discovery and validation, while leaving coherent transaction integration to future work.
 - Provide a standalone checker that validates vendor libraries and protocol transactors without gem5.
@@ -392,8 +393,8 @@ constexpr SignalRoleId PRData  = 9;
 constexpr SignalRoleId PSlvErr = 10;
 }
 
-// Base AXI3 channel roles. AXI4 and AXI3-ACE reuse applicable IDs and add
-// protocol-specific roles in the same namespace.
+// Common AXI3 and AXI4 channel roles. Protocol profiles decide which roles
+// are required, optional, or prohibited.
 namespace AxiSignal
 {
 constexpr SignalRoleId AwId    = 1;
@@ -436,6 +437,17 @@ constexpr SignalRoleId RResp   = 33;
 constexpr SignalRoleId RLast   = 34;
 constexpr SignalRoleId RValid  = 35;
 constexpr SignalRoleId RReady  = 36;
+
+// AXI4 sideband signals are appended to preserve the common role IDs above.
+constexpr SignalRoleId AwRegion = 37;
+constexpr SignalRoleId AwQos    = 38;
+constexpr SignalRoleId AwUser   = 39;
+constexpr SignalRoleId WUser    = 40;
+constexpr SignalRoleId BUser    = 41;
+constexpr SignalRoleId ArRegion = 42;
+constexpr SignalRoleId ArQos    = 43;
+constexpr SignalRoleId ArUser   = 44;
+constexpr SignalRoleId RUser    = 45;
 }
 
 struct SignalBinding
@@ -470,9 +482,10 @@ class Bus
 by the framework; the framework must never infer protocol semantics from vendor-specific RTL signal names. `Signal::name()` remains available for
 diagnostics and waveform tracing.
 
-The V1 header defines complete canonical role-ID sets in `ApbSignal` and `AxiSignal`. AXI4, AXI3, and AXI3-ACE share IDs for common channel signals,
-while their validation profiles determine which roles are required, optional, or prohibited. AXI3-specific roles include write-data IDs, and the
-AXI3-ACE profile adds coherent address attributes, snoop channels, response channels, data channels, and acknowledge signals.
+The V1 header defines canonical role-ID sets in `ApbSignal` and `AxiSignal`. AXI4, AXI3, and AXI3-ACE share IDs for common channel signals, while
+their validation profiles determine which roles are required, optional, or prohibited. AXI3-specific roles include write-data IDs. AXI4 adds
+`AwRegion`, `AwQos`, `AwUser`, `WUser`, `BUser`, `ArRegion`, `ArQos`, `ArUser`, and `RUser`. The structurally validated AXI3-ACE profile adds its
+coherent address attributes, snoop channels, response channels, data channels, and acknowledge signals.
 
 Role IDs are interpreted together with `Bus::protocol()`. APB and AXI may therefore use overlapping numeric ID values without ambiguity. The actual
 RTL signal names remain vendor-defined and do not affect role matching.
@@ -493,6 +506,40 @@ The framework must define a validation profile for every supported protocol and 
 Before constructing a transactor, the framework must enumerate and validate all bindings, reject null or duplicate bindings, check required signals,
 and verify their directions and widths. Automatic discovery means consuming this structured metadata rather than guessing interfaces from signal
 names. For the initial single-clock proof of concept, clock and reset remain core-level signals.
+
+Signal widths are discovered exclusively through `Signal::bitWidth()` and must not be hard-coded for SCR1 or repeated as required JSON properties.
+Transactors derive address, data, strobe, ID, USER, and other variable widths at initialization, validate all protocol-specific relationships, and
+allocate byte buffers using `(bitWidth() + 7) / 8`. One transactor implementation must therefore handle every width accepted by its protocol profile.
+Configuration may contain optional width assertions for diagnostics, but discovered API metadata remains the source of truth and a mismatch is an
+initialization error.
+
+#### AXI4 Validation Profile
+
+The V1 AXI4 profile represents a full read/write AXI4 interface rather than AXI4-Lite. The base channel roles `AwId` through `RReady`, except `WId`,
+are required. `WId` is prohibited because AXI4 removed write-data interleaving. The AXI4 sideband roles `AwRegion`, `AwQos`, `AwUser`, `WUser`,
+`BUser`, `ArRegion`, `ArQos`, `ArUser`, and `RUser` are optional.
+
+All non-fixed AXI4 widths are discovered independently for each bus instance. For example, the two SCR1 buses are handled as discovered 32-bit
+address and data interfaces; supporting a model with another valid address, data, ID, or USER width requires no source-code change.
+
+The profile enforces these widths and relationships:
+
+- VALID, READY, LAST, and LOCK signals are one bit.
+- `AwLen` and `ArLen` are 8 bits; `AwSize` and `ArSize` are 3 bits; `AwBurst` and `ArBurst` are 2 bits.
+- `AwCache` and `ArCache` are 4 bits, while `AwProt` and `ArProt` are 3 bits.
+- `AwRegion`, `ArRegion`, `AwQos`, and `ArQos`, when present, are 4 bits.
+- `BResp` and `RResp` are 2 bits.
+- `AwAddr` and `ArAddr` have the same nonzero width, which must not exceed 64 bits in V1.
+- `WData` and `RData` have the same power-of-two width between 8 and 1024 bits. `WStrb` has one bit per data byte.
+- `AwId`, `BId`, `ArId`, and `RId` have the same width, between 1 and 32 bits.
+- USER signal widths are implementation-defined positive values and have no required relationship across channels.
+
+For an RTL initiator, AW, W, and AR payload and VALID signals, plus `BReady` and `RReady`, are outputs; the corresponding READY, B, and R response
+signals are inputs. An RTL target uses the inverse directions. Optional sideband signals follow the direction of their channel.
+
+The initial neutral transaction backend does not carry REGION, QOS, or USER metadata. A transactor samples and ignores such RTL-driven sidebands
+only when their channel handshakes, and drives zero on sidebands directed into the RTL. Their presence must never cause eager payload sampling on an
+idle or stalled channel. This behavior preserves functional SCR1 execution while keeping the canonical AXI4 signal mapping complete.
 
 ### `Signal`
 
@@ -589,6 +636,7 @@ The reusable `rtl_cosim_runtime` library implements:
 - V1 entry-point resolution and object lifetime management.
 - Bus, signal, and memory discovery.
 - Protocol-profile, direction, width, role, and binding validation.
+- Runtime discovery of address, data, strobe, ID, USER, and other variable signal widths, with dynamically sized signal buffers.
 - Reset sequencing and initial signal sampling.
 - Signal callback registration and teardown.
 - APB, AXI4, and AXI3 protocol state machines.
