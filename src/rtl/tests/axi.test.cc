@@ -97,16 +97,20 @@ TEST(AxiInitiator, ExecutesBurstWriteAndResponse)
     driveWriteAddress(*raw, 3, 0x40, 2);
     driveWriteBeat(*raw, 0x04030201, false);
     ASSERT_TRUE(transactor->beforeClock());
+    ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
     ASSERT_TRUE(transactor->afterClock());
     raw->get(AxiSignal::AwValid).drive(0);
     driveWriteBeat(*raw, 0x08070605, true);
     ASSERT_TRUE(transactor->beforeClock());
+    ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
     ASSERT_TRUE(transactor->afterClock());
     backend.advance();
     raw->get(AxiSignal::WValid).drive(0);
     ASSERT_TRUE(transactor->beforeClock());
+    ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
     ASSERT_TRUE(transactor->afterClock());
     ASSERT_TRUE(transactor->beforeClock());
+    ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
     EXPECT_EQ(raw->get(AxiSignal::BValid).value(), 1);
     EXPECT_EQ(raw->get(AxiSignal::BId).value(), 3);
     ASSERT_TRUE(transactor->afterClock());
@@ -133,24 +137,30 @@ TEST(AxiInitiator, ExecutesReadAndHoldsResponseUnderBackpressure)
     driveReadAddress(*raw, 5, 0x80, 2);
 
     ASSERT_TRUE(transactor->beforeClock());
+    ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
     ASSERT_TRUE(transactor->afterClock());
     backend.advance();
     raw->get(AxiSignal::ArValid).drive(0);
     ASSERT_TRUE(transactor->beforeClock());
+    ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
     ASSERT_TRUE(transactor->afterClock());
     raw->get(AxiSignal::RReady).drive(0);
     ASSERT_TRUE(transactor->beforeClock());
+    ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
     EXPECT_EQ(raw->get(AxiSignal::RValid).value(), 1);
     EXPECT_EQ(raw->get(AxiSignal::RData).value(), 0x44332211);
     EXPECT_EQ(raw->get(AxiSignal::RLast).value(), 0);
     ASSERT_TRUE(transactor->afterClock());
     ASSERT_TRUE(transactor->beforeClock());
+    ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
     EXPECT_EQ(raw->get(AxiSignal::RData).value(), 0x44332211);
     raw->get(AxiSignal::RReady).drive(1);
     ASSERT_TRUE(transactor->afterClock());
     ASSERT_TRUE(transactor->beforeClock());
+    ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
     ASSERT_TRUE(transactor->afterClock());
     ASSERT_TRUE(transactor->beforeClock());
+    ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
     EXPECT_EQ(raw->get(AxiSignal::RData).value(), 0x88776655);
     EXPECT_EQ(raw->get(AxiSignal::RLast).value(), 1);
 }
@@ -167,10 +177,12 @@ TEST(AxiInitiator, SamplesPayloadOnlyOnHandshake)
                                                    {.maxPending = 1});
     driveWriteAddress(*raw, 1, 0x10, 1);
     ASSERT_TRUE(transactor->beforeClock());
+    ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
     ASSERT_TRUE(transactor->afterClock());
     const std::size_t reads = raw->get(AxiSignal::AwAddr).getCount;
     raw->get(AxiSignal::AwAddr).drive(0x20);
     ASSERT_TRUE(transactor->beforeClock());
+    ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
     EXPECT_EQ(raw->get(AxiSignal::AwReady).value(), 0);
     EXPECT_EQ(raw->get(AxiSignal::AwAddr).getCount, reads);
     EXPECT_EQ(raw->get(AxiSignal::WData).getCount, 0);
@@ -191,12 +203,14 @@ TEST(AxiInitiator, SamplesWideUserSignalsOnlyOnHandshake)
     ControlledBackend backend;
     auto transactor = createAxiInitiatorTransactor(validated(core), backend);
     ASSERT_TRUE(transactor->beforeClock());
+    ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
     EXPECT_EQ(awUser.getCount, 0);
     EXPECT_EQ(wUser.getCount, 0);
 
     driveWriteAddress(*raw, 1, 0x20, 1);
     driveWriteBeat(*raw, 0x04030201, true);
     ASSERT_TRUE(transactor->beforeClock()) << transactor->getLastError();
+    ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
     EXPECT_EQ(awUser.getCount, 1);
     EXPECT_EQ(wUser.getCount, 1);
 }
@@ -212,7 +226,8 @@ TEST(AxiInitiator, RejectsAssertedLock)
     auto transactor = createAxiInitiatorTransactor(validated(core), backend);
     driveReadAddress(*raw, 0, 0, 1);
     raw->get(AxiSignal::ArLock).drive(1);
-    EXPECT_FALSE(transactor->beforeClock());
+    ASSERT_TRUE(transactor->beforeClock());
+    EXPECT_FALSE(transactor->afterSettle());
     EXPECT_NE(std::string(transactor->getLastError()).find("locked"),
               std::string::npos);
 }
@@ -240,6 +255,7 @@ TEST(AxiInitiator, Supports1024BitDataAndStrobes)
     raw->get(AxiSignal::WValid).drive(1);
 
     ASSERT_TRUE(transactor->beforeClock()) << transactor->getLastError();
+    ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
     ASSERT_TRUE(transactor->afterClock()) << transactor->getLastError();
     backend.advance();
     std::vector<std::uint8_t> stored(128);
@@ -262,6 +278,7 @@ TEST(AxiInitiator, SupportsAxi3WriteDataIds)
     driveWriteBeat(*raw, 0x44332211, true);
     raw->get(AxiSignal::WId).drive(5);
     ASSERT_TRUE(transactor->beforeClock()) << transactor->getLastError();
+    ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
     ASSERT_TRUE(transactor->afterClock()) << transactor->getLastError();
     backend.advance();
     std::array<std::uint8_t, 4> data{};
@@ -280,9 +297,11 @@ TEST(AxiInitiator, PreservesPerIdOrderForBackendResponses)
 
     driveReadAddress(*raw, 7, 0x100, 1);
     ASSERT_TRUE(transactor->beforeClock());
+    ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
     ASSERT_TRUE(transactor->afterClock());
     driveReadAddress(*raw, 7, 0x104, 1);
     ASSERT_TRUE(transactor->beforeClock());
+    ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
     ASSERT_TRUE(transactor->afterClock());
     raw->get(AxiSignal::ArValid).drive(0);
     ASSERT_EQ(backend.requests.size(), 2);
@@ -290,20 +309,25 @@ TEST(AxiInitiator, PreservesPerIdOrderForBackendResponses)
     backend.responses.push_back(
         {backend.requests[1].token, 7, {5, 6, 7, 8}, false});
     ASSERT_TRUE(transactor->beforeClock());
+    ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
     ASSERT_TRUE(transactor->afterClock());
     ASSERT_TRUE(transactor->beforeClock());
+    ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
     EXPECT_EQ(raw->get(AxiSignal::RValid).value(), 0);
     ASSERT_TRUE(transactor->afterClock());
 
     backend.responses.push_back(
         {backend.requests[0].token, 7, {1, 2, 3, 4}, false});
     ASSERT_TRUE(transactor->beforeClock());
+    ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
     ASSERT_TRUE(transactor->afterClock());
     raw->get(AxiSignal::RReady).drive(1);
     ASSERT_TRUE(transactor->beforeClock());
+    ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
     EXPECT_EQ(raw->get(AxiSignal::RData).value(), 0x04030201);
     ASSERT_TRUE(transactor->afterClock());
     ASSERT_TRUE(transactor->beforeClock());
+    ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
     EXPECT_EQ(raw->get(AxiSignal::RData).value(), 0x08070605);
 }
 
@@ -318,18 +342,22 @@ TEST(AxiInitiator, AllowsResponsesToReorderAcrossIds)
 
     driveReadAddress(*raw, 1, 0x100, 1);
     ASSERT_TRUE(transactor->beforeClock());
+    ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
     ASSERT_TRUE(transactor->afterClock());
     driveReadAddress(*raw, 2, 0x104, 1);
     ASSERT_TRUE(transactor->beforeClock());
+    ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
     ASSERT_TRUE(transactor->afterClock());
     raw->get(AxiSignal::ArValid).drive(0);
     ASSERT_EQ(backend.requests.size(), 2);
     backend.responses.push_back(
         {backend.requests[1].token, 2, {5, 6, 7, 8}, false});
     ASSERT_TRUE(transactor->beforeClock());
+    ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
     ASSERT_TRUE(transactor->afterClock());
     raw->get(AxiSignal::RReady).drive(1);
     ASSERT_TRUE(transactor->beforeClock());
+    ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
     EXPECT_EQ(raw->get(AxiSignal::RId).value(), 2);
     EXPECT_EQ(raw->get(AxiSignal::RData).value(), 0x08070605);
 }
@@ -351,6 +379,7 @@ TEST(AxiInitiator, AppliesNarrowWriteLaneAndByteStrobes)
     raw->get(AxiSignal::WLast).drive(1);
     raw->get(AxiSignal::WValid).drive(1);
     ASSERT_TRUE(transactor->beforeClock()) << transactor->getLastError();
+    ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
     ASSERT_TRUE(transactor->afterClock());
     backend.advance();
     std::array<std::uint8_t, 4> stored{};
@@ -371,12 +400,15 @@ TEST(AxiInitiator, ConvertsBackendReadErrorToRresp)
     auto transactor = createAxiInitiatorTransactor(validated(core), backend);
     driveReadAddress(*raw, 3, 0x100, 1);
     ASSERT_TRUE(transactor->beforeClock());
+    ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
     ASSERT_TRUE(transactor->afterClock());
     backend.advance();
     raw->get(AxiSignal::ArValid).drive(0);
     ASSERT_TRUE(transactor->beforeClock());
+    ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
     ASSERT_TRUE(transactor->afterClock());
     ASSERT_TRUE(transactor->beforeClock());
+    ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
     EXPECT_EQ(raw->get(AxiSignal::RValid).value(), 1);
     EXPECT_EQ(raw->get(AxiSignal::RResp).value(), 2);
 }
@@ -398,16 +430,19 @@ TEST(AxiInitiator, HandlesWrappingBurstAtFourKiBBoundary)
     driveReadAddress(*raw, 1, 0xffc, 4);
     raw->get(AxiSignal::ArBurst).drive(2);
     ASSERT_TRUE(transactor->beforeClock()) << transactor->getLastError();
+    ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
     ASSERT_TRUE(transactor->afterClock());
     backend.advance();
     raw->get(AxiSignal::ArValid).drive(0);
     ASSERT_TRUE(transactor->beforeClock());
+    ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
     ASSERT_TRUE(transactor->afterClock());
     raw->get(AxiSignal::RReady).drive(1);
     const std::array<std::uint32_t, 4> expected = {0x44444444, 0x11111111,
                                                    0x22222222, 0x33333333};
     for (std::uint32_t word : expected) {
         ASSERT_TRUE(transactor->beforeClock()) << transactor->getLastError();
+        ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
         EXPECT_EQ(raw->get(AxiSignal::RData).value(), word);
         ASSERT_TRUE(transactor->afterClock());
     }
@@ -424,10 +459,12 @@ TEST(AxiInitiator, RejectsMalformedWriteLast)
     driveWriteAddress(*raw, 1, 0x40, 2);
     driveWriteBeat(*raw, 0x04030201, true);
     ASSERT_TRUE(transactor->beforeClock());
+    ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
     ASSERT_TRUE(transactor->afterClock());
     raw->get(AxiSignal::AwValid).drive(0);
     driveWriteBeat(*raw, 0x08070605, true);
     ASSERT_TRUE(transactor->beforeClock());
+    ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
     EXPECT_FALSE(transactor->afterClock());
     EXPECT_NE(std::string(transactor->getLastError()).find("WLAST"),
               std::string::npos);
@@ -460,11 +497,13 @@ TEST(AxiTarget, DrivesBurstWriteAndCollectsB)
     raw->get(AxiSignal::WReady).drive(1);
 
     ASSERT_TRUE(transactor->beforeClock());
+    ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
     EXPECT_EQ(raw->get(AxiSignal::AwValid).value(), 1);
     EXPECT_EQ(raw->get(AxiSignal::WData).value(), 0x04030201);
     EXPECT_EQ(raw->get(AxiSignal::WLast).value(), 0);
     ASSERT_TRUE(transactor->afterClock());
     ASSERT_TRUE(transactor->beforeClock());
+    ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
     EXPECT_EQ(raw->get(AxiSignal::AwValid).value(), 0);
     EXPECT_EQ(raw->get(AxiSignal::WData).value(), 0x08070605);
     EXPECT_EQ(raw->get(AxiSignal::WLast).value(), 1);
@@ -474,6 +513,7 @@ TEST(AxiTarget, DrivesBurstWriteAndCollectsB)
     raw->get(AxiSignal::BResp).drive(0);
     raw->get(AxiSignal::BValid).drive(1);
     ASSERT_TRUE(transactor->beforeClock());
+    ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
     EXPECT_EQ(raw->get(AxiSignal::BReady).value(), 1);
     ASSERT_TRUE(transactor->afterClock());
     MemoryResponse response;
@@ -502,11 +542,13 @@ TEST(AxiTarget, DrivesAxi3WriteDataId)
     raw->get(AxiSignal::AwReady).drive(1);
     raw->get(AxiSignal::WReady).drive(1);
     ASSERT_TRUE(transactor->beforeClock()) << transactor->getLastError();
+    ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
     EXPECT_EQ(raw->get(AxiSignal::WId).value(), 6);
     ASSERT_TRUE(transactor->afterClock());
     raw->get(AxiSignal::BId).drive(6);
     raw->get(AxiSignal::BValid).drive(1);
     ASSERT_TRUE(transactor->beforeClock());
+    ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
     ASSERT_TRUE(transactor->afterClock());
     EXPECT_TRUE(source.isIdle());
 }
@@ -531,11 +573,13 @@ TEST(AxiTarget, PropagatesWriteResponseError)
     raw->get(AxiSignal::AwReady).drive(1);
     raw->get(AxiSignal::WReady).drive(1);
     ASSERT_TRUE(transactor->beforeClock());
+    ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
     ASSERT_TRUE(transactor->afterClock());
     raw->get(AxiSignal::BId).drive(2);
     raw->get(AxiSignal::BResp).drive(2);
     raw->get(AxiSignal::BValid).drive(1);
     ASSERT_TRUE(transactor->beforeClock());
+    ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
     ASSERT_TRUE(transactor->afterClock()) << transactor->getLastError();
     MemoryResponse response;
     ASSERT_TRUE(source.getCompleted(response));
@@ -559,6 +603,7 @@ TEST(AxiTarget, CollectsNarrowReadBeats)
     auto transactor = createAxiTargetTransactor(validated(core), source);
     raw->get(AxiSignal::ArReady).drive(1);
     ASSERT_TRUE(transactor->beforeClock());
+    ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
     EXPECT_EQ(raw->get(AxiSignal::ArSize).value(), 2);
     ASSERT_TRUE(transactor->afterClock());
 
@@ -568,11 +613,13 @@ TEST(AxiTarget, CollectsNarrowReadBeats)
     raw->get(AxiSignal::RValid).drive(1);
     raw->get(AxiSignal::RLast).drive(0);
     ASSERT_TRUE(transactor->beforeClock());
+    ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
     ASSERT_TRUE(transactor->afterClock());
     raw->get(AxiSignal::RData)
         .drive(std::vector<std::uint8_t>{5, 6, 7, 8, 0, 0, 0, 0});
     raw->get(AxiSignal::RLast).drive(1);
     ASSERT_TRUE(transactor->beforeClock());
+    ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
     ASSERT_TRUE(transactor->afterClock());
     MemoryResponse response;
     ASSERT_TRUE(source.getCompleted(response));

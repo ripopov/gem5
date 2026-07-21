@@ -335,6 +335,15 @@ run(const std::filesystem::path &libraryPath,
         std::cerr << "runtime error: " << error << '\n';
         return RuntimeError;
     }
+    if (!core.settle()) {
+        std::cerr << "runtime error: core settle failed";
+        const char *message = core.getLastError();
+        if (message && *message) {
+            std::cerr << ": " << message;
+        }
+        std::cerr << '\n';
+        return RuntimeError;
+    }
     for (std::size_t cycle = 0; cycle < config.resetAssertCycles; ++cycle) {
         const ClockResult result = core.clock();
         if (result != ClockResult::Completed) {
@@ -349,6 +358,15 @@ run(const std::filesystem::path &libraryPath,
     }
     if (!setResets(core, false, error)) {
         std::cerr << "runtime error: " << error << '\n';
+        return RuntimeError;
+    }
+    if (!core.settle()) {
+        std::cerr << "runtime error: core settle failed after reset";
+        const char *message = core.getLastError();
+        if (message && *message) {
+            std::cerr << ": " << message;
+        }
+        std::cerr << '\n';
         return RuntimeError;
     }
 
@@ -427,6 +445,26 @@ run(const std::filesystem::path &libraryPath,
     for (; cycles < config.maxCycles; ++cycles) {
         for (BusRuntime &bus : buses) {
             if (!bus.transactor->beforeClock()) {
+                error = "bus '" + bus.name +
+                        "': " + bus.transactor->getLastError();
+                stopReason = "error";
+                break;
+            }
+        }
+        if (!error.empty()) {
+            break;
+        }
+        if (!core.settle()) {
+            const char *message = core.getLastError();
+            error = "core settle failed";
+            if (message && *message) {
+                error += ": " + std::string(message);
+            }
+            stopReason = "error";
+            break;
+        }
+        for (BusRuntime &bus : buses) {
+            if (!bus.transactor->afterSettle()) {
                 error = "bus '" + bus.name +
                         "': " + bus.transactor->getLastError();
                 stopReason = "error";

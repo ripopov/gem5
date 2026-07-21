@@ -53,12 +53,14 @@ TEST(ModelLoader, LoadsV1ModelAndHonorsLifetimeContracts)
 
     std::string error;
     ASSERT_TRUE(writeSignalU64(*reset, 0, error)) << error;
+    EXPECT_TRUE(core.settle()) << core.getLastError();
     EXPECT_EQ(core.clock(), ClockResult::Completed);
     CountingCallback callback;
     interrupt->setChangeCallback(&callback);
     ASSERT_TRUE(writeSignalU64(*reset, 1, error)) << error;
     const std::vector<std::uint8_t> vectorValue = {1, 2, 3, 4, 5, 6, 7, 8, 9};
     ASSERT_TRUE(writeSignal(*vectorInput, vectorValue, error)) << error;
+    EXPECT_TRUE(core.settle()) << core.getLastError();
     EXPECT_EQ(core.clock(), ClockResult::Completed);
     EXPECT_EQ(callback.updates, 1);
     EXPECT_TRUE(core.isIdle());
@@ -71,11 +73,13 @@ TEST(ModelLoader, LoadsV1ModelAndHonorsLifetimeContracts)
     interrupt->setChangeCallback(&replacement);
     EXPECT_EQ(replacement.updates, 0);
     ASSERT_TRUE(writeSignalU64(*reset, 0, error)) << error;
+    EXPECT_TRUE(core.settle()) << core.getLastError();
     EXPECT_EQ(core.clock(), ClockResult::Completed);
     EXPECT_EQ(callback.updates, 1);
     EXPECT_EQ(replacement.updates, 1);
     interrupt->setChangeCallback(nullptr);
     ASSERT_TRUE(writeSignalU64(*reset, 1, error)) << error;
+    EXPECT_TRUE(core.settle()) << core.getLastError();
     EXPECT_EQ(core.clock(), ClockResult::Completed);
     EXPECT_EQ(replacement.updates, 1);
     EXPECT_TRUE(core.isIdle());

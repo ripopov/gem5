@@ -250,6 +250,12 @@ class RtlCore
     virtual bool writeMemory(std::size_t memoryIndex, std::uint64_t offset,
                              const std::uint8_t *data,
                              std::size_t dataSize) noexcept = 0;
+
+    // Propagates preceding input writes through combinational logic without
+    // advancing the physical clock or modeled time. Implementations that
+    // always keep outputs stable may return true without doing any work.
+    virtual bool settle() noexcept = 0;
+
     // Advances one complete clock cycle and returns after outputs stabilize.
     virtual ClockResult clock() noexcept = 0;
 

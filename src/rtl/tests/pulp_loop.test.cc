@@ -159,12 +159,16 @@ resetPair(RtlCore &master, RtlCore &slave)
 {
     setReset(master, true);
     setReset(slave, true);
+    ASSERT_TRUE(master.settle()) << master.getLastError();
+    ASSERT_TRUE(slave.settle()) << slave.getLastError();
     for (unsigned cycle = 0; cycle < 3; ++cycle) {
         ASSERT_EQ(master.clock(), ClockResult::Completed);
         ASSERT_EQ(slave.clock(), ClockResult::Completed);
     }
     setReset(master, false);
     setReset(slave, false);
+    ASSERT_TRUE(master.settle()) << master.getLastError();
+    ASSERT_TRUE(slave.settle()) << slave.getLastError();
 }
 
 struct LoopResult
@@ -228,6 +232,20 @@ runLoop(const char *masterPath, const char *slavePath, BusProtocol protocol)
         EXPECT_TRUE(masterBefore) << masterTransactor->getLastError();
         EXPECT_TRUE(slaveBefore) << slaveTransactor->getLastError();
         if (!masterBefore || !slaveBefore) {
+            break;
+        }
+        const bool masterSettled = master.settle();
+        const bool slaveSettled = slave.settle();
+        EXPECT_TRUE(masterSettled) << master.getLastError();
+        EXPECT_TRUE(slaveSettled) << slave.getLastError();
+        if (!masterSettled || !slaveSettled) {
+            break;
+        }
+        const bool masterCaptured = masterTransactor->afterSettle();
+        const bool slaveCaptured = slaveTransactor->afterSettle();
+        EXPECT_TRUE(masterCaptured) << masterTransactor->getLastError();
+        EXPECT_TRUE(slaveCaptured) << slaveTransactor->getLastError();
+        if (!masterCaptured || !slaveCaptured) {
             break;
         }
         EXPECT_EQ(master.clock(), ClockResult::Completed);

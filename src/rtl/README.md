@@ -82,12 +82,13 @@ The two neutral directions are:
 - `TransactionSource`: supplies requests to an RTL target and accepts its
   responses.
 
-APB and AXI transactors use `beforeClock()` to drive inputs and capture only
-payloads whose VALID/READY handshake is active. `afterClock()` commits those
-handshakes after the vendor has advanced one full cycle. AXI handling includes
-fixed, incrementing, and wrapping bursts; narrow lanes; byte strobes; AXI3
-WID; AXI IDs; per-ID ordering; cross-ID response reordering; error responses;
-and bounded queues. Optional AXI4 control signals default to zero when absent.
+APB and AXI transactors use `beforeClock()` to drive all bus inputs. After one
+core-wide `RtlCore::settle()`, `afterSettle()` captures only payloads whose
+VALID/READY handshake is active. `afterClock()` commits those handshakes after
+the vendor advances one full cycle. AXI handling includes fixed, incrementing,
+and wrapping bursts; narrow lanes; byte strobes; AXI3 WID; AXI IDs; per-ID
+ordering; cross-ID response reordering; error responses; and bounded queues.
+Optional AXI4 control signals default to zero when absent.
 
 Neutral request data is compact: each beat occupies `beatBytes` consecutive
 bytes in increasing-address order. Transactors map that compact representation
@@ -141,11 +142,13 @@ Process status is stable for automation:
    `RtlCosimDesign.md`; never allow exceptions across the V1 boundary.
 3. Bind physical pins to canonical APB or AXI role IDs. Signal names are only
    diagnostic and are not used to infer protocol meaning.
-4. Toggle the model's single physical clock entirely inside `RtlCore::clock()`
+4. Implement `RtlCore::settle()` as a clock-free combinational evaluation, or
+   as an explicit no-op when the model always maintains stable outputs.
+5. Toggle the model's single physical clock entirely inside `RtlCore::clock()`
    and return only after outputs stabilize.
-5. Notify each subscribed output at most once per clock, after stabilization,
-   and unregister callbacks safely during teardown.
-6. Export `createRtlCoreManagerV1` and `destroyRtlCoreManagerV1`, then run the
+6. Notify each subscribed output at most once per settle or clock operation,
+   after stabilization, and unregister callbacks safely during teardown.
+7. Export `createRtlCoreManagerV1` and `destroyRtlCoreManagerV1`, then run the
    checker before integrating with gem5.
 
 The PULP adapters under `fixtures/pulp` demonstrate this boundary, including

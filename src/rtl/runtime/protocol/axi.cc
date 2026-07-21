@@ -370,7 +370,6 @@ class AxiInitiator : public AxiBase
         if (!_error.empty()) {
             return false;
         }
-        _capture = {};
         const bool acceptAw = _aw.size() < _limits.maxPending;
         const auto maxSize = std::numeric_limits<std::size_t>::max();
         const auto maxWriteBeats =
@@ -385,6 +384,24 @@ class AxiInitiator : public AxiBase
             return false;
         }
 
+        return true;
+    }
+
+    bool
+    afterSettle() override
+    {
+        if (!_error.empty()) {
+            return false;
+        }
+        _capture = {};
+        const bool acceptAw = _aw.size() < _limits.maxPending;
+        const auto maxSize = std::numeric_limits<std::size_t>::max();
+        const auto maxWriteBeats =
+            _limits.maxPending > maxSize / _limits.maxBurstBeats
+                ? maxSize
+                : _limits.maxPending * _limits.maxBurstBeats;
+        const bool acceptW = _w.size() < maxWriteBeats;
+        const bool acceptAr = _ar.size() < _limits.maxPending;
         std::uint64_t valid = 0;
         if (!read(AxiSignal::AwValid, valid)) {
             return false;
@@ -747,7 +764,6 @@ class AxiTarget : public AxiBase
         if (!_error.empty()) {
             return false;
         }
-        _capture = {};
         if (!driveWrite() || !driveRead()) {
             return false;
         }
@@ -758,6 +774,18 @@ class AxiTarget : public AxiBase
             return false;
         }
 
+        return true;
+    }
+
+    bool
+    afterSettle() override
+    {
+        if (!_error.empty()) {
+            return false;
+        }
+        _capture = {};
+        const bool acceptB = _responses.size() < _limits.maxPending;
+        const bool acceptR = _responses.size() < _limits.maxPending;
         std::uint64_t ready = 0;
         if (_write) {
             if (!read(AxiSignal::AwReady, ready)) {

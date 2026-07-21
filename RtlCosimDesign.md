@@ -135,8 +135,8 @@ or the configured metadata disagree with `Signal::bitWidth()`.
 Reset-vector addresses, hart IDs, fuse values, clock enables, debug controls, and GPIO are generic I/O rather than reset ports. For example, a 32-bit
 reset-vector input is exposed through one `io_inputs` element carrying a 32-bit `SignalValue`; `reset_inputs` remains reserved for reset assertion.
 
-Clocking, TCM backdoor access, and idle state do not require SimObject ports. The gem5 clock domain schedules `RtlCore::clock()`, object-file loading
-uses the memory backdoor API directly, and `RtlCore::isIdle()` controls whether future clock events are scheduled.
+Clocking, TCM backdoor access, and idle state do not require SimObject ports. The gem5 clock domain schedules the drive, settle, capture, clock, and
+commit sequence; object-file loading uses the memory backdoor API directly, and `RtlCore::isIdle()` controls whether future cycles are scheduled.
 
 The SCR1 PoC uses `scr1_top_axi` and requires two `VectorRequestPort` elements for its instruction and data AXI4 initiator buses, interrupt sink
 elements, and reset response elements. A reset-request element is required only when the optional SCR1 system-reset output is exposed. Target-bus,
@@ -303,6 +303,9 @@ class RtlCore
         const std::uint8_t* data,
         std::size_t dataSize) noexcept = 0;
 
+    // Propagates input changes without advancing the clock or modeled time.
+    virtual bool settle() noexcept = 0;
+
     // Advances the RTL model by one complete clock cycle.
     virtual ClockResult clock() noexcept = 0;
 
@@ -328,9 +331,14 @@ and remains valid until the next API call on the core or any of its child object
 value without polarity normalization. For example, setting an active-low reset signal to zero asserts reset. `Signal::direction()` determines
 whether an interrupt, reset, or generic I/O signal is driven by gem5 or by the RTL model.
 
+`settle()` propagates all preceding `Signal::setValue()` calls through combinational logic and returns only after outputs stabilize. It must not
+toggle the physical clock, modify sequential state, or advance modeled time. It is idempotent while inputs remain unchanged and reports failure by
+returning false and setting `getLastError()`. An implementation whose outputs are always stable after `setValue()` may implement it as a no-op that
+returns true. Making the method mandatory keeps this vendor decision explicit and avoids a capability query.
+
 `clock()` must advance one complete RTL clock cycle and return only after outputs have stabilized. It evaluates the inactive phase, active clock
 edge, and final inactive phase, generating callbacks for subscribed outputs after their final values are available. No gem5 simulation time passes
-inside `clock()`; the gem5 adapter controls clock-event scheduling. `ClockResult::Finished` reports an RTL termination request, while
+inside `settle()` or `clock()`; the gem5 adapter controls clock-event scheduling. `ClockResult::Finished` reports an RTL termination request, while
 `ClockResult::Error` indicates an evaluation failure or fatal RTL condition.
 
 `ClockResult::Finished` and `ClockResult::Error` are terminal states. After either result, the framework may only query `getLastError()`, unregister
@@ -343,8 +351,8 @@ The vendor implementation must return false whenever it cannot safely prove that
 
 The memory backdoor enumerates code and data TCM regions using their configured architectural base addresses. `readMemory()` and `writeMemory()`
 transfer bytes in increasing address order and must reject an operation whose complete range does not fit within the selected region. Access is
-untimed, bypasses the modeled bus, and is only permitted when `clock()` is not executing. A library that has no backdoor-accessible memory returns
-zero from `memoryCount()`.
+untimed, bypasses the modeled bus, and is only permitted when neither `settle()` nor `clock()` is executing. A library that has no backdoor-accessible
+memory returns zero from `memoryCount()`.
 
 ELF and COFF parsing belongs to the framework rather than the vendor library. To initialize a code TCM, the framework loads each applicable image
 section, locates the `MemoryRegion` containing its architectural address, converts that address to a region-relative offset, and calls
@@ -627,7 +635,7 @@ is:
 - The framework owns the callback, which must remain alive while registered.
 - `update()` takes no arguments because each callback instance is associated with one specific signal.
 - `update()` runs synchronously on the RTL evaluation thread after the new value is available.
-- A signal generates at most one callback per `RtlCore::clock()` call after its output has stabilized.
+- A signal generates at most one callback per `RtlCore::settle()` or `RtlCore::clock()` call after its output has stabilized.
 - Installing a callback does not generate an initial notification; the framework samples the initial value explicitly.
 - Input changes made through `setValue()` do not generate callbacks.
 - No callback may occur after it is unregistered or after core destruction begins.
@@ -747,10 +755,13 @@ Protocol transactors are independent of both backends and use a cycle-oriented i
 class BusTransactor
 {
   public:
-    // Drive RTL inputs and capture any payload accepted at the upcoming edge.
+    // Drive all RTL inputs for the upcoming active edge.
     virtual bool beforeClock() = 0;
 
-    // Commit captured handshakes and sample controls for the next active edge.
+    // Capture handshakes and RTL-driven payload after the core has settled.
+    virtual bool afterSettle() = 0;
+
+    // Commit the handshakes captured before the active edge.
     virtual bool afterClock() = 0;
 
     virtual bool isIdle() const = 0;
@@ -760,10 +771,10 @@ class BusTransactor
 };
 ```
 
-Each transactor retains the handshake state prepared for the upcoming active edge. `beforeClock()` drives READY, response, and data inputs,
-determines which channels will handshake, and captures payload outputs only for those active handshakes. After `RtlCore::clock()`
-completes, `afterClock()` commits the captured handshakes, then samples the stabilized VALID, READY, and other control signals needed for the next
-edge. This prevents a transfer from being missed when RTL deasserts VALID or changes its payload during the active edge.
+Each transactor retains the handshake state prepared for the upcoming active edge. All transactors first call `beforeClock()` to drive READY,
+response, request, and data inputs. The framework then calls `RtlCore::settle()` once for the whole core. Each `afterSettle()` inspects the resulting
+VALID and READY controls and captures payload outputs only for active handshakes. After `RtlCore::clock()` completes, `afterClock()` commits those
+handshakes. Driving every bus before the shared settle phase also handles combinational coupling between interfaces consistently.
 
 Signal sampling must be handshake-gated. For each channel, inspect VALID and READY first and call `Signal::getValue()` for address, data, ID,
 attributes, response, or other payload signals only when that channel's handshake is active. Do not eagerly sample payload for an idle or stalled
@@ -805,6 +816,14 @@ The clock loop is logically equivalent to:
 while (cycles < maxCycles) {
     for (auto& transactor : transactors) {
         if (!transactor->beforeClock())
+            fail(transactor->getLastError());
+    }
+
+    if (!core->settle())
+        fail(core->getLastError());
+
+    for (auto& transactor : transactors) {
+        if (!transactor->afterSettle())
             fail(transactor->getLastError());
     }
 

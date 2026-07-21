@@ -391,6 +391,11 @@ class TestCore : public RtlCore
     {
         return false;
     }
+    bool
+    settle() noexcept override
+    {
+        return true;
+    }
     ClockResult
     clock() noexcept override
     {

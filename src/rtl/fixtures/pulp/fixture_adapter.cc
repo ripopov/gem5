@@ -268,6 +268,28 @@ class FixtureCore final : public RtlCore
         return false;
     }
 
+    bool
+    settle() noexcept override
+    {
+        if (_terminal) {
+            _error = "settle called after terminal state";
+            return false;
+        }
+        try {
+            _top->eval();
+            for (auto &signal : _signals) {
+                signal->notifyChange();
+            }
+            return true;
+        } catch (const std::exception &exception) {
+            _error = exception.what();
+        } catch (...) {
+            _error = "unknown Verilator settle failure";
+        }
+        _terminal = true;
+        return false;
+    }
+
     ClockResult
     clock() noexcept override
     {

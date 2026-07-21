@@ -183,6 +183,12 @@ class FixtureCore final : public RtlCore
         return true;
     }
 
+    bool
+    settle() noexcept override
+    {
+        return true;
+    }
+
     ClockResult
     clock() noexcept override
     {

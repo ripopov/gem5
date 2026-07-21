@@ -14,6 +14,59 @@ namespace
 
 using namespace test;
 
+class CombinationalApbTargetCore final : public TestCore
+{
+  public:
+    CombinationalApbTargetCore()
+    {
+        auto bus = makeApb(BusRole::Target);
+        _bus = bus.get();
+        buses.push_back(std::move(bus));
+    }
+
+    bool
+    settle() noexcept override
+    {
+        const bool access = _bus->get(ApbSignal::PSel).value() != 0 &&
+                            _bus->get(ApbSignal::PEnable).value() != 0;
+        _bus->get(ApbSignal::PReady).drive(access ? 1 : 0);
+        _bus->get(ApbSignal::PSlvErr).drive(0);
+        return true;
+    }
+
+    ClockResult
+    clock() noexcept override
+    {
+        if (_bus->get(ApbSignal::PSel).value() != 0 &&
+            _bus->get(ApbSignal::PEnable).value() != 0 &&
+            _bus->get(ApbSignal::PReady).value() != 0) {
+            ++handshakes;
+        }
+        return ClockResult::Completed;
+    }
+
+    TestBus &
+    apb()
+    {
+        return *_bus;
+    }
+
+    unsigned handshakes = 0;
+
+  private:
+    TestBus *_bus = nullptr;
+};
+
+void
+runCycle(CombinationalApbTargetCore &core, BusTransactor &transactor)
+{
+    ASSERT_TRUE(transactor.beforeClock()) << transactor.getLastError();
+    ASSERT_TRUE(core.settle()) << core.getLastError();
+    ASSERT_TRUE(transactor.afterSettle()) << transactor.getLastError();
+    ASSERT_EQ(core.clock(), ClockResult::Completed);
+    ASSERT_TRUE(transactor.afterClock()) << transactor.getLastError();
+}
+
 TEST(ApbInitiator, TransfersWriteWithBackpressure)
 {
     TestCore core;
@@ -34,12 +87,15 @@ TEST(ApbInitiator, TransfersWriteWithBackpressure)
     raw->get(ApbSignal::PStrb).drive(0b0101);
 
     ASSERT_TRUE(transactor->beforeClock());
+    ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
     EXPECT_EQ(raw->get(ApbSignal::PReady).value(), 0);
     ASSERT_TRUE(transactor->afterClock());
     backend.advance();
     ASSERT_TRUE(transactor->beforeClock());
+    ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
     ASSERT_TRUE(transactor->afterClock());
     ASSERT_TRUE(transactor->beforeClock());
+    ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
     EXPECT_EQ(raw->get(ApbSignal::PReady).value(), 1);
     ASSERT_TRUE(transactor->afterClock());
 
@@ -61,6 +117,7 @@ TEST(ApbInitiator, DoesNotSamplePayloadOnIdleBus)
     MemoryBackend backend(storage);
     auto transactor = createApbInitiatorTransactor(valid, backend);
     ASSERT_TRUE(transactor->beforeClock());
+    ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
     EXPECT_EQ(raw->get(ApbSignal::PAddr).getCount, 0);
     EXPECT_EQ(raw->get(ApbSignal::PWData).getCount, 0);
     EXPECT_EQ(raw->get(ApbSignal::PProt).getCount, 0);
@@ -92,6 +149,7 @@ TEST(ApbInitiator, Supports1024BitDataAndStrobes)
     raw->get(ApbSignal::PStrb).drive(strobe);
 
     ASSERT_TRUE(transactor->beforeClock()) << transactor->getLastError();
+    ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
     ASSERT_TRUE(transactor->afterClock());
     backend.advance();
     std::vector<std::uint8_t> stored(128, 0);
@@ -120,12 +178,14 @@ TEST(ApbTarget, DrivesSetupAndCompletesRead)
     auto transactor = createApbTargetTransactor(valid, source);
 
     ASSERT_TRUE(transactor->beforeClock());
+    ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
     EXPECT_EQ(raw->get(ApbSignal::PSel).value(), 1);
     EXPECT_EQ(raw->get(ApbSignal::PEnable).value(), 0);
     ASSERT_TRUE(transactor->afterClock());
     raw->get(ApbSignal::PReady).drive(1);
     raw->get(ApbSignal::PRData).drive(0x78563412);
     ASSERT_TRUE(transactor->beforeClock());
+    ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
     EXPECT_EQ(raw->get(ApbSignal::PEnable).value(), 1);
     ASSERT_TRUE(transactor->afterClock());
 
@@ -134,6 +194,30 @@ TEST(ApbTarget, DrivesSetupAndCompletesRead)
     EXPECT_EQ(response.token, 9);
     EXPECT_EQ(response.data,
               (std::vector<std::uint8_t>{0x12, 0x34, 0x56, 0x78}));
+    EXPECT_TRUE(transactor->isIdle());
+}
+
+TEST(ApbTarget, SettlesCombinationalReadyBeforeActiveEdge)
+{
+    CombinationalApbTargetCore core;
+    ScriptedTransactionSource source;
+    MemoryRequest request;
+    request.token = 10;
+    request.address = 0x20;
+    request.write = true;
+    request.beatBytes = 4;
+    request.data = {1, 2, 3, 4};
+    request.byteEnable.assign(4, 1);
+    source.add(request);
+    auto transactor = createApbTargetTransactor(validated(core), source);
+
+    runCycle(core, *transactor);
+    EXPECT_EQ(core.apb().get(ApbSignal::PEnable).value(), 0);
+    EXPECT_EQ(core.handshakes, 0);
+
+    runCycle(core, *transactor);
+    EXPECT_EQ(core.handshakes, 1);
+    EXPECT_TRUE(source.isIdle());
     EXPECT_TRUE(transactor->isIdle());
 }
 
@@ -154,10 +238,12 @@ TEST(ApbTarget, PropagatesSlaveError)
     source.add(request, {.error = true, .data = std::nullopt});
     auto transactor = createApbTargetTransactor(validated(core), source);
     ASSERT_TRUE(transactor->beforeClock());
+    ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
     ASSERT_TRUE(transactor->afterClock());
     raw->get(ApbSignal::PReady).drive(1);
     raw->get(ApbSignal::PSlvErr).drive(1);
     ASSERT_TRUE(transactor->beforeClock());
+    ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
     ASSERT_TRUE(transactor->afterClock());
     MemoryResponse response;
     ASSERT_TRUE(source.getCompleted(response));

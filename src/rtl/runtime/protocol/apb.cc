@@ -157,13 +157,19 @@ class ApbInitiator : public ApbBase
             }
         }
 
+        return true;
+    }
+
+    bool
+    afterSettle() override
+    {
         std::uint64_t select = 0;
         std::uint64_t enable = 0;
         if (!read(ApbSignal::PSel, select) ||
             !read(ApbSignal::PEnable, enable)) {
             return false;
         }
-        _complete = select && enable && responseReady;
+        _complete = select && enable && _response.has_value();
         if (select && enable && !_accessSeen) {
             MemoryRequest request;
             if (_nextToken == std::numeric_limits<std::uint64_t>::max()) {
@@ -281,6 +287,12 @@ class ApbTarget : public ApbBase
             }
         }
 
+        return true;
+    }
+
+    bool
+    afterSettle() override
+    {
         _complete = false;
         if (_request && _phase == Phase::Access) {
             std::uint64_t ready = 0;

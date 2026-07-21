@@ -68,7 +68,13 @@ class TransactionSource
 class BusTransactor
 {
   public:
+    // Drive all RTL inputs for the upcoming active edge.
     virtual bool beforeClock() = 0;
+
+    // Capture handshakes and RTL-driven payload after the core has settled.
+    virtual bool afterSettle() = 0;
+
+    // Commit the handshakes captured before the active edge.
     virtual bool afterClock() = 0;
     virtual bool isIdle() const = 0;
     virtual const char *getLastError() const = 0;
