@@ -104,21 +104,27 @@ if(RTL_COSIM_SCR1_ENABLE_TESTS)
     set(SCR1_PROGRAM_DIR "${CMAKE_CURRENT_BINARY_DIR}/programs")
     set(SCR1_LINKER_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/tests/programs/link.ld")
     set(SCR1_PROGRAM_FLAGS
-        -march=rv32imc_zicsr -mabi=ilp32 -mno-relax
+        -march=rv32imc_zicsr -mabi=ilp32 -mno-relax -msmall-data-limit=0
+        -O2 -ffreestanding -fno-builtin -fno-stack-protector
+        -Wall -Wextra -Werror
         -nostdlib -nostartfiles
         -Wl,--build-id=none
         -Wl,-T,${SCR1_LINKER_SCRIPT}
     )
-    function(add_scr1_program name source)
+    function(add_scr1_program name)
         set(output "${SCR1_PROGRAM_DIR}/${name}.elf")
+        set(sources)
+        foreach(source IN LISTS ARGN)
+            list(APPEND sources
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/programs/${source}")
+        endforeach()
         add_custom_command(
             OUTPUT "${output}"
             COMMAND "${CMAKE_COMMAND}" -E make_directory "${SCR1_PROGRAM_DIR}"
             COMMAND "${SCR1_RISCV_GCC}" ${SCR1_PROGRAM_FLAGS}
-                "${CMAKE_CURRENT_SOURCE_DIR}/tests/programs/${source}"
-                -o "${output}"
+                ${sources} -o "${output}"
             DEPENDS
-                "${CMAKE_CURRENT_SOURCE_DIR}/tests/programs/${source}"
+                ${sources}
                 "${SCR1_LINKER_SCRIPT}"
             VERBATIM
         )
@@ -128,6 +134,7 @@ if(RTL_COSIM_SCR1_ENABLE_TESTS)
 
     add_scr1_program(riscv_unit riscv_unit.S)
     add_scr1_program(baremetal_tcm baremetal_tcm.S)
+    add_scr1_program(c_integration crt0.S c_integration.c)
 
     add_executable(rtl_cosim_scr1_tests tests/adapter.test.cc)
     target_link_libraries(rtl_cosim_scr1_tests PRIVATE
@@ -153,10 +160,13 @@ if(RTL_COSIM_SCR1_ENABLE_TESTS)
 
     set(SCR1_UNIT_ELF "${riscv_unit_ELF}")
     set(SCR1_BAREMETAL_ELF "${baremetal_tcm_ELF}")
+    set(SCR1_C_INTEGRATION_ELF "${c_integration_ELF}")
     configure_file(tests/config/riscv_unit.json.in
         "${CMAKE_CURRENT_BINARY_DIR}/riscv_unit.json" @ONLY)
     configure_file(tests/config/baremetal_tcm.json.in
         "${CMAKE_CURRENT_BINARY_DIR}/baremetal_tcm.json" @ONLY)
+    configure_file(tests/config/c_integration.json.in
+        "${CMAKE_CURRENT_BINARY_DIR}/c_integration.json" @ONLY)
 
     add_test(NAME scr1_checker_riscv_unit
         COMMAND rtl-cosim-check "$<TARGET_FILE:rtl_cosim_scr1>"
@@ -164,12 +174,19 @@ if(RTL_COSIM_SCR1_ENABLE_TESTS)
     add_test(NAME scr1_checker_baremetal_tcm
         COMMAND rtl-cosim-check "$<TARGET_FILE:rtl_cosim_scr1>"
             "${CMAKE_CURRENT_BINARY_DIR}/baremetal_tcm.json")
+    add_test(NAME scr1_checker_c_integration
+        COMMAND rtl-cosim-check "$<TARGET_FILE:rtl_cosim_scr1>"
+            "${CMAKE_CURRENT_BINARY_DIR}/c_integration.json")
     set_tests_properties(
-        scr1_checker_riscv_unit scr1_checker_baremetal_tcm
+        scr1_checker_riscv_unit
+        scr1_checker_baremetal_tcm
+        scr1_checker_c_integration
         PROPERTIES
             PASS_REGULAR_EXPRESSION "stop: idle after"
             TIMEOUT 60
     )
     add_dependencies(rtl-cosim-check
-        scr1_riscv_unit_program scr1_baremetal_tcm_program)
+        scr1_riscv_unit_program
+        scr1_baremetal_tcm_program
+        scr1_c_integration_program)
 endif()

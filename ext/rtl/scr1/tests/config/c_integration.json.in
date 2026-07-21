@@ -1,0 +1,13 @@
+{
+  "core": {"config": {"instance_name": "checker-c-integration"}},
+  "reset": {"assert_cycles": 5},
+  "inputs": {"fuse_mhartid": 2, "soft_irq": 0},
+  "memory": {
+    "base": 0,
+    "size": 16777216,
+    "latency_cycles": 2,
+    "max_pending": 16,
+    "images": [{"path": "@SCR1_C_INTEGRATION_ELF@", "format": "elf"}]
+  },
+  "run": {"max_cycles": 5000, "stop_on_idle": true}
+}

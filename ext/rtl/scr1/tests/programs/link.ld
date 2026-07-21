@@ -1,6 +1,9 @@
 OUTPUT_ARCH(riscv)
 ENTRY(_start)
 
+__stack_top = 0x00490000;
+__stack_limit = __stack_top - 0x400;
+
 PHDRS
 {
     external PT_LOAD FLAGS(5);
@@ -20,9 +23,23 @@ SECTIONS
     {
         *(.text .text.*)
         *(.rodata .rodata.*)
-        *(.data .data.*)
-        *(.bss .bss.*)
+        *(.srodata .srodata.*)
     } :tcm
+
+    .data :
+    {
+        *(.data .data.*)
+        *(.sdata .sdata.*)
+    } :tcm
+
+    .bss (NOLOAD) :
+    {
+        *(.bss .bss.*)
+        *(.sbss .sbss.*)
+        *(COMMON)
+    } :tcm
+
+    ASSERT(. <= __stack_limit, "TCM image overlaps reserved stack")
 
     /DISCARD/ :
     {

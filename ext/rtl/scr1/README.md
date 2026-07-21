@@ -44,7 +44,7 @@ ctest --test-dir build/rtl-cosim-scr1 --output-on-failure
 The GoogleTests cover shared-library and object lifetime, configuration
 failures, discovery and variable widths, reset sequencing, output callbacks,
 unaligned TCM access, ELF loading, AXI traffic, failure paths, interrupt
-wakeup, and idle detection. Two CTest scenarios also run
+wakeup, and idle detection. Three CTest scenarios also run
 `rtl-cosim-check` against deterministic RISC-V programs:
 
 ```bash
@@ -55,12 +55,18 @@ build/rtl-cosim-scr1/rtl-cosim-check \
 build/rtl-cosim-scr1/rtl-cosim-check \
   build/rtl-cosim-scr1/scr1/librtl_cosim_scr1.so \
   build/rtl-cosim-scr1/scr1/baremetal_tcm.json
+
+build/rtl-cosim-scr1/rtl-cosim-check \
+  build/rtl-cosim-scr1/scr1/librtl_cosim_scr1.so \
+  build/rtl-cosim-scr1/scr1/c_integration.json
 ```
 
-Both scenarios terminate with `stop: idle after ... cycles` within their
+All scenarios terminate with `stop: idle after ... cycles` within their
 configured cycle limits. The unit scenario executes from external memory. The
-bare-metal scenario boots externally, jumps into the TCM, performs an external
-data read and write, and reaches an interrupt-wakeable WFI state.
+bare-metal assembly scenario boots externally, jumps into the TCM, performs an
+external data read and write, and reaches an interrupt-wakeable WFI state. The
+freestanding C scenario additionally establishes a TCM stack, verifies `.data`
+and `.bss` loading, and runs compiled C loops over external AXI memory.
 
 ## Exposed model
 
