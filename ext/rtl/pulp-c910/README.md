@@ -109,6 +109,10 @@ and USER widths come from the physical model bindings; AXI5 ATOP stays tied to
 zero inside the upstream wrapper and is not added to V1. ACE response cleanup,
 evict absorption, wrapping-burst conversion, and decrementing-burst conversion
 remain in `c910_axi_wrap`, so the generic AXI4 transactor is unchanged.
+The integration also completes OpenC910's reserved ID-31 legacy AxBAR
+transactions locally after older AXI traffic drains. This preserves their
+ordering semantics without exposing them as ordinary address-zero writes on
+the standard AXI4 port.
 
 Standalone bindings include active-low core and JTAG resets; software, timer,
 PLIC, and 40 external interrupts; RTC; debug request; JTAG; and the two-bit

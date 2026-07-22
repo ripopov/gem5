@@ -53,6 +53,8 @@ endforeach()
 # it is nested under a target selector. It is required for Verilator builds.
 list(APPEND C910_SOURCES
     "${C910_REPO}/vendor/thead_openc910/C910_RTL_FACTORY/gen_rtl/common/rtl/BUFGCE.v")
+list(APPEND C910_SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/rtl/c910_axi_barrier_filter.sv")
 
 # The upstream wrapper declares debug_req_i but does not connect it to the
 # OpenC910 subsystem. Generate guarded integration copies so CPU-state import
@@ -191,12 +193,56 @@ list(APPEND C910_SOURCES "${C910_OPEN_TOP_BUILD}")
 set(C910_AXI_WRAPPER "${C910_REPO}/hw/c910_axi_wrap.sv")
 file(READ "${C910_AXI_WRAPPER}" C910_AXI_WRAPPER_TEXT)
 set(C910_AXI_WRAPPER_PATCHED "${C910_AXI_WRAPPER_TEXT}")
+set(C910_AXI_WRAPPER_PREVIOUS "${C910_AXI_WRAPPER_PATCHED}")
+string(REPLACE
+    "  axi_rsp_t c910_axi_rsp;"
+    "  axi_rsp_t c910_axi_rsp;\n  axi_req_t c910_axi_req_filtered;\n  axi_rsp_t c910_axi_rsp_filtered;"
+    C910_AXI_WRAPPER_PATCHED "${C910_AXI_WRAPPER_PATCHED}")
+if(C910_AXI_WRAPPER_PATCHED STREQUAL C910_AXI_WRAPPER_PREVIOUS)
+    message(FATAL_ERROR
+        "The guarded PULP C910 barrier declarations no longer apply")
+endif()
+set(C910_AXI_WRAPPER_PREVIOUS "${C910_AXI_WRAPPER_PATCHED}")
 string(REPLACE
     "    .axim_clk_en          ( '1                          ),"
     "    .axim_clk_en          ( '1                          ),\n    .debug_req_i         ( debug_req_i                  ),"
     C910_AXI_WRAPPER_PATCHED "${C910_AXI_WRAPPER_PATCHED}")
-if(C910_AXI_WRAPPER_PATCHED STREQUAL C910_AXI_WRAPPER_TEXT)
-    message(FATAL_ERROR "The guarded PULP C910 wrapper debug fix no longer applies")
+if(C910_AXI_WRAPPER_PATCHED STREQUAL C910_AXI_WRAPPER_PREVIOUS)
+    message(FATAL_ERROR
+        "The guarded PULP C910 wrapper debug fix no longer applies")
+endif()
+set(C910_AXI_WRAPPER_PREVIOUS "${C910_AXI_WRAPPER_PATCHED}")
+string(REPLACE
+    "  // axi fifo to close timing"
+    [[  // OpenC910 reserves AXI ID 31 for legacy AxBAR transactions. Convert
+  // those transactions to ordering-only completions before exposing AXI4.
+  c910_axi_barrier_filter #(
+    .IdWidth   ( IdWidth   ),
+    .axi_req_t ( axi_req_t ),
+    .axi_rsp_t ( axi_rsp_t )
+  ) i_c910_axi_barrier_filter (
+    .clk_i,
+    .rst_ni,
+    .slv_req_i ( c910_axi_req          ),
+    .slv_rsp_o ( c910_axi_rsp          ),
+    .mst_req_o ( c910_axi_req_filtered ),
+    .mst_rsp_i ( c910_axi_rsp_filtered )
+  );
+
+  // axi fifo to close timing]]
+    C910_AXI_WRAPPER_PATCHED "${C910_AXI_WRAPPER_PATCHED}")
+if(C910_AXI_WRAPPER_PATCHED STREQUAL C910_AXI_WRAPPER_PREVIOUS)
+    message(FATAL_ERROR
+        "The guarded PULP C910 barrier insertion no longer applies")
+endif()
+set(C910_AXI_WRAPPER_PREVIOUS "${C910_AXI_WRAPPER_PATCHED}")
+string(REPLACE
+    ".slv_req_i    (c910_axi_req    ),\n    .slv_resp_o   (c910_axi_rsp    ),"
+    ".slv_req_i    (c910_axi_req_filtered),\n    .slv_resp_o   (c910_axi_rsp_filtered),"
+    C910_AXI_WRAPPER_PATCHED "${C910_AXI_WRAPPER_PATCHED}")
+if(C910_AXI_WRAPPER_PATCHED STREQUAL C910_AXI_WRAPPER_PREVIOUS)
+    message(FATAL_ERROR
+        "The guarded PULP C910 barrier wiring no longer applies")
 endif()
 set(C910_AXI_WRAPPER_BUILD "${CMAKE_CURRENT_BINARY_DIR}/c910_axi_wrap.sv")
 file(CONFIGURE OUTPUT "${C910_AXI_WRAPPER_BUILD}"
