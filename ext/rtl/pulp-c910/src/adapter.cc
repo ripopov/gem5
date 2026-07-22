@@ -666,6 +666,18 @@ C910Core::buildStandaloneSignals()
                   _top->jtag_tdo_en_o);
     addCoreSignal(CoreSignalRole::Io, io++, ActiveLevel::High, "lpmd_b_o", 2,
                   SignalDirection::Output, _top->lpmd_b_o);
+    addCoreSignal(CoreSignalRole::Io, io++, ActiveLevel::High,
+                  "cosim_retire_valid_o", 3, SignalDirection::Output,
+                  _top->cosim_retire_valid_o);
+    addCoreSignal(CoreSignalRole::Io, io++, ActiveLevel::High,
+                  "cosim_retire0_pc_o", 40, SignalDirection::Output,
+                  _top->cosim_retire0_pc_o);
+    addCoreSignal(CoreSignalRole::Io, io++, ActiveLevel::High,
+                  "cosim_retire1_pc_o", 40, SignalDirection::Output,
+                  _top->cosim_retire1_pc_o);
+    addCoreSignal(CoreSignalRole::Io, io++, ActiveLevel::High,
+                  "cosim_retire2_pc_o", 40, SignalDirection::Output,
+                  _top->cosim_retire2_pc_o);
 }
 
 bool

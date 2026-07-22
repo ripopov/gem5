@@ -21,6 +21,10 @@ module rtl_cosim_c910_top (
   input  logic         jtag_trst_ni,
   output logic [1:0]   lpmd_b_o,
   output logic         cosim_debug_mode_o,
+  output logic [2:0]   cosim_retire_valid_o,
+  output logic [39:0]  cosim_retire0_pc_o,
+  output logic [39:0]  cosim_retire1_pc_o,
+  output logic [39:0]  cosim_retire2_pc_o,
 
   output logic [7:0]   axi_aw_id_o,
   output logic [39:0]  axi_aw_addr_o,
@@ -170,5 +174,34 @@ module rtl_cosim_c910_top (
       .x_rv_integration_platform.x_cpu_top.x_ct_top_0.cp0_biu_lpmd_b;
   assign cosim_debug_mode_o = i_c910_axi_wrap.cpu_sub_system_axi_i
       .x_rv_integration_platform.x_cpu_top.x_ct_top_0.rtu_yy_xx_dbgon;
+  assign cosim_retire_valid_o = {
+    i_c910_axi_wrap.cpu_sub_system_axi_i.x_rv_integration_platform
+        .x_cpu_top.x_ct_top_0.x_ct_core.x_ct_rtu_top.x_ct_rtu_rob
+        .x_ct_rtu_rob_rt.debug_retire_inst2_vld,
+    i_c910_axi_wrap.cpu_sub_system_axi_i.x_rv_integration_platform
+        .x_cpu_top.x_ct_top_0.x_ct_core.x_ct_rtu_top.x_ct_rtu_rob
+        .x_ct_rtu_rob_rt.debug_retire_inst1_vld,
+    i_c910_axi_wrap.cpu_sub_system_axi_i.x_rv_integration_platform
+        .x_cpu_top.x_ct_top_0.x_ct_core.x_ct_rtu_top.x_ct_rtu_rob
+        .x_ct_rtu_rob_rt.debug_retire_inst0_vld
+  };
+  assign cosim_retire0_pc_o = {
+    i_c910_axi_wrap.cpu_sub_system_axi_i.x_rv_integration_platform
+        .x_cpu_top.x_ct_top_0.x_ct_core.x_ct_rtu_top.x_ct_rtu_rob
+        .x_ct_rtu_rob_rt.debug_retire_inst0_pc,
+    1'b0
+  };
+  assign cosim_retire1_pc_o = {
+    i_c910_axi_wrap.cpu_sub_system_axi_i.x_rv_integration_platform
+        .x_cpu_top.x_ct_top_0.x_ct_core.x_ct_rtu_top.x_ct_rtu_rob
+        .x_ct_rtu_rob_rt.debug_retire_inst1_pc,
+    1'b0
+  };
+  assign cosim_retire2_pc_o = {
+    i_c910_axi_wrap.cpu_sub_system_axi_i.x_rv_integration_platform
+        .x_cpu_top.x_ct_top_0.x_ct_core.x_ct_rtu_top.x_ct_rtu_rob
+        .x_ct_rtu_rob_rt.debug_retire_inst2_pc,
+    1'b0
+  };
 
 endmodule

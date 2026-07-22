@@ -28,3 +28,5 @@ if env["CONF"]["USE_RISCV_ISA"]:
     Source("riscv_cpu_state.cc", tags=["riscv isa"])
 
 DebugFlag("RtlCosim", "RTL co-simulation integration activity")
+DebugFlag("RtlCosimMemoryData", "RTL co-simulation memory payloads")
+DebugFlag("RtlCosimSignals", "RTL co-simulation standalone signal changes")

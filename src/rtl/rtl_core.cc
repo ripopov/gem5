@@ -17,6 +17,7 @@
 #include "base/logging.hh"
 #include "base/trace.hh"
 #include "debug/RtlCosim.hh"
+#include "debug/RtlCosimSignals.hh"
 #include "rtl/runtime/image_loader.hh"
 #include "rtl/runtime/protocol/apb.hh"
 #include "rtl/runtime/protocol/axi.hh"
@@ -574,6 +575,20 @@ RtlCoreSimObject::updateOutput(OutputKind kind, std::size_t index) noexcept
         std::string error;
         if (!readSignal(*binding->api.signal, bytes, error)) {
             runtimeFailure("sampling standalone output", error.c_str());
+        }
+        if (bytes.size() <= sizeof(std::uint64_t)) {
+            std::uint64_t value = 0;
+            for (std::size_t byte = 0; byte < bytes.size(); ++byte) {
+                value |= static_cast<std::uint64_t>(bytes[byte]) <<
+                         (byte * 8);
+            }
+            DPRINTF(RtlCosimSignals, "%s changed to %#llx\n",
+                    binding->api.signal->name(),
+                    static_cast<unsigned long long>(value));
+        } else {
+            DPRINTF(RtlCosimSignals, "%s changed (%zu bits)\n",
+                    binding->api.signal->name(),
+                    binding->api.signal->bitWidth());
         }
         if (kind == OutputKind::Io) {
             if (_ioOutputPorts.at(index)->isConnected()) {

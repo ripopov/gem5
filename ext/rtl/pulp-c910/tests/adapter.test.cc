@@ -302,10 +302,18 @@ TEST(PulpC910Adapter, DiscoversCanonicalAxiAndStandaloneSignals)
     EXPECT_EQ(bus.require(AxiSignal::AwUser).bitWidth(), 1);
     EXPECT_EQ(bus.require(AxiSignal::ArLen).bitWidth(), 8);
 
-    EXPECT_EQ(core.signalCount(), 56);
+    EXPECT_EQ(core.signalCount(), 60);
     ASSERT_NE(findCoreSignal(core, "ext_int_i[39]"), nullptr);
     ASSERT_NE(findCoreSignal(core, "lpmd_b_o"), nullptr);
     EXPECT_EQ(findCoreSignal(core, "lpmd_b_o")->bitWidth(), 2);
+    ASSERT_NE(findCoreSignal(core, "cosim_retire_valid_o"), nullptr);
+    EXPECT_EQ(findCoreSignal(core, "cosim_retire_valid_o")->bitWidth(), 3);
+    ASSERT_NE(findCoreSignal(core, "cosim_retire0_pc_o"), nullptr);
+    EXPECT_EQ(findCoreSignal(core, "cosim_retire0_pc_o")->bitWidth(), 40);
+    ASSERT_NE(findCoreSignal(core, "cosim_retire1_pc_o"), nullptr);
+    EXPECT_EQ(findCoreSignal(core, "cosim_retire1_pc_o")->bitWidth(), 40);
+    ASSERT_NE(findCoreSignal(core, "cosim_retire2_pc_o"), nullptr);
+    EXPECT_EQ(findCoreSignal(core, "cosim_retire2_pc_o")->bitWidth(), 40);
     ASSERT_NE(findCoreSignal(core, "rtc_i"), nullptr);
     ASSERT_NE(findCoreSignal(core, "debug_req_i"), nullptr);
     EXPECT_EQ(core.memoryCount(), 0);

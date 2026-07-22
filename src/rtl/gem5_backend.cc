@@ -11,6 +11,7 @@
 #include "base/logging.hh"
 #include "base/trace.hh"
 #include "debug/RtlCosim.hh"
+#include "debug/RtlCosimMemoryData.hh"
 #include "mem/packet.hh"
 
 namespace gem5::rtl_cosim
@@ -130,12 +131,18 @@ Gem5InitiatorBackend::submit(const MemoryRequest &request)
     }
 
     PendingTransaction pending;
+    const std::size_t enabledBytes = request.write
+        ? std::count_if(request.byteEnable.begin(), request.byteEnable.end(),
+                        [](std::uint8_t value) { return value != 0; })
+        : request.beatCount() * request.beatBytes;
     DPRINTF(RtlCosim,
-            "%s: submit AXI %s at %#llx (%llu beats, %llu bytes/beat)\n",
+            "%s: submit AXI %s at %#llx (%llu beats, %llu bytes/beat, "
+            "%llu enabled bytes)\n",
             _port.name(), request.write ? "write" : "read",
             static_cast<unsigned long long>(request.address),
             static_cast<unsigned long long>(request.beatCount()),
-            static_cast<unsigned long long>(request.beatBytes));
+            static_cast<unsigned long long>(request.beatBytes),
+            static_cast<unsigned long long>(enabledBytes));
     if (request.exclusive) {
         DPRINTF(RtlCosim,
                 "%s: submit AXI exclusive %s at %#llx (%llu bytes)\n",
@@ -243,6 +250,14 @@ Gem5InitiatorBackend::receiveTimingResponse(PacketPtr packet)
     const std::uint8_t *data = error
                                    ? nullptr
                                    : packet->getConstPtr<std::uint8_t>();
+    if (!write && data) {
+        DPRINTF(RtlCosimMemoryData,
+                "%s: AXI read response at %#llx (%u bytes)\n",
+                _port.name(),
+                static_cast<unsigned long long>(packet->getAddr()),
+                packet->getSize());
+        DDUMP(RtlCosimMemoryData, data, packet->getSize());
+    }
     completeBeat(token, beat, error, exclusiveOkay, data);
     delete packet;
     return true;

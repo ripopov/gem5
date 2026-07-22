@@ -217,7 +217,15 @@ elif args.switch_to_c910:
         reset_input_names=c910_reset_inputs,
         io_input_names=c910_io_inputs,
         io_input_values=["0"] * len(c910_io_inputs),
-        io_output_names=["jtag_tdo_o", "jtag_tdo_en_o", "lpmd_b_o"],
+        io_output_names=[
+            "jtag_tdo_o",
+            "jtag_tdo_en_o",
+            "lpmd_b_o",
+            "cosim_retire_valid_o",
+            "cosim_retire0_pc_o",
+            "cosim_retire1_pc_o",
+            "cosim_retire2_pc_o",
+        ],
         initial_reset_cycles=10,
     )
     system.rtl_core.initiator_ports = system.membus.cpu_side_ports
