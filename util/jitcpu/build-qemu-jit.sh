@@ -35,7 +35,7 @@ if [ ! -f "$build_dir/build.ninja" ]; then
         tar -xf - -C "$source_dir"
     (
         cd "$source_dir"
-        git apply "$patch_file"
+        patch -p1 < "$patch_file"
     )
 
     cd "$build_dir"
