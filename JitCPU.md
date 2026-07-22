@@ -20,6 +20,40 @@ Sv39. JitCPU and O3 use the same `RiscvISA` configuration. The current test
 configurations disable V, H, Zicbom, and Zicboz so code accepted during a JIT
 phase remains compatible with O3.
 
+### Measured performance (2026-07-22)
+
+On an Intel Core Ultra 7 265K host, a one-hart RV64 Linux boot reached a
+BusyBox ash shell in about three seconds of host time. The benchmark used
+`gem5.opt` at gem5 commit `aac187e174`, QEMU commit `ad14439be5`, CPU 0 (a
+P-core with a 5.4 GHz maximum frequency), a 1 GHz simulated CPU, 256 MiB of
+memory, and the default JitCPU batch size of 1024 instructions. The workload
+was `riscv-boot-exit-nodisk-1.0.0` plus a 101 KiB compressed initramfs
+containing static BusyBox 1.36.1 built for RV64GC. Its `/init` was interpreted
+by BusyBox ash, emitted `JITCPU-BUSYBOX-SHELL-READY`, and immediately executed
+an `m5_exit` helper.
+
+These are medians from five sequential runs after one warm-up; parentheses
+show the observed range:
+
+| Memory configuration | Guest instructions | Host instruction rate | gem5-reported host time | End-to-end command time |
+| --- | ---: | ---: | ---: | ---: |
+| Classic, `atomic_noncaching` | 411,079,684 | 141.2 Minst/s (141.0-141.4) | 2.91 s (2.91-2.92) | 3.17 s (3.16-3.17) |
+| Ruby CHI, 1 RNF/HNF/controller | 411,079,684 | 139.4 Minst/s (138.9-140.1) | 2.95 s (2.93-2.96) | 3.94 s (3.92-3.94) |
+
+Both configurations advanced 0.502305 seconds of simulated time. JitCPU
+reported 411,079,684 cycles and therefore exactly **1.000 simulated IPC**.
+That IPC is an accounting convention, not a prediction of real
+microarchitectural IPC: JitCPU deliberately charges one simulated cycle for
+each translated guest instruction. Host instruction rate and wall-clock time
+are the meaningful speed measurements.
+
+The numbers above characterize this host, binary, kernel, and single-hart
+workload; they are not a performance guarantee. Host CPU frequency and load,
+compiler options, guest code, JitCPU batch size, device activity, and system
+configuration can change them. Multihart execution remains serialized by
+single-threaded TCG, so adding guest harts should not be expected to multiply
+host instruction throughput.
+
 Current limitations are:
 
 - RISC-V RV64 only. Four harts are qualified; larger systems have not yet been
