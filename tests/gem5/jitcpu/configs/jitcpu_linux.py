@@ -358,12 +358,9 @@ elif args.switch_to_c910:
     if exit_event.getCause() != "simulate() limit reached":
         raise RuntimeError("C910 did not complete its validation interval")
 
+    memory_stats = get_simstat(system.mem_ctrl)
     rtl_reads = int(
-        Root.getInstance()
-        .resolveStat(
-            "system.mem_ctrl.requestorReadAccesses::rtl_core.memory"
-        )
-        .value
+        memory_stats["requestorReadAccesses"]["rtl_core.memory"].value
     )
     print(f"C910 completed {rtl_reads} post-takeover memory reads")
     if rtl_reads == 0:

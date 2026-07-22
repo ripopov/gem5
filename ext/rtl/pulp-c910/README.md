@@ -72,7 +72,7 @@ validation controller checks the expected bytes only after the RTL core,
 transactor, and packet backend are all idle. See `src/rtl/README.md` for the
 direct command and gem5 test-infrastructure command.
 
-## AtomicSimpleCPU to C910 switching
+## Fast CPU to C910 switching
 
 The adapter optionally exposes `RtlCpuState` with schema `riscv64/v1` and one
 architectural context. Import uses the C910 HAD/JTAG mechanism to halt a reset,
@@ -82,15 +82,17 @@ guarded build copies reconnect PULP's otherwise removed core-0 HAD router and
 debug request; the pinned repository and generic framework remain unchanged.
 
 `configs/example/rtl_cosim/c910_cpu_switch.py` creates a real
-`RiscvAtomicSimpleCPU`, a switched-out `RtlCpuSimObject`, and a preconnected
-C910 AXI runtime. The first CPU executes through an `m5_switch_cpu`
+`RiscvAtomicSimpleCPU` or `RiscvJitCPU`, a switched-out `RtlCpuSimObject`, and
+a preconnected C910 AXI runtime. The first CPU executes through an `m5_switch_cpu`
 instruction; gem5 drains it, transfers its `ThreadContext`, imports the
 canonical state, and starts C910 at the following instruction. The matrix
 covers exact GPR/PC and FPR/FCSR contents, compiled C state, traps and M/S CSRs,
 U-mode continuation, active S-mode Sv39 and PMP, pre-switch memory, AMOs before
 and after handover, RTL LR/SC, timer and external interrupts, and WFI wake.
-Linux boot and switching back are not supported yet; RVV is disabled because
-the initial canonical schema does not transfer vector state.
+The extended runner repeats the matrix with JitCPU, then boots Linux to a
+userspace marker, switches once, and checks sustained C910 memory traffic.
+Switching back is explicitly rejected; RVV is disabled because the initial
+canonical schema does not transfer vector state.
 
 OpenC910 requires its private memory-mode and data-cache control bits before
 AMO or LR/SC execution. It also treats `0x1000_0000` through `0x13ff_ffff` as

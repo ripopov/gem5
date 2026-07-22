@@ -37,7 +37,15 @@ C910_IO_INPUTS = [
     "jtag_tdi_i",
     "jtag_tms_i",
 ]
-C910_IO_OUTPUTS = ["jtag_tdo_o", "jtag_tdo_en_o", "lpmd_b_o"]
+C910_IO_OUTPUTS = [
+    "jtag_tdo_o",
+    "jtag_tdo_en_o",
+    "lpmd_b_o",
+    "cosim_retire_valid_o",
+    "cosim_retire0_pc_o",
+    "cosim_retire1_pc_o",
+    "cosim_retire2_pc_o",
+]
 SIGNATURE_ADDRESS = 0x01800020
 EXPECTED_SIGNATURE = 0xDC2EFB8ACC3994FF
 

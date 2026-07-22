@@ -1115,5 +1115,17 @@ packet backends remain outside `ext/rtl/scr1`; the pure C++ protocol transactors
   deterministic idle. Validate the generic AXI-exclusive path independently in transactor and packet-backend tests.
 - Run multiple switch locations and repeated independent runs; reject absent capability, schema/context mismatches, malformed state, protocol errors, and
   timeouts with explicit diagnostics.
-- Linux boot, RTL-to-fast switching, state export, and migration of microarchitectural cache/TLB state remain outside this stage.
+- Linux boot remains outside this stage and is covered by Stage 7. RTL-to-fast switching, state export, and migration of microarchitectural cache/TLB
+  state remain out of scope.
 - Stage 6 is complete when standalone importer tests and the complete gem5 bare-metal switch matrix pass without C910-specific generic code.
+
+### Stage 7: JitCPU-to-C910 Linux Validation
+
+- Build the pinned QEMU backend and a RISC-V gem5 binary with `USE_JITCPU=y`; keep QEMU details outside the RTL-cosim framework.
+- Repeat the complete Stage 6 bare-metal matrix with JitCPU as the source, including privilege, Sv39/PMP, floating point, atomics, LR/SC, traps, and
+  interrupts.
+- Enforce a one-shot, one-way handover: a second fast-to-RTL switch and an RTL-to-fast switch must both be rejected before any simulation state changes.
+- Boot a fixed RV64GC Linux image under JitCPU to its userspace `m5_exit`, then transfer the live architectural state into C910 exactly once.
+- Run C910 for a bounded post-takeover interval and require a normal tick-limit exit plus nonzero RTL memory traffic; protocol errors and timeouts fail.
+- Use `tests/gem5/rtl_cosim/run_jit_to_c910.py` to run bare metal first and Linux second, with explicit pass markers for every case.
+- Stage 7 is complete when the runner passes reproducibly without C910-specific changes to the generic state encoder, SimObject, or AMBA transactors.

@@ -121,8 +121,7 @@ class RtlCosimC910Fixture(UniqueFixture):
         targets = [
             "rtl_cosim_pulp_c910",
             "c910_gem5_benchmark_program",
-        ] + [
-            f"c910_switch_{case}_program" for case in C910_SWITCH_CASES
+            "c910_switch_programs",
         ]
         build = [
             "cmake",
@@ -220,6 +219,9 @@ for case in C910_SWITCH_CASES:
         ],
         verifiers=(
             verifier.MatchRegex(
+                r"^RTL_COSIM_CPU_SWITCH_ONE_WAY_PASS$"
+            ),
+            verifier.MatchRegex(
                 rf"^RTL_COSIM_CPU_SWITCH_PASS case={case}$"
             ),
         ),
@@ -245,6 +247,9 @@ for repetition in range(2):
             "integer",
         ],
         verifiers=(
+            verifier.MatchRegex(
+                r"^RTL_COSIM_CPU_SWITCH_ONE_WAY_PASS$"
+            ),
             verifier.MatchRegex(
                 r"^RTL_COSIM_CPU_SWITCH_PASS case=integer$"
             ),

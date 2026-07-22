@@ -98,6 +98,18 @@ def _expected_signature(case: str) -> bytes:
     return PASS_SIGNATURES[case].to_bytes(8, "little")
 
 
+def _require_switch_rejected(system, old_cpu, new_cpu, expected: str) -> None:
+    try:
+        m5.switchCpus(system, [(old_cpu, new_cpu)], verbose=False)
+    except RuntimeError as error:
+        if expected not in str(error):
+            raise RuntimeError(
+                f"CPU switch failed for the wrong reason: {error}"
+            ) from error
+    else:
+        raise RuntimeError("an unsupported CPU switch unexpectedly succeeded")
+
+
 def create_system(
     *,
     library: str,
@@ -252,6 +264,23 @@ def main() -> None:
             "RTL continuation failed: "
             f"cause={event.getCause()!r}, status={event.getCode()}"
         )
+
+    # The PoC handover is deliberately one-shot and one-way. These checks run
+    # before switchCpus drains or mutates either CPU, so they also verify that
+    # the successfully running RTL core remains the sole active CPU.
+    _require_switch_rejected(
+        system,
+        system.fast_cpu,
+        system.rtl_cpu,
+        "is already active",
+    )
+    _require_switch_rejected(
+        system,
+        system.rtl_cpu,
+        system.fast_cpu,
+        "does not support switching out",
+    )
+    print("RTL_COSIM_CPU_SWITCH_ONE_WAY_PASS")
     print(f"RTL_COSIM_CPU_SWITCH_PASS case={args.case}")
     if args.source_cpu == "jit":
         print(f"RTL_COSIM_JIT_TO_C910_PASS case={args.case}")

@@ -26,6 +26,7 @@ class RtlCpuSimObject final : public BaseCPU
     Port &getDataPort() override;
     Port &getInstPort() override;
     void wakeup(ThreadID thread) override;
+    void switchOut() override;
     void takeOverFrom(BaseCPU *oldCpu) override;
     void verifyMemoryMode() const override;
 

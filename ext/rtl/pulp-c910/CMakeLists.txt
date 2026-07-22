@@ -437,6 +437,12 @@ if(RTL_COSIM_PULP_C910_ENABLE_TESTS)
     add_c910_program(switch_lrsc switch_lrsc.S)
     add_c910_program(switch_interrupt switch_interrupt.S)
     add_c910_program(switch_external_interrupt switch_external_interrupt.S)
+    add_custom_target(c910_switch_programs)
+    foreach(case IN ITEMS
+            integer compute fp trap sv39 user atomic lrsc interrupt
+            external_interrupt)
+        add_dependencies(c910_switch_programs c910_switch_${case}_program)
+    endforeach()
 
     set(C910_STATE_IMPORT_ELF "${C910_PROGRAM_DIR}/state_import.elf")
     set(C910_STATE_IMPORT_FLAGS ${C910_PROGRAM_FLAGS})

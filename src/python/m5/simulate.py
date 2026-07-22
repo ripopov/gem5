@@ -481,6 +481,10 @@ def switchCpus(system, cpuList, verbose=True, is_ruby=False):
             )
         if old_cpu.switchedOut():
             raise RuntimeError(f"Old CPU ({new_cpu}) is inactive.")
+        if not old_cpu.support_switch_out():
+            raise RuntimeError(
+                f"Old CPU ({old_cpu}) does not support switching out."
+            )
         if not old_cpu.support_take_over():
             raise RuntimeError(
                 f"Old CPU ({old_cpu}) does not support CPU handover."

@@ -176,8 +176,25 @@ The gem5 testlib matrix covers exact integer and floating-point state,
 compiled C, traps and CSRs, U-mode and S-mode Sv39 continuation, AMOs before
 and after the switch, RTL LR/SC, timer and external interrupts, WFI wake,
 multiple continuation PCs, and repeated independent runs. Each case uses a
-real pre-switch phase and a byte-exact signature. Linux boot, state export,
-and switching back from RTL are intentionally out of scope.
+real pre-switch phase and a byte-exact signature. Each run also proves that a
+second takeover and a reverse RTL-to-fast switch are rejected before state is
+changed. State export and switching back from RTL remain intentionally out of
+scope.
+
+The extended JitCPU regression runs that complete matrix before booting a fixed
+Linux image under JitCPU, switching once into C910, and requiring sustained RTL
+memory traffic:
+
+```bash
+cmake --build build/rtl-cosim-pulp-c910 -j --target \
+  rtl_cosim_pulp_c910 c910_switch_programs
+tests/gem5/rtl_cosim/run_jit_to_c910.py \
+  build/RISCV/gem5.opt \
+  build/qemu-jit/libgem5-qemu-jit.so \
+  build/rtl-cosim-pulp-c910/pulp-c910/librtl_cosim_pulp_c910.so \
+  build/rtl-cosim-pulp-c910/pulp-c910/programs \
+  /path/to/riscv-boot-exit-nodisk
+```
 
 For AddressSanitizer and UndefinedBehaviorSanitizer:
 

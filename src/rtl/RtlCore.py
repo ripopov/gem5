@@ -150,3 +150,7 @@ class RtlCpuSimObject(BaseCPU):
     @classmethod
     def support_take_over(cls):
         return True
+
+    @classmethod
+    def support_switch_out(cls):
+        return False

@@ -66,6 +66,13 @@ RtlCpuSimObject::wakeup(ThreadID thread)
 }
 
 void
+RtlCpuSimObject::switchOut()
+{
+    fatal("%s: RTL CPU takeover is one-way; switching back is unsupported",
+          name());
+}
+
+void
 RtlCpuSimObject::takeOverFrom(BaseCPU *oldCpu)
 {
     RtlCpuState *state = _rtlCore->cpuStateCapability();

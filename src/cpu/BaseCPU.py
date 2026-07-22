@@ -93,6 +93,11 @@ class BaseCPU(ClockedObject):
         """Does the CPU model support CPU takeOverFrom?"""
         return False
 
+    @classmethod
+    def support_switch_out(cls):
+        """Can an active instance hand execution to another CPU model?"""
+        return cls.support_take_over()
+
     def takeOverFrom(self, old_cpu):
         self._ccObject.takeOverFrom(old_cpu._ccObject)
 
