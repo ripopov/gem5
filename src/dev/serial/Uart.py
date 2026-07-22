@@ -69,6 +69,12 @@ class Uart8250(Uart):
     cxx_header = "dev/serial/uart8250.hh"
     cxx_class = "gem5::Uart8250"
     pio_size = Param.Addr(0x8, "Size of address range")
+    reg_shift = Param.Unsigned(
+        0, "Log2 byte stride between adjacent UART registers"
+    )
+    end_on_eot = Param.Bool(
+        False, "End the simulation when an EOT byte is transmitted"
+    )
 
 
 class RiscvUart8250(Uart8250):
@@ -81,5 +87,7 @@ class RiscvUart8250(Uart8250):
         node.append(FdtPropertyWords("interrupts", [platform.uart_int_id]))
         node.append(FdtPropertyWords("clock-frequency", [0x384000]))
         node.append(FdtPropertyWords("interrupt-parent", state.phandle(plic)))
+        if self.reg_shift:
+            node.append(FdtPropertyWords("reg-shift", [self.reg_shift]))
         node.appendCompatible(["ns8250", "ns16550a"])
         yield node

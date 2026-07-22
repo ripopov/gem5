@@ -5,6 +5,8 @@
 #define __RTL_RTL_CPU_HH__
 
 #include <memory>
+#include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "cpu/base.hh"
@@ -26,6 +28,9 @@ class RtlCpuSimObject final : public BaseCPU
     Port &getDataPort() override;
     Port &getInstPort() override;
     void wakeup(ThreadID thread) override;
+    void postInterrupt(ThreadID thread, int number, int index) override;
+    void clearInterrupt(ThreadID thread, int number, int index) override;
+    void clearInterrupts(ThreadID thread) override;
     void switchOut() override;
     void takeOverFrom(BaseCPU *oldCpu) override;
     void verifyMemoryMode() const override;
@@ -36,7 +41,10 @@ class RtlCpuSimObject final : public BaseCPU
     void unserializeThread(CheckpointIn &cp, ThreadID thread) override;
 
   private:
+    void driveMappedInterrupt(int number, bool asserted);
+
     RtlCoreSimObject *_rtlCore;
+    std::unordered_map<int, std::string> _interruptSignals;
     std::vector<std::unique_ptr<SimpleThread>> _threads;
 };
 

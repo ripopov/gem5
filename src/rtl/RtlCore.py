@@ -135,6 +135,12 @@ class RtlCpuSimObject(BaseCPU):
     rtl_core = Param.RtlCoreSimObject(
         "Preconnected deferred RTL runtime containing the CPU model"
     )
+    rtl_interrupt_numbers = VectorParam.Int(
+        [], "Architectural interrupt numbers forwarded into RTL"
+    )
+    rtl_interrupt_signals = VectorParam.String(
+        [], "Vendor interrupt-input signal aligned with each number"
+    )
 
     def __init__(self, **kwargs):
         if _RtlMMU is None:

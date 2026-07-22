@@ -109,6 +109,13 @@ class Interrupts : public BaseInterrupts
 
     void clearAll() override;
 
+    bool
+    isPending(int int_num, int index) const override
+    {
+        return index == 0 && int_num >= 0 &&
+               int_num < NumInterruptTypes &&
+               (ip[int_num] || hvip[int_num]);
+    }
 
     bool isWakeUp() const override
     {

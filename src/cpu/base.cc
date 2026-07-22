@@ -259,6 +259,18 @@ BaseCPU::postInterrupt(ThreadID tid, int int_num, int index)
 }
 
 void
+BaseCPU::clearInterrupt(ThreadID tid, int int_num, int index)
+{
+    interrupts[tid]->clear(int_num, index);
+}
+
+void
+BaseCPU::clearInterrupts(ThreadID tid)
+{
+    interrupts[tid]->clearAll();
+}
+
+void
 BaseCPU::armMonitor(ThreadID tid, Addr address)
 {
     assert(tid < numThreads);

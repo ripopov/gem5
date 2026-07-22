@@ -32,6 +32,7 @@
 
 #include "dev/serial/uart8250.hh"
 
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -42,6 +43,7 @@
 #include "mem/packet.hh"
 #include "mem/packet_access.hh"
 #include "sim/serialize.hh"
+#include "sim/sim_exit.hh"
 
 namespace gem5
 {
@@ -100,10 +102,12 @@ Uart8250::clearIntr(int intrBit)
 
 Uart8250::Uart8250(const Params &p)
     : Uart(p, p.pio_size), registers(this, name() + ".registers"),
-      lastTxInt(0),
+      endOnEOT(p.end_on_eot), regShift(p.reg_shift), lastTxInt(0),
       txIntrEvent([this]{ processIntrEvent(TX_INT); }, "TX"),
       rxIntrEvent([this]{ processIntrEvent(RX_INT); }, "RX")
 {
+    fatal_if(regShift >= sizeof(Addr) * 8,
+             "%s: reg_shift %u is too large", name(), regShift);
 }
 
 Uart8250::Registers::Registers(Uart8250 *uart, const std::string &new_name) :
@@ -167,6 +171,9 @@ Uart8250::readRbr(Register8 &reg)
 void
 Uart8250::writeThr(Register8 &reg, const uint8_t &data)
 {
+    if (data == 0x04 && endOnEOT) {
+        exitSimLoop("UART received EOT", 0);
+    }
     device->writeData(data);
     clearIntr(TX_INT);
     if (registers.ier.get().thri) {
@@ -237,11 +244,21 @@ Uart8250::writeIer(Register<Ier> &reg, const Ier &ier)
 Tick
 Uart8250::read(PacketPtr pkt)
 {
-    Addr daddr = pkt->getAddr() - pioAddr;
+    const Addr byteOffset = pkt->getAddr() - pioAddr;
+    const Addr stride = Addr{1} << regShift;
+    const Addr daddr = byteOffset >> regShift;
 
     DPRINTF(Uart, "Read register %#x\n", daddr);
 
-    registers.read(daddr, pkt->getPtr<void>(), pkt->getSize());
+    if (regShift == 0) {
+        registers.read(daddr, pkt->getPtr<void>(), pkt->getSize());
+    } else {
+        fatal_if(byteOffset % stride != 0,
+                 "%s: access at %#x is not aligned to register stride %#x",
+                 name(), pkt->getAddr(), stride);
+        std::fill_n(pkt->getPtr<uint8_t>(), pkt->getSize(), 0);
+        registers.read(daddr, pkt->getPtr<void>(), 1);
+    }
 
     pkt->makeAtomicResponse();
     return pioDelay;
@@ -250,12 +267,24 @@ Uart8250::read(PacketPtr pkt)
 Tick
 Uart8250::write(PacketPtr pkt)
 {
-    Addr daddr = pkt->getAddr() - pioAddr;
+    const Addr byteOffset = pkt->getAddr() - pioAddr;
+    const Addr stride = Addr{1} << regShift;
+    const Addr daddr = byteOffset >> regShift;
 
     DPRINTF(Uart, "Write register %#x value %#x\n", daddr,
             pkt->getRaw<uint8_t>());
 
-    registers.write(daddr, pkt->getPtr<void>(), pkt->getSize());
+    if (regShift == 0) {
+        registers.write(daddr, pkt->getPtr<void>(), pkt->getSize());
+    } else {
+        fatal_if(byteOffset % stride != 0,
+                 "%s: access at %#x is not aligned to register stride %#x",
+                 name(), pkt->getAddr(), stride);
+        fatal_if(pkt->getSize() != 1,
+                 "%s: strided registers require one-byte writes, got %u",
+                 name(), pkt->getSize());
+        registers.write(daddr, pkt->getPtr<void>(), 1);
+    }
 
     pkt->makeAtomicResponse();
     return pioDelay;

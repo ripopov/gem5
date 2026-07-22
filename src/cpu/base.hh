@@ -281,19 +281,11 @@ class BaseCPU : public ClockedObject
 
     virtual void wakeup(ThreadID tid) = 0;
 
-    void postInterrupt(ThreadID tid, int int_num, int index);
+    virtual void postInterrupt(ThreadID tid, int int_num, int index);
 
-    void
-    clearInterrupt(ThreadID tid, int int_num, int index)
-    {
-        interrupts[tid]->clear(int_num, index);
-    }
+    virtual void clearInterrupt(ThreadID tid, int int_num, int index);
 
-    void
-    clearInterrupts(ThreadID tid)
-    {
-        interrupts[tid]->clearAll();
-    }
+    virtual void clearInterrupts(ThreadID tid);
 
     bool
     checkInterrupts(ThreadID tid) const

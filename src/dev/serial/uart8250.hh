@@ -206,6 +206,11 @@ class Uart8250 : public Uart
 
     Registers registers;
 
+    /** Stop the simulation when software transmits ASCII EOT (0x04). */
+    const bool endOnEOT;
+    /** Log2 byte stride between adjacent software-visible registers. */
+    const unsigned regShift;
+
     uint8_t readRbr(Register8 &reg);
     void writeThr(Register8 &reg, const uint8_t &data);
     void writeIer(Register<Ier> &reg, const Ier &ier);

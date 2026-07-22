@@ -88,6 +88,8 @@ class RtlCoreSimObject final : public ClockedObject
                         std::string &error);
     void setRequestContextId(ContextID contextId);
     void activateAfterCpuStateImport();
+    bool hasInterruptInput(const std::string &signalName) const noexcept;
+    void driveCpuInterrupt(const std::string &signalName, bool asserted);
 
   private:
     void loadModel(const Params &params);

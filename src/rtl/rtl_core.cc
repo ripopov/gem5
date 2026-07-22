@@ -734,6 +734,33 @@ RtlCoreSimObject::wake()
     }
 }
 
+bool
+RtlCoreSimObject::hasInterruptInput(
+    const std::string &signalName) const noexcept
+{
+    return std::any_of(
+        _interruptInputs.begin(), _interruptInputs.end(),
+        [&signalName](const StandaloneBinding &binding) {
+            return signalName == binding.api.signal->name();
+        });
+}
+
+void
+RtlCoreSimObject::driveCpuInterrupt(
+    const std::string &signalName, bool asserted)
+{
+    const auto position = std::find_if(
+        _interruptInputs.begin(), _interruptInputs.end(),
+        [&signalName](const StandaloneBinding &binding) {
+            return signalName == binding.api.signal->name();
+        });
+    fatal_if(position == _interruptInputs.end(),
+             "%s: CPU interrupt signal '%s' is not configured", name(),
+             signalName);
+    driveBoolean(*position, asserted);
+    wake();
+}
+
 Port &
 RtlCoreSimObject::defaultInitiatorPort()
 {

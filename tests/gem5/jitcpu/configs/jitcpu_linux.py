@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import time
 
 import m5
 from m5.defines import buildEnv
@@ -108,6 +109,7 @@ parser.add_argument("--switch-to-c910", action="store_true")
 parser.add_argument("--c910-library")
 parser.add_argument("--c910-clock", default="50MHz")
 parser.add_argument("--c910-ticks", type=int, default=100_000_000)
+parser.add_argument("--c910-hello-demo", action="store_true")
 parser.add_argument("--ruby-chi", action="store_true")
 args = parser.parse_args()
 
@@ -121,6 +123,8 @@ if args.switch_to_c910 and args.cpu != "jit":
     parser.error("--switch-to-c910 requires --cpu jit")
 if args.switch_to_c910 and not args.c910_library:
     parser.error("--switch-to-c910 requires --c910-library")
+if args.c910_hello_demo and not args.switch_to_c910:
+    parser.error("--c910-hello-demo requires --switch-to-c910")
 if args.c910_library and not os.path.isfile(args.c910_library):
     parser.error(f"C910 vendor library not found: {args.c910_library}")
 
@@ -134,6 +138,11 @@ if not args.ruby_chi:
     system.system_port = system.membus.cpu_side_ports
 
 system.platform = HiFive()
+if args.switch_to_c910:
+    # C910 emits full 128-bit AXI reads. Spacing byte-wide UART registers by
+    # one data beat preserves the selected register in ARADDR.
+    system.platform.uart.reg_shift = 4
+    system.platform.uart.pio_size = 8 << 4
 system.platform.rtc = RiscvRTC(frequency=args.rtc_frequency)
 system.platform.clint.int_pin = system.platform.rtc.int_pin
 system.platform.pci_host.internal_connect()
@@ -146,6 +155,7 @@ else:
     system.platform.attachOffChipIO(system.iobus)
 system.platform.attachPlic()
 system.platform.setNumCores(1)
+system.platform.uart.end_on_eot = args.c910_hello_demo
 
 if not args.ruby_chi:
     system.bridge = Bridge(delay="50ns")
@@ -234,6 +244,14 @@ elif args.switch_to_c910:
         cpu_id=0,
         switched_out=True,
         rtl_core=system.rtl_core,
+        # Standard RISC-V mip bit numbers mapped onto the vendor wrapper.
+        rtl_interrupt_numbers=[3, 7, 11, 9],
+        rtl_interrupt_signals=[
+            "ipi_i",
+            "time_irq_i",
+            "plic_hartx_mint_req_i[0]",
+            "plic_hartx_sint_req_i[0]",
+        ],
     )
     cpus.append(system.rtl_cpu)
 
@@ -290,7 +308,12 @@ system.workload = RiscvLinux(
 
 root = Root(full_system=True, system=system)
 m5.instantiate()
+ticks_per_second = m5.ticks.fromSeconds(1.0)
+boot_start_tick = m5.curTick()
+boot_host_start = time.perf_counter()
 exit_event = m5.simulate(args.max_ticks)
+boot_host_seconds = time.perf_counter() - boot_host_start
+boot_ticks = m5.curTick() - boot_start_tick
 print(
     f"JitCPU Linux stopped @ tick {m5.curTick()}: "
     f"{exit_event.getCause()}"
@@ -344,18 +367,35 @@ if args.switch_to_o3:
         if ruby_messages == 0:
             raise RuntimeError("Ruby CHI carried no post-takeover traffic")
 elif args.switch_to_c910:
+    switch_host_start = time.perf_counter()
     m5.switchCpus(system, [(system.cpu, system.rtl_cpu)])
+    switch_host_seconds = time.perf_counter() - switch_host_start
     print(
         f"Switched JitCPU -> C910 RTL @ tick {m5.curTick()}, "
         f"memory mode {system.getMemoryMode()}"
     )
     m5.stats.reset()
+    c910_start_tick = m5.curTick()
+    c910_host_start = time.perf_counter()
     exit_event = m5.simulate(args.c910_ticks)
+    c910_host_seconds = time.perf_counter() - c910_host_start
+    c910_ticks = m5.curTick() - c910_start_tick
     print(
         f"C910 RTL continued @ tick {m5.curTick()}: "
         f"{exit_event.getCause()}"
     )
-    if exit_event.getCause() != "simulate() limit reached":
+    if args.c910_hello_demo:
+        if exit_event.getCause() != "UART received EOT":
+            raise RuntimeError("C910 did not complete the Linux hello demo")
+        terminal_path = os.path.join(
+            m5.options.outdir, system.platform.terminal.path()
+        )
+        with open(terminal_path, encoding="utf-8") as terminal:
+            terminal_output = terminal.read()
+        hello = "Hello world from Linux on the C910 RTL CPU!"
+        if hello not in terminal_output:
+            raise RuntimeError("C910 hello marker is missing from the UART")
+    elif exit_event.getCause() != "simulate() limit reached":
         raise RuntimeError("C910 did not complete its validation interval")
 
     memory_stats = get_simstat(system.mem_ctrl)
@@ -365,4 +405,17 @@ elif args.switch_to_c910:
     print(f"C910 completed {rtl_reads} post-takeover memory reads")
     if rtl_reads == 0:
         raise RuntimeError("C910 generated no post-takeover memory traffic")
-    print("JITCPU_TO_C910_LINUX_PASS")
+    if args.c910_hello_demo:
+        print(
+            "RTL_CPU_HELLO_TIMING "
+            f"boot_sim_ticks={boot_ticks} "
+            f"boot_sim_seconds={boot_ticks / ticks_per_second:.9f} "
+            f"boot_host_seconds={boot_host_seconds:.6f} "
+            f"switch_host_seconds={switch_host_seconds:.6f} "
+            f"hello_sim_ticks={c910_ticks} "
+            f"hello_sim_seconds={c910_ticks / ticks_per_second:.9f} "
+            f"hello_host_seconds={c910_host_seconds:.6f}"
+        )
+        print("JITCPU_TO_C910_HELLO_PASS")
+    else:
+        print("JITCPU_TO_C910_LINUX_PASS")

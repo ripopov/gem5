@@ -27,6 +27,25 @@ RtlCpuSimObject::RtlCpuSimObject(const Params &params)
     fatal_if(state->contextCount() != numThreads,
              "%s: vendor exposes %zu contexts but numThreads is %u", name(),
              state->contextCount(), numThreads);
+    fatal_if(params.rtl_interrupt_numbers.size() !=
+                 params.rtl_interrupt_signals.size(),
+             "%s: rtl_interrupt_numbers and rtl_interrupt_signals must have "
+             "the same length", name());
+    fatal_if(numThreads != 1 && !params.rtl_interrupt_numbers.empty(),
+             "%s: RTL interrupt mapping currently supports one thread",
+             name());
+    for (std::size_t index = 0; index < params.rtl_interrupt_numbers.size();
+         ++index) {
+        const int number = params.rtl_interrupt_numbers[index];
+        const std::string &signal = params.rtl_interrupt_signals[index];
+        fatal_if(!_rtlCore->hasInterruptInput(signal),
+                 "%s: mapped RTL interrupt signal '%s' is not configured",
+                 name(), signal);
+        const bool inserted =
+            _interruptSignals.emplace(number, signal).second;
+        fatal_if(!inserted, "%s: architectural interrupt %d is mapped twice",
+                 name(), number);
+    }
 
     _threads.reserve(numThreads);
     for (ThreadID thread = 0; thread < numThreads; ++thread) {
@@ -63,6 +82,38 @@ RtlCpuSimObject::wakeup(ThreadID thread)
     fatal_if(thread >= numThreads, "%s: invalid wakeup thread %u", name(),
              thread);
     _rtlCore->wake();
+}
+
+void
+RtlCpuSimObject::driveMappedInterrupt(int number, bool asserted)
+{
+    const auto position = _interruptSignals.find(number);
+    if (position != _interruptSignals.end()) {
+        _rtlCore->driveCpuInterrupt(position->second, asserted);
+    }
+}
+
+void
+RtlCpuSimObject::postInterrupt(ThreadID thread, int number, int index)
+{
+    BaseCPU::postInterrupt(thread, number, index);
+    driveMappedInterrupt(number, true);
+}
+
+void
+RtlCpuSimObject::clearInterrupt(ThreadID thread, int number, int index)
+{
+    BaseCPU::clearInterrupt(thread, number, index);
+    driveMappedInterrupt(number, false);
+}
+
+void
+RtlCpuSimObject::clearInterrupts(ThreadID thread)
+{
+    BaseCPU::clearInterrupts(thread);
+    for (const auto &mapping : _interruptSignals) {
+        _rtlCore->driveCpuInterrupt(mapping.second, false);
+    }
 }
 
 void
@@ -119,6 +170,10 @@ RtlCpuSimObject::takeOverFrom(BaseCPU *oldCpu)
                  thread, error);
     }
     _rtlCore->activateAfterCpuStateImport();
+    for (const auto &mapping : _interruptSignals) {
+        _rtlCore->driveCpuInterrupt(
+            mapping.second, interrupts[0]->isPending(mapping.first, 0));
+    }
 }
 
 void

@@ -90,6 +90,13 @@ class BaseInterrupts : public SimObject
         panic("Interrupts::clearAll unimplemented!\n");
     }
 
+    /** Return the raw level of one architectural interrupt input. */
+    virtual bool
+    isPending(int int_num, int index) const
+    {
+        return false;
+    }
+
     virtual bool
     isWakeUp() const
     {
