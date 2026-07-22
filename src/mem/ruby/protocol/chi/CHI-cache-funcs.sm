@@ -375,6 +375,62 @@ void flushController() {
   cache.flushEntries();
 }
 
+public bool supportsCoherentCacheMaintenance() {
+  return true;
+}
+
+public void beginCoherentCacheMaintenance() {
+  if (is_HN) {
+    maintenance_cache_index := 0;
+  }
+}
+
+public void advanceCoherentCacheMaintenance() {
+  // HNFs are the point of coherence.  Issue one maintenance transaction at
+  // a time so the directory can mutate without invalidating an iterator.
+  bool idle := (storTBEs.size() == 0) &&
+               (storReplTBEs.size() == 0) &&
+               (storSnpTBEs.size() == 0) &&
+               (replTriggerQueue.getSize(clockEdge()) == 0);
+
+  if (is_HN && idle && (directory.getNumEntries() > 0)) {
+    Addr addr := directory.getAddressAtIdx(0);
+    enqueue(replTriggerOutPort, ReplacementMsg, 0) {
+      out_msg.addr := addr;
+      out_msg.maintenance := true;
+    }
+  } else if (is_HN && idle && (cache.getNumValidEntries() > 0)) {
+    if (maintenance_cache_index >= cache.getNumBlocks()) {
+      maintenance_cache_index := 0;
+    }
+    Addr addr := cache.getAddressAtIdx(maintenance_cache_index);
+    maintenance_cache_index := maintenance_cache_index + 1;
+    if (cache.isTagPresent(addr)) {
+      enqueue(replTriggerOutPort, ReplacementMsg, 0) {
+        out_msg.addr := addr;
+        out_msg.maintenance := true;
+      }
+    }
+  }
+}
+
+public bool coherentCacheMaintenanceDone() {
+  return (cache.getNumValidEntries() == 0) &&
+         (directory.getNumEntries() == 0) &&
+         (storTBEs.size() == 0) &&
+         (storReplTBEs.size() == 0) &&
+         (storSnpTBEs.size() == 0) &&
+         (storDvmTBEs.size() == 0) &&
+         (storDvmSnpTBEs.size() == 0) &&
+         (mandatoryQueue.getSize(clockEdge()) == 0) &&
+         (triggerQueue.getSize(clockEdge()) == 0) &&
+         (retryTriggerQueue.getSize(clockEdge()) == 0) &&
+         (reqRdy.getSize(clockEdge()) == 0) &&
+         (snpRdy.getSize(clockEdge()) == 0) &&
+         (replTriggerQueue.getSize(clockEdge()) == 0) &&
+         (prefetchQueue.getSize(clockEdge()) == 0);
+}
+
 
 ////////////////////////////////////////////////////////////////////////////
 // Helper functions

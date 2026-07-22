@@ -238,6 +238,7 @@ structure (CacheMemory, external = "yes") {
 
   int getCacheSize();
   int getNumBlocks();
+  int getNumValidEntries();
   Addr getAddressAtIdx(int);
 
   void profileDemandHit();

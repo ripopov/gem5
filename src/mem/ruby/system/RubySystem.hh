@@ -95,6 +95,7 @@ class RubySystem : public ClockedObject
     void resetStats() override;
 
     void memWriteback() override;
+    void memInvalidate() override;
     void serialize(CheckpointOut &cp) const override;
     void unserialize(CheckpointIn &cp) override;
     void drainResume() override;
@@ -137,6 +138,8 @@ class RubySystem : public ClockedObject
                                      uint64_t uncompressed_trace_size);
 
     void processRubyEvent();
+    void coherentCacheMaintenance();
+    bool coherentCacheMaintenanceDone();
 
     // Called from `functionalRead` depending on if the protocol needs
     // partial functional reads.
@@ -152,6 +155,7 @@ class RubySystem : public ClockedObject
 
     bool m_warmup_enabled = false;
     bool m_cooldown_enabled = false;
+    bool m_coherent_cache_maintenance = false;
     memory::SimpleMemory *m_phys_mem;
     const bool m_access_backing_store;
 

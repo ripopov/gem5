@@ -34,12 +34,14 @@ from m5.objects.ClockedObject import ClockedObject
 from m5.objects.Network import RubyNetwork
 from m5.params import *
 from m5.proxy import *
+from m5.util.pybind import PyBindMethod
 
 
 class GarnetNetwork(RubyNetwork):
     type = "GarnetNetwork"
     cxx_header = "mem/ruby/network/garnet/GarnetNetwork.hh"
     cxx_class = "gem5::ruby::garnet::GarnetNetwork"
+    cxx_exports = [PyBindMethod("getTotalPacketsInjected")]
 
     num_rows = Param.Int(0, "number of rows if 2D (mesh/torus/..) topology")
     ni_flit_size = Param.UInt32(16, "network interface flit size in bytes")

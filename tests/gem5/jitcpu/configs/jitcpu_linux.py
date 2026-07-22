@@ -2,6 +2,7 @@ import argparse
 import os
 
 import m5
+from m5 import params
 from m5.defines import buildEnv
 from m5.objects import (
     AddrRange,
@@ -11,6 +12,7 @@ from m5.objects import (
     IOXBar,
     MemCtrl,
     PMAChecker,
+    RiscvBootloaderKernelWorkload,
     RiscvJitCPU,
     RiscvLinux,
     RiscvRTC,
@@ -68,7 +70,7 @@ def generate_dtb(system, output):
     fdt.writeDtbFile(output)
 
 
-def ruby_options():
+def ruby_options(network):
     parser = argparse.ArgumentParser(add_help=False)
     Options.addCommonOptions(parser)
     Ruby.define_options(parser)
@@ -77,10 +79,14 @@ def ruby_options():
     options.num_dirs = 1
     options.num_l3caches = 1
     options.topology = "Crossbar"
+    options.network = network
     return options
 
 
 def ruby_router_messages(ruby_system):
+    if args.ruby_network == "garnet":
+        return int(ruby_system.network.getTotalPacketsInjected())
+
     network_stats = get_simstat(ruby_system.network)
     routers = network_stats["routers"].values["value"]
     return int(
@@ -93,6 +99,56 @@ def ruby_router_messages(ruby_system):
     )
 
 
+def stat_value(name):
+    value = Root.getInstance().resolveStat(name).value
+    if isinstance(value, list):
+        return int(sum(value))
+    return int(value)
+
+
+def cpu_user_instructions(cpu_name):
+    return stat_value(f"system.{cpu_name}.commitStats0.numUserInsts")
+
+
+def ruby_cache_accesses():
+    accesses = 0
+    for controller in (system.cpu.l1d, system.cpu.l1i, system.cpu.l2):
+        cache_stats = get_simstat(controller)["cache"]
+        accesses += int(cache_stats["m_demand_hits"].value)
+        accesses += int(cache_stats["m_demand_misses"].value)
+    return accesses
+
+
+def ruby_memory_bytes():
+    return stat_value("system.mem_ctrls.bytesReadSys") + stat_value(
+        "system.mem_ctrls.bytesWrittenSys"
+    )
+
+
+def check_guest_log():
+    terminal_path = os.path.join(m5.options.outdir, "system.platform.terminal")
+    failure_markers = (
+        "Kernel panic",
+        "Oops:",
+        "BUG:",
+        "Unhandled fault",
+        "Unable to handle kernel",
+        "Instruction access fault",
+        "Load access fault",
+        "Store/AMO access fault",
+    )
+
+    with open(terminal_path, encoding="utf-8", errors="replace") as terminal:
+        guest_log = terminal.read()
+
+    detected = [marker for marker in failure_markers if marker in guest_log]
+    if detected:
+        raise RuntimeError(
+            "guest kernel failure marker(s) found: " + ", ".join(detected)
+        )
+    print(f"Guest log check passed ({terminal_path})")
+
+
 parser = argparse.ArgumentParser()
 parser.add_argument("linux_image")
 parser.add_argument("backend")
@@ -102,10 +158,32 @@ parser.add_argument("--max-ticks", type=int, default=2_000_000_000_000)
 parser.add_argument("--switch-to-o3", action="store_true")
 parser.add_argument("--o3-ticks", type=int, default=10_000_000)
 parser.add_argument("--ruby-chi", action="store_true")
+parser.add_argument(
+    "--ruby-network", choices=("simple", "garnet"), default="simple"
+)
+parser.add_argument("--repeated-switches", type=int, default=0)
+parser.add_argument("--phase-ticks", type=int, default=10_000_000)
+parser.add_argument("--final-o3-ticks", type=int, default=50_000_000)
+parser.add_argument("--initrd")
+parser.add_argument(
+    "--initrd-addr", type=lambda value: int(value, 0), default=0x88000000
+)
 args = parser.parse_args()
 
 if args.ruby_chi and buildEnv["PROTOCOL"] != "CHI":
     parser.error("--ruby-chi requires a gem5 binary built with PROTOCOL=CHI")
+if args.ruby_network != "simple" and not args.ruby_chi:
+    parser.error("--ruby-network requires --ruby-chi")
+if args.repeated_switches:
+    if not args.ruby_chi:
+        parser.error("--repeated-switches requires --ruby-chi")
+    if args.repeated_switches < 3 or args.repeated_switches % 2 == 0:
+        parser.error("--repeated-switches must be an odd value of at least 3")
+    if not args.initrd:
+        parser.error(
+            "--repeated-switches requires the JitCPU Linux test initramfs"
+        )
+    args.switch_to_o3 = True
 
 system = RiscvSystem()
 system.mem_mode = "atomic_noncaching"
@@ -190,7 +268,7 @@ for cpu in cpus:
     )
 
 if args.ruby_chi:
-    ruby_args = ruby_options()
+    ruby_args = ruby_options(args.ruby_network)
     Ruby.create_system(
         ruby_args,
         True,
@@ -213,36 +291,136 @@ else:
 
 dtb_path = os.path.join(m5.options.outdir, "device.dtb")
 generate_dtb(system, dtb_path)
-system.workload = RiscvLinux(
-    object_file=args.linux_image,
-    dtb_filename=dtb_path,
-    dtb_addr=0x87E00000,
-    command_line="console=ttyS0",
-    addr_check=False,
-)
+if args.initrd:
+    system.workload = RiscvBootloaderKernelWorkload(
+        bootloader_filename=args.linux_image,
+        bootloader_addr=0x80000000,
+        entry_point=0x80000000,
+        dtb_filename=dtb_path,
+        dtb_addr=0x87E00000,
+        initrd_filename=args.initrd,
+        initrd_addr=args.initrd_addr,
+        command_line="console=ttyS0",
+        exit_on_kernel_panic=False,
+    )
+else:
+    system.workload = RiscvLinux(
+        object_file=args.linux_image,
+        dtb_filename=dtb_path,
+        dtb_addr=0x87E00000,
+        command_line="console=ttyS0",
+        addr_check=False,
+    )
 
 root = Root(full_system=True, system=system)
 m5.instantiate()
+
+
+def check_memory_mode(cpu_name):
+    expected = "atomic_noncaching" if cpu_name == "cpu" else "timing"
+    memory_mode = params.allEnums["MemoryMode"]
+    actual = system.getMemoryMode()
+    if actual != memory_mode(expected).getValue():
+        raise RuntimeError(
+            f"{cpu_name} requires {expected} mode, found {actual}"
+        )
+
+
+def validate_linux_phase(cpu_name, phase_name):
+    user_insts = cpu_user_instructions(cpu_name)
+    print(f"{phase_name}: {cpu_name} committed {user_insts} user instructions")
+    if user_insts == 0:
+        raise RuntimeError(f"{phase_name}: no userspace instruction progress")
+
+    if not args.ruby_chi:
+        return
+
+    ruby_messages = ruby_router_messages(system.ruby)
+    print(f"{phase_name}: Ruby CHI carried {ruby_messages} messages")
+    if cpu_name == "cpu":
+        if ruby_messages != 0:
+            raise RuntimeError(f"{phase_name}: JitCPU generated CHI traffic")
+        return
+
+    cache_accesses = ruby_cache_accesses()
+    memory_bytes = ruby_memory_bytes()
+    print(
+        f"{phase_name}: CHI caches handled {cache_accesses} accesses; "
+        f"memory handled {memory_bytes} bytes"
+    )
+    if ruby_messages == 0:
+        raise RuntimeError(f"{phase_name}: O3CPU generated no CHI traffic")
+    if cache_accesses == 0:
+        raise RuntimeError(f"{phase_name}: O3CPU generated no cache accesses")
+    if memory_bytes == 0:
+        raise RuntimeError(f"{phase_name}: O3CPU generated no memory traffic")
+
+
 exit_event = m5.simulate(args.max_ticks)
 print(
-    f"JitCPU Linux stopped @ tick {m5.curTick()}: "
-    f"{exit_event.getCause()}"
+    f"JitCPU Linux stopped @ tick {m5.curTick()}: " f"{exit_event.getCause()}"
 )
 
 if args.switch_to_o3:
     if exit_event.getCause() != "m5_exit instruction encountered":
         raise RuntimeError("Linux did not reach its userspace m5 exit")
 
-    if args.ruby_chi:
-        jit_ruby_messages = ruby_router_messages(system.ruby)
-        print(
-            "JitCPU generated "
-            f"{jit_ruby_messages} timing Ruby CHI messages"
-        )
-        if jit_ruby_messages != 0:
-            raise RuntimeError(
-                "JitCPU unexpectedly populated CHI during uncached boot"
+    validate_linux_phase("cpu", "Linux boot phase")
+
+    if args.repeated_switches:
+        active_cpu = system.cpu
+        active_name = "cpu"
+
+        for switch_index in range(args.repeated_switches):
+            if active_cpu is system.cpu:
+                next_cpu = system.o3
+                next_name = "o3"
+            else:
+                next_cpu = system.cpu
+                next_name = "cpu"
+
+            m5.switchCpus(
+                system,
+                [(active_cpu, next_cpu)],
+                is_ruby=True,
             )
+            active_cpu = next_cpu
+            active_name = next_name
+            check_memory_mode(active_name)
+            print(
+                f"Linux switch {switch_index + 1}/"
+                f"{args.repeated_switches}: active {active_name}, "
+                f"memory mode {system.getMemoryMode()}"
+            )
+
+            m5.stats.reset()
+            interval = (
+                args.final_o3_ticks
+                if switch_index == args.repeated_switches - 1
+                else args.phase_ticks
+            )
+            exit_event = m5.simulate(interval)
+            print(
+                f"Linux phase {switch_index + 1} stopped @ "
+                f"tick {m5.curTick()}: {exit_event.getCause()}"
+            )
+            if exit_event.getCause() != "simulate() limit reached":
+                raise RuntimeError(
+                    "Linux did not remain alive for the bounded phase: "
+                    f"{exit_event.getCause()}"
+                )
+            validate_linux_phase(
+                active_name, f"Linux phase {switch_index + 1}"
+            )
+
+        if active_cpu is not system.o3:
+            raise RuntimeError("Linux repeated switching did not finish on O3")
+        check_guest_log()
+        print(
+            "Linux repeated-switch validation passed after "
+            f"{args.repeated_switches} switches"
+        )
+        raise SystemExit(0)
 
     m5.switchCpus(
         system,
@@ -256,17 +434,12 @@ if args.switch_to_o3:
     m5.stats.reset()
     exit_event = m5.simulate(args.o3_ticks)
     print(
-        f"O3CPU continued @ tick {m5.curTick()}: "
-        f"{exit_event.getCause()}"
+        f"O3CPU continued @ tick {m5.curTick()}: " f"{exit_event.getCause()}"
     )
     if exit_event.getCause() != "simulate() limit reached":
         raise RuntimeError("O3CPU did not complete its validation interval")
 
-    o3_user_insts = int(
-        Root.getInstance()
-        .resolveStat("system.o3.commitStats0.numUserInsts")
-        .value
-    )
+    o3_user_insts = cpu_user_instructions("o3")
     print(f"O3CPU committed {o3_user_insts} userspace instructions")
     if o3_user_insts == 0:
         raise RuntimeError("O3CPU made no userspace progress after takeover")

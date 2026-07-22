@@ -82,6 +82,7 @@ GEM5_QEMU_JIT_API int gem5_qemu_jit_get_csr(unsigned csr, uint64_t *value);
 GEM5_QEMU_JIT_API int gem5_qemu_jit_set_csr(unsigned csr, uint64_t value);
 GEM5_QEMU_JIT_API uint64_t gem5_qemu_jit_get_mip(void);
 GEM5_QEMU_JIT_API void gem5_qemu_jit_set_mip(uint64_t value);
+/* Also clears software-TLB, halted, exception, and LR/SC transient state. */
 GEM5_QEMU_JIT_API void gem5_qemu_jit_invalidate_translations(void);
 
 #ifdef __cplusplus

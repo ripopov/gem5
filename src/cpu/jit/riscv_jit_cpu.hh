@@ -52,6 +52,7 @@ class RiscvJitCPU : public NonCachingSimpleCPU
     void init() override;
     void initState() override;
     void startup() override;
+    void takeOverFrom(BaseCPU *old_cpu) override;
 
   protected:
     void tick() override;

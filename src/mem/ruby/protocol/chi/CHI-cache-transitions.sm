@@ -890,6 +890,72 @@ transition(I, Global_Eviction) {
   Pop_ReplTriggerQueue;
 }
 
+// HNF-wide cache maintenance.  These transitions use the normal CHI snoop
+// and writeback machinery, but also remove the home directory entry once all
+// upstream acknowledgements and any dirty data have arrived.
+transition({UD,SD}, Maintenance_Eviction, BUSY_BLKD) {ReplTBEAvailable} {
+  Initiate_Replacement;
+  Initiate_Replacement_WB;
+  Profile_Eviction;
+  Deallocate_CacheBlock_IfPresent;
+  Deallocate_DirEntry_IfPresent;
+  Pop_ReplTriggerQueue;
+  ProcessNextState;
+}
+
+transition(UD_T, Maintenance_Eviction, BUSY_BLKD) {ReplTBEAvailable} {
+  Unset_Timeout_Cache;
+  Initiate_Replacement;
+  Initiate_Replacement_WB;
+  Profile_Eviction;
+  Deallocate_CacheBlock_IfPresent;
+  Deallocate_DirEntry_IfPresent;
+  Pop_ReplTriggerQueue;
+  ProcessNextState;
+}
+
+transition({UC,SC}, Maintenance_Eviction, BUSY_BLKD) {ReplTBEAvailable} {
+  Initiate_Replacement;
+  Initiate_Replacement_JustDrop;
+  Profile_Eviction;
+  Deallocate_CacheBlock_IfPresent;
+  Deallocate_DirEntry_IfPresent;
+  Pop_ReplTriggerQueue;
+  ProcessNextState;
+}
+
+transition({UD_RSC,SD_RSC,UD_RU,UC_RU,RU,UD_RSD,SD_RSD,RSD,RUSD},
+           Maintenance_Eviction, BUSY_BLKD) {ReplTBEAvailable} {
+  Initiate_Replacement;
+  Initiate_Replacement_WB_BackInvalidate;
+  Profile_Eviction;
+  Deallocate_CacheBlock_IfPresent;
+  Deallocate_DirEntry_IfPresent;
+  Pop_ReplTriggerQueue;
+  ProcessNextState;
+}
+
+transition({UC_RSC,SC_RSC,RUSC,RSC}, Maintenance_Eviction,
+           BUSY_BLKD) {ReplTBEAvailable} {
+  Initiate_Replacement;
+  Initiate_Maintenance_Clean_BackInvalidate;
+  Profile_Eviction;
+  Deallocate_CacheBlock_IfPresent;
+  Deallocate_DirEntry_IfPresent;
+  Pop_ReplTriggerQueue;
+  ProcessNextState;
+}
+
+transition(I, Maintenance_Eviction) {
+  Deallocate_CacheBlock_IfPresent;
+  Deallocate_DirEntry_IfPresent;
+  Pop_ReplTriggerQueue;
+}
+
+transition({BUSY_BLKD,BUSY_INTR}, Maintenance_Eviction) {
+  StallLocalEviction;
+}
+
 // Snoops
 
 // SnpCleanInvalid/SnpUnique/SnpUniqueFwd
@@ -1082,6 +1148,15 @@ transition({BUSY_BLKD, BUSY_INTR}, SendCompData, BUSY_BLKD) {
 transition(BUSY_BLKD, SendWBData) {
   Pop_TriggerQueue;
   Send_WBData;
+  ProcessNextState_ClearPending;
+}
+
+// Coherent maintenance can discover that an exclusive upstream copy is
+// clean, suppressing its conservatively queued WriteNoSnp after the
+// SendWriteNoSnp transition has entered BUSY_INTR.
+transition(BUSY_INTR, SendWBData, BUSY_BLKD) {
+  Pop_TriggerQueue;
+  Complete_Suppressed_Maintenance_Write;
   ProcessNextState_ClearPending;
 }
 

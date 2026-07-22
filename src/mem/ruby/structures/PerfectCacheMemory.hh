@@ -41,6 +41,7 @@
 #ifndef __MEM_RUBY_STRUCTURES_PERFECTCACHEMEMORY_HH__
 #define __MEM_RUBY_STRUCTURES_PERFECTCACHEMEMORY_HH__
 
+#include <iterator>
 #include <type_traits>
 #include <unordered_map>
 
@@ -93,6 +94,9 @@ class PerfectCacheMemory
 
     // Flush all entries within the cache
     void flushEntries();
+
+    int getNumEntries() const { return m_map.size(); }
+    Addr getAddressAtIdx(int idx) const;
 
     // Returns with the physical address of the conflicting cache line
     Addr cacheProbe(Addr newAddress) const;
@@ -193,6 +197,16 @@ inline void
 PerfectCacheMemory<ENTRY>::flushEntries()
 {
     m_map.clear();
+}
+
+template <class ENTRY>
+inline Addr
+PerfectCacheMemory<ENTRY>::getAddressAtIdx(int idx) const
+{
+    assert(idx >= 0 && static_cast<size_t>(idx) < m_map.size());
+    auto it = m_map.begin();
+    std::advance(it, idx);
+    return it->first;
 }
 
 // Returns with the physical address of the conflicting cache line

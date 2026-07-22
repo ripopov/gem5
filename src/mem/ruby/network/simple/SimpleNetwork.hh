@@ -90,6 +90,7 @@ class SimpleNetwork : public Network
                           PortDirection dst_inport);
 
     void print(std::ostream& out) const;
+    bool isEmpty() const override;
 
     bool functionalRead(Packet *pkt);
     bool functionalRead(Packet *pkt, WriteMask &mask);

@@ -326,6 +326,19 @@ RiscvJitCPU::startup()
 }
 
 void
+RiscvJitCPU::takeOverFrom(BaseCPU *old_cpu)
+{
+    NonCachingSimpleCPU::takeOverFrom(old_cpu);
+
+    // The other CPU may have changed page tables without changing SATP, and
+    // QEMU may still carry a halted state, a load reservation, an exception,
+    // translated code, or software-TLB entries from the previous JIT phase.
+    // Reset that non-architectural state before importing gem5's new state.
+    backend->invalidate();
+    syncToBackend();
+}
+
+void
 RiscvJitCPU::syncToBackend()
 {
     if (!backendInitialized) {

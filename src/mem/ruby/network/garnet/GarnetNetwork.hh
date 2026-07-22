@@ -116,10 +116,27 @@ class GarnetNetwork : public Network
     void regStats();
     void resetStats();
     void print(std::ostream& out) const;
+    bool isEmpty() const override;
+    uint64_t getTotalPacketsInjected() const
+    {
+        return m_packets_injected.total();
+    }
 
     // increment counters
-    void increment_injected_packets(int vnet) { m_packets_injected[vnet]++; }
-    void increment_received_packets(int vnet) { m_packets_received[vnet]++; }
+    void
+    increment_injected_packets(int vnet)
+    {
+        m_packets_injected[vnet]++;
+        ++m_packets_in_flight;
+    }
+
+    void
+    increment_received_packets(int vnet)
+    {
+        m_packets_received[vnet]++;
+        assert(m_packets_in_flight > 0);
+        --m_packets_in_flight;
+    }
 
     void
     increment_packet_network_latency(Tick latency, int vnet)
@@ -202,6 +219,10 @@ class GarnetNetwork : public Network
 
     std::vector<std::vector<statistics::Scalar *>> m_data_traffic_distribution;
     std::vector<std::vector<statistics::Scalar *>> m_ctrl_traffic_distribution;
+
+    // Unlike the packet statistics, this count is not cleared by a stats
+    // reset while a packet is traversing the network.
+    uint64_t m_packets_in_flight = 0;
 
   private:
     GarnetNetwork(const GarnetNetwork& obj);

@@ -57,6 +57,7 @@
 #include "mem/ruby/system/Sequencer.hh"
 #include "mem/simple_mem.hh"
 #include "sim/eventq.hh"
+#include "sim/sim_exit.hh"
 #include "sim/simulate.hh"
 #include "sim/system.hh"
 
@@ -223,6 +224,21 @@ RubySystem::makeCacheRecorder(uint8_t *uncompressed_trace,
 void
 RubySystem::memWriteback()
 {
+    bool coherent_maintenance_supported = false;
+    for (auto *controller : m_abs_cntrl_vec) {
+        coherent_maintenance_supported |=
+            controller->supportsCoherentCacheMaintenance();
+    }
+
+    if (coherent_maintenance_supported) {
+        coherentCacheMaintenance();
+
+        // Checkpoint serialization requires a recorder even when coherent
+        // maintenance has left all caches empty.
+        makeCacheRecorder(NULL, 0, getBlockSizeBytes());
+        return;
+    }
+
     m_cooldown_enabled = true;
 
     // Make the trace so we know what to write back.
@@ -298,6 +314,56 @@ RubySystem::memWriteback()
 
     // Keep the cache recorder around so that we can dump the trace if a
     // checkpoint is immediately taken.
+}
+
+void
+RubySystem::coherentCacheMaintenance()
+{
+    fatal_if(m_coherent_cache_maintenance,
+             "Nested Ruby coherent cache maintenance");
+
+    for (auto *controller : m_abs_cntrl_vec) {
+        if (controller->supportsCoherentCacheMaintenance()) {
+            controller->beginCoherentCacheMaintenance();
+        }
+    }
+
+    if (coherentCacheMaintenanceDone()) {
+        return;
+    }
+
+    m_coherent_cache_maintenance = true;
+    enqueueRubyEvent(curTick());
+    simulate();
+    fatal_if(m_coherent_cache_maintenance ||
+                 !coherentCacheMaintenanceDone(),
+             "Ruby coherent cache maintenance stopped before completion");
+}
+
+bool
+RubySystem::coherentCacheMaintenanceDone()
+{
+    for (auto *controller : m_abs_cntrl_vec) {
+        if (controller->supportsCoherentCacheMaintenance() &&
+            !controller->coherentCacheMaintenanceDone()) {
+            return false;
+        }
+    }
+    for (const auto &network : m_networks) {
+        if (!network->isEmpty()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void
+RubySystem::memInvalidate()
+{
+    fatal_if(m_coherent_cache_maintenance ||
+                 !coherentCacheMaintenanceDone(),
+             "Ruby cache invalidation requested before coherent maintenance "
+             "completed");
 }
 
 void
@@ -491,6 +557,18 @@ RubySystem::processRubyEvent()
         m_cache_recorder->enqueueNextFetchRequest();
     } else if (getCooldownEnabled()) {
         m_cache_recorder->enqueueNextFlushRequest();
+    } else if (m_coherent_cache_maintenance) {
+        for (auto *controller : m_abs_cntrl_vec) {
+            if (controller->supportsCoherentCacheMaintenance()) {
+                controller->advanceCoherentCacheMaintenance();
+            }
+        }
+        if (coherentCacheMaintenanceDone()) {
+            m_coherent_cache_maintenance = false;
+            exitSimLoop("Ruby coherent cache maintenance complete", 0);
+        } else {
+            enqueueRubyEvent(clockEdge(Cycles(1)));
+        }
     }
 }
 

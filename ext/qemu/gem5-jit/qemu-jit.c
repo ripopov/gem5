@@ -11,6 +11,7 @@
 #include "accel/tcg/cpu-loop.h"
 #include "accel/tcg/tcg-accel-ops-icount.h"
 #include "exec/icount.h"
+#include "exec/cputlb.h"
 #include "exec/tb-flush.h"
 #include "exec/translation-block.h"
 #include "hw/core/cpu.h"
@@ -369,14 +370,32 @@ void
 gem5_qemu_jit_set_mip(uint64_t value)
 {
     if (jit.initialized) {
-        jit.riscv_cpu->env.mip = value;
+        riscv_cpu_update_mip(&jit.riscv_cpu->env, UINT64_MAX, value);
     }
+}
+
+static void
+jit_invalidate_on_vcpu(CPUState *cpu, run_on_cpu_data data)
+{
+    CPURISCVState *env = &jit.riscv_cpu->env;
+
+    tlb_flush(cpu);
+    cpu->halted = 0;
+    cpu->exception_index = RISCV_EXCP_NONE;
+    qatomic_set(&cpu->exit_request, false);
+    env->load_res = -1;
+    env->load_val = 0;
+    env->badaddr = 0;
+    env->guest_phys_fault_addr = 0;
+    env->bins = 0;
 }
 
 void
 gem5_qemu_jit_invalidate_translations(void)
 {
     if (jit.initialized) {
+        /* The queued TB flush executes before the synchronous callback. */
         queue_tb_flush(jit.cpu);
+        run_on_cpu(jit.cpu, jit_invalidate_on_vcpu, RUN_ON_CPU_NULL);
     }
 }
