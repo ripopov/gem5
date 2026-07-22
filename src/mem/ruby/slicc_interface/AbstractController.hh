@@ -120,19 +120,11 @@ class AbstractController : public ClockedObject, public Consumer
 
     virtual void recordCacheTrace(int cntrl, CacheRecorder* tr) = 0;
 
-    /**
-     * Protocol-coherent cache maintenance used before a switch to an
-     * uncached memory mode.  Protocols which implement this interface must
-     * write dirty data back and invalidate all coherent copies before
-     * reporting completion.
-     */
-    virtual bool supportsCoherentCacheMaintenance() { return false; }
-    virtual void beginCoherentCacheMaintenance()
-    {
-        fatal("Coherent cache maintenance not supported in %s", name());
-    }
-    virtual void advanceCoherentCacheMaintenance() {}
-    virtual bool coherentCacheMaintenanceDone() { return true; }
+    /** Whether protocol-internal work can still move coherent cache state. */
+    virtual bool coherenceQuiescent() { return true; }
+
+    /** Verify that protocol cache and directory state is empty. */
+    virtual bool cacheAndDirectoryEmpty() { return true; }
 
     virtual Sequencer* getCPUSequencer() const = 0;
     virtual DMASequencer* getDMASequencer() const = 0;

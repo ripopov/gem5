@@ -169,6 +169,8 @@ action(AllocateTBE_SeqRequest, desc="") {
         } else {
           out_msg.type := CHIRequestType:Store;
         }
+      } else if (in_msg.Type == RubyRequestType:FLUSH) {
+        out_msg.type := CHIRequestType:Flush;
       } else if (in_msg.Type == RubyRequestType:ATOMIC_RETURN) {
         out_msg.type := CHIRequestType:AtomicLoad;
       } else if (in_msg.Type == RubyRequestType:ATOMIC_NO_RETURN){
@@ -402,14 +404,10 @@ action(Initiate_Replacement, desc="") {
   if (unify_repl_TBEs) {
     peek(replTriggerInPort, ReplacementMsg) {
       set_tbe(allocateReplacementTBEOnSlot(address, in_msg.slot));
-      tbe.coherentMaintenance := in_msg.maintenance;
       DPRINTF(RubySlicc, "Allocated replacement TBE on slot %d\n", tbe.storSlot);
     }
   } else {
     set_tbe(allocateReplacementTBE(address));
-    peek(replTriggerInPort, ReplacementMsg) {
-      tbe.coherentMaintenance := in_msg.maintenance;
-    }
     DPRINTF(RubySlicc, "Allocated replacement TBE on new slot %d\n", tbe.storSlot);
   }
   copyCacheAndDir(cache_entry, getDirEntry(address), tbe, initial);
@@ -1501,13 +1499,29 @@ action(Initiate_Replacement_Evict_BackInvalidte, desc="") {
   tbe.actions.pushNB(Event:TagArrayWrite);
 }
 
-action(Initiate_Maintenance_Clean_BackInvalidate, desc="") {
+action(Initiate_Flush_Clean_BackInvalidate, desc="") {
   assert(is_HN);
   assert(tbe.dataDirty == false);
   assert(tbe.dataMaybeDirtyUpstream == false);
   tbe.actions.push(Event:SendSnpCleanInvalid);
   tbe.dataToBeInvalid := true;
   tbe.actions.pushNB(Event:TagArrayWrite);
+}
+
+// Forward FLUSH without assuming that its injection port owns this line.
+// The caller first cleans and invalidates this controller's local subtree,
+// if any. This avoids a request/snoop dependency cycle when the HNF sends a
+// SnpCleanInvalid back through the same controller, and ensures dirty data
+// reaches the next level before the hierarchy-wide FLUSH is issued.
+action(Initiate_Flush_Forward, desc="") {
+  assert(is_HN == false);
+  tbe.actions.push(Event:SendFlush);
+  tbe.actions.push(Event:CompleteFlush);
+}
+
+action(Queue_Flush_Completion, desc="") {
+  assert(is_HN);
+  tbe.actions.push(Event:CompleteFlush);
 }
 
 action(Initiate_Replacement_Evict, desc="") {
@@ -1726,6 +1740,24 @@ action(Send_Evict, desc="") {
   tbe.expected_req_resp.setExpectedCount(1);
 }
 
+action(Send_Flush, desc="") {
+  assert(is_valid(tbe));
+  assert(is_HN == false);
+  assert(tbe.expected_req_resp.hasExpected() == false);
+  // A snoop may have made the preceding local WriteBack/Evict stale. That
+  // status belongs only to that completed transaction, not to the new FLUSH.
+  tbe.is_stale := false;
+  clearExpectedReqResp(tbe);
+  tbe.expected_req_resp.addExpectedRespType(CHIResponseType:FlushAck);
+  tbe.expected_req_resp.setExpectedCount(1);
+
+  enqueue(reqOutPort, CHIRequestMsg, request_latency) {
+    prepareRequest(tbe, CHIRequestType:FlushLine, out_msg);
+    out_msg.Destination.add(mapAddressToDownstreamMachine(tbe.addr));
+    allowRequestRetry(tbe, out_msg);
+  }
+}
+
 action(Send_InvSnpResp, desc="") {
   assert(is_valid(tbe));
   assert(tbe.dataMaybeDirtyUpstream == false);
@@ -1783,10 +1815,10 @@ action(Send_WriteCleanFull, desc="") {
 action(Send_WriteNoSnp, desc="") {
   assert(is_valid(tbe));
 
-  // A clean exclusive owner may answer SnpCleanInvalid without data.  Whole-
-  // hierarchy maintenance only discovers that after the snoop completes, so
+  // A clean exclusive owner may answer SnpCleanInvalid without data. FLUSH
+  // only discovers that after the snoop completes, so
   // suppress the conservatively queued write in that case.
-  if (!tbe.coherentMaintenance || tbe.dataDirty) {
+  if ((tbe.reqType != CHIRequestType:FlushLine) || tbe.dataDirty) {
     enqueue(reqOutPort, CHIRequestMsg, request_latency) {
       prepareRequest(tbe, CHIRequestType:WriteNoSnp, out_msg);
       out_msg.Destination.add(mapAddressToDownstreamMachine(tbe.addr));
@@ -2930,7 +2962,7 @@ action(Send_CompData, desc="") {
 
 action(Send_WBData, desc="") {
   assert(is_valid(tbe));
-  if (tbe.coherentMaintenance && is_HN && !tbe.dataDirty) {
+  if ((tbe.reqType == CHIRequestType:FlushLine) && is_HN && !tbe.dataDirty) {
     // The matching WriteNoSnp was suppressed after a clean snoop response.
     assert(!tbe.expected_req_resp.hasExpected());
   } else {
@@ -2973,9 +3005,9 @@ action(Send_WBData, desc="") {
   }
 }
 
-action(Complete_Suppressed_Maintenance_Write, desc="") {
+action(Complete_Suppressed_Flush_Write, desc="") {
   assert(is_HN);
-  assert(tbe.coherentMaintenance);
+  assert(tbe.reqType == CHIRequestType:FlushLine);
   assert(tbe.dataDirty == false);
   assert(tbe.expected_req_resp.hasExpected() == false);
 }
@@ -3298,6 +3330,32 @@ action(Send_CompI, desc="") {
     out_msg.txnId := tbe.txnId;
     out_msg.dbid := tbe.txnId;
     out_msg.cbusy := getCurrCBusy(out_msg);
+  }
+}
+
+action(Complete_Flush, desc="") {
+  assert(is_valid(tbe));
+  assert((tbe.reqType == CHIRequestType:Flush) ||
+         (tbe.reqType == CHIRequestType:FlushLine));
+  assert(tbe.expected_req_resp.hasExpected() == false);
+  assert(tbe.expected_snp_resp.hasExpected() == false);
+  assert(tbe.dataMaybeDirtyUpstream == false);
+  assert(tbe.dir_sharers.isEmpty());
+  assert(tbe.dir_ownerExists == false);
+
+  if (tbe.requestor == machineID) {
+    // The original Ruby request was injected at this controller.
+    sequencer.writeCallback(tbe.addr, tbe.dataBlk, false);
+  } else {
+    enqueue(rspOutPort, CHIResponseMsg, response_latency) {
+      out_msg.addr := address;
+      out_msg.type := CHIResponseType:FlushAck;
+      out_msg.responder := machineID;
+      out_msg.Destination.add(tbe.requestor);
+      out_msg.txnId := tbe.txnId;
+      out_msg.dbid := tbe.txnId;
+      out_msg.cbusy := getCurrCBusy(out_msg);
+    }
   }
 }
 
@@ -4013,7 +4071,7 @@ action(Profile_Eviction, desc="") {
 }
 
 action(Profile_OutgoingStart, desc="") {
-  if (!(tbe.coherentMaintenance && !tbe.dataDirty &&
+  if (!((tbe.reqType == CHIRequestType:FlushLine) && !tbe.dataDirty &&
         (curTransitionEvent() == Event:SendWriteNoSnp))) {
     outgoingTransactionStart(address, curTransitionEvent());
   }

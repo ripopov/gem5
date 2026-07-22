@@ -9,6 +9,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 PAYLOAD_DIR = REPO_ROOT / "tests/test-progs/jitcpu-smoke/src"
 BAREMETAL_CONFIG = REPO_ROOT / "tests/gem5/jitcpu/configs/jitcpu_baremetal.py"
 LINUX_CONFIG = REPO_ROOT / "tests/gem5/jitcpu/configs/jitcpu_linux.py"
+RUBY_RANDOM_CONFIG = REPO_ROOT / "configs/example/ruby_random_test.py"
 
 
 def run(command, *, capture=False):
@@ -70,6 +71,31 @@ backend = args.backend.resolve()
 for artifact in (gem5, backend):
     if not artifact.is_file():
         parser.error(f"file does not exist: {artifact}")
+
+
+def run_chi_flush(network):
+    require_success(
+        [
+            gem5,
+            f"--outdir={args.outdir / f'chi-flush-{network}'}",
+            RUBY_RANDOM_CONFIG,
+            "--num-cpus=4",
+            "--num-dirs=2",
+            "--num-l3caches=4",
+            "--maxloads=5000",
+            "--abs-max-tick=10000000000",
+            f"--network={network}",
+            "--check-flush",
+            "--flush-period=127",
+            "--flush-duplicates",
+        ],
+        f"four-requester/two-controller {network} CHI FLUSH regression",
+    )
+
+
+run_chi_flush("simple")
+if args.smp_garnet:
+    run_chi_flush("garnet")
 
 require_success(
     [
@@ -150,7 +176,10 @@ def run_smp_baremetal(network, payload, variant):
         "--repeated-switches",
         "21",
         "--max-ticks",
-        "200000000",
+        # Trace-driven FLUSH intentionally serializes one hierarchy-wide
+        # transaction per recorded cache block. The four-core footprint can
+        # therefore consume more than the old 200M-tick phase guard.
+        "500000000",
     ]
     if network == "garnet":
         command.extend(["--ruby-network", "garnet"])

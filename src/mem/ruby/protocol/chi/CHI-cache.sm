@@ -312,6 +312,8 @@ machine(MachineType:Cache, "Cache coherency protocol") :
     Store,                       desc="", in_trans="yes";
     AtomicLoad,                  desc="", in_trans="yes";
     AtomicStore,                 desc="", in_trans="yes";
+    Flush,                       desc="Forward a Ruby FLUSH to the point of coherence", in_trans="yes";
+    Flush_PoC,                   desc="Clean and invalidate a line at the point of coherence", in_trans="yes";
     Prefetch,                    desc="", in_trans="yes";
     ReadShared,                  desc="", in_trans="yes";
     ReadNotSharedDirty,          desc="", in_trans="yes";
@@ -356,6 +358,7 @@ machine(MachineType:Cache, "Cache coherency protocol") :
 
     // Events triggered by incoming response messages
     // See CHIResponseType in CHi-msg.sm for descriptions
+    FlushAck,                desc="Hierarchy-wide FLUSH completed";
     CompAck,                 desc="";
     Comp_I,                  desc="";
     Comp_UC,                 desc="";
@@ -439,7 +442,6 @@ machine(MachineType:Cache, "Cache coherency protocol") :
     Local_Eviction,   in_trans="yes", desc="Evicts/WB the local copy of the line";
     LocalHN_Eviction, in_trans="yes", desc="Local_Eviction triggered when is HN";
     Global_Eviction,  in_trans="yes", desc="Local_Eviction + back-invalidate line in all upstream requesters";
-    Maintenance_Eviction, in_trans="yes", desc="HNF writeback and global invalidation before uncached execution";
 
     // Events triggered from tbe.actions
     // In general, for each event we define a single transition from
@@ -487,6 +489,7 @@ machine(MachineType:Cache, "Cache coherency protocol") :
     SendWriteNoSnp,            out_trans="yes", desc="Send a WriteNoSnp for a full line";
     SendWriteNoSnpPartial,     out_trans="yes", desc="Send a WriteNoSnpPtl";
     SendWriteUnique,           out_trans="yes", desc="Send a WriteUniquePtl";
+    SendFlush,                 out_trans="yes", desc="Send a Ruby FLUSH toward the point of coherence";
     SendWBData,                desc="Send writeback data";
     SendWUData,                desc="Send write unique data";
     SendWUDataCB,              desc="Send write unique data from a sequencer callback";
@@ -517,6 +520,7 @@ machine(MachineType:Cache, "Cache coherency protocol") :
     SendCompUCResp, desc="Ack CleanUnique with Comp_UC";
     SendCompUCRespStale, desc="Ack stale CleanUnique with Comp_UC";
     SendCompUDResp, desc="Ack MakeReadUnique with Comp_UD_PD";
+    CompleteFlush, desc="Complete FLUSH locally or acknowledge it upstream";
 
     // Checks if an upgrade using a CleanUnique was sucessfull
     CheckUpgrade_FromStore, desc="Upgrade needed by a Store";
@@ -669,8 +673,6 @@ machine(MachineType:Cache, "Cache coherency protocol") :
     MachineID fwdRequestor, desc="Requestor to receive data on fwding snoops";
     bool use_DMT,           desc="Use DMT for this transaction";
     bool use_DCT,           desc="Use DCT for this transaction";
-    bool coherentMaintenance, default="false",
-         desc="Internal whole-hierarchy maintenance replacement";
 
     // if either is set prefetchers are not notified on miss/hit/fill and
     // demand hit/miss stats are not incremented
@@ -805,7 +807,6 @@ machine(MachineType:Cache, "Cache coherency protocol") :
     void deallocate(Addr);
     void flushEntries();
     int getNumEntries();
-    Addr getAddressAtIdx(int);
     DirEntry lookup(Addr);
     bool isTagPresent(Addr);
   }
@@ -820,10 +821,6 @@ machine(MachineType:Cache, "Cache coherency protocol") :
   // This is incremented at Profile_Eviction and decays on
   // store miss completion
   int sc_lock_multiplier, default="0";
-
-  // Index used to find local-only HNF cache lines after the directory has
-  // been drained by coherent cache maintenance.
-  int maintenance_cache_index, default="0";
 
   // Definitions of the TBE tables
 
@@ -900,7 +897,6 @@ machine(MachineType:Cache, "Cache coherency protocol") :
     Addr addr;
     Addr from_addr;
     int slot; // set only when unify_repl_TBEs is set
-    bool maintenance, default="false";
     bool functionalRead(Packet *pkt) { return false; }
     bool functionalRead(Packet *pkt, WriteMask &mask) { return false; }
     bool functionalWrite(Packet *pkt) { return false; }

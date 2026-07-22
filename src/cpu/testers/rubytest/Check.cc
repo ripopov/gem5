@@ -66,9 +66,17 @@ Check::initiate(Cycles current_time)
         initiatePrefetch(current_time);
     }
 
-    if (m_tester_ptr->getCheckFlush() && (rng->random(0, 0xff) == 0)) {
+    const auto flush_period = m_tester_ptr->getFlushPeriod();
+    if (m_tester_ptr->getCheckFlush() &&
+        ((flush_period && m_tester_ptr->shouldIssuePeriodicFlush()) ||
+         (!flush_period && rng->random(0, 0xff) == 0))) {
         // issue a Flush request from random processor
-        initiateFlush(current_time);
+        if (initiateFlush(current_time)) {
+            // Treat a completed clean-and-invalidate as a global ordering
+            // point in this tester. Already-issued traffic can still race the
+            // FLUSH, but no new checker operation is launched behind it.
+            return;
+        }
     }
 
     if (m_status == ruby::TesterStatus_Idle) {
@@ -141,36 +149,50 @@ Check::initiatePrefetch(Cycles current_time)
     }
 }
 
-void
+bool
 Check::initiateFlush(Cycles current_time)
 {
 
     DPRINTF(RubyTest, "initiating Flush\n");
 
-    int index = rng->random(0, m_num_writers - 1);
-    RequestPort* port = m_tester_ptr->getWritableCpuPort(index);
+    const int first_index = rng->random(0, m_num_writers - 1);
+    const int attempts = m_tester_ptr->getFlushDuplicates() ? 2 : 1;
+    int issued = 0;
 
-    Request::Flags flags;
-
-    RequestPtr req = std::make_shared<Request>(
+    for (int attempt = 0; attempt < attempts; ++attempt) {
+        // Send an enabled duplicate from a distinct requester when possible.
+        const int index = (first_index + attempt) % m_num_writers;
+        RequestPort* port = m_tester_ptr->getWritableCpuPort(index);
+        Request::Flags flags;
+        RequestPtr req = std::make_shared<Request>(
             m_address, CHECK_SIZE, flags, m_tester_ptr->requestorId());
-    req->setPC(m_pc);
+        req->setPC(m_pc);
 
-    Packet::Command cmd;
+        // CleanInvalidReq maps to RubyRequestType::FLUSH and, unlike the
+        // fire-and-forget FlushReq used by CacheRecorder, returns an
+        // observable response so this tester can verify causal completion.
+        PacketPtr pkt = new Packet(req, MemCmd::CleanInvalidReq);
+        pkt->senderState = new SenderState(m_address, req->getSize(),
+                                           CACHE_LINE_BITS);
 
-    cmd = MemCmd::FlushReq;
-
-    PacketPtr pkt = new Packet(req, cmd);
-
-    // push the subblock onto the sender state.  The sequencer will
-    // update the subblock on the return
-    pkt->senderState = new SenderState(m_address, req->getSize(),
-                                       CACHE_LINE_BITS);
-
-    if (port->sendTimingReq(pkt)) {
-        m_tester_ptr->updateProgress(index, m_address, current_time);
-        DPRINTF(RubyTest, "initiating Flush - successful\n");
+        if (port->sendTimingReq(pkt)) {
+            ++issued;
+            m_tester_ptr->noteFlushIssued(current_time);
+            DPRINTF(RubyTest,
+                    "initiating Flush - successful on proc %d\n", index);
+        } else {
+            delete pkt->senderState;
+            delete pkt;
+            DPRINTF(RubyTest,
+                    "failed to initiate Flush on proc %d - port not ready\n",
+                    index);
+        }
     }
+
+    if (issued == 2) {
+        m_tester_ptr->noteFlushDuplicatePairIssued();
+    }
+    return issued != 0;
 }
 
 void

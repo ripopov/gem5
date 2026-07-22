@@ -345,6 +345,19 @@ machine(MachineType:Memory, "Memory controller interface") :
     return !retryQueue.empty();
   }
 
+  // Generic Ruby drain must also wait for protocol work which has already
+  // left the coherent caches but has not yet completed at backing memory.
+  public bool coherenceQuiescent() {
+    return (storTBEs.size() == 0) &&
+           (storTBEs.reserved() == 0) &&
+           (pendingWrites == 0) &&
+           retryQueue.empty() &&
+           (reqRdy.getSize(clockEdge()) == 0) &&
+           (triggerQueue.getSize(clockEdge()) == 0) &&
+           (requestToMemory.getSize(clockEdge()) == 0) &&
+           (responseFromMemory.getSize(clockEdge()) == 0);
+  }
+
   int getCurrCBusy(CHIResponseMsg message) {
     return cbusy_generator.generate(this, message);
   }

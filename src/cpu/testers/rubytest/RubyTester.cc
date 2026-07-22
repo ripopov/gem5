@@ -65,6 +65,8 @@ RubyTester::RubyTester(const Params &p)
     m_num_readers(0),
     m_wakeup_frequency(p.wakeup_frequency),
     m_check_flush(p.check_flush),
+    m_flush_period(p.flush_period),
+    m_flush_duplicates(p.flush_duplicates),
     m_num_inst_only_ports(p.port_cpuInstPort_connection_count),
     m_num_inst_data_ports(p.port_cpuInstDataPort_connection_count)
 {
@@ -180,7 +182,16 @@ RubyTester::CpuPort::recvTimingResp(PacketPtr pkt)
         safe_cast<RubyTester::SenderState*>(pkt->senderState);
     ruby::SubBlock& subblock = senderState->subBlock;
 
-    tester->hitCallback(globalIdx, &subblock);
+    if (pkt->cmd == MemCmd::CleanInvalidResp) {
+        // A flush carries no data and is independent of the Check action/read
+        // state machine. Treating its completion as a load or store callback
+        // can advance that state machine and corrupt the reference value.
+        DPRINTF(RubyTest, "completed Flush for proc: %d addr: %#x\n",
+                globalIdx, pkt->getAddr());
+        tester->noteFlushCompleted(tester->curCycle());
+    } else {
+        tester->hitCallback(globalIdx, &subblock);
+    }
 
     // Now that the tester has completed, delete the senderState
     // (includes sublock) and the packet, then return
@@ -239,7 +250,13 @@ RubyTester::hitCallback(ruby::NodeID proc, ruby::SubBlock* data)
 void
 RubyTester::wakeup()
 {
-    if (m_checks_completed < m_checks_to_complete) {
+    if (m_flush_requests_issued != m_flush_requests_completed) {
+        // FLUSH is a test barrier: traffic already in Ruby remains free to
+        // race it, while the tester waits for its causal response before
+        // injecting more work.
+        checkForDeadlock();
+        schedule(checkStartEvent, curTick() + m_wakeup_frequency);
+    } else if (m_checks_completed < m_checks_to_complete) {
         // Try to perform an action or check
         Check* check_ptr = m_checkTable_ptr->getRandomCheck();
         assert(check_ptr != NULL);
@@ -249,15 +266,62 @@ RubyTester::wakeup()
 
         schedule(checkStartEvent, curTick() + m_wakeup_frequency);
     } else {
+        fatal_if(m_check_flush && m_flush_period &&
+                     m_flush_requests_completed == 0,
+                 "RubyTester periodic FLUSH test completed without a FLUSH");
+        fatal_if(m_flush_duplicates && m_flush_duplicate_pairs_issued == 0,
+                 "RubyTester duplicate FLUSH test completed without an "
+                 "accepted duplicate pair");
+        if (m_check_flush) {
+            inform("Ruby Tester completed with %d FLUSH requests and %d "
+                   "duplicate pairs",
+                   m_flush_requests_completed,
+                   m_flush_duplicate_pairs_issued);
+        }
         exitSimLoop("Ruby Tester completed");
     }
+}
+
+bool
+RubyTester::shouldIssuePeriodicFlush()
+{
+    if (m_flush_period == 0) {
+        return false;
+    }
+    ++m_flush_attempts;
+    return (m_flush_attempts % m_flush_period) == 0;
+}
+
+void
+RubyTester::noteFlushIssued(Cycles current_time)
+{
+    ++m_flush_requests_issued;
+    m_last_flush_progress = current_time;
+}
+
+void
+RubyTester::noteFlushCompleted(Cycles current_time)
+{
+    assert(m_flush_requests_completed < m_flush_requests_issued);
+    ++m_flush_requests_completed;
+    m_last_flush_progress = current_time;
 }
 
 void
 RubyTester::checkForDeadlock()
 {
-    int size = m_last_progress_vector.size();
     Cycles current_time = curCycle();
+    if (m_flush_requests_issued != m_flush_requests_completed &&
+        (current_time - m_last_flush_progress) > m_deadlock_threshold) {
+        panic("Possible FLUSH deadlock detected:\n"
+              "  Current Time: %d\n"
+              "  Last Progress Time: %d\n"
+              "  Outstanding FLUSH requests: %d\n",
+              current_time, m_last_flush_progress,
+              m_flush_requests_issued - m_flush_requests_completed);
+    }
+
+    int size = m_last_progress_vector.size();
     for (int processor = 0; processor < size; processor++) {
         if (m_last_progress_vector[processor].empty()) {
             DPRINTF(RubyTest, "Processor %d is idle now, skip\n", processor);

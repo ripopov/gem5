@@ -890,70 +890,127 @@ transition(I, Global_Eviction) {
   Pop_ReplTriggerQueue;
 }
 
-// HNF-wide cache maintenance.  These transitions use the normal CHI snoop
-// and writeback machinery, but also remove the home directory entry once all
-// upstream acknowledgements and any dirty data have arrived.
-transition({UD,SD}, Maintenance_Eviction, BUSY_BLKD) {ReplTBEAvailable} {
-  Initiate_Replacement;
-  Initiate_Replacement_WB;
-  Profile_Eviction;
-  Deallocate_CacheBlock_IfPresent;
-  Deallocate_DirEntry_IfPresent;
-  Pop_ReplTriggerQueue;
+// Ruby FLUSH is forwarded by RN caches to the point of coherence. The HNF
+// uses the normal CHI snoop and writeback machinery, then removes its local
+// cache and directory state before acknowledging the original request.
+transition(I, Flush, BUSY_BLKD) {
+  Initiate_Request;
+  Initiate_Flush_Forward;
+  Pop_ReqRdyQueue;
   ProcessNextState;
 }
 
-transition(UD_T, Maintenance_Eviction, BUSY_BLKD) {ReplTBEAvailable} {
+transition(SC, Flush, BUSY_BLKD) {
+  Initiate_Request;
+  Initiate_Replacement_Evict;
+  Initiate_Flush_Forward;
+  Deallocate_CacheBlock_IfPresent;
+  Pop_ReqRdyQueue;
+  ProcessNextState;
+}
+
+transition({UD,SD,UC}, Flush, BUSY_BLKD) {
+  Initiate_Request;
+  Initiate_Replacement_WB;
+  Initiate_Flush_Forward;
+  Deallocate_CacheBlock_IfPresent;
+  Pop_ReqRdyQueue;
+  ProcessNextState;
+}
+
+transition(UD_T, Flush, BUSY_BLKD) {
   Unset_Timeout_Cache;
-  Initiate_Replacement;
+  Initiate_Request;
   Initiate_Replacement_WB;
-  Profile_Eviction;
+  Initiate_Flush_Forward;
   Deallocate_CacheBlock_IfPresent;
-  Deallocate_DirEntry_IfPresent;
-  Pop_ReplTriggerQueue;
+  Pop_ReqRdyQueue;
   ProcessNextState;
 }
 
-transition({UC,SC}, Maintenance_Eviction, BUSY_BLKD) {ReplTBEAvailable} {
-  Initiate_Replacement;
-  Initiate_Replacement_JustDrop;
+transition({RSC,SC_RSC}, Flush, BUSY_BLKD) {
+  Initiate_Request;
+  Initiate_Replacement_Evict_BackInvalidte;
+  Initiate_Flush_Forward;
+  Deallocate_CacheBlock_IfPresent;
+  Deallocate_DirEntry_IfPresent;
+  Pop_ReqRdyQueue;
+  ProcessNextState;
+}
+
+transition({RU,RSD,RUSD,RUSC,UD_RSC,SD_RSC,UC_RSC,UC_RU,UD_RU,
+            UD_RSD,SD_RSD}, Flush, BUSY_BLKD) {
+  Initiate_Request;
+  Initiate_Replacement_WB_BackInvalidate;
+  Initiate_Flush_Forward;
+  Deallocate_CacheBlock_IfPresent;
+  Deallocate_DirEntry_IfPresent;
+  Pop_ReqRdyQueue;
+  ProcessNextState;
+}
+
+transition({UD,SD}, Flush_PoC, BUSY_BLKD) {
+  Initiate_Request;
+  Initiate_Replacement_WB;
+  Queue_Flush_Completion;
   Profile_Eviction;
   Deallocate_CacheBlock_IfPresent;
   Deallocate_DirEntry_IfPresent;
-  Pop_ReplTriggerQueue;
+  Pop_ReqRdyQueue;
+  ProcessNextState;
+}
+
+transition(UD_T, Flush_PoC, BUSY_BLKD) {
+  Unset_Timeout_Cache;
+  Initiate_Request;
+  Initiate_Replacement_WB;
+  Queue_Flush_Completion;
+  Profile_Eviction;
+  Deallocate_CacheBlock_IfPresent;
+  Deallocate_DirEntry_IfPresent;
+  Pop_ReqRdyQueue;
+  ProcessNextState;
+}
+
+transition({UC,SC}, Flush_PoC, BUSY_BLKD) {
+  Initiate_Request;
+  Initiate_Replacement_JustDrop;
+  Queue_Flush_Completion;
+  Profile_Eviction;
+  Deallocate_CacheBlock_IfPresent;
+  Deallocate_DirEntry_IfPresent;
+  Pop_ReqRdyQueue;
   ProcessNextState;
 }
 
 transition({UD_RSC,SD_RSC,UD_RU,UC_RU,RU,UD_RSD,SD_RSD,RSD,RUSD},
-           Maintenance_Eviction, BUSY_BLKD) {ReplTBEAvailable} {
-  Initiate_Replacement;
+           Flush_PoC, BUSY_BLKD) {
+  Initiate_Request;
   Initiate_Replacement_WB_BackInvalidate;
+  Queue_Flush_Completion;
   Profile_Eviction;
   Deallocate_CacheBlock_IfPresent;
   Deallocate_DirEntry_IfPresent;
-  Pop_ReplTriggerQueue;
+  Pop_ReqRdyQueue;
   ProcessNextState;
 }
 
-transition({UC_RSC,SC_RSC,RUSC,RSC}, Maintenance_Eviction,
-           BUSY_BLKD) {ReplTBEAvailable} {
-  Initiate_Replacement;
-  Initiate_Maintenance_Clean_BackInvalidate;
+transition({UC_RSC,SC_RSC,RUSC,RSC}, Flush_PoC, BUSY_BLKD) {
+  Initiate_Request;
+  Initiate_Flush_Clean_BackInvalidate;
+  Queue_Flush_Completion;
   Profile_Eviction;
   Deallocate_CacheBlock_IfPresent;
   Deallocate_DirEntry_IfPresent;
-  Pop_ReplTriggerQueue;
+  Pop_ReqRdyQueue;
   ProcessNextState;
 }
 
-transition(I, Maintenance_Eviction) {
-  Deallocate_CacheBlock_IfPresent;
-  Deallocate_DirEntry_IfPresent;
-  Pop_ReplTriggerQueue;
-}
-
-transition({BUSY_BLKD,BUSY_INTR}, Maintenance_Eviction) {
-  StallLocalEviction;
+transition(I, Flush_PoC, BUSY_BLKD) {
+  Initiate_Request;
+  Queue_Flush_Completion;
+  Pop_ReqRdyQueue;
+  ProcessNextState;
 }
 
 // Snoops
@@ -1033,7 +1090,7 @@ transition({BUSY_BLKD,BUSY_INTR},
             {ReadShared, ReadNotSharedDirty, ReadUnique, ReadUnique_PoC,
             ReadNoSnp,
             ReadOnce, CleanUnique, CleanUnique_Stale,
-            Load, Store, AtomicLoad, AtomicStore, Prefetch,
+            Load, Store, AtomicLoad, AtomicStore, Flush, Flush_PoC, Prefetch,
             MakeReadUnique,
             WriteBackFull, WriteBackFull_Stale,
             WriteEvictFull, WriteEvictFull_Stale,
@@ -1083,6 +1140,13 @@ transition({BUSY_BLKD,BUSY_INTR}, ActionStalledOnHazard) {
 transition(BUSY_BLKD, SendWriteBackOrWriteEvict, BUSY_INTR) {DestinationAvailable} {
   Pop_TriggerQueue;
   Send_WriteBackOrWriteEvict;
+  Profile_OutgoingStart;
+  ProcessNextState_ClearPending;
+}
+
+transition(BUSY_BLKD, SendFlush, BUSY_INTR) {DestinationAvailable} {
+  Pop_TriggerQueue;
+  Send_Flush;
   Profile_OutgoingStart;
   ProcessNextState_ClearPending;
 }
@@ -1151,12 +1215,18 @@ transition(BUSY_BLKD, SendWBData) {
   ProcessNextState_ClearPending;
 }
 
-// Coherent maintenance can discover that an exclusive upstream copy is
-// clean, suppressing its conservatively queued WriteNoSnp after the
+// FLUSH can discover that an exclusive upstream copy is clean, suppressing
+// its conservatively queued WriteNoSnp after the
 // SendWriteNoSnp transition has entered BUSY_INTR.
 transition(BUSY_INTR, SendWBData, BUSY_BLKD) {
   Pop_TriggerQueue;
-  Complete_Suppressed_Maintenance_Write;
+  Complete_Suppressed_Flush_Write;
+  ProcessNextState_ClearPending;
+}
+
+transition(BUSY_BLKD, CompleteFlush) {
+  Pop_TriggerQueue;
+  Complete_Flush;
   ProcessNextState_ClearPending;
 }
 
@@ -1632,6 +1702,16 @@ transition({BUSY_INTR,BUSY_BLKD}, DoRetry_Hazard) {
 transition({BUSY_BLKD,BUSY_INTR}, CompAck) {
   Receive_ReqResp;
   UpdateDirState_FromReqResp;
+  Pop_RespInQueue;
+  ProcessNextState;
+}
+
+// A FLUSH completion is returned only after the downstream controller has
+// completed all recursive snoops, data movement, and memory write responses.
+transition(BUSY_INTR, FlushAck, BUSY_BLKD) {
+  Receive_ReqResp;
+  UpdateBPTracker_FromDatalessResp;
+  Profile_OutgoingEnd_DatalessResp;
   Pop_RespInQueue;
   ProcessNextState;
 }

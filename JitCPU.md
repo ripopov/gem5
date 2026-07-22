@@ -12,8 +12,8 @@ JitCPU -> O3CPU -> JitCPU -> O3CPU -> ...
 ```
 
 Ruby+CHI is supported across those switches. Entering JitCPU performs a
-protocol-coherent hierarchy writeback and invalidation; drain alone is not
-treated as cache invalidation.
+trace-driven, protocol-coherent hierarchy writeback and invalidation using
+`RubyRequestType::FLUSH`; drain alone is not treated as cache invalidation.
 
 The proof-of-concept ISA is RV64GC plus Zicsr and Zifencei, MSU privilege, and
 Sv39. JitCPU and O3 use the same `RiscvISA` configuration. The current test
@@ -64,8 +64,8 @@ Current limitations are:
   mode, so multicore correctness is supported but host-side JIT execution is
   serialized and does not scale with the number of host cores.
 - Reverse switching to `atomic_noncaching` is implemented for CHI. Other Ruby
-  protocols must implement the coherent-maintenance controller interface
-  before they can claim equivalent support.
+  protocols must implement `RubyRequestType::FLUSH` and the Ruby
+  quiescence/empty-hierarchy checks before they can claim equivalent support.
 - JitCPU performs fast functional memory accesses; it does not model detailed
   cache or interconnect timing.
 - The Linux two-controller configuration uses Ruby's canonical functional
@@ -145,28 +145,37 @@ Switching from O3 timing mode to JitCPU `atomic_noncaching` mode follows this
 ordering:
 
 1. `m5.switchCpus(..., is_ruby=True)` drains the CPUs and outstanding Ruby
-   work and switches O3 out.
-2. The CHI HNF, as point of coherence, walks its directory and local cache one
-   address at a time.
-3. Each address uses normal CHI replacement machinery. Upstream RNF copies are
-   invalidated with `SnpCleanInvalid`; dirty data is collected and written to
-   the downstream memory node, while clean lines are invalidated without an
-   unnecessary data write.
-4. Maintenance finishes only when every participating cache and directory is
-   empty, all CHI TBE/internal queues are empty, and all Ruby networks are
-   quiescent. SimpleNetwork checks endpoint, internal-link, and switch queues.
-   Garnet additionally tracks non-statistical in-flight packets and waits for
-   data and credit-link source/destination buffers, so statistics resets
-   cannot falsify quiescence.
-5. The drain manager is re-armed and the system is drained again. This final
+   work and switches O3 out. Ruby drain waits for controller TBEs, internal
+   queues, and network traffic to become quiescent, so the trace is a stable
+   hierarchy snapshot.
+2. `RubySystem::memWriteback()` uses the existing checkpoint `CacheRecorder`
+   trace as a worklist. It submits one recorded line at a time as the existing
+   `RubyRequestType::FLUSH`, advancing simulated time normally without
+   removing events or rewinding `curTick()`.
+3. The injection-side CHI cache first cleans and invalidates its local subtree,
+   then forwards a `FlushLine` request to the address-selected HNF. The HNF,
+   as point of coherence, uses the normal replacement, snoop, and writeback
+   machinery: `SnpCleanInvalid` removes upstream copies, dirty data reaches the
+   downstream memory node, and clean data is discarded without an unnecessary
+   memory write.
+4. A causal `FlushAck` is returned only after all snoop responses, dirty-data
+   movement, and downstream write responses for that line are complete.
+   Flushing an absent line and overlapping duplicate FLUSH requests are safe;
+   per-line CHI TBE serialization prevents conflicting transactions from
+   completing early.
+5. After trace playback, `RubySystem::memInvalidate()` requires every cache and
+   directory to be empty and every controller and network to be quiescent.
+   This is also the coverage invariant: if a trace record were missed, the
+   switch fails rather than silently discarding a tag.
+6. The drain manager is re-armed and the system is drained again. This final
    drain waits for posted writebacks already accepted by CHI but still queued
-   in the DRAM controller.
-6. Only then does gem5 change to `atomic_noncaching` and invoke JitCPU reverse
-   takeover.
+   in the DRAM controller. Only then does gem5 change to
+   `atomic_noncaching` and invoke JitCPU reverse takeover.
 
-`RubySystem::memInvalidate()` rejects an attempt to continue while coherent
-maintenance is incomplete. The CHI implementation never clears tags without
-also completing the corresponding protocol and directory transitions.
+The old custom HNF directory/cache walker and `Maintenance_Eviction` request
+path are not used. This keeps CPU switching on Ruby's existing trace-driven
+FLUSH mechanism, which is also the appropriate protocol primitive for future
+architectural cache-maintenance operations.
 
 ## Build
 
@@ -197,6 +206,36 @@ updates memory. The SMP version starts and pins four workers before its first
 shared atomic counter. These overlays are necessary for repeated switching
 because the fixed image's original init script returns after its `m5_exit`,
 which eventually causes Linux to panic after a one-way test has already ended.
+
+## Focused CHI FLUSH regression
+
+The Ruby random tester has a deterministic FLUSH mode for exercising the
+protocol independently of CPU switching. It injects periodic
+`RubyRequestType::FLUSH` operations through four requester ports while normal
+reads, writes, and cache replacements remain active. The duplicate mode also
+issues the same line concurrently from two different requesters. Completion
+is checked separately from ordinary data callbacks, with explicit progress,
+deadlock, accepted-duplicate, and request/completion accounting checks.
+
+The automated driver uses four RNFs, four HNFs, two interleaved memory
+controllers, small randomized caches, 5,000 normal operations, and both
+SimpleNetwork and Garnet. Run the focused cases directly with:
+
+```sh
+build/RISCV/gem5.opt -d /tmp/chi-flush-simple \
+  configs/example/ruby_random_test.py \
+  --num-cpus=4 --num-dirs=2 --num-l3caches=4 \
+  --maxloads=5000 --abs-max-tick=10000000000 \
+  --network=simple --check-flush --flush-period=127 \
+  --flush-duplicates
+
+build/RISCV/gem5.opt -d /tmp/chi-flush-garnet \
+  configs/example/ruby_random_test.py \
+  --num-cpus=4 --num-dirs=2 --num-l3caches=4 \
+  --maxloads=5000 --abs-max-tick=10000000000 \
+  --network=garnet --check-flush --flush-period=127 \
+  --flush-duplicates
+```
 
 ## Directed bare-metal regression
 
@@ -264,7 +303,7 @@ build/RISCV/gem5.opt -d /tmp/jitcpu-repeated-garnet \
   tests/test-progs/jitcpu-smoke/src/jitcpu-smp-repeated-switch \
   "$QEMU_JIT_LIBRARY" --ruby-chi --ruby-network garnet \
   --num-cpus 4 --num-dirs 2 --num-l3caches 4 \
-  --repeated-switches 21 --max-ticks 200000000
+  --repeated-switches 21 --max-ticks 500000000
 ```
 
 ## Linux Ruby+CHI validation
@@ -336,41 +375,37 @@ configuration before running this document's tests.
 ## Observed validation
 
 Validation on 2026-07-22 used the pinned `ext/qemu/repo` revision and a
-CHI-enabled `build/RISCV/gem5.opt`:
+CHI-enabled `build/RISCV/gem5.opt`. One invocation of the complete regression
+driver passed all of the following:
 
-- The standalone ABI-5 adapter smoke created two QEMU vCPUs with different
-  `mhartid` values and proved independent PC and integer-register state.
-- The original single-hart directed regression passed 21 switches at tick
-  66,266,000, preserving the original switch path after the multicore changes.
-- Four-hart directed SimpleNetwork and Garnet regressions each passed 21
-  switches, at ticks 828,691,000 and 936,397,000 respectively. Every phase
-  advanced all four harts. Every JIT phase had zero timing CHI messages; every
-  O3 phase exercised all four RNFs and both interleaved memory controllers.
-  Each payload phase also checked per-hart integer/FP state, the complete
-  64 KiB-per-hart footprint, shared AMO totals, and handoff generation.
+- Focused four-requester/two-controller CHI FLUSH stress passed on both
+  networks while ordinary traffic and evictions remained active. SimpleNetwork
+  completed at tick 2,365,351 with 343 accepted FLUSH requests and 37
+  concurrent duplicate pairs; Garnet completed at tick 382,441 with 448 FLUSH
+  requests and 219 duplicate pairs.
+- The single-hart directed regression passed 21 switches at tick 97,384,000.
+  The unsafe negative control skipped FLUSH maintenance and failed at the first
+  reverse handoff with the expected stale-data `m5_fail` code 9.
+- Four-hart active-worker SimpleNetwork and Garnet regressions passed 21
+  switches at ticks 2,511,378,000 and 3,259,701,000. Every phase advanced all
+  four harts. Every JIT phase had zero timing CHI messages; every O3 phase
+  exercised all four RNFs and both interleaved memory controllers. Each phase
+  also checked per-hart integer/FP state, the complete 64 KiB-per-hart
+  footprint, shared AMO totals, and handoff generation.
 - Four-hart WFI/MSIP SimpleNetwork and Garnet regressions passed 21 switches
-  at ticks 1,801,647,000 and 1,910,067,000. Three harts repeatedly waited in
+  at ticks 3,480,995,000 and 4,233,413,000. Three harts repeatedly waited in
   WFI and were independently awakened, handled, and cleared by CLINT software
-  interrupts after every switch. The trap counters reached the exact expected
-  generation on every hart; all per-hart, RNF, and controller assertions
-  passed.
-- Negative control: skipping coherent maintenance failed at the first reverse
-  handoff with `m5_fail` code 9, proving the positive result depends on the
-  coherence fix.
-- The single-hart Linux compatibility stress passed 11 switches and a
-  one-billion-tick final O3 interval with a clean guest log.
-- Four-hart Linux booted entirely on JitCPU and passed 21 switches with both
-  SimpleNetwork and Garnet, finishing at ticks 627,206,071,000 and
-  627,305,089,000. All four pinned userspace workers progressed in every
-  phase. Each JIT phase carried zero timing CHI traffic. Every O3 phase had
-  nonzero traffic on all four RNFs and both controllers, including the
-  one-billion-tick final phase; guest-log scans passed on both networks.
-- The automated bare-metal driver, including the negative, active-hart, and
-  WFI/MSIP cases on both networks, passed end to end. Its single-core and SMP
-  Linux branches were also exercised; the final per-node Linux checks passed
-  in the direct 21-switch runs above.
-- Existing one-way bare-metal and Linux switches passed with both classic
-  memory and Ruby+CHI.
+  interrupts after every switch. Exact trap-generation and per-hart, RNF, and
+  controller assertions passed.
+- Single-hart Linux booted on JitCPU, passed 11 switches, finished a
+  one-billion-tick O3 interval at tick 504,864,901,500, and passed the guest-log
+  scan.
+- Four-hart Linux booted entirely on JitCPU and passed 21 switches with
+  SimpleNetwork and Garnet, finishing at ticks 628,851,907,750 and
+  629,578,785,750. All four pinned userspace workers progressed in every phase.
+  Each JIT phase carried zero timing CHI traffic. Every O3 phase had nonzero
+  traffic on all four RNFs and both controllers, including the final
+  one-billion-tick phase; guest-log scans passed on both networks.
 
 The directed test, not Linux alone, is the correctness gate: it explicitly
 proves dirty writeback, clean invalidation, translation/TB invalidation, PMP,

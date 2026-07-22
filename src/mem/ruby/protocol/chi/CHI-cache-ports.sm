@@ -282,10 +282,7 @@ in_port(replTriggerInPort, ReplacementMsg, replTriggerQueue, rank=4) {
       TBE tbe := getCurrentActiveTBE(in_msg.addr);
       CacheEntry cache_entry := getCacheEntry(in_msg.addr);
       Event trigger := Event:null;
-      if (in_msg.maintenance) {
-        assert(is_HN);
-        trigger := Event:Maintenance_Eviction;
-      } else if (is_valid(cache_entry) &&
+      if (is_valid(cache_entry) &&
           ((upstreamHasUnique(cache_entry.state) && dealloc_backinv_unique) ||
           (upstreamHasShared(cache_entry.state) && dealloc_backinv_shared))) {
         trigger := Event:Global_Eviction;
