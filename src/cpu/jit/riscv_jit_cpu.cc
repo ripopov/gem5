@@ -549,6 +549,9 @@ RiscvJitCPU::tick()
                  "Unhandled JitCPU m5 pseudo instruction %#x",
                  result.m5_function);
         tc->setReg(RiscvISA::int_reg::A0, value);
+        // The generated RV64 M5Op executes with both ABI result operands in
+        // its destination set. Match that path exactly before a CPU switch.
+        tc->setReg(RiscvISA::int_reg::A1, RegVal{0});
         tc->pcState(tc->pcState().instAddr() + 4);
 
         if (!tryCompleteDrain() && _status != Idle) {

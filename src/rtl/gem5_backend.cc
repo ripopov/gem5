@@ -130,6 +130,12 @@ Gem5InitiatorBackend::submit(const MemoryRequest &request)
     }
 
     PendingTransaction pending;
+    DPRINTF(RtlCosim,
+            "%s: submit AXI %s at %#llx (%llu beats, %llu bytes/beat)\n",
+            _port.name(), request.write ? "write" : "read",
+            static_cast<unsigned long long>(request.address),
+            static_cast<unsigned long long>(request.beatCount()),
+            static_cast<unsigned long long>(request.beatBytes));
     if (request.exclusive) {
         DPRINTF(RtlCosim,
                 "%s: submit AXI exclusive %s at %#llx (%llu bytes)\n",

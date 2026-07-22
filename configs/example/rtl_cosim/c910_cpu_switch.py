@@ -1,13 +1,14 @@
 # Copyright (c) 2026 The gem5 Authors
 # SPDX-License-Identifier: BSD-3-Clause
 
-"""Switch one RISC-V AtomicSimpleCPU into a preconnected PULP C910 RTL CPU."""
+"""Switch one RISC-V fast CPU into a preconnected PULP C910 RTL CPU."""
 
 import argparse
 import json
 from pathlib import Path
 
 import m5
+from m5.defines import buildEnv
 from m5.objects import (
     AddrRange,
     DDR3_1600_8x8,
@@ -52,6 +53,10 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--library", required=True, type=Path)
     parser.add_argument("--image", required=True, type=Path)
     parser.add_argument(
+        "--source-cpu", choices=("atomic", "jit"), default="atomic"
+    )
+    parser.add_argument("--jit-backend", type=Path)
+    parser.add_argument(
         "--case", choices=tuple(PASS_SIGNATURES), default="integer"
     )
     parser.add_argument("--clock", default="50MHz")
@@ -94,13 +99,21 @@ def _expected_signature(case: str) -> bytes:
 
 
 def create_system(
-    *, library: str, image: str, clock: str, case: str
+    *,
+    library: str,
+    image: str,
+    clock: str,
+    case: str,
+    source_cpu: str = "atomic",
+    jit_backend: str = "",
 ) -> RiscvSystem:
     system = RiscvSystem()
     system.clk_domain = SrcClockDomain(
         clock=clock, voltage_domain=VoltageDomain()
     )
-    system.mem_mode = "atomic"
+    system.mem_mode = (
+        "atomic_noncaching" if source_cpu == "jit" else "atomic"
+    )
     # OpenC910's fixed physical-memory attributes mark 0x1000_0000 through
     # 0x13ff_ffff cacheable. Include that window so RTL AMOs can be tested on
     # architecturally valid cacheable memory.
@@ -118,7 +131,20 @@ def create_system(
     system.mem_ctrl.port = system.membus.mem_side_ports
     system.workload = RiscvBareMetal(bootloader=image)
 
-    system.fast_cpu = RiscvAtomicSimpleCPU(cpu_id=0)
+    if source_cpu == "jit":
+        if not buildEnv["USE_JITCPU"]:
+            raise RuntimeError(
+                "--source-cpu jit requires a gem5 build with USE_JITCPU=y"
+            )
+        from m5.objects import RiscvJitCPU
+
+        system.fast_cpu = RiscvJitCPU(
+            cpu_id=0,
+            backend_path=jit_backend,
+            batch_size=256,
+        )
+    else:
+        system.fast_cpu = RiscvAtomicSimpleCPU(cpu_id=0)
     system.fast_cpu.icache_port = system.membus.cpu_side_ports
     system.fast_cpu.dcache_port = system.membus.cpu_side_ports
     system.fast_cpu.mmu.connectWalkerPorts(
@@ -189,12 +215,24 @@ def main() -> None:
         raise FileNotFoundError(f"vendor library not found: {args.library}")
     if not args.image.is_file():
         raise FileNotFoundError(f"program image not found: {args.image}")
+    if args.source_cpu == "jit" and (
+        args.jit_backend is None or not args.jit_backend.is_file()
+    ):
+        raise FileNotFoundError(
+            f"JitCPU backend not found: {args.jit_backend}"
+        )
 
     system = create_system(
         library=str(args.library.resolve()),
         image=str(args.image.resolve()),
         clock=args.clock,
         case=args.case,
+        source_cpu=args.source_cpu,
+        jit_backend=(
+            str(args.jit_backend.resolve())
+            if args.jit_backend is not None
+            else ""
+        ),
     )
     Root(full_system=True, system=system)
     m5.instantiate()
@@ -215,6 +253,8 @@ def main() -> None:
             f"cause={event.getCause()!r}, status={event.getCode()}"
         )
     print(f"RTL_COSIM_CPU_SWITCH_PASS case={args.case}")
+    if args.source_cpu == "jit":
+        print(f"RTL_COSIM_JIT_TO_C910_PASS case={args.case}")
 
 
 if __name__ == "__m5_main__":

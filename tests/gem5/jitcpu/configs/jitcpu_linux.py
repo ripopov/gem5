@@ -1,4 +1,5 @@
 import argparse
+import json
 import os
 
 import m5
@@ -16,6 +17,8 @@ from m5.objects import (
     RiscvRTC,
     RiscvSystem,
     Root,
+    RtlCoreSimObject,
+    RtlCpuSimObject,
     SrcClockDomain,
     SystemXBar,
     VoltageDomain,
@@ -101,11 +104,25 @@ parser.add_argument("--rtc-frequency", default="1MHz")
 parser.add_argument("--max-ticks", type=int, default=2_000_000_000_000)
 parser.add_argument("--switch-to-o3", action="store_true")
 parser.add_argument("--o3-ticks", type=int, default=10_000_000)
+parser.add_argument("--switch-to-c910", action="store_true")
+parser.add_argument("--c910-library")
+parser.add_argument("--c910-clock", default="50MHz")
+parser.add_argument("--c910-ticks", type=int, default=100_000_000)
 parser.add_argument("--ruby-chi", action="store_true")
 args = parser.parse_args()
 
+if args.switch_to_o3 and args.switch_to_c910:
+    parser.error("select only one destination CPU")
 if args.ruby_chi and buildEnv["PROTOCOL"] != "CHI":
     parser.error("--ruby-chi requires a gem5 binary built with PROTOCOL=CHI")
+if args.switch_to_c910 and args.ruby_chi:
+    parser.error("C910 RTL takeover currently requires the classic xbar")
+if args.switch_to_c910 and args.cpu != "jit":
+    parser.error("--switch-to-c910 requires --cpu jit")
+if args.switch_to_c910 and not args.c910_library:
+    parser.error("--switch-to-c910 requires --c910-library")
+if args.c910_library and not os.path.isfile(args.c910_library):
+    parser.error(f"C910 vendor library not found: {args.c910_library}")
 
 system = RiscvSystem()
 system.mem_mode = "atomic_noncaching"
@@ -169,6 +186,48 @@ if args.switch_to_o3:
         switched_out=True,
     )
     cpus.append(system.o3)
+elif args.switch_to_c910:
+    system.rtl_clk_domain = SrcClockDomain(
+        clock=args.c910_clock,
+        voltage_domain=system.cpu_voltage_domain,
+    )
+    c910_reset_inputs = ["rst_ni", "jtag_trst_ni"]
+    c910_interrupt_inputs = ["ipi_i", "time_irq_i"] + [
+        f"plic_hartx_mint_req_i[{index}]" for index in range(2)
+    ] + [
+        f"plic_hartx_sint_req_i[{index}]" for index in range(2)
+    ] + [f"ext_int_i[{index}]" for index in range(40)]
+    c910_io_inputs = [
+        "rtc_i",
+        "debug_req_i",
+        "jtag_tck_i",
+        "jtag_tdi_i",
+        "jtag_tms_i",
+    ]
+    system.rtl_core = RtlCoreSimObject(
+        clk_domain=system.rtl_clk_domain,
+        library=os.path.abspath(args.c910_library),
+        model_config=json.dumps(
+            {"instance_name": "gem5-c910-linux-switch"},
+            separators=(",", ":"),
+        ),
+        defer_startup=True,
+        initiator_bus_names=["memory"],
+        interrupt_input_names=c910_interrupt_inputs,
+        reset_input_names=c910_reset_inputs,
+        io_input_names=c910_io_inputs,
+        io_input_values=["0"] * len(c910_io_inputs),
+        io_output_names=["jtag_tdo_o", "jtag_tdo_en_o", "lpmd_b_o"],
+        initial_reset_cycles=10,
+    )
+    system.rtl_core.initiator_ports = system.membus.cpu_side_ports
+    system.rtl_cpu = RtlCpuSimObject(
+        clk_domain=system.rtl_clk_domain,
+        cpu_id=0,
+        switched_out=True,
+        rtl_core=system.rtl_core,
+    )
+    cpus.append(system.rtl_cpu)
 
 for cpu in cpus:
     if cpu is system.cpu and not args.ruby_chi:
@@ -229,7 +288,7 @@ print(
     f"{exit_event.getCause()}"
 )
 
-if args.switch_to_o3:
+if args.switch_to_o3 or args.switch_to_c910:
     if exit_event.getCause() != "m5_exit instruction encountered":
         raise RuntimeError("Linux did not reach its userspace m5 exit")
 
@@ -244,11 +303,8 @@ if args.switch_to_o3:
                 "JitCPU unexpectedly populated CHI during uncached boot"
             )
 
-    m5.switchCpus(
-        system,
-        [(system.cpu, system.o3)],
-        is_ruby=args.ruby_chi,
-    )
+if args.switch_to_o3:
+    m5.switchCpus(system, [(system.cpu, system.o3)], is_ruby=args.ruby_chi)
     print(
         f"Switched JitCPU -> O3CPU @ tick {m5.curTick()}, "
         f"memory mode {system.getMemoryMode()}"
@@ -279,3 +335,29 @@ if args.switch_to_o3:
         )
         if ruby_messages == 0:
             raise RuntimeError("Ruby CHI carried no post-takeover traffic")
+elif args.switch_to_c910:
+    m5.switchCpus(system, [(system.cpu, system.rtl_cpu)])
+    print(
+        f"Switched JitCPU -> C910 RTL @ tick {m5.curTick()}, "
+        f"memory mode {system.getMemoryMode()}"
+    )
+    m5.stats.reset()
+    exit_event = m5.simulate(args.c910_ticks)
+    print(
+        f"C910 RTL continued @ tick {m5.curTick()}: "
+        f"{exit_event.getCause()}"
+    )
+    if exit_event.getCause() != "simulate() limit reached":
+        raise RuntimeError("C910 did not complete its validation interval")
+
+    rtl_reads = int(
+        Root.getInstance()
+        .resolveStat(
+            "system.mem_ctrl.requestorReadAccesses::rtl_core.memory"
+        )
+        .value
+    )
+    print(f"C910 completed {rtl_reads} post-takeover memory reads")
+    if rtl_reads == 0:
+        raise RuntimeError("C910 generated no post-takeover memory traffic")
+    print("JITCPU_TO_C910_LINUX_PASS")

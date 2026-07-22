@@ -14,6 +14,7 @@
 #include "arch/riscv/regs/int.hh"
 #include "arch/riscv/regs/misc.hh"
 #include "cpu/thread_context.hh"
+#include "debug/RtlCosim.hh"
 
 namespace gem5::rtl_cosim
 {
@@ -49,6 +50,19 @@ encodeRiscv64(ThreadContext &context,
                 "disable RVV for this handover";
         return false;
     }
+
+    DPRINTF(RtlCosim,
+            "encoding riscv64/v1 pc=%#llx priv=%llu mstatus=%#llx "
+            "satp=%#llx stvec=%#llx\n",
+            static_cast<unsigned long long>(context.pcState().instAddr()),
+            static_cast<unsigned long long>(context.readMiscRegNoEffect(
+                RiscvISA::MISCREG_PRV)),
+            static_cast<unsigned long long>(context.readMiscRegNoEffect(
+                RiscvISA::MISCREG_STATUS)),
+            static_cast<unsigned long long>(context.readMiscRegNoEffect(
+                RiscvISA::MISCREG_SATP)),
+            static_cast<unsigned long long>(context.readMiscRegNoEffect(
+                RiscvISA::MISCREG_STVEC)));
 
     addValue(values, "pc", 64, context.pcState().instAddr());
     for (std::size_t index = 0; index < 32; ++index) {
