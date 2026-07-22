@@ -255,6 +255,19 @@ class BaseCPU : public ClockedObject
   protected:
     std::vector<BaseInterrupts*> interrupts;
 
+    /**
+     * Transfer CPU and architectural thread state from @p cpu.
+     *
+     * Normal CPU switches also migrate MMU/TLB state and its walker ports.
+     * Destinations backed by an external execution engine may request a clean
+     * MMU instead; their architectural translation state is carried by the
+     * ThreadContext and their memory topology is already connected.
+     */
+    void takeOverStateFrom(BaseCPU *cpu, bool take_over_mmu = true);
+
+    /** Transfer the conventional split instruction/data and reset ports. */
+    void takeOverPortsFrom(BaseCPU *cpu);
+
   public:
     BaseInterrupts *
     getInterruptController(ThreadID tid)

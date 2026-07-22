@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "Vrtl_cosim_c910_top.h"
+#include "cpu_state.hh"
 #include "gem5/rtl_cosim/api_v1.hh"
 #include "verilated.h"
 
@@ -275,7 +276,8 @@ class C910Core final : public RtlCore
           _context(makeContext()),
           _top(std::make_unique<Vrtl_cosim_c910_top>(
               _context.get(), _name.c_str())),
-          _bus(std::make_unique<C910Bus>())
+          _bus(std::make_unique<C910Bus>()),
+          _cpuState(std::make_unique<C910CpuState>(*_top, *_context))
     {
         initializeInputs();
         _top->eval();
@@ -418,6 +420,12 @@ class C910Core final : public RtlCore
         return _error.get();
     }
 
+    RtlCpuState *
+    cpuState() noexcept override
+    {
+        return _cpuState.get();
+    }
+
   private:
     template <class T>
     PortSignalBase *
@@ -508,6 +516,7 @@ class C910Core final : public RtlCore
     std::unique_ptr<VerilatedContext> _context;
     std::unique_ptr<Vrtl_cosim_c910_top> _top;
     std::unique_ptr<C910Bus> _bus;
+    std::unique_ptr<C910CpuState> _cpuState;
     std::vector<std::unique_ptr<PortSignalBase>> _signals;
     std::vector<CoreSignalBinding> _coreSignals;
     mutable ErrorState _error;

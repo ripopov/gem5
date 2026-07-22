@@ -41,12 +41,15 @@ class Gem5InitiatorBackend final : public TransactionBackend
 
     struct PacketState final : public Packet::SenderState
     {
-        PacketState(std::uint64_t token, std::size_t beat)
-            : token(token), beat(beat)
+        PacketState(std::uint64_t token, std::size_t beat, bool exclusive,
+                    bool write)
+            : token(token), beat(beat), exclusive(exclusive), write(write)
         {}
 
         std::uint64_t token;
         std::size_t beat;
+        bool exclusive;
+        bool write;
     };
 
     struct PendingTransaction
@@ -72,11 +75,12 @@ class Gem5InitiatorBackend final : public TransactionBackend
     RequestPort &port() noexcept { return _port; }
     void sendFunctional(Addr address, const std::uint8_t *data,
                         std::size_t size);
+    void setRequestContextId(ContextID contextId) noexcept;
 
   private:
     bool receiveTimingResponse(PacketPtr packet);
     void completeBeat(std::uint64_t token, std::size_t beat, bool error,
-                      const std::uint8_t *data);
+                      bool exclusiveOkay, const std::uint8_t *data);
     void retryRequest();
     void pump();
     PacketPtr makePacket(const MemoryRequest &request, std::size_t beat);
@@ -92,6 +96,7 @@ class Gem5InitiatorBackend final : public TransactionBackend
     std::deque<MemoryResponse> _responses;
     std::vector<AddrRange> _errorRanges;
     bool _waitingForRetry = false;
+    ContextID _contextId = InvalidContextID;
 };
 
 /** Converts timing packets into requests driven into an RTL target bus. */

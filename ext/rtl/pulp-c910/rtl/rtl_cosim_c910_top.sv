@@ -20,6 +20,7 @@ module rtl_cosim_c910_top (
   output logic         jtag_tdo_en_o,
   input  logic         jtag_trst_ni,
   output logic [1:0]   lpmd_b_o,
+  output logic         cosim_debug_mode_o,
 
   output logic [7:0]   axi_aw_id_o,
   output logic [39:0]  axi_aw_addr_o,
@@ -167,5 +168,7 @@ module rtl_cosim_c910_top (
   // through this integration-only probe.
   assign lpmd_b_o = i_c910_axi_wrap.cpu_sub_system_axi_i
       .x_rv_integration_platform.x_cpu_top.x_ct_top_0.cp0_biu_lpmd_b;
+  assign cosim_debug_mode_o = i_c910_axi_wrap.cpu_sub_system_axi_i
+      .x_rv_integration_platform.x_cpu_top.x_ct_top_0.rtu_yy_xx_dbgon;
 
 endmodule

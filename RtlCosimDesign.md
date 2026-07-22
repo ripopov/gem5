@@ -203,9 +203,9 @@ destroyRtlCoreManagerV1(RtlCoreManager* manager) noexcept;
 gem5 negotiates the API version by looking up the versioned factory symbol before creating or calling a C++ object. Successfully locating
 `createRtlCoreManagerV1` identifies the V1 interface and vtable layout; no manager-level version method is needed.
 
-The suffix is the major API and ABI version. Every V1 virtual interface is immutable: methods must not be added, removed, reordered, or have their
-signatures changed. Any such change introduces V2 factory and destructor symbols with corresponding V2 interfaces. A library may export multiple
-major versions during migration, while compatible implementation changes continue to use V1.
+The suffix is the major API and ABI version. During this exploratory PoC, V1 may still evolve without a version bump. Once the ABI is declared
+stable, virtual methods must not be added, removed, reordered, or changed; an incompatible change will then require V2 factory and destructor
+symbols. A library may export multiple stable major versions during migration.
 
 Core and manager objects must be destroyed by the shared library that created them. For the proof of concept, gem5 and the RTL adapter library may
 be required to use compatible C++ compiler ABIs.
@@ -214,6 +214,7 @@ be required to use compatible C++ compiler ABIs.
 
 ```cpp
 class Bus;
+class RtlCpuState;
 class Signal;
 
 enum class CoreSignalRole : std::uint32_t
@@ -315,6 +316,9 @@ class RtlCore
     // Describes the most recent failed operation or ClockResult::Error.
     virtual const char* getLastError() const noexcept = 0;
 
+    // Optional architectural-state import capability.
+    virtual RtlCpuState* cpuState() noexcept { return nullptr; }
+
   protected:
     virtual ~RtlCore() noexcept = default;
 };
@@ -361,6 +365,64 @@ section, locates the `MemoryRegion` containing its architectural address, conver
 For the single-clock proof of concept, the physical clock is owned and toggled by the vendor adapter inside `clock()` rather than exposed as a
 `Signal`. Register access, checkpointing, tracing controls, and multiple clock domains should be separate optional interfaces added after the SCR1
 execution path is working.
+
+### Optional CPU-State Import
+
+CPU cores that can resume state produced by a gem5 CPU expose `RtlCpuState` through `RtlCore::cpuState()`. The default implementation returns
+`nullptr`, so existing vendors and non-CPU RTL models require no changes. The capability is import-only; exporting state and switching back from RTL
+are outside the PoC.
+
+```cpp
+struct CpuStateValue
+{
+    const char* name;
+    std::size_t bitWidth;
+    const std::uint8_t* data;
+    std::size_t dataSize;
+};
+
+class RtlCpuState
+{
+  public:
+    virtual const char* schema() const noexcept = 0;
+    virtual std::size_t contextCount() const noexcept = 0;
+    virtual bool importState(
+        std::size_t context,
+        const CpuStateValue* values,
+        std::size_t valueCount) noexcept = 0;
+    virtual const char* getLastError() const noexcept = 0;
+
+  protected:
+    virtual ~RtlCpuState() noexcept = default;
+};
+```
+
+`schema()` names a canonical, versioned architectural bundle rather than a vendor implementation. A state value uses the same little-endian byte
+and bit ordering as `Signal`: bit zero is bit zero of byte zero, `dataSize` is exactly `ceil(bitWidth / 8)`, and unused high bits are zero. Field
+names are case-sensitive. `importState()` consumes one complete context atomically; it validates the full bundle before changing visible RTL state
+and reports failure through `getLastError()`.
+
+The initial schema is `riscv64/v1`. Every field is mandatory, and unknown or duplicate fields are rejected:
+
+- `pc` and `x0` through `x31`: 64 bits. `pc` is the next instruction to execute, must be two-byte aligned, and `x0` must be zero.
+- `priv`: 2 bits using the architectural encodings U=0, S=1, and M=3; encoding 2 is invalid.
+- 64-bit machine fields `csr.mstatus`, `csr.medeleg`, `csr.mideleg`, `csr.mie`, `csr.mtvec`, `csr.mcounteren`, `csr.mscratch`, `csr.mepc`,
+  `csr.mcause`, `csr.mtval`, and `csr.mip`.
+- 64-bit supervisor fields `csr.stvec`, `csr.scounteren`, `csr.sscratch`, `csr.sepc`, `csr.scause`, `csr.stval`, and `csr.satp`.
+- 64-bit PMP fields `csr.pmpcfg0`, `csr.pmpcfg2`, and `csr.pmpaddr0` through `csr.pmpaddr15`.
+- `f0` through `f31`: 64-bit raw floating-point register contents; `csr.fcsr`: 8 bits.
+
+Vector registers and vector CSRs are not part of `riscv64/v1`. The gem5 encoder rejects handover from an RVV-enabled ISA configuration instead of
+silently dropping architectural state; a later schema can add vector state explicitly.
+
+The bundle represents architectural state at the continuation PC. For example, `mstatus` is not a temporary MRET staging value. Vendors may use
+debug logic, hierarchy access, or tool APIs internally, but all such mechanisms remain in the vendor adapter. Before successful import becomes
+observable, the RTL implementation must have clean caches and TLBs, no outstanding transactions, and must not be reset again.
+
+`RtlCpuSimObject` is the generic gem5 `BaseCPU` wrapper for this capability. It uses the normal `m5.switchCpus` sequence: drain the old CPU, copy its
+`ThreadContext`, encode each context according to the vendor schema, hold the preconnected RTL topology in reset, import every context, and then
+start RTL clock events at the following cycle. It deliberately does not migrate gem5 TLBs, walker ports, or split instruction/data ports. This lets
+a unified AXI RTL CPU coexist with a fast CPU that uses a different preconnected port topology. The PoC supports one-way fast-to-RTL switching only.
 
 ### `Bus`
 
@@ -990,11 +1052,12 @@ packet backends remain outside `ext/rtl/scr1`; the pure C++ protocol transactors
   variable widths, backpressure, and handshake-gated sampling.
 - Add end-to-end tests using independent Verilated master and slave RTL endpoints, including master-to-slave loop tests through the runtime.
 - Limit AXI3-ACE work to canonical signal-profile validation; do not implement or behaviorally test ACE transactions or coherence.
-- Stage 1 is complete when both protocol directions are documented, reproducible, sanitizer-clean, and independently validated; then freeze API V1.
+- Stage 1 is complete when both protocol directions are documented, reproducible, sanitizer-clean, and independently validated. The candidate V1
+  remains open to explicitly scoped exploratory capabilities until the PoC ABI is declared stable.
 
 ### Stage 2: SCR1 Reference Vendor Integration
 
-- Build the Verilated `scr1_top_axi` reference DLL under `ext/rtl/scr1` using only the frozen vendor API and the selected RTL-to-C++ tool runtime.
+- Build the Verilated `scr1_top_axi` reference DLL under `ext/rtl/scr1` using only the candidate V1 vendor API and the selected RTL-to-C++ tool runtime.
 - Map both SCR1 AXI4 initiator buses and its reset, interrupt, fuse, and other standalone signals using automatic discovery and width validation.
 - Implement SCR1 clocking, callbacks, idle detection, error reporting, and backdoor access to its unified instruction/data TCM.
 - Reuse the Stage 1 runtime and AXI4 initiator transactor unchanged; SCR1-specific code must remain inside the reference vendor adapter.
@@ -1006,7 +1069,7 @@ packet backends remain outside `ext/rtl/scr1`; the pure C++ protocol transactors
 
 - Pin `pulp-platform/pulp-c910` under `ext/rtl/pulp-c910/repo`; keep the adapter, tests, documentation, and independent CMake shared-library build in
   `ext/rtl/pulp-c910`, following the SCR1 reference integration layout.
-- Verilate `c910_axi_wrap` and expose its normalized external AXI4 initiator port through the frozen V1 API with automatically discovered address,
+- Verilate `c910_axi_wrap` and expose its normalized external AXI4 initiator port through the candidate V1 API with automatically discovered address,
   data, ID, and USER widths. ATOP remains tied to zero and is not added to V1.
 - Keep C910-specific ACE response handling, evict absorption, wrapping-burst conversion, and decrementing-burst conversion inside the upstream wrapper;
   the framework sees only standard AXI4 and reuses the Stage 1 initiator transactor unchanged.
@@ -1040,3 +1103,17 @@ packet backends remain outside `ext/rtl/scr1`; the pure C++ protocol transactors
 - Validate the benchmark using an expected memory signature or checksum, and fail explicitly on timeout, protocol error, or incorrect output.
 - Add the test to gem5's infrastructure and rerun the SCR1 and standalone AMBA suites to ensure generic fixes introduce no regressions.
 - Stage 5 is complete when C910 passes reproducibly and the framework supports both reference cores without core-specific integration logic.
+
+### Stage 6: One-Way Fast-to-RTL CPU Switching
+
+- Add the optional `RtlCpuState` capability, the canonical `riscv64/v1` schema, and the generic `RtlCpuSimObject` `BaseCPU` wrapper.
+- Use gem5's normal drain and `m5.switchCpus` path, but retain the RTL core's preconnected bus topology and start it only after state import.
+- Implement C910 state import entirely in its vendor adapter using HAD/JTAG; do not expose C910 hierarchy, reset, or register details to gem5.
+- Validate exact PC, integer and floating-point registers, M/S CSRs, M/S/U privilege, traps, PMP, active Sv39, C stack/data, and pre-switch memory
+  visibility.
+- Validate RTL-side AMOs and LR/SC in C910's cacheable PMA window, memory across handover, timer and external interrupt delivery, WFI wake, and
+  deterministic idle. Validate the generic AXI-exclusive path independently in transactor and packet-backend tests.
+- Run multiple switch locations and repeated independent runs; reject absent capability, schema/context mismatches, malformed state, protocol errors, and
+  timeouts with explicit diagnostics.
+- Linux boot, RTL-to-fast switching, state export, and migration of microarchitectural cache/TLB state remain outside this stage.
+- Stage 6 is complete when standalone importer tests and the complete gem5 bare-metal switch matrix pass without C910-specific generic code.

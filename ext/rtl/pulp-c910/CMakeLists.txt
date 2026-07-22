@@ -54,6 +54,156 @@ endforeach()
 list(APPEND C910_SOURCES
     "${C910_REPO}/vendor/thead_openc910/C910_RTL_FACTORY/gen_rtl/common/rtl/BUFGCE.v")
 
+# The upstream wrapper declares debug_req_i but does not connect it to the
+# OpenC910 subsystem. Generate guarded integration copies so CPU-state import
+# can halt and drain the core through its standard active-low debug request.
+set(C910_CPU_SUBSYSTEM
+    "${C910_REPO}/vendor/thead_openc910/smart_run/logical/common/cpu_sub_system_axi.v")
+file(READ "${C910_CPU_SUBSYSTEM}" C910_CPU_SUBSYSTEM_TEXT)
+set(C910_CPU_SUBSYSTEM_PATCHED "${C910_CPU_SUBSYSTEM_TEXT}")
+string(REPLACE
+    "  axim_clk_en                              ,"
+    "  axim_clk_en                              ,\n  debug_req_i                             ,"
+    C910_CPU_SUBSYSTEM_PATCHED "${C910_CPU_SUBSYSTEM_PATCHED}")
+string(REPLACE
+    "input                  axim_clk_en                              ;"
+    "input                  axim_clk_en                              ;\ninput                  debug_req_i                             ;"
+    C910_CPU_SUBSYSTEM_PATCHED "${C910_CPU_SUBSYSTEM_PATCHED}")
+string(REPLACE
+    ".pad_core0_dbgrq_b                            (1'b1                                     )"
+    ".pad_core0_dbgrq_b                            (!debug_req_i                             )"
+    C910_CPU_SUBSYSTEM_PATCHED "${C910_CPU_SUBSYSTEM_PATCHED}")
+if(C910_CPU_SUBSYSTEM_PATCHED STREQUAL C910_CPU_SUBSYSTEM_TEXT)
+    message(FATAL_ERROR "The guarded PULP C910 debug-request fix no longer applies")
+endif()
+set(C910_CPU_SUBSYSTEM_BUILD "${CMAKE_CURRENT_BINARY_DIR}/cpu_sub_system_axi.v")
+file(CONFIGURE OUTPUT "${C910_CPU_SUBSYSTEM_BUILD}"
+    CONTENT "${C910_CPU_SUBSYSTEM_PATCHED}" @ONLY)
+list(REMOVE_ITEM C910_SOURCES "${C910_CPU_SUBSYSTEM}")
+list(APPEND C910_SOURCES "${C910_CPU_SUBSYSTEM_BUILD}")
+
+# The multicore shell also leaves the synchronized core0 debug request
+# disconnected at the final ct_top boundary.
+set(C910_OPEN_TOP
+    "${C910_REPO}/vendor/thead_openc910/C910_RTL_FACTORY/gen_rtl/cpu/rtl/openC910.v")
+file(READ "${C910_OPEN_TOP}" C910_OPEN_TOP_TEXT)
+set(C910_OPEN_TOP_PATCHED "${C910_OPEN_TOP_TEXT}")
+set(C910_OPEN_TOP_PREVIOUS "${C910_OPEN_TOP_PATCHED}")
+string(REPLACE
+    ".pad_biu_dbgrq_b         (1'b1    ),"
+    ".pad_biu_dbgrq_b         (pad_core0_dbgrq_b),"
+    C910_OPEN_TOP_PATCHED "${C910_OPEN_TOP_PATCHED}")
+if(C910_OPEN_TOP_PATCHED STREQUAL C910_OPEN_TOP_PREVIOUS)
+    message(FATAL_ERROR "The guarded OpenC910 core0 debug fix no longer applies")
+endif()
+
+# PULP removes the SoC-level HAD/JTAG router from OpenC910 because Cheshire
+# does not use the legacy debug port. The CPU-state adapter does: restore the
+# vendor block in this generated copy and reconnect only core 0. This keeps
+# the private C910 transport out of both the pinned RTL and the generic API.
+set(C910_OPEN_TOP_PREVIOUS "${C910_OPEN_TOP_PATCHED}")
+string(REPLACE
+    "  .ir_corex_wdata          (64'b0   ),"
+    "  .ir_corex_wdata          (ir_corex_wdata),"
+    C910_OPEN_TOP_PATCHED "${C910_OPEN_TOP_PATCHED}")
+string(CONCAT C910_CORE0_HAD_OLD
+    "  .sm_update_dr            (1'b0    ),\n"
+    "  .sm_update_ir            (1'b0    ),\n"
+    "  .x_dbg_ack_pc            (        ),\n"
+    "  .x_enter_dbg_req_i       (1'b0    ),\n"
+    "  .x_enter_dbg_req_o       (        ),\n"
+    "  .x_exit_dbg_req_i        (1'b0    ),\n"
+    "  .x_exit_dbg_req_o        (        ),\n"
+    "  .x_had_dbg_mask          (1'b0    ),\n"
+    "  .x_regs_serial_data      (        )")
+string(CONCAT C910_CORE0_HAD_NEW
+    "  .sm_update_dr            (sm_update_dr),\n"
+    "  .sm_update_ir            (sm_update_ir),\n"
+    "  .x_dbg_ack_pc            (core0_dbg_ack_pc),\n"
+    "  .x_enter_dbg_req_i       (core0_enter_dbg_req_i),\n"
+    "  .x_enter_dbg_req_o       (core0_enter_dbg_req_o),\n"
+    "  .x_exit_dbg_req_i        (core0_exit_dbg_req_i),\n"
+    "  .x_exit_dbg_req_o        (core0_exit_dbg_req_o),\n"
+    "  .x_had_dbg_mask          (core0_had_dbg_mask),\n"
+    "  .x_regs_serial_data      (core0_regs_serial_data)")
+string(REPLACE "${C910_CORE0_HAD_OLD}" "${C910_CORE0_HAD_NEW}"
+    C910_OPEN_TOP_PATCHED "${C910_OPEN_TOP_PATCHED}")
+if(C910_OPEN_TOP_PATCHED STREQUAL C910_OPEN_TOP_PREVIOUS)
+    message(FATAL_ERROR "The guarded OpenC910 core0 HAD fix no longer applies")
+endif()
+
+set(C910_OPEN_TOP_PREVIOUS "${C910_OPEN_TOP_PATCHED}")
+set(C910_HAD_COMMON [[
+// RTL co-simulation state-import transport. The optional second-core and
+// removed SoC debug inputs are tied off explicitly.
+ct_had_common_top x_ct_had_common_top (
+  .apbif_had_pctrace_inv  (1'b0),
+  .ciu_had_dbg_info       (293'b0),
+  .core0_dbg_ack_pc       (core0_dbg_ack_pc),
+  .core0_enter_dbg_req_i  (core0_enter_dbg_req_i),
+  .core0_enter_dbg_req_o  (core0_enter_dbg_req_o),
+  .core0_exit_dbg_req_i   (core0_exit_dbg_req_i),
+  .core0_exit_dbg_req_o   (core0_exit_dbg_req_o),
+  .core0_had_dbg_mask     (core0_had_dbg_mask),
+  .core0_regs_serial_data (core0_regs_serial_data),
+  .core0_rst_b            (core0_rst_b),
+  .core1_dbg_ack_pc       (1'b0),
+  .core1_enter_dbg_req_i  (),
+  .core1_enter_dbg_req_o  (1'b0),
+  .core1_exit_dbg_req_i   (),
+  .core1_exit_dbg_req_o   (1'b0),
+  .core1_had_dbg_mask     (),
+  .core1_regs_serial_data (64'b0),
+  .core1_rst_b            (1'b0),
+  .cpurst_b               (cpurst_b),
+  .forever_cpuclk         (forever_cpuclk),
+  .had_pad_jtg_tdo        (had_pad_jtg_tdo),
+  .had_pad_jtg_tdo_en     (had_pad_jtg_tdo_en),
+  .ir_corex_wdata         (ir_corex_wdata),
+  .l2c_had_dbg_info       (44'b0),
+  .pad_had_jtg_tdi        (pad_had_jtg_tdi),
+  .pad_had_jtg_tms        (pad_had_jtg_tms),
+  .pad_yy_icg_scan_en     (pad_yy_icg_scan_en),
+  .perr_had               (),
+  .prdata_had             (),
+  .pready_had             (),
+  .psel_had               (1'b0),
+  .sm_update_dr           (sm_update_dr),
+  .sm_update_ir           (sm_update_ir),
+  .sysio_had_dbg_mask     (4'b0),
+  .tclk                   (forever_jtgclk),
+  .trst_b                 (trst_b)
+);
+]])
+string(REPLACE
+    "// &Instance(\"ct_sysio_top\"); @1515\n\nassign core1_cpu_no_retire = 1'b0;"
+    "// &Instance(\"ct_sysio_top\"); @1515\n${C910_HAD_COMMON}\nassign core1_cpu_no_retire = 1'b0;"
+    C910_OPEN_TOP_PATCHED "${C910_OPEN_TOP_PATCHED}")
+if(C910_OPEN_TOP_PATCHED STREQUAL C910_OPEN_TOP_PREVIOUS)
+    message(FATAL_ERROR "The guarded OpenC910 HAD instance fix no longer applies")
+endif()
+set(C910_OPEN_TOP_BUILD "${CMAKE_CURRENT_BINARY_DIR}/openC910.v")
+file(CONFIGURE OUTPUT "${C910_OPEN_TOP_BUILD}"
+    CONTENT "${C910_OPEN_TOP_PATCHED}" @ONLY)
+list(REMOVE_ITEM C910_SOURCES "${C910_OPEN_TOP}")
+list(APPEND C910_SOURCES "${C910_OPEN_TOP_BUILD}")
+
+set(C910_AXI_WRAPPER "${C910_REPO}/hw/c910_axi_wrap.sv")
+file(READ "${C910_AXI_WRAPPER}" C910_AXI_WRAPPER_TEXT)
+set(C910_AXI_WRAPPER_PATCHED "${C910_AXI_WRAPPER_TEXT}")
+string(REPLACE
+    "    .axim_clk_en          ( '1                          ),"
+    "    .axim_clk_en          ( '1                          ),\n    .debug_req_i         ( debug_req_i                  ),"
+    C910_AXI_WRAPPER_PATCHED "${C910_AXI_WRAPPER_PATCHED}")
+if(C910_AXI_WRAPPER_PATCHED STREQUAL C910_AXI_WRAPPER_TEXT)
+    message(FATAL_ERROR "The guarded PULP C910 wrapper debug fix no longer applies")
+endif()
+set(C910_AXI_WRAPPER_BUILD "${CMAKE_CURRENT_BINARY_DIR}/c910_axi_wrap.sv")
+file(CONFIGURE OUTPUT "${C910_AXI_WRAPPER_BUILD}"
+    CONTENT "${C910_AXI_WRAPPER_PATCHED}" @ONLY)
+list(REMOVE_ITEM C910_SOURCES "${C910_AXI_WRAPPER}")
+list(APPEND C910_SOURCES "${C910_AXI_WRAPPER_BUILD}")
+
 # PULP C910 commit 896e5d3 parameterized two internal LFB vectors but missed
 # the corresponding non-ANSI input declarations. Generate a guarded build
 # copy rather than modifying the pinned submodule or carrying the full file.
@@ -115,7 +265,7 @@ set(AXI_SOURCES
     "${PULP_AXI}/src/axi_zero_mem.sv"
 )
 
-add_library(rtl_cosim_pulp_c910 SHARED src/adapter.cc)
+add_library(rtl_cosim_pulp_c910 SHARED src/adapter.cc src/cpu_state.cc)
 add_library(rtl_cosim::pulp_c910 ALIAS rtl_cosim_pulp_c910)
 target_include_directories(rtl_cosim_pulp_c910 PRIVATE "${GEM5_ROOT}/include")
 target_compile_features(rtl_cosim_pulp_c910 PRIVATE cxx_std_20)
@@ -126,10 +276,11 @@ set_target_properties(rtl_cosim_pulp_c910 PROPERTIES
 )
 
 if(MSVC)
-    set_property(SOURCE src/adapter.cc APPEND PROPERTY
+    set_property(SOURCE src/adapter.cc src/cpu_state.cc APPEND PROPERTY
         COMPILE_OPTIONS /W4 /permissive-)
 else()
-    set_property(SOURCE src/adapter.cc APPEND PROPERTY COMPILE_OPTIONS
+    set_property(SOURCE src/adapter.cc src/cpu_state.cc APPEND PROPERTY
+        COMPILE_OPTIONS
         -Wall -Wextra
         -Wno-bool-operation -Wno-sign-compare
         -Wno-unused-parameter -Wno-unused-variable)
@@ -230,6 +381,35 @@ if(RTL_COSIM_PULP_C910_ENABLE_TESTS)
     add_c910_program(interrupt_wfi interrupt_wfi.S)
     add_c910_program(c_integration crt0.S c_integration.c)
     add_c910_program(gem5_benchmark crt0.S gem5_benchmark.c)
+    add_c910_program(switch_integer switch_integer.S)
+    add_c910_program(switch_compute crt0.S switch_compute.c)
+    add_c910_program(switch_fp switch_fp.S)
+    add_c910_program(switch_trap switch_trap.S)
+    add_c910_program(switch_sv39 switch_sv39.S)
+    add_c910_program(switch_user switch_user.S)
+    add_c910_program(switch_atomic switch_atomic.S)
+    add_c910_program(switch_lrsc switch_lrsc.S)
+    add_c910_program(switch_interrupt switch_interrupt.S)
+    add_c910_program(switch_external_interrupt switch_external_interrupt.S)
+
+    set(C910_STATE_IMPORT_ELF "${C910_PROGRAM_DIR}/state_import.elf")
+    set(C910_STATE_IMPORT_FLAGS ${C910_PROGRAM_FLAGS})
+    list(REMOVE_ITEM C910_STATE_IMPORT_FLAGS
+        -Wl,-T,${C910_LINKER_SCRIPT})
+    add_custom_command(
+        OUTPUT "${C910_STATE_IMPORT_ELF}"
+        COMMAND "${CMAKE_COMMAND}" -E make_directory "${C910_PROGRAM_DIR}"
+        COMMAND "${C910_RISCV_GCC}" ${C910_STATE_IMPORT_FLAGS}
+            -Wl,-T,${CMAKE_CURRENT_SOURCE_DIR}/tests/programs/state_import.ld
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/programs/state_import.S"
+            -o "${C910_STATE_IMPORT_ELF}"
+        DEPENDS
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/programs/state_import.S"
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/programs/state_import.ld"
+        VERBATIM
+    )
+    add_custom_target(c910_state_import_program
+        DEPENDS "${C910_STATE_IMPORT_ELF}")
 
     add_executable(rtl_cosim_pulp_c910_tests tests/adapter.test.cc)
     target_link_libraries(rtl_cosim_pulp_c910_tests PRIVATE
@@ -240,11 +420,13 @@ if(RTL_COSIM_PULP_C910_ENABLE_TESTS)
         "RTL_COSIM_PULP_C910_ERROR_TRAP_ELF=\"${error_trap_ELF}\""
         "RTL_COSIM_PULP_C910_C_INTEGRATION_ELF=\"${c_integration_ELF}\""
         "RTL_COSIM_PULP_C910_GEM5_BENCHMARK_ELF=\"${gem5_benchmark_ELF}\""
+        "RTL_COSIM_PULP_C910_STATE_IMPORT_ELF=\"${C910_STATE_IMPORT_ELF}\""
         "RTL_COSIM_PULP_C910_INTERRUPT_WFI_ELF=\"${interrupt_wfi_ELF}\"")
     add_dependencies(rtl_cosim_pulp_c910_tests
         rtl_cosim_pulp_c910 c910_boot_wfi_program
         c910_error_trap_program c910_c_integration_program
         c910_gem5_benchmark_program c910_interrupt_wfi_program)
+    add_dependencies(rtl_cosim_pulp_c910_tests c910_state_import_program)
     if(MSVC)
         target_compile_options(rtl_cosim_pulp_c910_tests PRIVATE
             /W4 /permissive-)

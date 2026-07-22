@@ -22,6 +22,7 @@ inline constexpr std::uint32_t RtlCosimApiVersion = 1;
 class RtlCore;
 class Bus;
 class Signal;
+class RtlCpuState;
 
 enum class CoreSignalRole : std::uint32_t
 {
@@ -190,6 +191,42 @@ struct SignalBinding
     Signal *signal;
 };
 
+struct CpuStateValue
+{
+    // Canonical schema-defined field name. Names are case-sensitive.
+    const char *name;
+    std::size_t bitWidth;
+    // Values use the same little-endian byte/bit ordering as Signal. The
+    // pointed-to bytes need only remain valid for the importState() call.
+    const std::uint8_t *data;
+    std::size_t dataSize;
+};
+
+class RtlCpuState
+{
+  public:
+    // Versioned canonical schema implemented by this core, for example
+    // "riscv64/v1". The returned string is valid for the core lifetime.
+    virtual const char *schema() const noexcept = 0;
+    virtual std::size_t contextCount() const noexcept = 0;
+
+    // Imports one complete architectural context atomically. On failure the
+    // RTL architectural state must remain unchanged. Microarchitectural state
+    // must be clean and idle before a successful import becomes observable.
+    virtual bool importState(std::size_t context,
+                             const CpuStateValue *values,
+                             std::size_t valueCount) noexcept = 0;
+    virtual const char *getLastError() const noexcept = 0;
+
+  protected:
+    virtual ~RtlCpuState() noexcept = default;
+};
+
+namespace RtlCpuStateSchema
+{
+inline constexpr char Riscv64V1[] = "riscv64/v1";
+} // namespace RtlCpuStateSchema
+
 class SignalChangeCallback
 {
   public:
@@ -263,6 +300,10 @@ class RtlCore
     virtual bool isIdle() const noexcept = 0;
     virtual const char *getLastError() const noexcept = 0;
 
+    // Optional architectural-state import capability. Existing vendor
+    // implementations need no changes when CPU switching is unsupported.
+    virtual RtlCpuState *cpuState() noexcept { return nullptr; }
+
   protected:
     virtual ~RtlCore() noexcept = default;
 };
@@ -281,8 +322,9 @@ class RtlCoreManager
     virtual ~RtlCoreManager() noexcept = default;
 };
 
-// These exported C-linkage names freeze the V1 interface and vtable layout.
-// An incompatible API must introduce corresponding V2 symbols and classes.
+// These C-linkage names identify the exploratory V1 interface. Once V1 is
+// published as stable, an incompatible API must introduce corresponding V2
+// symbols and classes.
 extern "C" RtlCoreManager *createRtlCoreManagerV1() noexcept;
 extern "C" void destroyRtlCoreManagerV1(RtlCoreManager *manager) noexcept;
 

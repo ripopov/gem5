@@ -32,6 +32,9 @@
 #ifndef RTL_COSIM_PULP_C910_GEM5_BENCHMARK_ELF
 #error "RTL_COSIM_PULP_C910_GEM5_BENCHMARK_ELF must be defined"
 #endif
+#ifndef RTL_COSIM_PULP_C910_STATE_IMPORT_ELF
+#error "RTL_COSIM_PULP_C910_STATE_IMPORT_ELF must be defined"
+#endif
 
 namespace gem5::rtl_cosim
 {
@@ -185,6 +188,76 @@ class CoreRunner
     std::unique_ptr<BusTransactor> _transactor;
 };
 
+struct OwnedStateValue
+{
+    std::string name;
+    std::size_t width;
+    std::vector<std::uint8_t> data;
+};
+
+class Riscv64State
+{
+  public:
+    Riscv64State(std::uint64_t pc, std::uint64_t dumpAddress,
+                 std::uint8_t privilege = 3,
+                 std::uint64_t mstatus =
+                     UINT64_C(0x8000000a00000000) | (3ULL << 13))
+    {
+        _owned.reserve(104);
+        add("pc", 64, pc);
+        add("x0", 64, 0);
+        for (unsigned index = 1; index < 31; ++index) {
+            add("x" + std::to_string(index), 64,
+                UINT64_C(0x1111000000000000) + index);
+        }
+        add("x31", 64, dumpAddress);
+        add("priv", 2, privilege);
+
+        constexpr std::array<const char *, 20> Csrs = {
+            "mstatus", "medeleg", "mideleg", "mie", "mtvec",
+            "mcounteren", "mscratch", "mepc", "mcause", "mtval",
+            "mip", "stvec", "scounteren", "sscratch", "sepc",
+            "scause", "stval", "satp", "pmpcfg0", "pmpcfg2",
+        };
+        for (const char *name : Csrs) {
+            const std::uint64_t value =
+                std::string_view(name) == "mstatus" ? mstatus : 0;
+            add("csr." + std::string(name), 64, value);
+        }
+        for (unsigned index = 0; index < 16; ++index) {
+            add("csr.pmpaddr" + std::to_string(index), 64, 0);
+        }
+        for (unsigned index = 0; index < 32; ++index) {
+            add("f" + std::to_string(index), 64,
+                UINT64_C(0x3ff0000000000000) + index);
+        }
+        add("csr.fcsr", 8, 0x21);
+
+        _views.reserve(_owned.size());
+        for (const OwnedStateValue &value : _owned) {
+            _views.push_back({value.name.c_str(), value.width,
+                              value.data.data(), value.data.size()});
+        }
+    }
+
+    const std::vector<CpuStateValue> &values() const { return _views; }
+
+  private:
+    void
+    add(std::string name, std::size_t width, std::uint64_t value)
+    {
+        OwnedStateValue field{std::move(name), width,
+                              std::vector<std::uint8_t>((width + 7) / 8)};
+        for (std::size_t index = 0; index < field.data.size(); ++index) {
+            field.data[index] = static_cast<std::uint8_t>(value >> (index * 8));
+        }
+        _owned.push_back(std::move(field));
+    }
+
+    std::vector<OwnedStateValue> _owned;
+    std::vector<CpuStateValue> _views;
+};
+
 TEST(PulpC910Adapter, ManagerLifetimeAndConfigurationFailures)
 {
     ModelLoader first;
@@ -236,6 +309,109 @@ TEST(PulpC910Adapter, DiscoversCanonicalAxiAndStandaloneSignals)
     ASSERT_NE(findCoreSignal(core, "rtc_i"), nullptr);
     ASSERT_NE(findCoreSignal(core, "debug_req_i"), nullptr);
     EXPECT_EQ(core.memoryCount(), 0);
+    ASSERT_NE(core.cpuState(), nullptr);
+    EXPECT_STREQ(core.cpuState()->schema(), RtlCpuStateSchema::Riscv64V1);
+    EXPECT_EQ(core.cpuState()->contextCount(), 1);
+}
+
+TEST(PulpC910Adapter, RejectsMalformedArchitecturalStateBeforeMutation)
+{
+    ModelLoader loader;
+    ASSERT_TRUE(loader.open(RTL_COSIM_PULP_C910_PATH)) << loader.error();
+    ASSERT_TRUE(loader.createCore("{}")) << loader.error();
+    RtlCpuState *state = loader.core()->cpuState();
+    ASSERT_NE(state, nullptr);
+
+    EXPECT_FALSE(state->importState(1, nullptr, 0));
+    EXPECT_NE(std::string(state->getLastError()).find("context 1"),
+              std::string::npos);
+    EXPECT_FALSE(state->importState(0, nullptr, 0));
+    EXPECT_NE(std::string(state->getLastError()).find("missing field 'pc'"),
+              std::string::npos);
+
+    std::uint8_t data = 0;
+    const CpuStateValue duplicate[] = {
+        {"pc", 8, &data, 1}, {"pc", 8, &data, 1}};
+    EXPECT_FALSE(state->importState(0, duplicate, 2));
+    EXPECT_NE(std::string(state->getLastError()).find("duplicate field 'pc'"),
+              std::string::npos);
+
+    const Riscv64State valid(0x02001000, 0x01810000);
+    auto values = valid.values();
+    values.front().bitWidth = 63;
+    EXPECT_FALSE(state->importState(0, values.data(), values.size()));
+    EXPECT_NE(std::string(state->getLastError()).find("invalid width"),
+              std::string::npos);
+
+    values = valid.values();
+    values.push_back({"vendor.private", 1, &data, 1});
+    EXPECT_FALSE(state->importState(0, values.data(), values.size()));
+    EXPECT_NE(std::string(state->getLastError()).find("unknown field"),
+              std::string::npos);
+}
+
+TEST(PulpC910Adapter, ImportsPcIntegerAndFloatingPointStateAndResumes)
+{
+    ModelLoader loader;
+    ASSERT_TRUE(loader.open(RTL_COSIM_PULP_C910_PATH)) << loader.error();
+    ASSERT_TRUE(loader.createCore("{\"instance_name\":\"state-import\"}"))
+        << loader.error();
+    RtlCore &core = *loader.core();
+    const ValidationResult validation = validateModel(core);
+    ASSERT_TRUE(validation.ok());
+
+    constexpr std::uint64_t DumpAddress = 0x01810000;
+    auto memory = std::make_shared<SparseMemory>(0, 64 * 1024 * 1024);
+    std::string error;
+    ASSERT_TRUE(loadProgram(*memory, RTL_COSIM_PULP_C910_STATE_IMPORT_ELF,
+                            error))
+        << error;
+    ASSERT_TRUE(driveBusInputsToZero(validation, error)) << error;
+    ASSERT_TRUE(setResets(core, true, error)) << error;
+    ASSERT_TRUE(core.settle()) << core.getLastError();
+    for (unsigned cycle = 0; cycle < 8; ++cycle) {
+        ASSERT_EQ(core.clock(), ClockResult::Completed) << core.getLastError();
+    }
+    ASSERT_TRUE(setResets(core, false, error)) << error;
+
+    RtlCpuState *cpuState = core.cpuState();
+    ASSERT_NE(cpuState, nullptr);
+    const Riscv64State invalidTransition(
+        0x02001000, DumpAddress, 1, 3ULL << 13);
+    EXPECT_FALSE(cpuState->importState(
+        0, invalidTransition.values().data(),
+        invalidTransition.values().size()));
+    EXPECT_NE(std::string(cpuState->getLastError()).find("post-MRET state"),
+              std::string::npos);
+
+    // A rejected semantic bundle must not consume the one successful import.
+    const Riscv64State state(0x02001000, DumpAddress);
+    ASSERT_TRUE(cpuState->importState(0, state.values().data(),
+                                      state.values().size()))
+        << cpuState->getLastError();
+    EXPECT_FALSE(cpuState->importState(0, state.values().data(),
+                                       state.values().size()));
+
+    CoreRunner runner(core, validation.buses[0], memory);
+    ASSERT_TRUE(runner.runUntilIdle(50000, error)) << error;
+    std::uint64_t value = 0;
+    for (unsigned index = 0; index < 32; ++index) {
+        ASSERT_TRUE(memory->read(DumpAddress + index * 8,
+                                 reinterpret_cast<std::uint8_t *>(&value), 8));
+        const std::uint64_t expected = index == 0 ? 0 :
+            index == 31 ? DumpAddress :
+            UINT64_C(0x1111000000000000) + index;
+        EXPECT_EQ(value, expected) << "x" << index;
+    }
+    for (unsigned index = 0; index < 32; ++index) {
+        ASSERT_TRUE(memory->read(DumpAddress + 256 + index * 8,
+                                 reinterpret_cast<std::uint8_t *>(&value), 8));
+        EXPECT_EQ(value, UINT64_C(0x3ff0000000000000) + index)
+            << "f" << index;
+    }
+    ASSERT_TRUE(memory->read(DumpAddress + 512,
+                             reinterpret_cast<std::uint8_t *>(&value), 8));
+    EXPECT_EQ(value, UINT64_C(0x600dc9105a7e0001));
 }
 
 TEST(PulpC910Adapter, SequencesResetAndSupportsWideSignalAccess)

@@ -30,6 +30,7 @@ struct MemoryRequest
     BurstType burst = BurstType::Increment;
     std::vector<std::uint8_t> data;
     std::vector<std::uint8_t> byteEnable;
+    bool exclusive = false;
 
     std::size_t beatCount() const noexcept;
     bool valid(std::string &error) const;
@@ -41,6 +42,7 @@ struct MemoryResponse
     std::uint32_t id = 0;
     std::vector<std::uint8_t> data;
     bool error = false;
+    bool exclusiveOkay = false;
 };
 
 // Consumes requests produced by an RTL initiator.

@@ -96,6 +96,7 @@ class MemoryBackend : public TransactionBackend
     std::uint64_t _writes = 0;
     std::deque<Pending> _pending;
     std::deque<MemoryResponse> _responses;
+    std::optional<std::uint64_t> _exclusiveAddress;
 };
 
 class ScriptedTransactionSource : public TransactionSource
@@ -104,6 +105,7 @@ class ScriptedTransactionSource : public TransactionSource
     struct Expectation
     {
         bool error = false;
+        bool exclusiveOkay = false;
         std::optional<std::vector<std::uint8_t>> data;
     };
 

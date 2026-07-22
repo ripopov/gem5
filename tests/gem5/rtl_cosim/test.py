@@ -66,8 +66,22 @@ class RtlCosimScr1Fixture(UniqueFixture):
         log_call(log.test_log, build, time=None, stderr=sys.stderr)
 
 
+C910_SWITCH_CASES = (
+    "integer",
+    "compute",
+    "fp",
+    "trap",
+    "sv39",
+    "user",
+    "atomic",
+    "lrsc",
+    "interrupt",
+    "external_interrupt",
+)
+
+
 class RtlCosimC910Fixture(UniqueFixture):
-    """Build the C910 vendor library and gem5 benchmark once."""
+    """Build the C910 vendor library and bare-metal programs once."""
 
     def __new__(cls):
         build_dir = joinpath(config.build_dir, "rtl-cosim-pulp-c910")
@@ -82,11 +96,8 @@ class RtlCosimC910Fixture(UniqueFixture):
             config.build_dir, "rtl-cosim-pulp-c910"
         )
         self.library = self.target
-        self.program = joinpath(
-            self.build_dir,
-            "pulp-c910",
-            "programs",
-            "gem5_benchmark.elf",
+        self.program_dir = joinpath(
+            self.build_dir, "pulp-c910", "programs"
         )
 
     def _setup(self, testitem):
@@ -107,6 +118,12 @@ class RtlCosimC910Fixture(UniqueFixture):
         ]
         log_call(log.test_log, configure, time=None, stderr=sys.stderr)
 
+        targets = [
+            "rtl_cosim_pulp_c910",
+            "c910_gem5_benchmark_program",
+        ] + [
+            f"c910_switch_{case}_program" for case in C910_SWITCH_CASES
+        ]
         build = [
             "cmake",
             "--build",
@@ -114,8 +131,7 @@ class RtlCosimC910Fixture(UniqueFixture):
             "--parallel",
             str(config.threads),
             "--target",
-            "rtl_cosim_pulp_c910",
-            "c910_gem5_benchmark_program",
+            *targets,
         ]
         log_call(log.test_log, build, time=None, stderr=sys.stderr)
 
@@ -175,7 +191,7 @@ gem5_verify_config(
         "--library",
         c910_fixture.library,
         "--image",
-        c910_fixture.program,
+        joinpath(c910_fixture.program_dir, "gem5_benchmark.elf"),
     ],
     verifiers=(verifier.MatchRegex(r"^RTL_COSIM_C910_PASS$"),),
     fixtures=(c910_fixture,),
@@ -184,3 +200,58 @@ gem5_verify_config(
     valid_hosts=constants.supported_hosts,
     length=constants.long_tag,
 )
+
+
+c910_switch_script = joinpath(
+    config.base_dir, "configs", "example", "rtl_cosim", "c910_cpu_switch.py"
+)
+
+for case in C910_SWITCH_CASES:
+    gem5_verify_config(
+        name=f"rtl-cosim-riscv-atomic-to-c910-{case}",
+        config=c910_switch_script,
+        config_args=[
+            "--library",
+            c910_fixture.library,
+            "--image",
+            joinpath(c910_fixture.program_dir, f"switch_{case}.elf"),
+            "--case",
+            case,
+        ],
+        verifiers=(
+            verifier.MatchRegex(
+                rf"^RTL_COSIM_CPU_SWITCH_PASS case={case}$"
+            ),
+        ),
+        fixtures=(c910_fixture,),
+        valid_isas=(constants.riscv_tag,),
+        valid_variants=(constants.opt_tag,),
+        valid_hosts=constants.supported_hosts,
+        length=constants.long_tag,
+    )
+
+# Run the exact-state case twice to catch retained vendor-model or runtime
+# state and prove deterministic reconstruction across independent processes.
+for repetition in range(2):
+    gem5_verify_config(
+        name=f"rtl-cosim-riscv-atomic-to-c910-repeat-{repetition}",
+        config=c910_switch_script,
+        config_args=[
+            "--library",
+            c910_fixture.library,
+            "--image",
+            joinpath(c910_fixture.program_dir, "switch_integer.elf"),
+            "--case",
+            "integer",
+        ],
+        verifiers=(
+            verifier.MatchRegex(
+                r"^RTL_COSIM_CPU_SWITCH_PASS case=integer$"
+            ),
+        ),
+        fixtures=(c910_fixture,),
+        valid_isas=(constants.riscv_tag,),
+        valid_variants=(constants.opt_tag,),
+        valid_hosts=constants.supported_hosts,
+        length=constants.long_tag,
+    )

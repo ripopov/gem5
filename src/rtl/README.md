@@ -7,6 +7,8 @@ Stage 2 adds the SCR1 reference vendor integration under `ext/rtl/scr1`.
 Stage 3 adds the wider PULP C910 reference under `ext/rtl/pulp-c910`.
 Stage 4 adds the gem5 adapter and a two-core SCR1 validation system.
 Stage 5 adds a direct-memory, single-core C910 portability test.
+Stage 6 adds optional one-way gem5 CPU-to-RTL state import and validates
+`RiscvAtomicSimpleCPU` to C910 switching.
 AXI3-ACE support is intentionally limited to structural profile validation.
 
 The vendor ABI is the self-contained header
@@ -147,6 +149,36 @@ Success prints `RTL_COSIM_C910_PASS`. The validation controller exits with a
 nonzero status on timeout or a byte-exact signature mismatch; packet or
 transactor protocol failures remain fatal simulation errors.
 
+### Fast-to-RTL CPU switching
+
+`RtlCpuSimObject` participates in gem5's standard `m5.switchCpus` path while
+retaining the associated `RtlCoreSimObject` bus topology. A vendor opts in by
+returning `RtlCpuState` from `RtlCore::cpuState()`; the default `nullptr`
+preserves all existing adapters. The initial `riscv64/v1` schema transfers PC,
+all integer and floating-point registers, current privilege, M/S CSRs, PMP,
+and `satp`. Vector state is deliberately excluded and RVV must be disabled for
+this schema. Caches and TLBs are clean rather than transferred.
+
+Build the C910 switch programs with the C910 fixture, then run one case:
+
+```bash
+cmake --build build/rtl-cosim-pulp-c910 -j --target \
+  rtl_cosim_pulp_c910 c910_switch_integer_program
+build/RISCV/gem5.opt configs/example/rtl_cosim/c910_cpu_switch.py \
+  --library \
+    build/rtl-cosim-pulp-c910/pulp-c910/librtl_cosim_pulp_c910.so \
+  --image \
+    build/rtl-cosim-pulp-c910/pulp-c910/programs/switch_integer.elf \
+  --case integer
+```
+
+The gem5 testlib matrix covers exact integer and floating-point state,
+compiled C, traps and CSRs, U-mode and S-mode Sv39 continuation, AMOs before
+and after the switch, RTL LR/SC, timer and external interrupts, WFI wake,
+multiple continuation PCs, and repeated independent runs. Each case uses a
+real pre-switch phase and a byte-exact signature. Linux boot, state export,
+and switching back from RTL are intentionally out of scope.
+
 For AddressSanitizer and UndefinedBehaviorSanitizer:
 
 ```bash
@@ -186,6 +218,8 @@ the vendor advances one full cycle. AXI handling includes fixed, incrementing,
 and wrapping bursts; narrow lanes; byte strobes; AXI3 WID; AXI IDs; per-ID
 ordering; cross-ID response reordering; error responses; and bounded queues.
 Optional AXI4 control signals default to zero when absent.
+Single-beat AXI exclusives map to gem5 load-locked/store-conditional packets
+and preserve AXI `EXOKAY` response status.
 
 Neutral request data is compact: each beat occupies `beatBytes` consecutive
 bytes in increasing-address order. Transactors map that compact representation

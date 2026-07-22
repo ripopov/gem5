@@ -166,5 +166,51 @@ TEST(TransactionSource, EnforcesOutstandingLimitAndExpectations)
     EXPECT_NE(source.error().find("error status"), std::string::npos);
 }
 
+TEST(MemoryBackend, ExecutesExclusiveReadAndConditionalWrite)
+{
+    auto memory = std::make_shared<SparseMemory>(0, 0x1000);
+    const std::array<std::uint8_t, 4> initial = {1, 2, 3, 4};
+    ASSERT_TRUE(memory->write(0x40, initial.data(), nullptr, initial.size()));
+    MemoryBackend backend(
+        memory, {.latencyCycles = 0, .maxPending = 64, .errorRanges = {}});
+
+    MemoryRequest load;
+    load.token = 1;
+    load.address = 0x40;
+    load.beatBytes = 4;
+    load.byteEnable.assign(4, 1);
+    load.exclusive = true;
+    ASSERT_TRUE(backend.submit(load));
+    backend.advance();
+    MemoryResponse response;
+    ASSERT_TRUE(backend.getResponse(response));
+    EXPECT_TRUE(response.exclusiveOkay);
+    EXPECT_EQ(response.data,
+              (std::vector<std::uint8_t>{1, 2, 3, 4}));
+
+    MemoryRequest store;
+    store.token = 2;
+    store.address = 0x40;
+    store.write = true;
+    store.beatBytes = 4;
+    store.data = {5, 6, 7, 8};
+    store.byteEnable.assign(4, 1);
+    store.exclusive = true;
+    ASSERT_TRUE(backend.submit(store));
+    backend.advance();
+    ASSERT_TRUE(backend.getResponse(response));
+    EXPECT_TRUE(response.exclusiveOkay);
+
+    store.token = 3;
+    store.data = {9, 9, 9, 9};
+    ASSERT_TRUE(backend.submit(store));
+    backend.advance();
+    ASSERT_TRUE(backend.getResponse(response));
+    EXPECT_FALSE(response.exclusiveOkay);
+    std::array<std::uint8_t, 4> observed{};
+    ASSERT_TRUE(memory->read(0x40, observed.data(), observed.size()));
+    EXPECT_EQ(observed, (std::array<std::uint8_t, 4>{5, 6, 7, 8}));
+}
+
 } // anonymous namespace
 } // namespace gem5::rtl_cosim

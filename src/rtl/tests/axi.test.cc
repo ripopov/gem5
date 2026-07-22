@@ -215,17 +215,44 @@ TEST(AxiInitiator, SamplesWideUserSignalsOnlyOnHandshake)
     EXPECT_EQ(wUser.getCount, 1);
 }
 
-TEST(AxiInitiator, RejectsAssertedLock)
+TEST(AxiInitiator, TranslatesExclusiveReadAndExokay)
 {
     TestCore core;
     auto bus = makeAxi(BusRole::Initiator);
     TestBus *raw = bus.get();
     core.buses.push_back(std::move(bus));
-    auto storage = std::make_shared<SparseMemory>(0, 0x1000);
-    MemoryBackend backend(storage);
+    ControlledBackend backend;
     auto transactor = createAxiInitiatorTransactor(validated(core), backend);
+    raw->get(AxiSignal::RReady).drive(1);
     driveReadAddress(*raw, 0, 0, 1);
     raw->get(AxiSignal::ArLock).drive(1);
+    ASSERT_TRUE(transactor->beforeClock());
+    ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
+    ASSERT_TRUE(transactor->afterClock()) << transactor->getLastError();
+    ASSERT_EQ(backend.requests.size(), 1);
+    EXPECT_TRUE(backend.requests[0].exclusive);
+
+    raw->get(AxiSignal::ArValid).drive(0);
+    backend.responses.push_back(
+        {backend.requests[0].token, 0, {1, 2, 3, 4}, false, true});
+    ASSERT_TRUE(transactor->beforeClock());
+    ASSERT_TRUE(transactor->afterSettle()) << transactor->getLastError();
+    ASSERT_TRUE(transactor->afterClock()) << transactor->getLastError();
+    ASSERT_TRUE(transactor->beforeClock());
+    EXPECT_EQ(raw->get(AxiSignal::RValid).value(), 1);
+    EXPECT_EQ(raw->get(AxiSignal::RResp).value(), 1);
+}
+
+TEST(AxiInitiator, RejectsAxi3LockedTransaction)
+{
+    TestCore core;
+    auto bus = makeAxi(BusRole::Initiator, BusProtocol::Axi3);
+    TestBus *raw = bus.get();
+    core.buses.push_back(std::move(bus));
+    ControlledBackend backend;
+    auto transactor = createAxiInitiatorTransactor(validated(core), backend);
+    driveReadAddress(*raw, 0, 0, 1);
+    raw->get(AxiSignal::ArLock).drive(2);
     ASSERT_TRUE(transactor->beforeClock());
     EXPECT_FALSE(transactor->afterSettle());
     EXPECT_NE(std::string(transactor->getLastError()).find("locked"),

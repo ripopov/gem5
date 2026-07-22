@@ -633,6 +633,13 @@ BaseCPU::switchOut()
 void
 BaseCPU::takeOverFrom(BaseCPU *oldCPU)
 {
+    takeOverStateFrom(oldCPU);
+    takeOverPortsFrom(oldCPU);
+}
+
+void
+BaseCPU::takeOverStateFrom(BaseCPU *oldCPU, bool take_over_mmu)
+{
     assert(threadContexts.size() == oldCPU->threadContexts.size());
     assert(_cpuId == oldCPU->cpuId());
     assert(_switchedOut);
@@ -667,13 +674,14 @@ BaseCPU::takeOverFrom(BaseCPU *oldCPU)
             ThreadContext::compare(oldTC, newTC);
         */
 
-        newTC->getMMUPtr()->takeOverFrom(oldTC->getMMUPtr());
+        if (take_over_mmu)
+            newTC->getMMUPtr()->takeOverFrom(oldTC->getMMUPtr());
 
         // Checker whether or not we have to transfer CheckerCPU
         // objects over in the switch
         CheckerCPU *old_checker = oldTC->getCheckerCpuPtr();
         CheckerCPU *new_checker = newTC->getCheckerCpuPtr();
-        if (old_checker && new_checker) {
+        if (take_over_mmu && old_checker && new_checker) {
             new_checker->getMMUPtr()->takeOverFrom(old_checker->getMMUPtr());
         }
     }
@@ -683,7 +691,11 @@ BaseCPU::takeOverFrom(BaseCPU *oldCPU)
         interrupts[tid]->setThreadContext(threadContexts[tid]);
     }
     oldCPU->interrupts.clear();
+}
 
+void
+BaseCPU::takeOverPortsFrom(BaseCPU *oldCPU)
+{
     // All CPUs have an instruction and a data port, and the new CPU's
     // ports are dangling while the old CPU has its ports connected
     // already. Unbind the old CPU and then bind the ports of the one

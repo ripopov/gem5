@@ -3,13 +3,17 @@
 
 Import("*")
 
-SimObject("RtlCore.py", sim_objects=["RtlCoreSimObject"])
+SimObject(
+    "RtlCore.py", sim_objects=["RtlCoreSimObject", "RtlCpuSimObject"]
+)
 SimObject(
     "RtlCosimTestController.py", sim_objects=["RtlCosimTestController"]
 )
 
 Source("gem5_backend.cc")
+Source("cpu_state.cc")
 Source("rtl_core.cc")
+Source("rtl_cpu.cc")
 Source("test_controller.cc")
 Source("runtime/image_loader.cc")
 Source("runtime/json.cc")
@@ -19,5 +23,8 @@ Source("runtime/protocol/apb.cc")
 Source("runtime/protocol/axi.cc")
 Source("runtime/signal_access.cc")
 Source("runtime/transaction.cc")
+
+if env["CONF"]["USE_RISCV_ISA"]:
+    Source("riscv_cpu_state.cc", tags=["riscv isa"])
 
 DebugFlag("RtlCosim", "RTL co-simulation integration activity")

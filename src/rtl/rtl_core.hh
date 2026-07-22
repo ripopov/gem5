@@ -78,6 +78,17 @@ class RtlCoreSimObject final : public ClockedObject
     void wake();
     bool isQuiescent() const noexcept;
 
+    /** CPU-switch support used by the composing RtlCpuSimObject. */
+    Port &defaultInitiatorPort();
+    RtlCpuState *cpuStateCapability() const noexcept;
+    bool deferredForCpuSwitch() const noexcept { return _deferStartup; }
+    bool prepareCpuStateImport(std::string &error);
+    bool importCpuState(std::size_t context,
+                        const std::vector<CpuStateValue> &values,
+                        std::string &error);
+    void setRequestContextId(ContextID contextId);
+    void activateAfterCpuStateImport();
+
   private:
     void loadModel(const Params &params);
     void buildBusMappings(const Params &params);
@@ -138,6 +149,10 @@ class RtlCoreSimObject final : public ClockedObject
     std::string _imageBusName;
     bool _started = false;
     bool _finished = false;
+    bool _deferStartup = false;
+    bool _cpuImportPrepared = false;
+    std::vector<bool> _cpuContextsImported;
+    bool _cpuActivated = false;
 };
 
 } // namespace gem5::rtl_cosim

@@ -151,6 +151,8 @@ MemoryBackend::execute(const MemoryRequest &request)
     if (!request.write) {
         response.data.resize(request.beatCount() * request.beatBytes);
     }
+    const bool exclusiveWriteOkay = request.exclusive && request.write &&
+        _exclusiveAddress && *_exclusiveAddress == request.address;
     for (std::size_t beat = 0; beat < request.beatCount(); ++beat) {
         const std::uint64_t address = transactionBeatAddress(request, beat);
         if (!_memory->contains(address, request.beatBytes) ||
@@ -160,13 +162,23 @@ MemoryBackend::execute(const MemoryRequest &request)
         }
         const std::size_t offset = beat * request.beatBytes;
         if (request.write) {
-            _memory->write(address, request.data.data() + offset,
-                           request.byteEnable.data() + offset,
-                           request.beatBytes);
+            if (!request.exclusive || exclusiveWriteOkay) {
+                _memory->write(address, request.data.data() + offset,
+                               request.byteEnable.data() + offset,
+                               request.beatBytes);
+            }
         } else {
             _memory->read(address, response.data.data() + offset,
                           request.beatBytes);
         }
+    }
+    if (request.exclusive && !response.error) {
+        response.exclusiveOkay = !request.write || exclusiveWriteOkay;
+    }
+    if (request.exclusive && !request.write && !response.error) {
+        _exclusiveAddress = request.address;
+    } else if (request.write) {
+        _exclusiveAddress.reset();
     }
     return response;
 }
@@ -292,6 +304,12 @@ ScriptedTransactionSource::submitResponse(const MemoryResponse &response)
         _error =
             "response error status does not match expectation for token " +
             std::to_string(response.token);
+        return false;
+    }
+    if (response.exclusiveOkay !=
+        it->second.expectation.exclusiveOkay) {
+        _error = "response exclusive status does not match expectation for "
+                 "token " + std::to_string(response.token);
         return false;
     }
     if (it->second.expectation.data &&

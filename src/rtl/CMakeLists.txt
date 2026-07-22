@@ -19,6 +19,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 get_filename_component(GEM5_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
 
 add_library(rtl_cosim_runtime
+    cpu_state.cc
     runtime/json.cc
     runtime/image_loader.cc
     runtime/model_loader.cc
@@ -113,6 +114,7 @@ if(RTL_COSIM_BUILD_TESTS)
         tests/apb.test.cc
         tests/axi.test.cc
         tests/checker_config.test.cc
+        tests/cpu_state.test.cc
         tests/image_loader.test.cc
         tests/model_loader.test.cc
         tests/model_validator.test.cc

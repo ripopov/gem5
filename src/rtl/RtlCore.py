@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 from m5.objects.ClockedObject import ClockedObject
+from m5.objects.BaseCPU import BaseCPU
+from m5.defines import buildEnv
 from m5.objects.SignalPort import (
     VectorSignalSinkPort,
     VectorSignalSourcePort,
@@ -17,6 +19,27 @@ from m5.params import (
     VectorResponsePort,
 )
 from m5.proxy import Parent
+
+
+# BaseCPU's Python helpers require architecture traits. Select the build ISA,
+# while keeping the C++ switch implementation and vendor ABI ISA-neutral.
+if buildEnv.get("USE_RISCV_ISA", False):
+    from m5.objects.RiscvDecoder import RiscvDecoder as _RtlDecoder
+    from m5.objects.RiscvInterrupts import RiscvInterrupts as _RtlInterrupts
+    from m5.objects.RiscvISA import RiscvISA as _RtlISA
+    from m5.objects.RiscvMMU import RiscvMMU as _RtlMMU
+elif buildEnv.get("USE_ARM_ISA", False):
+    from m5.objects.ArmDecoder import ArmDecoder as _RtlDecoder
+    from m5.objects.ArmInterrupts import ArmInterrupts as _RtlInterrupts
+    from m5.objects.ArmISA import ArmISA as _RtlISA
+    from m5.objects.ArmMMU import ArmMMU as _RtlMMU
+elif buildEnv.get("USE_X86_ISA", False):
+    from m5.objects.X86Decoder import X86Decoder as _RtlDecoder
+    from m5.objects.X86ISA import X86ISA as _RtlISA
+    from m5.objects.X86LocalApic import X86LocalApic as _RtlInterrupts
+    from m5.objects.X86MMU import X86MMU as _RtlMMU
+else:
+    _RtlDecoder = _RtlInterrupts = _RtlISA = _RtlMMU = None
 
 
 RtlSignalSinkPort = VectorSignalSinkPort("gem5::rtl_cosim::SignalValue")
@@ -91,3 +114,39 @@ class RtlCoreSimObject(ClockedObject):
     image_bus = Param.String(
         "", "Initiator bus used for non-TCM functional image writes"
     )
+    defer_startup = Param.Bool(
+        False,
+        "Hold reset until a parent RtlCpuSimObject imports CPU state",
+    )
+
+
+class RtlCpuSimObject(BaseCPU):
+    type = "RtlCpuSimObject"
+    cxx_header = "rtl/rtl_cpu.hh"
+    cxx_class = "gem5::rtl_cosim::RtlCpuSimObject"
+
+    if _RtlMMU is not None:
+        ArchDecoder = _RtlDecoder
+        ArchInterrupts = _RtlInterrupts
+        ArchISA = _RtlISA
+        ArchMMU = _RtlMMU
+        mmu = _RtlMMU()
+
+    rtl_core = Param.RtlCoreSimObject(
+        "Preconnected deferred RTL runtime containing the CPU model"
+    )
+
+    def __init__(self, **kwargs):
+        if _RtlMMU is None:
+            raise RuntimeError(
+                "RtlCpuSimObject has no architecture traits in this build"
+            )
+        super().__init__(**kwargs)
+
+    @classmethod
+    def memory_mode(cls):
+        return "timing"
+
+    @classmethod
+    def support_take_over(cls):
+        return True

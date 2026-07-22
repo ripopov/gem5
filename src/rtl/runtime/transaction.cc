@@ -45,6 +45,10 @@ MemoryRequest::valid(std::string &error) const
         error = "read request must not contain data";
         return false;
     }
+    if (exclusive && beatCount() != 1) {
+        error = "exclusive transaction must contain exactly one beat";
+        return false;
+    }
     return true;
 }
 

@@ -35,6 +35,7 @@ struct AddressBeat
     std::size_t beats = 0;
     std::size_t beatBytes = 0;
     BurstType burst = BurstType::Increment;
+    bool exclusive = false;
 };
 
 struct WriteBeat
@@ -49,6 +50,7 @@ struct BBeat
 {
     std::uint32_t id = 0;
     bool error = false;
+    bool exclusiveOkay = false;
 };
 
 struct RBeat
@@ -57,6 +59,7 @@ struct RBeat
     std::vector<std::uint8_t> data;
     bool error = false;
     bool last = false;
+    bool exclusiveOkay = false;
 };
 
 std::uint64_t
@@ -78,7 +81,7 @@ AddressBeat
 requestAddress(const MemoryRequest &request)
 {
     return {request.id, request.address, request.beatCount(),
-            request.beatBytes, request.burst};
+            request.beatBytes, request.burst, request.exclusive};
 }
 
 class AxiBase : public BusTransactor
@@ -213,6 +216,9 @@ class AxiBase : public BusTransactor
         if (address.address % address.beatBytes != 0) {
             return fail("unaligned AXI transfers are unsupported in V1");
         }
+        if (address.exclusive && address.beats != 1) {
+            return fail("AXI exclusive transactions must be single-beat");
+        }
 
         std::uint64_t highest = address.address;
         if (address.burst == BurstType::Increment) {
@@ -269,9 +275,8 @@ class AxiBase : public BusTransactor
             !read(burstRole, burst) || !read(lockRole, lock)) {
             return false;
         }
-        if (lock != 0) {
-            return fail(
-                "exclusive or locked AXI transactions are unsupported");
+        if (lock > 1) {
+            return fail("AXI locked transactions are unsupported");
         }
         if (size >= std::numeric_limits<std::size_t>::digits) {
             return fail("AXI SIZE is too large");
@@ -283,6 +288,7 @@ class AxiBase : public BusTransactor
             return fail("reserved AXI BURST value");
         }
         result.burst = static_cast<BurstType>(burst);
+        result.exclusive = lock == 1;
         std::uint64_t ignored = 0;
         const SignalRoleId cacheRole =
             writeAddress ? AxiSignal::AwCache : AxiSignal::ArCache;
@@ -340,7 +346,8 @@ class AxiBase : public BusTransactor
                write(burstRole, address
                                     ? static_cast<std::uint8_t>(address->burst)
                                     : 0) &&
-               write(lockRole, 0) && write(cacheRole, 0) &&
+               write(lockRole, address && address->exclusive ? 1 : 0) &&
+               write(cacheRole, 0) &&
                write(protRole, 0) && write(regionRole, 0) &&
                write(qosRole, 0) && writeZero(userRole) &&
                write(validRole, address ? 1 : 0);
@@ -505,7 +512,9 @@ class AxiInitiator : public AxiBase
     {
         const BBeat *beat = _b.empty() ? nullptr : &_b.front();
         return write(AxiSignal::BId, beat ? beat->id : 0) &&
-               write(AxiSignal::BResp, beat && beat->error ? 2 : 0) &&
+               write(AxiSignal::BResp,
+                     beat && beat->error ? 2 :
+                     beat && beat->exclusiveOkay ? 1 : 0) &&
                writeZero(AxiSignal::BUser) &&
                write(AxiSignal::BValid, beat ? 1 : 0);
     }
@@ -520,7 +529,9 @@ class AxiInitiator : public AxiBase
         }
         return write(AxiSignal::RId, beat ? beat->id : 0) &&
                writeBytes(AxiSignal::RData, data) &&
-               write(AxiSignal::RResp, beat && beat->error ? 2 : 0) &&
+               write(AxiSignal::RResp,
+                     beat && beat->error ? 2 :
+                     beat && beat->exclusiveOkay ? 1 : 0) &&
                write(AxiSignal::RLast, beat && beat->last ? 1 : 0) &&
                writeZero(AxiSignal::RUser) &&
                write(AxiSignal::RValid, beat ? 1 : 0);
@@ -575,6 +586,7 @@ class AxiInitiator : public AxiBase
             request.write = true;
             request.beatBytes = address.beatBytes;
             request.burst = address.burst;
+            request.exclusive = address.exclusive;
             request.data.reserve(address.beats * address.beatBytes);
             request.byteEnable.reserve(request.data.capacity());
             for (std::size_t index = 0; index < address.beats; ++index) {
@@ -627,6 +639,7 @@ class AxiInitiator : public AxiBase
             request.address = address.address;
             request.beatBytes = address.beatBytes;
             request.burst = address.burst;
+            request.exclusive = address.exclusive;
             request.byteEnable.assign(address.beats * address.beatBytes, 1);
             if (!_backend.canAccept(request)) {
                 break;
@@ -698,7 +711,8 @@ class AxiInitiator : public AxiBase
             if (!response.data.empty()) {
                 return fail("AXI write response unexpectedly contains data");
             }
-            _b.push_back({pending.address.id, response.error});
+            _b.push_back({pending.address.id, response.error,
+                          response.exclusiveOkay});
             return true;
         }
         const std::size_t expected =
@@ -722,6 +736,7 @@ class AxiInitiator : public AxiBase
                         beat.data.begin() + offset(lane));
             beat.error = response.error;
             beat.last = index + 1 == pending.address.beats;
+            beat.exclusiveOkay = response.exclusiveOkay;
             _r.push_back(std::move(beat));
         }
         return true;
@@ -818,7 +833,8 @@ class AxiTarget : public AxiBase
                 return false;
             }
             beat.id = static_cast<std::uint32_t>(id);
-            beat.error = response != 0;
+            beat.error = response >= 2;
+            beat.exclusiveOkay = response == 1;
             _capture.b = beat;
         }
         if (!read(AxiSignal::RValid, valid)) {
@@ -837,7 +853,8 @@ class AxiTarget : public AxiBase
                 return false;
             }
             beat.id = static_cast<std::uint32_t>(id);
-            beat.error = response != 0;
+            beat.error = response >= 2;
+            beat.exclusiveOkay = response == 1;
             beat.last = last != 0;
             _capture.r = std::move(beat);
         }
@@ -924,6 +941,7 @@ class AxiTarget : public AxiBase
         AddressBeat address;
         std::size_t beatsReceived = 0;
         bool error = false;
+        bool exclusiveOkay = false;
         std::vector<std::uint8_t> data;
     };
     struct Capture
@@ -1052,7 +1070,8 @@ class AxiTarget : public AxiBase
         MemoryRequest request = std::move(queue.front());
         queue.pop_front();
         _responses.push_back(
-            MemoryResponse{request.token, request.id, {}, beat.error});
+            MemoryResponse{request.token, request.id, {}, beat.error,
+                           beat.exclusiveOkay});
         return true;
     }
 
@@ -1077,6 +1096,8 @@ class AxiTarget : public AxiBase
             pending.data.end(), beat.data.begin() + offset(lane),
             beat.data.begin() + offset(lane + pending.address.beatBytes));
         pending.error = pending.error || beat.error;
+        pending.exclusiveOkay =
+            pending.exclusiveOkay || beat.exclusiveOkay;
         ++pending.beatsReceived;
         const bool expectedLast =
             pending.beatsReceived == pending.address.beats;
@@ -1086,7 +1107,8 @@ class AxiTarget : public AxiBase
         if (expectedLast) {
             _responses.push_back(
                 MemoryResponse{pending.request.token, pending.request.id,
-                               std::move(pending.data), pending.error});
+                               std::move(pending.data), pending.error,
+                               pending.exclusiveOkay});
             queue.pop_front();
         }
         return true;

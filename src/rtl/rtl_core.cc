@@ -141,7 +141,8 @@ RtlCoreSimObject::RtlCoreSimObject(const Params &params)
       _maxPending(params.max_pending_transactions),
       _imagePath(params.image), _imageFormat(params.image_format),
       _rawImageAddress(params.raw_image_address),
-      _imageBusName(params.image_bus)
+      _imageBusName(params.image_bus),
+      _deferStartup(params.defer_startup)
 {
     fatal_if(_maxPending == 0,
              "%s: max_pending_transactions must be positive", name());
@@ -441,9 +442,14 @@ RtlCoreSimObject::startup()
     synchronizeInputs();
     registerCallbacks();
     synchronizeOutputs();
+    fatal_if(_deferStartup && !_imagePath.empty(),
+             "%s: deferred CPU-switch RTL must not configure an image",
+             name());
     loadConfiguredImage();
     setInitialReset(_resetRemaining > Cycles(0));
-    schedule(_tickEvent, clockEdge(Cycles(0)));
+    if (!_deferStartup) {
+        schedule(_tickEvent, clockEdge(Cycles(0)));
+    }
 }
 
 void
@@ -627,7 +633,6 @@ RtlCoreSimObject::runtimeFailure(const std::string &context,
 void
 RtlCoreSimObject::tick()
 {
-    DPRINTF(RtlCosim, "clocking RTL core\n");
     auto runPhase = [this](auto operation, const char *phase) {
         for (BusRuntime &bus : _initiatorBuses) {
             if (!(bus.transactor.get()->*operation)()) {
@@ -700,7 +705,8 @@ RtlCoreSimObject::isQuiescent() const noexcept
 void
 RtlCoreSimObject::scheduleNextCycle()
 {
-    if (!_finished && !_tickEvent.scheduled()) {
+    if (!_finished && (!_deferStartup || _cpuActivated) &&
+        !_tickEvent.scheduled()) {
         schedule(_tickEvent, clockEdge(Cycles(1)));
     }
 }
@@ -711,6 +717,106 @@ RtlCoreSimObject::wake()
     if (_started) {
         scheduleNextCycle();
     }
+}
+
+Port &
+RtlCoreSimObject::defaultInitiatorPort()
+{
+    fatal_if(_initiatorBuses.empty(),
+             "%s: an RTL CPU requires at least one initiator bus", name());
+    return _initiatorBuses.front().backend->port();
+}
+
+RtlCpuState *
+RtlCoreSimObject::cpuStateCapability() const noexcept
+{
+    return _core ? _core->cpuState() : nullptr;
+}
+
+bool
+RtlCoreSimObject::prepareCpuStateImport(std::string &error)
+{
+    if (!_deferStartup || !_started || _cpuActivated) {
+        error = "RTL runtime is not awaiting a CPU-state import";
+        return false;
+    }
+    if (!cpuStateCapability()) {
+        error = "vendor RTL core does not support CPU-state import";
+        return false;
+    }
+    if (_cpuImportPrepared) {
+        error = "RTL runtime was already prepared for CPU-state import";
+        return false;
+    }
+
+    while (_resetRemaining > Cycles(0)) {
+        tick();
+        if (_tickEvent.scheduled()) {
+            deschedule(_tickEvent);
+        }
+        if (_finished) {
+            error = "vendor RTL model finished during reset preparation";
+            return false;
+        }
+    }
+    if (!allTransactorsIdle()) {
+        error = "RTL buses are not idle at the CPU-state import boundary";
+        return false;
+    }
+    const std::size_t contexts = cpuStateCapability()->contextCount();
+    if (contexts == 0) {
+        error = "vendor CPU-state capability reports zero contexts";
+        return false;
+    }
+    _cpuContextsImported.assign(contexts, false);
+    _cpuImportPrepared = true;
+    error.clear();
+    return true;
+}
+
+bool
+RtlCoreSimObject::importCpuState(
+    std::size_t context, const std::vector<CpuStateValue> &values,
+    std::string &error)
+{
+    if (!_cpuImportPrepared || context >= _cpuContextsImported.size() ||
+        _cpuContextsImported[context]) {
+        error = "RTL runtime is not ready for CPU-state import";
+        return false;
+    }
+    RtlCpuState *state = cpuStateCapability();
+    if (!state) {
+        error = "vendor RTL core does not support CPU-state import";
+        return false;
+    }
+    if (!state->importState(context, values.data(), values.size())) {
+        const char *detail = state->getLastError();
+        error = detail && *detail ? detail : "vendor CPU-state import failed";
+        return false;
+    }
+    _cpuContextsImported[context] = true;
+    error.clear();
+    return true;
+}
+
+void
+RtlCoreSimObject::setRequestContextId(ContextID contextId)
+{
+    for (BusRuntime &bus : _initiatorBuses) {
+        bus.backend->setRequestContextId(contextId);
+    }
+}
+
+void
+RtlCoreSimObject::activateAfterCpuStateImport()
+{
+    const bool complete = !_cpuContextsImported.empty() &&
+        std::all_of(_cpuContextsImported.begin(), _cpuContextsImported.end(),
+                    [](bool imported) { return imported; });
+    fatal_if(!_cpuImportPrepared || !complete || _cpuActivated,
+             "%s: invalid activation after CPU-state import", name());
+    _cpuActivated = true;
+    schedule(_tickEvent, clockEdge(Cycles(1)));
 }
 
 bool

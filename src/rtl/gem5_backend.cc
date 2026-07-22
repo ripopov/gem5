@@ -9,6 +9,8 @@
 #include <utility>
 
 #include "base/logging.hh"
+#include "base/trace.hh"
+#include "debug/RtlCosim.hh"
 #include "mem/packet.hh"
 
 namespace gem5::rtl_cosim
@@ -82,6 +84,13 @@ Gem5InitiatorBackend::makePacket(const MemoryRequest &request,
     const auto size = static_cast<unsigned>(request.beatBytes);
     auto gem5Request = std::make_shared<Request>(
         beatAddress(request, beat), size, Request::Flags(), _requestorId);
+    if (request.exclusive) {
+        fatal_if(_contextId == InvalidContextID,
+                 "%s received an exclusive request without a CPU context",
+                 _port.name());
+        gem5Request->setFlags(Request::LLSC);
+        gem5Request->setContext(_contextId);
+    }
     if (request.write) {
         std::vector<bool> enables(request.beatBytes);
         const std::size_t offset = beat * request.beatBytes;
@@ -92,8 +101,10 @@ Gem5InitiatorBackend::makePacket(const MemoryRequest &request,
         gem5Request->setByteEnable(enables);
     }
 
-    auto *packet = new Packet(
-        gem5Request, request.write ? MemCmd::WriteReq : MemCmd::ReadReq);
+    const MemCmd command = request.exclusive
+        ? (request.write ? MemCmd::StoreCondReq : MemCmd::LoadLockedReq)
+        : (request.write ? MemCmd::WriteReq : MemCmd::ReadReq);
+    auto *packet = new Packet(gem5Request, command);
     // getPtr() and setData() intentionally reject masked writes. Populate an
     // owned buffer before attaching it so arbitrary AMBA byte strobes remain
     // valid gem5 WriteReq packets.
@@ -105,7 +116,8 @@ Gem5InitiatorBackend::makePacket(const MemoryRequest &request,
                   payload);
     }
     packet->dataDynamic(payload);
-    packet->pushSenderState(new PacketState(request.token, beat));
+    packet->pushSenderState(new PacketState(
+        request.token, beat, request.exclusive, request.write));
     return packet;
 }
 
@@ -118,6 +130,13 @@ Gem5InitiatorBackend::submit(const MemoryRequest &request)
     }
 
     PendingTransaction pending;
+    if (request.exclusive) {
+        DPRINTF(RtlCosim,
+                "%s: submit AXI exclusive %s at %#llx (%llu bytes)\n",
+                _port.name(), request.write ? "write" : "read",
+                static_cast<unsigned long long>(request.address),
+                static_cast<unsigned long long>(request.beatBytes));
+    }
     pending.request = request;
     pending.response.token = request.token;
     pending.response.id = request.id;
@@ -176,7 +195,7 @@ Gem5InitiatorBackend::advance()
     while (!_errorBeats.empty()) {
         const auto [token, beat] = _errorBeats.front();
         _errorBeats.pop_front();
-        completeBeat(token, beat, true, nullptr);
+        completeBeat(token, beat, true, false, nullptr);
     }
 }
 
@@ -199,20 +218,34 @@ Gem5InitiatorBackend::receiveTimingResponse(PacketPtr packet)
     state = static_cast<PacketState *>(packet->popSenderState());
     const std::uint64_t token = state->token;
     const std::size_t beat = state->beat;
+    const bool exclusive = state->exclusive;
+    const bool write = state->write;
     delete state;
 
     const bool error = packet->isError();
+    // LoadLockedReq deliberately becomes a plain ReadResp in gem5, so the
+    // response command alone cannot identify an exclusive read. Preserve the
+    // original request attributes in PacketState for AXI RRESP=EXOKAY.
+    const bool exclusiveOkay = exclusive && !error &&
+        (!write || packet->req->getExtraData() != 0);
+    if (exclusive) {
+        DPRINTF(RtlCosim,
+                "%s: complete gem5 exclusive %s (error=%d, success=%d)\n",
+                _port.name(), write ? "write" : "read", error,
+                exclusiveOkay);
+    }
     const std::uint8_t *data = error
                                    ? nullptr
                                    : packet->getConstPtr<std::uint8_t>();
-    completeBeat(token, beat, error, data);
+    completeBeat(token, beat, error, exclusiveOkay, data);
     delete packet;
     return true;
 }
 
 void
 Gem5InitiatorBackend::completeBeat(std::uint64_t token, std::size_t beat,
-                                   bool error, const std::uint8_t *data)
+                                   bool error, bool exclusiveOkay,
+                                   const std::uint8_t *data)
 {
     auto transaction = _transactions.find(token);
     panic_if(transaction == _transactions.end(),
@@ -223,6 +256,7 @@ Gem5InitiatorBackend::completeBeat(std::uint64_t token, std::size_t beat,
              "%s received an invalid RTL beat index", _port.name());
 
     pending.response.error |= error;
+    pending.response.exclusiveOkay |= exclusiveOkay;
     if (!pending.request.write && !error) {
         panic_if(!data, "%s completed a read beat without data", _port.name());
         const std::size_t offset = beat * pending.request.beatBytes;
@@ -236,6 +270,12 @@ Gem5InitiatorBackend::completeBeat(std::uint64_t token, std::size_t beat,
         _transactions.erase(transaction);
     }
     _wakeup();
+}
+
+void
+Gem5InitiatorBackend::setRequestContextId(ContextID contextId) noexcept
+{
+    _contextId = contextId;
 }
 
 bool
@@ -329,6 +369,7 @@ Gem5TargetSource::receiveTimingRequest(PacketPtr packet)
     request.token = ++_nextToken;
     request.address = packet->getAddr();
     request.write = packet->isWrite();
+    request.exclusive = packet->isLLSC();
     request.beatBytes = packet->getSize();
     request.byteEnable.assign(request.beatBytes, 1);
     const auto &gem5Enable = packet->req->getByteEnable();
@@ -386,6 +427,9 @@ Gem5TargetSource::submitResponse(const MemoryResponse &response)
     }
     if (packet->isRead() && !response.error) {
         packet->setData(response.data.data());
+    }
+    if (packet->isLLSC() && packet->isWrite()) {
+        packet->req->setExtraData(response.exclusiveOkay ? 1 : 0);
     }
     packet->makeResponse();
     if (response.error) {
