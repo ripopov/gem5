@@ -33,6 +33,7 @@
 #include <algorithm>
 #include <array>
 #include <string>
+#include <unordered_set>
 
 #include "arch/riscv/isa.hh"
 #include "arch/riscv/regs/float.hh"
@@ -54,7 +55,22 @@ namespace gem5
 namespace
 {
 
-constexpr uint32_t QemuJitAbiVersion = 3;
+constexpr uint32_t QemuJitAbiVersion = 5;
+
+std::unordered_set<const Event *> JitCpuTickEvents;
+
+bool
+isJitCpuTickEvent(const Event *event)
+{
+    return JitCpuTickEvents.find(event) != JitCpuTickEvents.end();
+}
+
+bool
+hasNonJitEventAtOrBefore(const EventQueue *event_queue, Tick when)
+{
+    return event_queue->anyEventAtOrBefore(
+        when, [](const Event *event) { return !isJitCpuTickEvent(event); });
+}
 
 using MemoryRead = int (*)(void *, uint64_t, uint8_t *, size_t);
 using MemoryWrite = int (*)(void *, uint64_t, const uint8_t *, size_t);
@@ -67,6 +83,9 @@ using ShouldStop = int (*)(void *);
 struct QemuJitCallbacks
 {
     uint32_t abi_version;
+    uint32_t instance_id;
+    uint32_t instance_count;
+    uint64_t hart_id;
     MemoryRead memory_read;
     MemoryWrite memory_write;
     MemoryMap memory_map;
@@ -146,20 +165,21 @@ class QemuJitBackend
 {
   private:
     void *handle;
+    uint32_t instanceId = 0;
 
     using InitFn = int (*)(const QemuJitCallbacks *);
-    using RunFn = int (*)(uint64_t, QemuJitRunResult *);
-    using GetRegFn = uint64_t (*)(unsigned);
-    using SetRegFn = int (*)(unsigned, uint64_t);
-    using GetPcFn = uint64_t (*)();
-    using SetPcFn = void (*)(uint64_t);
-    using GetPrivFn = unsigned (*)();
-    using SetPrivFn = int (*)(unsigned);
-    using GetCsrFn = int (*)(unsigned, uint64_t *);
-    using SetCsrFn = int (*)(unsigned, uint64_t);
-    using GetMipFn = uint64_t (*)();
-    using SetMipFn = void (*)(uint64_t);
-    using InvalidateFn = void (*)();
+    using RunFn = int (*)(uint32_t, uint64_t, QemuJitRunResult *);
+    using GetRegFn = uint64_t (*)(uint32_t, unsigned);
+    using SetRegFn = int (*)(uint32_t, unsigned, uint64_t);
+    using GetPcFn = uint64_t (*)(uint32_t);
+    using SetPcFn = void (*)(uint32_t, uint64_t);
+    using GetPrivFn = unsigned (*)(uint32_t);
+    using SetPrivFn = int (*)(uint32_t, unsigned);
+    using GetCsrFn = int (*)(uint32_t, unsigned, uint64_t *);
+    using SetCsrFn = int (*)(uint32_t, unsigned, uint64_t);
+    using GetMipFn = uint64_t (*)(uint32_t);
+    using SetMipFn = void (*)(uint32_t, uint64_t);
+    using InvalidateFn = void (*)(uint32_t);
 
     InitFn initFn;
     RunFn runFn;
@@ -223,70 +243,95 @@ class QemuJitBackend
     void
     init(const QemuJitCallbacks &callbacks)
     {
-        fatal_if(initFn(&callbacks) != 0, "JitCPU backend init failed");
+        instanceId = callbacks.instance_id;
+        fatal_if(initFn(&callbacks) != 0,
+                 "JitCPU backend init failed for hart %llu",
+                 static_cast<unsigned long long>(callbacks.hart_id));
     }
 
     QemuJitRunResult
     run(uint64_t instructions)
     {
         QemuJitRunResult result{};
-        fatal_if(runFn(instructions, &result) != 0,
+        fatal_if(runFn(instanceId, instructions, &result) != 0,
                  "JitCPU backend execution failed");
         return result;
     }
 
-    uint64_t getGpr(unsigned index) const { return getGprFn(index); }
-    uint64_t getFpr(unsigned index) const { return getFprFn(index); }
-    uint64_t getPc() const { return getPcFn(); }
-    unsigned getPriv() const { return getPrivFn(); }
-    uint64_t getMip() const { return getMipFn(); }
+    uint64_t getGpr(unsigned index) const
+    {
+        return getGprFn(instanceId, index);
+    }
+    uint64_t getFpr(unsigned index) const
+    {
+        return getFprFn(instanceId, index);
+    }
+    uint64_t getPc() const { return getPcFn(instanceId); }
+    unsigned getPriv() const { return getPrivFn(instanceId); }
+    uint64_t getMip() const { return getMipFn(instanceId); }
 
     void
     setGpr(unsigned index, uint64_t value)
     {
-        fatal_if(setGprFn(index, value), "Unable to set QEMU GPR %u", index);
+        fatal_if(setGprFn(instanceId, index, value),
+                 "Unable to set QEMU GPR %u", index);
     }
 
     void
     setFpr(unsigned index, uint64_t value)
     {
-        fatal_if(setFprFn(index, value), "Unable to set QEMU FPR %u", index);
+        fatal_if(setFprFn(instanceId, index, value),
+                 "Unable to set QEMU FPR %u", index);
     }
 
-    void setPc(uint64_t value) { setPcFn(value); }
+    void setPc(uint64_t value) { setPcFn(instanceId, value); }
 
     void
     setPriv(unsigned value)
     {
-        fatal_if(setPrivFn(value), "Unable to set QEMU privilege %u", value);
+        fatal_if(setPrivFn(instanceId, value),
+                 "Unable to set QEMU privilege %u", value);
     }
 
     uint64_t
     getCsr(unsigned csr) const
     {
         uint64_t value = 0;
-        fatal_if(getCsrFn(csr, &value), "Unable to read QEMU CSR %#x", csr);
+        fatal_if(getCsrFn(instanceId, csr, &value),
+                 "Unable to read QEMU CSR %#x", csr);
         return value;
     }
 
     void
     setCsr(unsigned csr, uint64_t value)
     {
-        fatal_if(setCsrFn(csr, value), "Unable to set QEMU CSR %#x", csr);
+        fatal_if(setCsrFn(instanceId, csr, value),
+                 "Unable to set QEMU CSR %#x", csr);
     }
 
-    void setMip(uint64_t value) { setMipFn(value); }
-    void invalidate() { invalidateFn(); }
+    void setMip(uint64_t value) { setMipFn(instanceId, value); }
+    void invalidate() { invalidateFn(instanceId); }
 };
 
 RiscvJitCPU::RiscvJitCPU(const Params &p)
-    : NonCachingSimpleCPU(p), batchSize(p.batch_size)
+    : NonCachingSimpleCPU(p), batchSize(p.batch_size),
+      backendInstance(p.backend_instance),
+      backendInstanceCount(p.backend_instance_count)
 {
     fatal_if(batchSize == 0, "JitCPU batch_size must be non-zero");
+    fatal_if(backendInstanceCount == 0,
+             "JitCPU backend_instance_count must be non-zero");
+    fatal_if(backendInstance >= backendInstanceCount,
+             "JitCPU backend_instance must be smaller than "
+             "backend_instance_count");
+    JitCpuTickEvents.insert(&tickEvent);
     backend = std::make_unique<QemuJitBackend>(p.backend_path);
 }
 
-RiscvJitCPU::~RiscvJitCPU() = default;
+RiscvJitCPU::~RiscvJitCPU()
+{
+    JitCpuTickEvents.erase(&tickEvent);
+}
 
 void
 RiscvJitCPU::init()
@@ -295,6 +340,9 @@ RiscvJitCPU::init()
 
     const QemuJitCallbacks callbacks = {
         .abi_version = QemuJitAbiVersion,
+        .instance_id = backendInstance,
+        .instance_count = backendInstanceCount,
+        .hart_id = static_cast<uint64_t>(threadContexts[0]->contextId()),
         .memory_read = memoryReadThunk,
         .memory_write = memoryWriteThunk,
         .memory_map = memoryMapThunk,
@@ -445,9 +493,20 @@ RiscvJitCPU::syncFromBackend()
         }
     }
 
-    const RegVal mip = backend->getMip();
-    if (tc->readMiscReg(RiscvISA::MISCREG_IP) != mip) {
-        tc->setMiscReg(RiscvISA::MISCREG_IP, mip);
+    // Interrupt-controller state is canonical in gem5.  In particular,
+    // copying QEMU's sampled MSIP/MTIP/MEIP levels back after a device MMIO
+    // clear would immediately re-post the stale interrupt.  Supervisor
+    // pending bits may originate from guest CSR execution in QEMU; legacy
+    // SBI firmware, for example, converts MTIP into STIP for Linux.
+    constexpr RegVal guest_pending_mask =
+        RiscvISA::SSI_MASK | RiscvISA::STI_MASK | RiscvISA::SEI_MASK;
+    const RegVal backend_mip = backend->getMip();
+    const RegVal gem5_mip = tc->readMiscReg(RiscvISA::MISCREG_IP);
+    const RegVal merged_mip =
+        (gem5_mip & ~guest_pending_mask) |
+        (backend_mip & guest_pending_mask);
+    if (gem5_mip != merged_mip) {
+        tc->setMiscReg(RiscvISA::MISCREG_IP, merged_mip);
     }
 
     tc->setMiscRegNoEffect(RiscvISA::MISCREG_PRV, privilege);
@@ -478,7 +537,7 @@ RiscvJitCPU::executionBudget() const
             const Cycles cycles = ticksToCycles(next - curTick());
             budget = std::min<uint64_t>(budget,
                 std::max<uint64_t>(1, cycles));
-        } else {
+        } else if (hasNonJitEventAtOrBefore(event_queue, curTick())) {
             budget = 1;
         }
     }
@@ -583,8 +642,18 @@ RiscvJitCPU::tick()
         // while preserving device/timer event ordering.
         EventQueue *event_queue = eventQueue();
         if (!event_queue->empty()) {
-            const Tick after_instructions = clockEdge(
-                Cycles(std::max<uint64_t>(1, result.instructions)));
+            uint64_t poll_instructions =
+                std::max<uint64_t>(1, result.instructions);
+            if (event_queue->nextTick() <= curTick() &&
+                !hasNonJitEventAtOrBefore(event_queue, curTick())) {
+                // A halted peer at the same tick is not a reason to poll WFI
+                // every cycle.  Bound the wakeup delay by the normal JIT
+                // batch, matching the granularity already used while
+                // executing instructions.
+                poll_instructions = std::max(poll_instructions, batchSize);
+            }
+            const Tick after_instructions =
+                clockEdge(Cycles(poll_instructions));
             schedule(tickEvent,
                      std::max(after_instructions, event_queue->nextTick()));
         }
@@ -605,6 +674,7 @@ int
 RiscvJitCPU::physicalRead(uint64_t address, uint8_t *data, size_t size)
 {
     while (size) {
+        backendIoAccessed = backendIoAccessed || !system->isMemAddr(address);
         const size_t fragment = std::min<size_t>(
             size, cacheLineSize() - addrBlockOffset(address, cacheLineSize()));
         RequestPtr request = std::make_shared<Request>(
@@ -627,6 +697,7 @@ int
 RiscvJitCPU::physicalWrite(uint64_t address, const uint8_t *data, size_t size)
 {
     while (size) {
+        backendIoAccessed = backendIoAccessed || !system->isMemAddr(address);
         const size_t fragment = std::min<size_t>(
             size, cacheLineSize() - addrBlockOffset(address, cacheLineSize()));
         RequestPtr request = std::make_shared<Request>(
@@ -654,6 +725,11 @@ RiscvJitCPU::physicalMemoryMap(size_t index, uint64_t *guestAddress,
     size_t eligible = 0;
 
     for (const auto &store : stores) {
+        DPRINTF(JitCPU,
+                "Backend store [%#x:%#x] kvmMap=%d pmem=%p "
+                "interleaved=%d\n",
+                store.range.start(), store.range.end(), store.kvmMap,
+                store.pmem, store.range.interleaved());
         if (!store.kvmMap || !store.pmem || store.range.interleaved()) {
             continue;
         }
@@ -674,6 +750,7 @@ void
 RiscvJitCPU::backendRunBegin()
 {
     fatal_if(backendQueueLocked, "Nested JitCPU backend execution");
+    backendIoAccessed = false;
     eventQueue()->lock();
     curEventQueue(eventQueue());
     backendQueueLocked = true;
@@ -699,7 +776,10 @@ RiscvJitCPU::backendReadTime() const
 bool
 RiscvJitCPU::backendShouldStop() const
 {
-    return !eventQueue()->empty() && eventQueue()->nextTick() <= curTick();
+    EventQueue *event_queue = eventQueue();
+    return backendIoAccessed ||
+           (!event_queue->empty() && event_queue->nextTick() <= curTick() &&
+            hasNonJitEventAtOrBefore(event_queue, curTick()));
 }
 
 int

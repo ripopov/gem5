@@ -2,10 +2,10 @@
 
 ## Status and scope
 
-`RiscvJitCPU` is a single-hart, QEMU-TCG-backed CPU for fast functional
-execution. It can boot RV64 Linux in `atomic_noncaching` mode and switch to a
-`RiscvO3CPU` in timing mode. Reusing the same two CPU objects is supported in
-both directions, including repeated sequences such as:
+`RiscvJitCPU` is a QEMU-TCG-backed CPU for fast functional execution. It can
+boot multicore RV64 Linux in `atomic_noncaching` mode and switch every hart to
+a corresponding `RiscvO3CPU` in timing mode. Reusing the same CPU objects is
+supported in both directions, including repeated sequences such as:
 
 ```text
 JitCPU -> O3CPU -> JitCPU -> O3CPU -> ...
@@ -22,15 +22,25 @@ phase remains compatible with O3.
 
 Current limitations are:
 
-- RISC-V RV64, one hart, and one JitCPU backend instance per process.
+- RISC-V RV64 only. Four harts are qualified; larger systems have not yet been
+  stress-tested.
 - No vector or hypervisor extension support.
+- One shared QEMU runtime owns a fixed number of vCPUs and one physical address
+  space per gem5 process. All vCPUs execute through QEMU's single-threaded TCG
+  mode, so multicore correctness is supported but host-side JIT execution is
+  serialized and does not scale with the number of host cores.
 - Reverse switching to `atomic_noncaching` is implemented for CHI. Other Ruby
   protocols must implement the coherent-maintenance controller interface
   before they can claim equivalent support.
 - JitCPU performs fast functional memory accesses; it does not model detailed
   cache or interconnect timing.
-- Checkpoint restore, multicore/SMT, DMA races during maintenance, and
-  performance targets beyond the current PoC need separate qualification.
+- The Linux two-controller configuration uses Ruby's canonical functional
+  backing store because interleaved DRAM ranges are not host-contiguous. The
+  directed bare-metal test disables that shortcut and checks writeback and
+  invalidation through both real interleaved controllers.
+- Checkpoint restore, SMT, DMA races during maintenance, systems larger than
+  four harts, and performance targets beyond the current PoC need separate
+  qualification.
 
 ## Source and licensing layout
 
@@ -50,6 +60,28 @@ QEMU dependency. This separation is useful engineering isolation, but it is
 not a way to avoid applicable GPL obligations. Obtain legal review for any
 distribution plan.
 
+## Multicore backend model
+
+All JitCPU objects load the same backend image. ABI version 5 creates one QEMU
+RISC-V vCPU per gem5 JitCPU and selects it with an explicit backend instance
+ID. Each instance has independent integer, floating-point, privilege, CSR,
+interrupt, software-TLB, halted, exception, and LR/SC state. `mhartid` is the
+gem5 context ID, rather than QEMU's creation-order default.
+
+The embedded QEMU runtime and physical address space are shared. TCG executes
+one vCPU at a time (`tcg,thread=single`), matching gem5's event-driven CPU
+scheduling. Same-tick peer JitCPU events do not reduce a running hart to
+one-instruction batches or force a hart in WFI to poll every simulated cycle.
+External device/timer events at the same tick remain visible even when they
+share an event-queue bin with JitCPU events. A backend batch also stops after
+MMIO so device side effects cannot be repeated before gem5 services pending
+events.
+
+Machine interrupt-pending bits remain owned by gem5's interrupt controllers.
+Only supervisor software/timer/external pending bits are imported from QEMU;
+this preserves guest CSR/SBI updates without replaying a stale CLINT MSIP or
+timer level after the device has cleared it.
+
 ## Bidirectional takeover
 
 The gem5 `ThreadContext` remains the canonical switchable architectural state.
@@ -59,7 +91,7 @@ CPU objects. The existing RISC-V PMP takeover support is used in both
 directions.
 
 `RiscvJitCPU::takeOverFrom()` adds the QEMU-specific reverse-takeover step. On
-every O3-to-JIT switch it:
+every O3-to-JIT switch, for every hart, it:
 
 1. completes `NonCachingSimpleCPU`/`BaseCPU` takeover;
 2. synchronously flushes QEMU's software TLB;
@@ -124,20 +156,22 @@ scons build/RISCV/gem5.opt -j"$(nproc)"
 make -C tests/test-progs/jitcpu-smoke/src
 ```
 
-The initramfs target creates a small static `/init`. It executes a userspace
-`m5_exit` after Linux boot, then remains PID 1 and continuously updates a
-256 KiB working set. This overlay is necessary for repeated switching because
-the fixed image's original init script returns after its `m5_exit`, which
-eventually causes Linux to panic after a one-way test has already ended.
+The initramfs targets create small static `/init` payloads. The single-core
+version executes a userspace `m5_exit` after Linux boot and then continuously
+updates memory. The SMP version starts and pins four workers before its first
+`m5_exit`; together they continuously update a 256 KiB working set and a
+shared atomic counter. These overlays are necessary for repeated switching
+because the fixed image's original init script returns after its `m5_exit`,
+which eventually causes Linux to panic after a one-way test has already ended.
 
 ## Directed bare-metal regression
 
-`jitcpu-repeated-switch.S` prints `P00 J` through `P21 O` and uses `m5_fail`
-with distinct codes for all failures. Its 21 switches provide ten complete
-JIT/O3 round trips and a final O3 interval. Every phase checks instruction
-progress and memory mode. JIT phases must produce exactly zero timing CHI
-traffic; O3 phases must produce nonzero network messages, cache accesses, and
-memory traffic.
+The single-hart `jitcpu-repeated-switch.S` payload prints `P00 J` through
+`P21 O` and uses `m5_fail` with distinct codes for all failures. Its 21
+switches provide ten complete JIT/O3 round trips and a final O3 interval.
+Every phase checks instruction progress and memory mode. JIT phases must
+produce exactly zero timing CHI traffic; O3 phases must produce nonzero
+network messages, cache accesses, and memory traffic.
 
 The payload covers:
 
@@ -153,58 +187,95 @@ The payload covers:
 - UART MMIO, CLINT timer interrupts, and repeated m5ops; and
 - phase-word persistence, which makes a skipped writeback immediately visible.
 
-Run the positive stress and its automated negative control:
+The four-hart `jitcpu-smp-repeated-switch.S` payload adds a 64 KiB private
+footprint per hart, distinct preserved integer and floating-point values per
+hart, shared AMOs, and a generation barrier around every handoff. It fails if
+any hart skips or duplicates a phase. The host checker requires progress and
+cache activity from every hart/RNF and memory traffic through each of two
+interleaved controllers. Ruby's canonical backing store is disabled in this
+test, so dirty writeback and clean invalidation are checked against the real
+controller backing stores.
+
+The complementary `jitcpu-smp-wfi-repeated-switch.S` payload keeps hart 0
+active while harts 1-3 repeatedly enter WFI. After every whole-system
+handoff, hart 0 publishes a new generation and wakes each peer through its
+own CLINT MSIP register. The peers handle and clear the machine software
+interrupt, validate preserved integer/FP state and the preceding memory
+footprint, update their next footprint, and return to WFI. Spurious WFI
+returns permitted by the ISA are handled without weakening skipped-generation
+checks. This covers active-to-suspended and suspended-to-active takeover,
+per-hart interrupt routing, and interrupt clear/re-arm across both CPU models.
+An independent per-hart trap counter requires exactly one machine software
+interrupt to be handled in every phase, so a legal spurious WFI return cannot
+produce a false pass.
+
+Run both directed stresses, the automated negative control, and the 4-core
+SimpleNetwork and Garnet variants:
 
 ```sh
 python3 tests/gem5/jitcpu/run_repeated_switch_regression.py \
   build/RISCV/gem5.opt "$QEMU_JIT_LIBRARY" \
+  --smp-garnet \
   --outdir /tmp/jitcpu-repeated-regression
 ```
 
 The negative control deliberately bypasses Ruby maintenance for the first
 O3-to-JIT switch. It is considered successful only when gem5 exits nonzero and
 the payload reports `m5_fail instruction encountered (code 9)` from the stale
-cached phase word. The same positive regression can exercise Garnet directly:
+cached phase word. The multicore Garnet regression can also be run directly:
 
 ```sh
 build/RISCV/gem5.opt -d /tmp/jitcpu-repeated-garnet \
   tests/gem5/jitcpu/configs/jitcpu_baremetal.py \
-  tests/test-progs/jitcpu-smoke/src/jitcpu-repeated-switch \
+  tests/test-progs/jitcpu-smoke/src/jitcpu-smp-repeated-switch \
   "$QEMU_JIT_LIBRARY" --ruby-chi --ruby-network garnet \
+  --num-cpus 4 --num-dirs 2 --num-l3caches 4 \
   --repeated-switches 21 --max-ticks 200000000
 ```
 
 ## Linux Ruby+CHI validation
 
 The Linux test first boots the existing fixed RV64 image entirely on JitCPU
-until the initramfs userspace `m5_exit`. Host-driven, bounded intervals then
-reuse the same JitCPU and O3 objects. The test rejects a phase with no userspace
-instruction progress, unexpected exit causes, the wrong memory mode, CHI
-traffic during JIT, or missing CHI/cache/memory traffic during O3. It finishes
-on O3, runs a longer final interval, and scans the terminal log for kernel
-panic, Oops, BUG, access-fault, and unhandled-fault markers.
+until the initramfs userspace `m5_exit`. The SMP initramfs creates four
+shared-address-space workers, pins one to each Linux CPU, verifies the actual
+CPU assignment, and requires every worker to sweep private memory and perform
+shared AMOs before signaling the host. The workers then remain active for all
+switch phases.
 
-Run the complete bare-metal suite followed by an 11-switch Linux stress:
+Host-driven, bounded intervals reuse the same JitCPU and O3 objects. The test
+rejects a phase with no userspace instruction progress on any core, unexpected
+exit causes, the wrong memory mode, CHI traffic during JIT, or missing CHI
+traffic from any RNF or memory controller during O3. It finishes on O3, runs a
+one-billion-tick final interval, and scans the terminal log for kernel panic,
+Oops, BUG, access-fault, and unhandled-fault markers.
+
+Run the complete suite: 11 switches on single-core Linux, plus 21 switches on
+4-core/4-HNF/2-controller Linux with both SimpleNetwork and Garnet:
 
 ```sh
 python3 tests/gem5/jitcpu/run_repeated_switch_regression.py \
   build/RISCV/gem5.opt "$QEMU_JIT_LIBRARY" \
   --linux-image /path/to/riscv-boot-exit-nodisk-1.0.0 \
   --linux-switches 11 \
+  --smp-linux-switches 21 --smp-garnet \
   --outdir /tmp/jitcpu-full-regression
 ```
 
-The equivalent direct Linux command is:
+The equivalent direct multicore SimpleNetwork command is:
 
 ```sh
 build/RISCV/gem5.opt -d /tmp/jitcpu-linux-repeated \
   tests/gem5/jitcpu/configs/jitcpu_linux.py \
   /path/to/riscv-boot-exit-nodisk-1.0.0 \
-  "$QEMU_JIT_LIBRARY" --ruby-chi --repeated-switches 11 \
+  "$QEMU_JIT_LIBRARY" --ruby-chi \
+  --num-cpus 4 --num-dirs 2 --num-l3caches 4 \
+  --repeated-switches 21 \
   --phase-ticks 100000000 --final-o3-ticks 1000000000 \
-  --initrd tests/test-progs/jitcpu-smoke/src/jitcpu-linux-init.cpio \
+  --initrd tests/test-progs/jitcpu-smoke/src/jitcpu-linux-smp-init.cpio \
   --max-ticks 2000000000000
 ```
+
+Add `--ruby-network garnet` to repeat the same Linux stress on Garnet.
 
 ## One-way compatibility checks
 
@@ -233,20 +304,37 @@ configuration before running this document's tests.
 Validation on 2026-07-22 used the pinned `ext/qemu/repo` revision and a
 CHI-enabled `build/RISCV/gem5.opt`:
 
-- SimpleNetwork: 21 directed switches passed; every JIT interval reported
-  zero CHI messages and every O3 interval reported nonzero network, cache, and
-  memory activity.
-- Garnet: 21 directed switches passed at tick 76,876,000 with the same traffic
-  assertions. Drain diagnostics proved the post-maintenance DRAM write queue
-  was empty before each transition to uncached mode.
+- The standalone ABI-5 adapter smoke created two QEMU vCPUs with different
+  `mhartid` values and proved independent PC and integer-register state.
+- The original single-hart directed regression passed 21 switches at tick
+  66,266,000, preserving the original switch path after the multicore changes.
+- Four-hart directed SimpleNetwork and Garnet regressions each passed 21
+  switches, at ticks 828,691,000 and 936,397,000 respectively. Every phase
+  advanced all four harts. Every JIT phase had zero timing CHI messages; every
+  O3 phase exercised all four RNFs and both interleaved memory controllers.
+  Each payload phase also checked per-hart integer/FP state, the complete
+  64 KiB-per-hart footprint, shared AMO totals, and handoff generation.
+- Four-hart WFI/MSIP SimpleNetwork and Garnet regressions passed 21 switches
+  at ticks 1,801,647,000 and 1,910,067,000. Three harts repeatedly waited in
+  WFI and were independently awakened, handled, and cleared by CLINT software
+  interrupts after every switch. The trap counters reached the exact expected
+  generation on every hart; all per-hart, RNF, and controller assertions
+  passed.
 - Negative control: skipping coherent maintenance failed at the first reverse
   handoff with `m5_fail` code 9, proving the positive result depends on the
   coherence fix.
-- Linux: an 11-switch SimpleNetwork stress reached userspace on JitCPU,
-  survived five complete JIT/O3 round trips, finished on O3, and completed a
-  one-billion-tick final O3 interval. Every JIT phase had zero CHI traffic;
-  every O3 phase had userspace progress and nonzero CHI/cache/DRAM activity;
-  the guest log check passed.
+- The single-hart Linux compatibility stress passed 11 switches and a
+  one-billion-tick final O3 interval with a clean guest log.
+- Four-hart Linux booted entirely on JitCPU and passed 21 switches with both
+  SimpleNetwork and Garnet, finishing at ticks 627,206,071,000 and
+  627,305,089,000. All four pinned userspace workers progressed in every
+  phase. Each JIT phase carried zero timing CHI traffic. Every O3 phase had
+  nonzero traffic on all four RNFs and both controllers, including the
+  one-billion-tick final phase; guest-log scans passed on both networks.
+- The automated bare-metal driver, including the negative, active-hart, and
+  WFI/MSIP cases on both networks, passed end to end. Its single-core and SMP
+  Linux branches were also exercised; the final per-node Linux checks passed
+  in the direct 21-switch runs above.
 - Existing one-way bare-metal and Linux switches passed with both classic
   memory and Ruby+CHI.
 

@@ -9,7 +9,8 @@ INITRAMFS_DIR = .jitcpu-linux-initramfs
 .PHONY: all clean
 
 all: jitcpu-smoke jitcpu-switch jitcpu-repeated-switch \
-	jitcpu-linux-init.cpio
+	jitcpu-smp-repeated-switch jitcpu-smp-wfi-repeated-switch \
+	jitcpu-linux-init.cpio jitcpu-linux-smp-init.cpio
 
 jitcpu-smoke: jitcpu-smoke.S
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $<
@@ -20,13 +21,22 @@ jitcpu-switch: jitcpu-switch.S
 jitcpu-repeated-switch: jitcpu-repeated-switch.S
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $<
 
+jitcpu-smp-repeated-switch: jitcpu-smp-repeated-switch.S
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $<
+
+jitcpu-smp-wfi-repeated-switch: jitcpu-smp-wfi-repeated-switch.S
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $<
+
 jitcpu-linux-init: jitcpu-linux-init.S
 	$(CC) $(CFLAGS) $(USER_LDFLAGS) -o $@ $<
 
-jitcpu-linux-init.cpio: jitcpu-linux-init
+jitcpu-linux-smp-init: jitcpu-linux-smp-init.S
+	$(CC) $(CFLAGS) $(USER_LDFLAGS) -o $@ $<
+
+%.cpio: %
 	rm -rf $(INITRAMFS_DIR)
 	mkdir -p $(INITRAMFS_DIR)
-	cp jitcpu-linux-init $(INITRAMFS_DIR)/init
+	cp $< $(INITRAMFS_DIR)/init
 	chmod 755 $(INITRAMFS_DIR)/init
 	cd $(INITRAMFS_DIR) && printf './init\n' | \
 		cpio --quiet -o -H newc > ../$@
@@ -35,4 +45,6 @@ jitcpu-linux-init.cpio: jitcpu-linux-init
 clean:
 	rm -rf $(INITRAMFS_DIR)
 	rm -f jitcpu-smoke jitcpu-switch jitcpu-repeated-switch \
-		jitcpu-linux-init jitcpu-linux-init.cpio
+		jitcpu-smp-repeated-switch jitcpu-smp-wfi-repeated-switch \
+		jitcpu-linux-init jitcpu-linux-init.cpio \
+		jitcpu-linux-smp-init jitcpu-linux-smp-init.cpio

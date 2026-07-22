@@ -60,8 +60,11 @@ class RiscvJitCPU : public NonCachingSimpleCPU
   private:
     std::unique_ptr<QemuJitBackend> backend;
     const uint64_t batchSize;
+    const uint32_t backendInstance;
+    const uint32_t backendInstanceCount;
     bool backendInitialized = false;
     bool backendQueueLocked = false;
+    bool backendIoAccessed = false;
 
     void syncToBackend();
     void syncFromBackend();

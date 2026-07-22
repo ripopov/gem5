@@ -25,10 +25,16 @@
 
 #include <limits.h>
 
-typedef struct Gem5QemuJitState {
+typedef struct Gem5QemuJitHart {
     Gem5QemuJitCallbacks callbacks;
     CPUState *cpu;
     RISCVCPU *riscv_cpu;
+    bool initialized;
+} Gem5QemuJitHart;
+
+typedef struct Gem5QemuJitState {
+    Gem5QemuJitHart *harts;
+    uint32_t hart_count;
     MemoryRegion memory;
     MemoryRegion ram[32];
     size_t ram_count;
@@ -41,8 +47,31 @@ static Gem5QemuJitState jit;
  * library has no QEMU main function, but display backends still reference it. */
 int (*qemu_main)(void);
 
+static Gem5QemuJitHart *
+jit_hart(uint32_t instance_id)
+{
+    if (!jit.initialized || instance_id >= jit.hart_count ||
+        !jit.harts[instance_id].initialized) {
+        return NULL;
+    }
+    return &jit.harts[instance_id];
+}
+
+static Gem5QemuJitHart *
+jit_current_hart(void)
+{
+    uint32_t i;
+
+    for (i = 0; i < jit.hart_count; ++i) {
+        if (jit.harts[i].cpu == current_cpu) {
+            return &jit.harts[i];
+        }
+    }
+    return NULL;
+}
+
 static void
-jit_maybe_stop(Gem5QemuJitState *state)
+jit_maybe_stop(Gem5QemuJitHart *state)
 {
     if (state->callbacks.should_stop &&
         state->callbacks.should_stop(state->callbacks.opaque)) {
@@ -53,7 +82,7 @@ jit_maybe_stop(Gem5QemuJitState *state)
 static uint64_t
 jit_read_time(void *opaque)
 {
-    Gem5QemuJitState *state = opaque;
+    Gem5QemuJitHart *state = opaque;
 
     if (!state->callbacks.read_time) {
         return 0;
@@ -65,12 +94,12 @@ static MemTxResult
 jit_memory_read(void *opaque, hwaddr address, uint64_t *value,
                 unsigned size, MemTxAttrs attrs)
 {
-    Gem5QemuJitState *state = opaque;
+    Gem5QemuJitHart *state = jit_current_hart();
     uint8_t data[8] = { 0 };
     uint64_t result = 0;
     unsigned i;
 
-    if (size > sizeof(data) ||
+    if (!state || !state->initialized || size > sizeof(data) ||
         state->callbacks.memory_read(state->callbacks.opaque, address,
                                      data, size) != 0) {
         return MEMTX_ERROR;
@@ -88,11 +117,11 @@ static MemTxResult
 jit_memory_write(void *opaque, hwaddr address, uint64_t value,
                  unsigned size, MemTxAttrs attrs)
 {
-    Gem5QemuJitState *state = opaque;
+    Gem5QemuJitHart *state = jit_current_hart();
     uint8_t data[8];
     unsigned i;
 
-    if (size > sizeof(data)) {
+    if (!state || !state->initialized || size > sizeof(data)) {
         return MEMTX_ERROR;
     }
     for (i = 0; i < size; ++i) {
@@ -124,6 +153,7 @@ static const MemoryRegionOps jit_memory_ops = {
 };
 
 typedef struct Gem5QemuJitRunRequest {
+    Gem5QemuJitHart *hart;
     uint64_t max_instructions;
     Gem5QemuJitRunResult result;
 } Gem5QemuJitRunRequest;
@@ -132,6 +162,7 @@ static void
 jit_run_on_vcpu(CPUState *cpu, run_on_cpu_data data)
 {
     Gem5QemuJitRunRequest *request = data.host_ptr;
+    Gem5QemuJitHart *hart = request->hart;
     int64_t before;
     int64_t after;
     int64_t budget;
@@ -141,8 +172,8 @@ jit_run_on_vcpu(CPUState *cpu, run_on_cpu_data data)
     qatomic_set(&cpu->exit_request, false);
     qatomic_set(&cpu->neg.icount_decr.u16.high, 0);
     bql_unlock();
-    if (jit.callbacks.run_begin) {
-        jit.callbacks.run_begin(jit.callbacks.opaque);
+    if (hart->callbacks.run_begin) {
+        hart->callbacks.run_begin(hart->callbacks.opaque);
     }
     before = icount_get_raw();
     budget = MIN(request->max_instructions, (uint64_t)INT32_MAX);
@@ -150,16 +181,16 @@ jit_run_on_vcpu(CPUState *cpu, run_on_cpu_data data)
     request->result.qemu_exception = cpu_exec(cpu);
     icount_process_data(cpu);
     after = icount_get_raw();
-    if (jit.callbacks.run_end) {
-        jit.callbacks.run_end(jit.callbacks.opaque);
+    if (hart->callbacks.run_end) {
+        hart->callbacks.run_end(hart->callbacks.opaque);
     }
     bql_lock();
 
     request->result.instructions = after - before;
     if (request->result.qemu_exception == EXCP_HLT &&
-        (jit.riscv_cpu->env.bins & 0x01ffffff) == 0x7b) {
+        (hart->riscv_cpu->env.bins & 0x01ffffff) == 0x7b) {
         request->result.reason = GEM5_QEMU_JIT_EXIT_M5OP;
-        request->result.m5_function = jit.riscv_cpu->env.bins >> 25;
+        request->result.m5_function = hart->riscv_cpu->env.bins >> 25;
     } else if (request->result.instructions == budget) {
         request->result.reason = GEM5_QEMU_JIT_EXIT_BUDGET;
     } else if (cpu->halted) {
@@ -171,9 +202,12 @@ jit_run_on_vcpu(CPUState *cpu, run_on_cpu_data data)
     }
 }
 
-int
-gem5_qemu_jit_init(const Gem5QemuJitCallbacks *callbacks)
+static int
+jit_global_init(const Gem5QemuJitCallbacks *callbacks)
 {
+    CPUState *cpu;
+    const char *cpu_type;
+    uint32_t cpu_count = 0;
     uint64_t guest_address;
     uint64_t size;
     uint8_t *host_address;
@@ -194,23 +228,39 @@ gem5_qemu_jit_init(const Gem5QemuJitCallbacks *callbacks)
         (char *)"-serial", (char *)"none",
     };
 
-    if (jit.initialized || !callbacks ||
-        callbacks->abi_version != GEM5_QEMU_JIT_ABI_VERSION ||
-        !callbacks->memory_read || !callbacks->memory_write) {
-        return -1;
-    }
-
-    jit.callbacks = *callbacks;
     qemu_init(G_N_ELEMENTS(argv), argv);
 
-    jit.cpu = first_cpu;
-    if (!jit.cpu || CPU_NEXT(jit.cpu)) {
+    if (!first_cpu || CPU_NEXT(first_cpu)) {
         return -1;
     }
-    jit.riscv_cpu = RISCV_CPU(jit.cpu);
+    cpu_type = object_get_typename(OBJECT(first_cpu));
+    for (index = 1; index < callbacks->instance_count; ++index) {
+        if (!cpu_create(cpu_type)) {
+            return -1;
+        }
+    }
+
+    jit.hart_count = callbacks->instance_count;
+    jit.harts = g_new0(Gem5QemuJitHart, jit.hart_count);
     riscv_gem5_jit_enabled = true;
-    jit.riscv_cpu->env.rdtime_fn = jit_read_time;
-    jit.riscv_cpu->env.rdtime_fn_arg = &jit;
+
+    CPU_FOREACH(cpu) {
+        Gem5QemuJitHart *hart;
+
+        if (cpu->cpu_index >= jit.hart_count) {
+            return -1;
+        }
+        hart = &jit.harts[cpu->cpu_index];
+        hart->cpu = cpu;
+        hart->riscv_cpu = RISCV_CPU(cpu);
+        hart->riscv_cpu->env.mhartid = cpu->cpu_index;
+        hart->riscv_cpu->env.rdtime_fn = jit_read_time;
+        hart->riscv_cpu->env.rdtime_fn_arg = hart;
+        ++cpu_count;
+    }
+    if (cpu_count != jit.hart_count) {
+        return -1;
+    }
 
     /* qemu_init() returns with both locks held. The normal QEMU main() drops
      * them before entering its loop. This adapter retains the BQL so that
@@ -222,13 +272,13 @@ gem5_qemu_jit_init(const Gem5QemuJitCallbacks *callbacks)
                           "gem5-jit-physical-memory", UINT64_MAX);
     memory_region_add_subregion(get_system_memory(), 0, &jit.memory);
 
-    if (jit.callbacks.memory_map) {
+    if (callbacks->memory_map) {
         for (index = 0; ; ++index) {
             char *name;
 
-            if (jit.callbacks.memory_map(jit.callbacks.opaque, index,
-                                         &guest_address, &size,
-                                         &host_address, &writable) != 0) {
+            if (callbacks->memory_map(callbacks->opaque, index,
+                                      &guest_address, &size,
+                                      &host_address, &writable) != 0) {
                 break;
             }
             if (!size || !host_address) {
@@ -254,130 +304,188 @@ gem5_qemu_jit_init(const Gem5QemuJitCallbacks *callbacks)
 }
 
 int
-gem5_qemu_jit_run(uint64_t max_instructions, Gem5QemuJitRunResult *result)
+gem5_qemu_jit_init(const Gem5QemuJitCallbacks *callbacks)
 {
-    Gem5QemuJitRunRequest request = {
-        .max_instructions = max_instructions,
-    };
+    Gem5QemuJitHart *hart;
 
-    if (!jit.initialized || !result || max_instructions == 0) {
+    if (!callbacks ||
+        callbacks->abi_version != GEM5_QEMU_JIT_ABI_VERSION ||
+        callbacks->instance_count == 0 ||
+        callbacks->instance_id >= callbacks->instance_count ||
+        !callbacks->memory_read || !callbacks->memory_write) {
         return -1;
     }
 
-    run_on_cpu(jit.cpu, jit_run_on_vcpu, RUN_ON_CPU_HOST_PTR(&request));
+    if (!jit.initialized && jit_global_init(callbacks) != 0) {
+        return -1;
+    }
+    if (callbacks->instance_count != jit.hart_count) {
+        return -1;
+    }
+
+    hart = &jit.harts[callbacks->instance_id];
+    if (hart->initialized) {
+        return -1;
+    }
+    hart->callbacks = *callbacks;
+    hart->riscv_cpu->env.mhartid = callbacks->hart_id;
+    hart->initialized = true;
+    return 0;
+}
+
+int
+gem5_qemu_jit_run(uint32_t instance_id, uint64_t max_instructions,
+                  Gem5QemuJitRunResult *result)
+{
+    Gem5QemuJitHart *hart = jit_hart(instance_id);
+    Gem5QemuJitRunRequest request = {
+        .hart = hart,
+        .max_instructions = max_instructions,
+    };
+
+    if (!hart || !result || max_instructions == 0) {
+        return -1;
+    }
+
+    run_on_cpu(hart->cpu, jit_run_on_vcpu, RUN_ON_CPU_HOST_PTR(&request));
     *result = request.result;
     return 0;
 }
 
 uint64_t
-gem5_qemu_jit_get_gpr(unsigned index)
+gem5_qemu_jit_get_gpr(uint32_t instance_id, unsigned index)
 {
-    if (!jit.initialized || index >= 32) {
+    Gem5QemuJitHart *hart = jit_hart(instance_id);
+
+    if (!hart || index >= 32) {
         return 0;
     }
-    return index == 0 ? 0 : jit.riscv_cpu->env.gpr[index];
+    return index == 0 ? 0 : hart->riscv_cpu->env.gpr[index];
 }
 
 int
-gem5_qemu_jit_set_gpr(unsigned index, uint64_t value)
+gem5_qemu_jit_set_gpr(uint32_t instance_id, unsigned index, uint64_t value)
 {
-    if (!jit.initialized || index >= 32) {
+    Gem5QemuJitHart *hart = jit_hart(instance_id);
+
+    if (!hart || index >= 32) {
         return -1;
     }
     if (index != 0) {
-        jit.riscv_cpu->env.gpr[index] = value;
+        hart->riscv_cpu->env.gpr[index] = value;
     }
     return 0;
 }
 
 uint64_t
-gem5_qemu_jit_get_fpr(unsigned index)
+gem5_qemu_jit_get_fpr(uint32_t instance_id, unsigned index)
 {
-    if (!jit.initialized || index >= 32) {
+    Gem5QemuJitHart *hart = jit_hart(instance_id);
+
+    if (!hart || index >= 32) {
         return 0;
     }
-    return jit.riscv_cpu->env.fpr[index];
+    return hart->riscv_cpu->env.fpr[index];
 }
 
 int
-gem5_qemu_jit_set_fpr(unsigned index, uint64_t value)
+gem5_qemu_jit_set_fpr(uint32_t instance_id, unsigned index, uint64_t value)
 {
-    if (!jit.initialized || index >= 32) {
+    Gem5QemuJitHart *hart = jit_hart(instance_id);
+
+    if (!hart || index >= 32) {
         return -1;
     }
-    jit.riscv_cpu->env.fpr[index] = value;
+    hart->riscv_cpu->env.fpr[index] = value;
     return 0;
 }
 
 uint64_t
-gem5_qemu_jit_get_pc(void)
+gem5_qemu_jit_get_pc(uint32_t instance_id)
 {
-    return jit.initialized ? jit.riscv_cpu->env.pc : 0;
+    Gem5QemuJitHart *hart = jit_hart(instance_id);
+
+    return hart ? hart->riscv_cpu->env.pc : 0;
 }
 
 void
-gem5_qemu_jit_set_pc(uint64_t value)
+gem5_qemu_jit_set_pc(uint32_t instance_id, uint64_t value)
 {
-    if (jit.initialized) {
-        jit.riscv_cpu->env.pc = value;
-        jit.cpu->halted = 0;
+    Gem5QemuJitHart *hart = jit_hart(instance_id);
+
+    if (hart) {
+        hart->riscv_cpu->env.pc = value;
+        hart->cpu->halted = 0;
     }
 }
 
 unsigned
-gem5_qemu_jit_get_priv(void)
+gem5_qemu_jit_get_priv(uint32_t instance_id)
 {
-    return jit.initialized ? jit.riscv_cpu->env.priv : 0;
+    Gem5QemuJitHart *hart = jit_hart(instance_id);
+
+    return hart ? hart->riscv_cpu->env.priv : 0;
 }
 
 int
-gem5_qemu_jit_set_priv(unsigned value)
+gem5_qemu_jit_set_priv(uint32_t instance_id, unsigned value)
 {
-    if (!jit.initialized || value > PRV_M) {
+    Gem5QemuJitHart *hart = jit_hart(instance_id);
+
+    if (!hart || value > PRV_M) {
         return -1;
     }
-    riscv_cpu_set_mode(&jit.riscv_cpu->env, value, false);
+    riscv_cpu_set_mode(&hart->riscv_cpu->env, value, false);
     return 0;
 }
 
 int
-gem5_qemu_jit_get_csr(unsigned csr, uint64_t *value)
+gem5_qemu_jit_get_csr(uint32_t instance_id, unsigned csr, uint64_t *value)
 {
-    if (!jit.initialized || !value || csr >= 0x1000) {
+    Gem5QemuJitHart *hart = jit_hart(instance_id);
+
+    if (!hart || !value || csr >= 0x1000) {
         return -1;
     }
-    return riscv_csr_read_i64(&jit.riscv_cpu->env, csr, value) ==
+    return riscv_csr_read_i64(&hart->riscv_cpu->env, csr, value) ==
         RISCV_EXCP_NONE ? 0 : -1;
 }
 
 int
-gem5_qemu_jit_set_csr(unsigned csr, uint64_t value)
+gem5_qemu_jit_set_csr(uint32_t instance_id, unsigned csr, uint64_t value)
 {
-    if (!jit.initialized || csr >= 0x1000) {
+    Gem5QemuJitHart *hart = jit_hart(instance_id);
+
+    if (!hart || csr >= 0x1000) {
         return -1;
     }
-    return riscv_csr_write_i64(&jit.riscv_cpu->env, csr, value) ==
+    return riscv_csr_write_i64(&hart->riscv_cpu->env, csr, value) ==
         RISCV_EXCP_NONE ? 0 : -1;
 }
 
 uint64_t
-gem5_qemu_jit_get_mip(void)
+gem5_qemu_jit_get_mip(uint32_t instance_id)
 {
-    return jit.initialized ? jit.riscv_cpu->env.mip : 0;
+    Gem5QemuJitHart *hart = jit_hart(instance_id);
+
+    return hart ? hart->riscv_cpu->env.mip : 0;
 }
 
 void
-gem5_qemu_jit_set_mip(uint64_t value)
+gem5_qemu_jit_set_mip(uint32_t instance_id, uint64_t value)
 {
-    if (jit.initialized) {
-        riscv_cpu_update_mip(&jit.riscv_cpu->env, UINT64_MAX, value);
+    Gem5QemuJitHart *hart = jit_hart(instance_id);
+
+    if (hart) {
+        riscv_cpu_update_mip(&hart->riscv_cpu->env, UINT64_MAX, value);
     }
 }
 
 static void
 jit_invalidate_on_vcpu(CPUState *cpu, run_on_cpu_data data)
 {
-    CPURISCVState *env = &jit.riscv_cpu->env;
+    Gem5QemuJitHart *hart = data.host_ptr;
+    CPURISCVState *env = &hart->riscv_cpu->env;
 
     tlb_flush(cpu);
     cpu->halted = 0;
@@ -391,11 +499,14 @@ jit_invalidate_on_vcpu(CPUState *cpu, run_on_cpu_data data)
 }
 
 void
-gem5_qemu_jit_invalidate_translations(void)
+gem5_qemu_jit_invalidate_translations(uint32_t instance_id)
 {
-    if (jit.initialized) {
+    Gem5QemuJitHart *hart = jit_hart(instance_id);
+
+    if (hart) {
         /* The queued TB flush executes before the synchronous callback. */
-        queue_tb_flush(jit.cpu);
-        run_on_cpu(jit.cpu, jit_invalidate_on_vcpu, RUN_ON_CPU_NULL);
+        queue_tb_flush(hart->cpu);
+        run_on_cpu(hart->cpu, jit_invalidate_on_vcpu,
+                   RUN_ON_CPU_HOST_PTR(hart));
     }
 }

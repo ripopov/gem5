@@ -23,6 +23,14 @@ class RiscvJitCPU(BaseNonCachingSimpleCPU):
         "libgem5-qemu-jit.so",
         "Path to the QEMU/TCG JitCPU backend shared library",
     )
+    backend_instance = Param.Unsigned(
+        0,
+        "This JitCPU's instance ID within the shared QEMU backend",
+    )
+    backend_instance_count = Param.Unsigned(
+        1,
+        "Number of JitCPU instances sharing the QEMU backend",
+    )
     batch_size = Param.Unsigned(
         10000,
         "Maximum translated guest instructions executed per gem5 event",

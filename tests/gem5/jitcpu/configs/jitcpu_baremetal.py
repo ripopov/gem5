@@ -32,14 +32,14 @@ from common import Options
 from ruby import Ruby
 
 
-def ruby_options(network):
+def ruby_options(network, num_cpus, num_dirs, num_l3caches):
     parser = argparse.ArgumentParser(add_help=False)
     Options.addCommonOptions(parser)
     Ruby.define_options(parser)
     options = parser.parse_args([])
-    options.num_cpus = 1
-    options.num_dirs = 1
-    options.num_l3caches = 1
+    options.num_cpus = num_cpus
+    options.num_dirs = num_dirs
+    options.num_l3caches = num_l3caches
     options.topology = "Crossbar"
     options.network = network
     return options
@@ -61,8 +61,8 @@ def ruby_router_messages(ruby_system):
     )
 
 
-def cpu_instructions(cpu_name):
-    return stat_value(f"system.{cpu_name}.commitStats0.numInsts")
+def cpu_instructions(cpu):
+    return stat_value(f"{cpu.path()}.commitStats0.numInsts")
 
 
 def stat_value(name):
@@ -73,24 +73,32 @@ def stat_value(name):
 
 
 def ruby_cache_accesses():
-    accesses = 0
-    for controller in (system.cpu.l1d, system.cpu.l1i, system.cpu.l2):
-        cache_stats = get_simstat(controller)["cache"]
-        accesses += int(cache_stats["m_demand_hits"].value)
-        accesses += int(cache_stats["m_demand_misses"].value)
+    accesses = []
+    for cpu in jit_cpus:
+        cpu_accesses = 0
+        for controller in (cpu.l1d, cpu.l1i, cpu.l2):
+            cache_stats = get_simstat(controller)["cache"]
+            cpu_accesses += int(cache_stats["m_demand_hits"].value)
+            cpu_accesses += int(cache_stats["m_demand_misses"].value)
+        accesses.append(cpu_accesses)
     return accesses
 
 
 def ruby_memory_bytes():
-    return stat_value("system.mem_ctrls.bytesReadSys") + stat_value(
-        "system.mem_ctrls.bytesWrittenSys"
-    )
+    return [
+        stat_value(f"{controller.path()}.bytesReadSys")
+        + stat_value(f"{controller.path()}.bytesWrittenSys")
+        for controller in system.mem_ctrls
+    ]
 
 
 parser = argparse.ArgumentParser()
 parser.add_argument("binary")
 parser.add_argument("backend")
 parser.add_argument("--max-ticks", type=int, default=100000)
+parser.add_argument("--num-cpus", type=int, default=1)
+parser.add_argument("--num-dirs", type=int, default=1)
+parser.add_argument("--num-l3caches", type=int, default=1)
 parser.add_argument("--switch-to-o3", action="store_true")
 parser.add_argument("--ruby-chi", action="store_true")
 parser.add_argument(
@@ -104,6 +112,12 @@ parser.add_argument(
 )
 args = parser.parse_args()
 
+if args.num_cpus < 1:
+    parser.error("--num-cpus must be at least 1")
+if args.num_dirs < 1 or args.num_dirs & (args.num_dirs - 1):
+    parser.error("--num-dirs must be a power of two")
+if args.num_l3caches < 1:
+    parser.error("--num-l3caches must be at least 1")
 if args.ruby_chi and buildEnv["PROTOCOL"] != "CHI":
     parser.error("--ruby-chi requires a gem5 binary built with PROTOCOL=CHI")
 if args.repeated_switches and not args.ruby_chi:
@@ -112,6 +126,8 @@ if args.ruby_network != "simple" and not args.ruby_chi:
     parser.error("--ruby-network requires --ruby-chi")
 if args.unsafe_skip_ruby_maintenance and not args.repeated_switches:
     parser.error("--unsafe-skip-ruby-maintenance requires --repeated-switches")
+if args.unsafe_skip_ruby_maintenance and args.num_cpus != 1:
+    parser.error("--unsafe-skip-ruby-maintenance requires one CPU")
 if args.repeated_switches:
     args.switch_to_o3 = True
 
@@ -145,7 +161,7 @@ else:
     system.platform.attachOnChipIO(system.membus)
     system.platform.attachOffChipIO(system.iobus)
 system.platform.attachPlic()
-system.platform.setNumCores(1)
+system.platform.setNumCores(args.num_cpus)
 
 if not args.ruby_chi:
     system.bridge = Bridge(delay="50ns")
@@ -167,45 +183,56 @@ system.cpu_clk_domain = SrcClockDomain(
     clock="1GHz", voltage_domain=system.cpu_voltage_domain
 )
 
-system.cpu = RiscvJitCPU(
-    clk_domain=system.cpu_clk_domain,
-    cpu_id=0,
-    backend_path=args.backend,
-    batch_size=256,
-)
-if not args.ruby_chi:
-    system.cpu.icache_port = system.membus.cpu_side_ports
-    system.cpu.dcache_port = system.membus.cpu_side_ports
-    system.cpu.mmu.connectWalkerPorts(
-        system.membus.cpu_side_ports, system.membus.cpu_side_ports
+jit_cpus = [
+    RiscvJitCPU(
+        clk_domain=system.cpu_clk_domain,
+        cpu_id=index,
+        backend_path=args.backend,
+        backend_instance=index,
+        backend_instance_count=args.num_cpus,
+        batch_size=256,
     )
-system.cpu.createInterruptController()
-system.cpu.createThreads()
-system.cpu.isa[0].enable_rvv = False
-system.cpu.isa[0].enable_Zicbom_fs = False
-system.cpu.isa[0].enable_Zicboz_fs = False
+    for index in range(args.num_cpus)
+]
+system.cpu = jit_cpus[0] if args.num_cpus == 1 else jit_cpus
 
 uncacheable_range = [
     *system.platform._on_chip_ranges(),
     *system.platform._off_chip_ranges(),
 ]
-system.cpu.mmu.pma_checker = PMAChecker(uncacheable=uncacheable_range)
-
+o3_cpus = []
 if args.switch_to_o3:
-    system.o3 = RiscvO3CPU(
-        clk_domain=system.cpu_clk_domain,
-        cpu_id=0,
-        switched_out=True,
-    )
-    system.o3.createInterruptController()
-    system.o3.createThreads()
-    system.o3.isa[0].enable_rvv = False
-    system.o3.isa[0].enable_Zicbom_fs = False
-    system.o3.isa[0].enable_Zicboz_fs = False
-    system.o3.mmu.pma_checker = PMAChecker(uncacheable=uncacheable_range)
+    o3_cpus = [
+        RiscvO3CPU(
+            clk_domain=system.cpu_clk_domain,
+            cpu_id=index,
+            switched_out=True,
+        )
+        for index in range(args.num_cpus)
+    ]
+    system.o3 = o3_cpus[0] if args.num_cpus == 1 else o3_cpus
+
+for cpu in [*jit_cpus, *o3_cpus]:
+    if any(cpu is jit_cpu for jit_cpu in jit_cpus) and not args.ruby_chi:
+        cpu.icache_port = system.membus.cpu_side_ports
+        cpu.dcache_port = system.membus.cpu_side_ports
+        cpu.mmu.connectWalkerPorts(
+            system.membus.cpu_side_ports, system.membus.cpu_side_ports
+        )
+    cpu.createInterruptController()
+    cpu.createThreads()
+    cpu.isa[0].enable_rvv = False
+    cpu.isa[0].enable_Zicbom_fs = False
+    cpu.isa[0].enable_Zicboz_fs = False
+    cpu.mmu.pma_checker = PMAChecker(uncacheable=uncacheable_range)
 
 if args.ruby_chi:
-    ruby_args = ruby_options(args.ruby_network)
+    ruby_args = ruby_options(
+        args.ruby_network,
+        args.num_cpus,
+        args.num_dirs,
+        args.num_l3caches,
+    )
     Ruby.create_system(
         ruby_args,
         True,
@@ -213,14 +240,29 @@ if args.ruby_chi:
         system.iobus,
         dma_ports=[],
         bootmem=None,
-        cpus=[system.cpu],
+        cpus=jit_cpus,
     )
     system.ruby.clk_domain = SrcClockDomain(
         clock=ruby_args.ruby_clock,
         voltage_domain=system.voltage_domain,
     )
     system.iobus.mem_side_ports = system.ruby._io_port.in_ports
-    system.ruby._cpu_ports[0].connectCpuPorts(system.cpu)
+    if len(system.ruby._cpu_ports) != args.num_cpus:
+        raise RuntimeError(
+            "CHI created an unexpected number of CPU sequencers: "
+            f"{len(system.ruby._cpu_ports)}"
+        )
+    for ruby_port, cpu in zip(system.ruby._cpu_ports, jit_cpus):
+        ruby_port.connectCpuPorts(cpu)
+    if len(system.mem_ctrls) != args.num_dirs:
+        raise RuntimeError(
+            "CHI created an unexpected number of memory controllers: "
+            f"{len(system.mem_ctrls)}"
+        )
+    print(
+        f"Configured {args.num_cpus} CPU cores, {args.num_l3caches} HNFs, "
+        f"and {len(system.mem_ctrls)} memory controllers"
+    )
 else:
     system.mem_ctrl = MemCtrl()
     system.mem_ctrl.dram = DDR3_1600_8x8(range=system.mem_ranges[0])
@@ -230,11 +272,17 @@ root = Root(full_system=True, system=system)
 m5.instantiate()
 
 
-def validate_phase(cpu_name):
-    instructions = cpu_instructions(cpu_name)
-    print(f"{cpu_name} retired {instructions} instructions in this phase")
-    if instructions == 0:
-        raise RuntimeError(f"{cpu_name} made no instruction progress")
+def validate_phase(cpus, cpu_name):
+    instructions = [cpu_instructions(cpu) for cpu in cpus]
+    print(
+        f"{cpu_name} per-core retired instructions: "
+        + ", ".join(str(value) for value in instructions)
+    )
+    stalled = [index for index, value in enumerate(instructions) if value == 0]
+    if stalled:
+        raise RuntimeError(
+            f"{cpu_name} made no instruction progress on core(s) {stalled}"
+        )
 
     if args.ruby_chi:
         messages = ruby_router_messages(system.ruby)
@@ -247,13 +295,31 @@ def validate_phase(cpu_name):
             cache_accesses = ruby_cache_accesses()
             memory_bytes = ruby_memory_bytes()
             print(
-                f"{cpu_name} generated {cache_accesses} CHI cache accesses "
-                f"and {memory_bytes} memory bytes"
+                f"{cpu_name} per-RNF CHI cache accesses: "
+                + ", ".join(str(value) for value in cache_accesses)
             )
-            if cache_accesses == 0:
-                raise RuntimeError("O3CPU generated no CHI cache accesses")
-            if memory_bytes == 0:
-                raise RuntimeError("O3CPU generated no memory traffic")
+            print(
+                f"{cpu_name} per-controller memory bytes: "
+                + ", ".join(str(value) for value in memory_bytes)
+            )
+            idle_rnfs = [
+                index
+                for index, value in enumerate(cache_accesses)
+                if value == 0
+            ]
+            if idle_rnfs:
+                raise RuntimeError(
+                    "O3CPU generated no CHI cache accesses on RNF(s) "
+                    f"{idle_rnfs}"
+                )
+            idle_controllers = [
+                index for index, value in enumerate(memory_bytes) if value == 0
+            ]
+            if idle_controllers:
+                raise RuntimeError(
+                    "O3CPU generated no traffic at memory controller(s) "
+                    f"{idle_controllers}"
+                )
 
 
 def check_memory_mode(cpu_name):
@@ -284,7 +350,7 @@ print(
 )
 
 if args.repeated_switches:
-    active_cpu = system.cpu
+    active_cpus = jit_cpus
     active_name = "cpu"
     for switch_index in range(args.repeated_switches):
         if exit_event.getCause() != "switchcpu":
@@ -292,23 +358,25 @@ if args.repeated_switches:
                 f"phase {switch_index} did not execute m5_switch_cpu: "
                 f"{exit_event.getCause()}"
             )
-        validate_phase(active_name)
+        validate_phase(active_cpus, active_name)
 
-        if active_cpu is system.cpu:
-            next_cpu = system.o3
+        if active_cpus is jit_cpus:
+            next_cpus = o3_cpus
             next_name = "o3"
         else:
-            next_cpu = system.cpu
+            next_cpus = jit_cpus
             next_name = "cpu"
-        if args.unsafe_skip_ruby_maintenance and active_cpu is system.o3:
-            unsafe_switch_without_ruby_maintenance(active_cpu, next_cpu)
+        if args.unsafe_skip_ruby_maintenance and active_cpus is o3_cpus:
+            unsafe_switch_without_ruby_maintenance(
+                active_cpus[0], next_cpus[0]
+            )
         else:
             m5.switchCpus(
                 system,
-                [(active_cpu, next_cpu)],
+                list(zip(active_cpus, next_cpus)),
                 is_ruby=True,
             )
-        active_cpu = next_cpu
+        active_cpus = next_cpus
         active_name = next_name
         check_memory_mode(active_name)
         print(
@@ -328,9 +396,9 @@ if args.repeated_switches:
             "repeated-switch payload did not complete: "
             f"{exit_event.getCause()}"
         )
-    if active_cpu is not system.o3:
+    if active_cpus is not o3_cpus:
         raise RuntimeError("repeated-switch regression did not finish on O3")
-    validate_phase(active_name)
+    validate_phase(active_cpus, active_name)
     print(
         f"Repeated-switch regression passed @ tick {m5.curTick()} "
         f"after {args.repeated_switches} switches"
@@ -340,7 +408,7 @@ elif args.switch_to_o3:
         raise RuntimeError("JitCPU did not execute m5_switch_cpu")
     m5.switchCpus(
         system,
-        [(system.cpu, system.o3)],
+        list(zip(jit_cpus, o3_cpus)),
         is_ruby=args.ruby_chi,
     )
     print(

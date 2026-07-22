@@ -56,6 +56,12 @@ parser.add_argument(
     help="also run the Linux repeated-switch stress using this fixed image",
 )
 parser.add_argument("--linux-switches", type=int, default=11)
+parser.add_argument("--smp-linux-switches", type=int, default=21)
+parser.add_argument(
+    "--smp-garnet",
+    action="store_true",
+    help="repeat the four-core directed and Linux stresses with Garnet",
+)
 parser.add_argument("--timeout-seconds", type=int, default=900)
 args = parser.parse_args()
 
@@ -72,13 +78,19 @@ require_success(
         PAYLOAD_DIR,
         f"CROSS_COMPILE={args.cross_compile}",
         "jitcpu-repeated-switch",
+        "jitcpu-smp-repeated-switch",
+        "jitcpu-smp-wfi-repeated-switch",
         "jitcpu-linux-init.cpio",
+        "jitcpu-linux-smp-init.cpio",
     ],
     "payload build",
 )
 
 baremetal = PAYLOAD_DIR / "jitcpu-repeated-switch"
+baremetal_smp = PAYLOAD_DIR / "jitcpu-smp-repeated-switch"
+baremetal_smp_wfi = PAYLOAD_DIR / "jitcpu-smp-wfi-repeated-switch"
 initrd = PAYLOAD_DIR / "jitcpu-linux-init.cpio"
+smp_initrd = PAYLOAD_DIR / "jitcpu-linux-smp-init.cpio"
 require_success(
     [
         gem5,
@@ -120,12 +132,48 @@ if negative.returncode == 0 or negative_proof not in negative.stdout:
     )
 print("Negative control failed with stale cached data as expected")
 
+
+def run_smp_baremetal(network, payload, variant):
+    command = [
+        gem5,
+        f"--outdir={args.outdir / f'baremetal-smp-{variant}-{network}'}",
+        BAREMETAL_CONFIG,
+        payload,
+        backend,
+        "--ruby-chi",
+        "--num-cpus",
+        "4",
+        "--num-dirs",
+        "2",
+        "--num-l3caches",
+        "4",
+        "--repeated-switches",
+        "21",
+        "--max-ticks",
+        "200000000",
+    ]
+    if network == "garnet":
+        command.extend(["--ruby-network", "garnet"])
+    require_success(
+        command,
+        f"four-core/two-controller {network} {variant} regression",
+    )
+
+
+run_smp_baremetal("simple", baremetal_smp, "active")
+run_smp_baremetal("simple", baremetal_smp_wfi, "wfi")
+if args.smp_garnet:
+    run_smp_baremetal("garnet", baremetal_smp, "active")
+    run_smp_baremetal("garnet", baremetal_smp_wfi, "wfi")
+
 if args.linux_image:
     linux_image = args.linux_image.resolve()
     if not linux_image.is_file():
         parser.error(f"Linux image does not exist: {linux_image}")
     if args.linux_switches < 3 or args.linux_switches % 2 == 0:
         parser.error("--linux-switches must be an odd value of at least 3")
+    if args.smp_linux_switches < 3 or args.smp_linux_switches % 2 == 0:
+        parser.error("--smp-linux-switches must be an odd value of at least 3")
 
     require_success(
         [
@@ -148,6 +196,42 @@ if args.linux_image:
         ],
         "Linux repeated-switch stress",
     )
+
+    def run_smp_linux(network):
+        command = [
+            gem5,
+            f"--outdir={args.outdir / f'linux-smp-{network}'}",
+            LINUX_CONFIG,
+            linux_image,
+            backend,
+            "--ruby-chi",
+            "--num-cpus",
+            "4",
+            "--num-dirs",
+            "2",
+            "--num-l3caches",
+            "4",
+            "--repeated-switches",
+            str(args.smp_linux_switches),
+            "--phase-ticks",
+            "100000000",
+            "--final-o3-ticks",
+            "1000000000",
+            "--initrd",
+            smp_initrd,
+            "--max-ticks",
+            "2000000000000",
+        ]
+        if network == "garnet":
+            command.extend(["--ruby-network", "garnet"])
+        require_success(
+            command,
+            f"four-core/two-controller {network} Linux stress",
+        )
+
+    run_smp_linux("simple")
+    if args.smp_garnet:
+        run_smp_linux("garnet")
 else:
     print("Linux stress skipped (pass --linux-image to enable it)")
 
