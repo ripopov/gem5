@@ -191,6 +191,47 @@ def check_guest_log(required_markers=()):
     print(f"Guest log check passed ({terminal_path})")
 
 
+def validate_dining_guest_phase(phase, cpu_model):
+    check_guest_log(
+        (
+            "JITCPU-DINING ONLINE cpus=16",
+            "JITCPU-DINING READY",
+            f"JITCPU-DINING PHASE-PASS phase={phase} model={cpu_model}",
+        )
+    )
+    _, guest_log = read_guest_log()
+    reports = [
+        (philosopher, cpu)
+        for philosopher, cpu, report_phase in re.findall(
+            r"JITCPU-DINING PHASE philosopher=(\d+) cpu=(\d+) " r"phase=(\d+)",
+            guest_log,
+        )
+        if int(report_phase) == phase
+    ]
+    expected_pairs = [(str(index), str(index)) for index in range(16)]
+    if sorted(reports) != sorted(expected_pairs):
+        raise RuntimeError(
+            f"guest phase {phase} reports are {sorted(reports)}, "
+            f"expected {sorted(expected_pairs)}"
+        )
+
+    if phase != 0:
+        return
+
+    online = re.findall(r"JITCPU-DINING ONLINE cpus=(\d+)", guest_log)
+    affinity = re.findall(
+        r"JITCPU-DINING AFFINITY philosopher=(\d+) cpu=(\d+)",
+        guest_log,
+    )
+    if online != ["16"]:
+        raise RuntimeError(f"guest online-CPU report is {online}, expected 16")
+    if sorted(affinity) != sorted(expected_pairs):
+        raise RuntimeError(
+            f"guest affinity reports are {sorted(affinity)}, "
+            f"expected {sorted(expected_pairs)}"
+        )
+
+
 parser = argparse.ArgumentParser()
 parser.add_argument("linux_image")
 parser.add_argument("backend")
@@ -226,6 +267,15 @@ parser.add_argument(
     action="store_true",
     help="run a guest-coordinated one-way JitCPU-to-O3 workload handoff",
 )
+parser.add_argument(
+    "--workload-switches",
+    type=int,
+    default=0,
+    help=(
+        "perform this many guest-coordinated 16-core mesh switches; the "
+        "userspace workload must request and validate every phase"
+    ),
+)
 args = parser.parse_args()
 apply_16core_mesh_options(args)
 
@@ -257,12 +307,25 @@ if args.repeated_switches:
         )
     args.switch_to_o3 = True
 if args.workload_handoff:
+    if args.workload_switches:
+        parser.error(
+            "--workload-handoff cannot be combined with --workload-switches"
+        )
+    args.workload_switches = 1
+if args.workload_switches:
     if not args.chi_4x4_mesh:
-        parser.error("--workload-handoff requires --chi-4x4-mesh")
+        parser.error("--workload-switches requires --chi-4x4-mesh")
     if args.repeated_switches:
-        parser.error("--workload-handoff cannot be combined with switches")
+        parser.error(
+            "--workload-switches cannot be combined with "
+            "--repeated-switches"
+        )
+    if not args.workload_handoff and (
+        args.workload_switches < 3 or args.workload_switches % 2 == 0
+    ):
+        parser.error("--workload-switches must be an odd value of at least 3")
     if not args.initrd:
-        parser.error("--workload-handoff requires --initrd")
+        parser.error("--workload-switches requires --initrd")
     args.switch_to_o3 = True
 
 system = RiscvSystem()
@@ -511,72 +574,73 @@ if args.switch_to_o3:
 
     validate_linux_phase(jit_cpus, "jit", "Linux boot phase")
 
-    if args.workload_handoff:
+    if args.workload_switches:
+        validate_dining_guest_phase(0, "jit")
+        active_cpus = jit_cpus
+        active_model = "jit"
+
+        for switch_index in range(args.workload_switches):
+            if active_model == "jit":
+                next_cpus = o3_cpus
+                next_model = "o3"
+            else:
+                next_cpus = jit_cpus
+                next_model = "jit"
+
+            m5.switchCpus(
+                system,
+                list(zip(active_cpus, next_cpus)),
+                is_ruby=True,
+            )
+            active_cpus = next_cpus
+            active_model = next_model
+            check_memory_mode(active_model)
+            print(
+                f"Dining philosophers switch {switch_index + 1}/"
+                f"{args.workload_switches}: active {active_model}, "
+                f"memory mode {system.getMemoryMode()} @ tick {m5.curTick()}"
+            )
+
+            m5.stats.reset()
+            exit_event = m5.simulate(args.o3_ticks)
+            print(
+                f"Dining philosophers phase {switch_index + 1} stopped @ "
+                f"tick {m5.curTick()}: {exit_event.getCause()}"
+            )
+            if exit_event.getCause() != "m5_exit instruction encountered":
+                raise RuntimeError(
+                    f"dining philosophers phase {switch_index + 1} did not "
+                    f"finish before the {args.o3_ticks}-tick timeout"
+                )
+            validate_linux_phase(
+                active_cpus,
+                active_model,
+                f"Dining philosophers phase {switch_index + 1}",
+            )
+            check_memory_mode(active_model)
+            validate_dining_guest_phase(switch_index + 1, active_model)
+
+        if active_model != "o3":
+            raise RuntimeError(
+                "dining philosophers repeated switching did not finish on O3"
+            )
         check_guest_log(
             (
-                "JITCPU-DINING READY",
-                "JITCPU-DINING PRE-SWITCH-PASS",
+                f"JITCPU-DINING PASS workers=16 "
+                f"switches={args.workload_switches}",
             )
         )
-        m5.switchCpus(
-            system,
-            list(zip(jit_cpus, o3_cpus)),
-            is_ruby=True,
-        )
-        check_memory_mode("o3")
-        print(
-            f"Dining philosophers switched 16 JitCPUs -> 16 O3CPUs @ "
-            f"tick {m5.curTick()}, memory mode {system.getMemoryMode()}"
-        )
-        m5.stats.reset()
-        exit_event = m5.simulate(args.o3_ticks)
-        print(
-            f"Dining philosophers O3 phase stopped @ tick {m5.curTick()}: "
-            f"{exit_event.getCause()}"
-        )
-        if exit_event.getCause() != "m5_exit instruction encountered":
-            raise RuntimeError(
-                "dining philosophers did not finish on O3 before the "
-                f"{args.o3_ticks}-tick timeout"
+        if args.workload_switches == 1:
+            print(
+                "16-core Linux dining-philosophers handoff passed on O3 in "
+                f"timing mode @ tick {m5.curTick()}"
             )
-        validate_linux_phase(o3_cpus, "o3", "Dining philosophers O3 phase")
-        check_memory_mode("o3")
-        check_guest_log(
-            (
-                "JITCPU-DINING READY",
-                "JITCPU-DINING PRE-SWITCH-PASS",
-                "JITCPU-DINING POST-SWITCH-PROGRESS",
-                "JITCPU-DINING PASS",
+        else:
+            print(
+                "16-core Linux dining-philosophers repeated-switch "
+                f"validation passed after {args.workload_switches} switches "
+                f"@ tick {m5.curTick()}"
             )
-        )
-        _, guest_log = read_guest_log()
-        online = re.findall(r"JITCPU-DINING ONLINE cpus=(\d+)", guest_log)
-        affinity = re.findall(
-            r"JITCPU-DINING AFFINITY philosopher=(\d+) cpu=(\d+)",
-            guest_log,
-        )
-        progress = re.findall(
-            r"JITCPU-DINING POST philosopher=(\d+) cpu=(\d+)", guest_log
-        )
-        if online != ["16"]:
-            raise RuntimeError(
-                f"guest online-CPU report is {online}, expected 16"
-            )
-        expected_pairs = {(str(index), str(index)) for index in range(16)}
-        if set(affinity) != expected_pairs:
-            raise RuntimeError(
-                f"guest affinity reports are {sorted(set(affinity))}, "
-                f"expected {sorted(expected_pairs)}"
-            )
-        if set(progress) != expected_pairs:
-            raise RuntimeError(
-                f"guest post-switch reports are {sorted(set(progress))}, "
-                f"expected {sorted(expected_pairs)}"
-            )
-        print(
-            "16-core Linux dining-philosophers handoff passed on O3 in "
-            f"timing mode @ tick {m5.curTick()}"
-        )
         raise SystemExit(0)
 
     if args.repeated_switches:

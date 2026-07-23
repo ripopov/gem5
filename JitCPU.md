@@ -58,9 +58,9 @@ host instruction throughput.
 
 Current limitations are:
 
-- RISC-V RV64 only. A 16-hart one-way JIT-to-O3 handoff is qualified with CHI
-  SimpleNetwork; repeated bidirectional switching remains qualified through
-  four harts.
+- RISC-V RV64 only. Five userspace-coordinated JIT/O3 switches on 16 harts are
+  qualified with the CHI 4x4 SimpleNetwork mesh. The 16-hart path is not
+  qualified with Garnet.
 - No vector, hypervisor, or SSTC extension support.
 - One shared QEMU runtime owns a fixed number of vCPUs and one physical address
   space per gem5 process. All vCPUs execute through QEMU's single-threaded TCG
@@ -282,17 +282,29 @@ Each worker is pinned to the correspondingly numbered Linux CPU and checks the
 actual assignment. Globally ordered fork locking is deadlock-free. A fixed
 seed drives shared cache-line updates; fork ownership, fork-use counts,
 per-worker checksums and meal counts, total meals, shared slots, and a shared
-atomic counter are independently recomputed. All workers complete 128 meals
-before `m5_exit`; the host drains and switches all 16 JitCPUs together; the
-same threads and shared state then complete another 1,024 meals on O3. The
-guest emits `READY`, `PRE-SWITCH-PASS`, `POST-SWITCH-PROGRESS`, and `PASS`, or
-uses a distinct `m5_fail` code on any invariant or timeout.
+atomic counter are independently recomputed.
+
+The one-way payload completes 128 meals per worker before `m5_exit`, then
+another 1,024 on O3. The repeated payload uses the same source but performs
+five switches:
+
+```text
+JitCPU -> O3CPU -> JitCPU -> O3CPU -> JitCPU -> O3CPU
+```
+
+It runs one 128-meal phase before the first switch and 256 meals per worker in
+each later phase. All 16 workers reach a userspace barrier, recheck their CPU
+affinity, and publish their cumulative checksum before PID 1 emits the next
+`m5_exit`. Workers remain blocked until the host has drained and switched all
+16 CPUs. The guest validates all shared and private state after every phase
+and reports `PHASE-PASS`, `SWITCH-REQUEST`, and a final `PASS`, or executes
+`m5_fail` on any invariant or timeout.
 
 Run the automated sequence with at least two Linux repetitions (three by
-default). It runs the bare-metal gate first and then the existing focused
-FLUSH and one-/four-core repeated-switch regressions. All invocations in this
-sequence use SimpleNetwork unless a separate legacy test explicitly requests
-another network:
+default). It also runs one five-switch 16-core Linux workload, the bare-metal
+gate, and the existing focused FLUSH and one-/four-core repeated-switch
+regressions. All invocations in this sequence use SimpleNetwork unless a
+separate legacy test explicitly requests another network:
 
 ```sh
 python3 tests/gem5/jitcpu/run_16core_mesh_regression.py \
@@ -302,6 +314,22 @@ python3 tests/gem5/jitcpu/run_16core_mesh_regression.py \
   --musl-cc riscv64-linux-musl-gcc \
   --linux-runs 3 --timeout-seconds 3600 \
   --outdir /tmp/jitcpu-16core-mesh-regression
+```
+
+The five-switch Linux case can be run directly with:
+
+```sh
+make -C tests/test-progs/jitcpu-smoke/src \
+  DINING_CC=riscv64-linux-musl-gcc \
+  jitcpu-dining-philosophers-repeated.cpio
+build/RISCV/gem5.opt -d /tmp/jitcpu-mesh16-repeated \
+  tests/gem5/jitcpu/configs/jitcpu_linux.py \
+  /tmp/riscv-bootloader-opensbi-1.3.1 "$QEMU_JIT_LIBRARY" \
+  --kernel /tmp/riscv-linux-6.8.12-kernel \
+  --chi-4x4-mesh --workload-switches 5 \
+  --initrd \
+    tests/test-progs/jitcpu-smoke/src/jitcpu-dining-philosophers-repeated.cpio \
+  --max-ticks 2000000000000 --o3-ticks 50000000000
 ```
 
 ### Observed 16-core results (2026-07-23)
@@ -330,6 +358,17 @@ above.
 - Three complete Linux handoffs passed at the identical final tick. Two were
   run consecutively by the repeatability driver and took 263.81 and 265.06
   host seconds; the third was an independent direct acceptance run.
+- The userspace-coordinated repeated run completed five switches and six
+  workload phases at tick 705,635,053,000 in 7 minutes 53 seconds of wall
+  time. Every phase contained exactly 16 matching
+  `philosopher=N cpu=N` reports. The guest cumulatively validated 22,528
+  meals, an atomic total of 191,488, all per-worker checksums, fork ownership
+  and use counts, and every shared slot.
+- Both reverse switches completed hierarchy maintenance before JitCPU resumed.
+  The two post-O3 JitCPU phases carried exactly zero timing CHI messages. The
+  three O3 phases carried 2,614,611, 2,686,983, and 3,144,475 messages,
+  respectively; every phase exercised all 16 RNFs and all four memory
+  controllers. Every CPU retired userspace instructions in every phase.
 - The existing SimpleNetwork suite remained green: focused FLUSH completed at
   tick 2,365,351 with 343 requests and 37 duplicate pairs; single-core,
   four-core active, and four-core WFI bare-metal tests completed 21 switches at
@@ -348,9 +387,10 @@ exist to flush; the unchanged trace-driven `RubyRequestType::FLUSH` path is
 exercised by the focused and reverse-switch regressions before this Linux test
 is considered qualified.
 
-This 16-core configuration qualifies a one-way JIT-to-O3 handoff only. It does
-not claim 16-core reverse/repeated switching, Garnet behavior, host-parallel
-TCG scaling, detailed timing during boot, or systems larger than 16 harts.
+This configuration qualifies five userspace-coordinated switches on the
+16-core CHI SimpleNetwork mesh. It does not claim 16-core Garnet behavior,
+host-parallel TCG scaling, detailed timing during boot, or systems larger than
+16 harts.
 
 ## Focused CHI FLUSH regression
 

@@ -16,15 +16,26 @@
 #include <time.h>
 #include <unistd.h>
 
+#ifndef JITCPU_DINING_SWITCHES
+#define JITCPU_DINING_SWITCHES 1
+#endif
+
+#ifndef JITCPU_DINING_OTHER_PHASE_MEALS
+#define JITCPU_DINING_OTHER_PHASE_MEALS 1024
+#endif
+
 enum
 {
     NUM_PHILOSOPHERS = 16,
     NUM_SHARED_SLOTS = 64,
-    PRE_SWITCH_MEALS = 128,
-    POST_SWITCH_MEALS = 1024,
-    POST_PROGRESS_MEALS = 64,
+    NUM_SWITCHES = JITCPU_DINING_SWITCHES,
+    FIRST_PHASE_MEALS = 128,
+    OTHER_PHASE_MEALS = JITCPU_DINING_OTHER_PHASE_MEALS,
     WAIT_TIMEOUT_SECONDS = 120,
 };
+
+_Static_assert(NUM_SWITCHES >= 1, "at least one CPU switch is required");
+_Static_assert(NUM_SWITCHES % 2 == 1, "the final CPU must be O3");
 
 static const uint64_t seed_base = UINT64_C(0x9e3779b97f4a7c15);
 
@@ -38,11 +49,8 @@ static _Atomic uint64_t shared_atomic_counter;
 static _Atomic uint64_t philosopher_meals[NUM_PHILOSOPHERS];
 static _Atomic uint64_t philosopher_checksums[NUM_PHILOSOPHERS];
 static _Atomic int affinity_ready;
-static _Atomic int start_pre_switch;
-static _Atomic int pre_switch_ready;
-static _Atomic int release_post_switch;
-static _Atomic int post_switch_progress;
-static _Atomic int workers_done;
+static _Atomic int released_phase = -1;
+static _Atomic int completed_workers;
 
 static void
 m5_exit(void)
@@ -146,6 +154,27 @@ current_cpu(void)
     return cpu;
 }
 
+static unsigned
+phase_first_meal(unsigned phase)
+{
+    if (phase == 0) {
+        return 0;
+    }
+    return FIRST_PHASE_MEALS + (phase - 1) * OTHER_PHASE_MEALS;
+}
+
+static unsigned
+phase_meals(unsigned phase)
+{
+    return phase == 0 ? FIRST_PHASE_MEALS : OTHER_PHASE_MEALS;
+}
+
+static unsigned
+completed_meals(unsigned phase)
+{
+    return phase_first_meal(phase) + phase_meals(phase);
+}
+
 static void *
 philosopher_main(void *opaque)
 {
@@ -172,37 +201,31 @@ philosopher_main(void *opaque)
     pthread_mutex_unlock(&print_lock);
     atomic_fetch_add(&affinity_ready, 1);
 
-    while (!atomic_load(&start_pre_switch)) {
-        sched_yield();
-    }
-
     uint64_t random_state = initial_seed(philosopher);
     uint64_t checksum = 0;
-    eat_meals(philosopher, 0, PRE_SWITCH_MEALS, &random_state, &checksum);
-    atomic_store(&philosopher_checksums[philosopher], checksum);
-    atomic_fetch_add(&pre_switch_ready, 1);
+    for (unsigned phase = 0; phase <= NUM_SWITCHES; ++phase) {
+        while (atomic_load(&released_phase) < (int)phase) {
+            sched_yield();
+        }
 
-    while (!atomic_load(&release_post_switch)) {
-        sched_yield();
+        eat_meals(philosopher, phase_first_meal(phase), phase_meals(phase),
+                  &random_state, &checksum);
+        atomic_store(&philosopher_checksums[philosopher], checksum);
+        if (current_cpu() != (int)philosopher) {
+            fail(77, "post-switch affinity changed");
+        }
+
+        pthread_mutex_lock(&print_lock);
+        printf("JITCPU-DINING PHASE philosopher=%u cpu=%d phase=%u meals=%u\n",
+               philosopher, current_cpu(), phase, completed_meals(phase));
+        if (phase == 1) {
+            printf("JITCPU-DINING POST philosopher=%u cpu=%d meals=%u\n",
+                   philosopher, current_cpu(), completed_meals(phase));
+        }
+        fflush(stdout);
+        pthread_mutex_unlock(&print_lock);
+        atomic_fetch_add(&completed_workers, 1);
     }
-
-    eat_meals(philosopher, PRE_SWITCH_MEALS, POST_PROGRESS_MEALS,
-              &random_state, &checksum);
-    if (current_cpu() != (int)philosopher) {
-        fail(77, "post-switch affinity changed");
-    }
-    pthread_mutex_lock(&print_lock);
-    printf("JITCPU-DINING POST philosopher=%u cpu=%d meals=%u\n", philosopher,
-           current_cpu(), PRE_SWITCH_MEALS + POST_PROGRESS_MEALS);
-    fflush(stdout);
-    pthread_mutex_unlock(&print_lock);
-    atomic_fetch_add(&post_switch_progress, 1);
-
-    eat_meals(philosopher, PRE_SWITCH_MEALS + POST_PROGRESS_MEALS,
-              POST_SWITCH_MEALS - POST_PROGRESS_MEALS, &random_state,
-              &checksum);
-    atomic_store(&philosopher_checksums[philosopher], checksum);
-    atomic_fetch_add(&workers_done, 1);
     return NULL;
 }
 
@@ -300,25 +323,40 @@ main(void)
                      "affinity readiness timeout");
     printf("JITCPU-DINING READY workers=16 seed=0x%016" PRIx64 "\n",
            seed_base);
-    atomic_store(&start_pre_switch, 1);
+    atomic_store(&released_phase, 0);
 
-    wait_for_counter(&pre_switch_ready, NUM_PHILOSOPHERS, 84,
-                     "pre-switch warm-up timeout");
-    validate_shared_state(PRE_SWITCH_MEALS, 85);
-    printf("JITCPU-DINING PRE-SWITCH-PASS workers=16 meals=%u atomic=%" PRIu64
-           "\n",
-           NUM_PHILOSOPHERS * PRE_SWITCH_MEALS,
-           atomic_load(&shared_atomic_counter));
+    for (unsigned phase = 0; phase <= NUM_SWITCHES; ++phase) {
+        wait_for_counter(&completed_workers,
+                         (int)((phase + 1) * NUM_PHILOSOPHERS), 84,
+                         "phase completion timeout");
+        const unsigned meals = completed_meals(phase);
+        validate_shared_state(meals, 85);
+        printf("JITCPU-DINING PHASE-PASS phase=%u model=%s workers=16 "
+               "meals=%u atomic=%" PRIu64 " integrity=ok\n",
+               phase, phase % 2 == 0 ? "jit" : "o3", NUM_PHILOSOPHERS * meals,
+               atomic_load(&shared_atomic_counter));
 
-    /* gem5 resumes at the next statement after switching all CPUs to O3. */
-    m5_exit();
-    atomic_store(&release_post_switch, 1);
+        if (phase == 0) {
+            printf("JITCPU-DINING PRE-SWITCH-PASS workers=16 meals=%u "
+                   "atomic=%" PRIu64 "\n",
+                   NUM_PHILOSOPHERS * meals,
+                   atomic_load(&shared_atomic_counter));
+        } else if (phase == 1) {
+            printf("JITCPU-DINING POST-SWITCH-PROGRESS workers=16\n");
+        }
 
-    wait_for_counter(&post_switch_progress, NUM_PHILOSOPHERS, 86,
-                     "post-switch progress timeout");
-    printf("JITCPU-DINING POST-SWITCH-PROGRESS workers=16\n");
-    wait_for_counter(&workers_done, NUM_PHILOSOPHERS, 87,
-                     "post-switch completion timeout");
+        if (phase != NUM_SWITCHES) {
+            printf("JITCPU-DINING SWITCH-REQUEST index=%u from=%s to=%s\n",
+                   phase + 1, phase % 2 == 0 ? "jit" : "o3",
+                   phase % 2 == 0 ? "o3" : "jit");
+            /*
+             * gem5 resumes at the next statement after switching all CPUs.
+             * Workers cannot enter the next phase until that has happened.
+             */
+            m5_exit();
+            atomic_store(&released_phase, (int)phase + 1);
+        }
+    }
 
     for (unsigned philosopher = 0; philosopher < NUM_PHILOSOPHERS;
          ++philosopher) {
@@ -328,12 +366,11 @@ main(void)
         }
     }
 
-    const unsigned total_per_philosopher =
-        PRE_SWITCH_MEALS + POST_SWITCH_MEALS;
+    const unsigned total_per_philosopher = completed_meals(NUM_SWITCHES);
     validate_shared_state(total_per_philosopher, 89);
-    printf("JITCPU-DINING PASS workers=16 meals=%u atomic=%" PRIu64
-           " integrity=ok\n",
-           NUM_PHILOSOPHERS * total_per_philosopher,
+    printf("JITCPU-DINING PASS workers=16 switches=%u meals=%u "
+           "atomic=%" PRIu64 " integrity=ok\n",
+           NUM_SWITCHES, NUM_PHILOSOPHERS * total_per_philosopher,
            atomic_load(&shared_atomic_counter));
     m5_exit();
     return 0;

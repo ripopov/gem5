@@ -46,6 +46,15 @@ parser.add_argument(
     default=Path("/tmp/jitcpu-16core-mesh-regression"),
 )
 parser.add_argument("--linux-runs", type=int, default=3)
+parser.add_argument(
+    "--workload-switches",
+    type=int,
+    default=5,
+    help=(
+        "odd number of userspace-coordinated switches in the 16-core "
+        "repeated Linux run"
+    ),
+)
 parser.add_argument("--timeout-seconds", type=int, default=3600)
 parser.add_argument(
     "--skip-existing-regressions",
@@ -56,6 +65,8 @@ args = parser.parse_args()
 
 if args.linux_runs < 2:
     parser.error("--linux-runs must be at least 2")
+if args.workload_switches < 3 or args.workload_switches % 2 == 0:
+    parser.error("--workload-switches must be an odd value of at least 3")
 
 gem5 = args.gem5.resolve()
 backend = args.backend.resolve()
@@ -152,7 +163,22 @@ run(
     ],
     "16-core payload build",
 )
+run(
+    [
+        "make",
+        "-B",
+        "-C",
+        PAYLOAD_DIR,
+        f"DINING_CC={args.musl_cc}",
+        f"DINING_SWITCHES={args.workload_switches}",
+        "jitcpu-dining-philosophers-repeated.cpio",
+    ],
+    "16-core repeated payload build",
+)
 require_no_vector_instructions(PAYLOAD_DIR / "jitcpu-dining-philosophers")
+require_no_vector_instructions(
+    PAYLOAD_DIR / "jitcpu-dining-philosophers-repeated"
+)
 
 baremetal_outdir = args.outdir / "baremetal"
 baremetal_output, baremetal_host_time = run(
@@ -236,6 +262,65 @@ for run_index in range(args.linux_runs):
 if len(set(linux_ticks)) != 1:
     raise RuntimeError(f"Linux runs ended at different ticks: {linux_ticks}")
 
+repeated_outdir = args.outdir / "linux-repeated"
+repeated_output, repeated_host_time = run(
+    [
+        gem5,
+        f"--outdir={repeated_outdir}",
+        LINUX_CONFIG,
+        linux_image,
+        backend,
+        "--kernel",
+        kernel,
+        "--chi-4x4-mesh",
+        "--workload-switches",
+        str(args.workload_switches),
+        "--initrd",
+        PAYLOAD_DIR / "jitcpu-dining-philosophers-repeated.cpio",
+        "--max-ticks",
+        "2000000000000",
+        "--o3-ticks",
+        "50000000000",
+    ],
+    (
+        "16-core Linux dining-philosophers "
+        f"{args.workload_switches}-switch run"
+    ),
+)
+repeated_matches = re.findall(
+    r"16-core Linux dining-philosophers repeated-switch validation "
+    rf"passed after {args.workload_switches} switches @ tick (\d+)",
+    repeated_output,
+)
+if len(repeated_matches) != 1:
+    raise RuntimeError(
+        "16-core repeated Linux run did not report exactly one final tick"
+    )
+repeated_tick = int(repeated_matches[0])
+repeated_guest_log = read_terminal(repeated_outdir)
+required_repeated_markers = [
+    "JITCPU-DINING ONLINE cpus=16",
+    "JITCPU-DINING READY",
+    (f"JITCPU-DINING PASS workers=16 " f"switches={args.workload_switches}"),
+]
+for phase in range(args.workload_switches + 1):
+    model = "jit" if phase % 2 == 0 else "o3"
+    required_repeated_markers.append(
+        f"JITCPU-DINING PHASE-PASS phase={phase} model={model}"
+    )
+for switch_index in range(1, args.workload_switches + 1):
+    source = "jit" if switch_index % 2 == 1 else "o3"
+    destination = "o3" if source == "jit" else "jit"
+    required_repeated_markers.append(
+        f"JITCPU-DINING SWITCH-REQUEST index={switch_index} "
+        f"from={source} to={destination}"
+    )
+require_markers(
+    repeated_guest_log,
+    required_repeated_markers,
+    "16-core repeated Linux guest log",
+)
+
 if not args.skip_existing_regressions:
     run(
         [
@@ -264,4 +349,7 @@ print(
     f"linux_ticks={linux_ticks}, "
     "linux_host_times="
     + ",".join(f"{value:.2f}s" for value in linux_host_times)
+    + f", repeated_switches={args.workload_switches}, "
+    f"repeated_tick={repeated_tick}, "
+    f"repeated_host_time={repeated_host_time:.2f}s"
 )

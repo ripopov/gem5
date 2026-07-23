@@ -1,6 +1,8 @@
 CROSS_COMPILE ?= riscv64-linux-gnu-
 CC = $(CROSS_COMPILE)gcc
 DINING_CC ?= riscv64-linux-musl-gcc
+DINING_SWITCHES ?= 5
+DINING_OTHER_PHASE_MEALS ?= 256
 CFLAGS = -march=rv64imafdc_zicsr_zifencei -mabi=lp64d \
 	-nostdlib -nostartfiles -static
 LDFLAGS = -Wl,--build-id=none -Wl,-Ttext=0x80000000 -Wl,-e,_start
@@ -12,7 +14,8 @@ INITRAMFS_DIR = .jitcpu-linux-initramfs
 all: jitcpu-smoke jitcpu-switch jitcpu-repeated-switch \
 	jitcpu-smp-repeated-switch jitcpu-smp-wfi-repeated-switch \
 	jitcpu-16core-mesh-switch jitcpu-linux-init.cpio \
-	jitcpu-linux-smp-init.cpio jitcpu-dining-philosophers.cpio
+	jitcpu-linux-smp-init.cpio jitcpu-dining-philosophers.cpio \
+	jitcpu-dining-philosophers-repeated.cpio
 
 jitcpu-smoke: jitcpu-smoke.S
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $<
@@ -43,6 +46,14 @@ jitcpu-dining-philosophers: jitcpu-dining-philosophers.c
 		-march=rv64imafdc_zicsr_zifencei \
 		-mabi=lp64d -Wl,--build-id=none -Wall -Wextra -Werror -o $@ $<
 
+jitcpu-dining-philosophers-repeated: jitcpu-dining-philosophers.c
+	$(DINING_CC) -O2 -g0 -static -pthread \
+		-march=rv64imafdc_zicsr_zifencei \
+		-mabi=lp64d -Wl,--build-id=none -Wall -Wextra -Werror \
+		-DJITCPU_DINING_SWITCHES=$(DINING_SWITCHES) \
+		-DJITCPU_DINING_OTHER_PHASE_MEALS=$(DINING_OTHER_PHASE_MEALS) \
+		-o $@ $<
+
 %.cpio: %
 	rm -rf $(INITRAMFS_DIR)
 	mkdir -p $(INITRAMFS_DIR)
@@ -59,4 +70,6 @@ clean:
 		jitcpu-16core-mesh-switch \
 		jitcpu-linux-init jitcpu-linux-init.cpio \
 		jitcpu-linux-smp-init jitcpu-linux-smp-init.cpio \
-		jitcpu-dining-philosophers jitcpu-dining-philosophers.cpio
+		jitcpu-dining-philosophers jitcpu-dining-philosophers.cpio \
+		jitcpu-dining-philosophers-repeated \
+		jitcpu-dining-philosophers-repeated.cpio
