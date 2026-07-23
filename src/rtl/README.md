@@ -1,18 +1,54 @@
 # Standalone RTL Co-simulation Runtime
 
-This directory contains the standalone RTL co-simulation runtime. Stage 1
-loads vendor V1 shared libraries, validates discovered interfaces, transacts
-APB, AXI3, and AXI4 in both directions, and exercises models without gem5.
-Stage 2 adds the SCR1 reference vendor integration under `ext/rtl/scr1`.
-Stage 3 adds the wider PULP C910 reference under `ext/rtl/pulp-c910`.
-Stage 4 adds the gem5 adapter and a two-core SCR1 validation system.
-Stage 5 adds a direct-memory, single-core C910 portability test.
-AXI3-ACE support is intentionally limited to structural profile validation.
+This directory contains the standalone RTL co-simulation runtime. It loads
+vendor-compiled RTL models as shared libraries, validates their discovered
+interfaces, and transacts APB, AXI3, and AXI4 in both directions — either
+completely standalone through the `rtl-cosim-check` tool, or inside gem5
+through the `RtlCore` SimObject adapter. AXI3-ACE support is intentionally
+limited to structural profile validation.
+
+The work is layered in stages:
+
+| Stage | Contents |
+| ---: | --- |
+| 1 | Runtime, protocol transactors, `rtl-cosim-check`, C++ fixture |
+| 2 | SCR1 reference vendor integration under `ext/rtl/scr1` |
+| 3 | Wider PULP C910 reference under `ext/rtl/pulp-c910` |
+| 4 | gem5 adapter and a two-core SCR1 validation system |
+| 5 | Direct-memory, single-core C910 portability test |
 
 The vendor ABI is the self-contained header
 `include/gem5/rtl_cosim/api_v1.hh`. Runtime and checker code uses only that
 header, C++20, operating-system shared-library APIs, and sources in this
 directory. PULP and Verilator types are confined to the fixture adapters.
+
+## Component map
+
+```text
+                  ┌───────────────────────────────────────┐
+                  │       Vendor shared library           │
+                  │  compiled RTL model + V1 adapter      │
+                  │  (Verilator, commercial simulators)   │
+                  └──────────────────┬────────────────────┘
+                                     │  C++ V1 ABI
+                                     │  include/gem5/rtl_cosim/api_v1.hh
+                  ┌──────────────────┴────────────────────┐
+                  │          rtl_cosim_runtime            │
+                  │  ModelLoader · validateModel() ·      │
+                  │  image loader · APB/AXI3/AXI4         │
+                  │  protocol transactors                 │
+                  └────────┬─────────────────────┬────────┘
+                           │                     │
+            ┌──────────────┴─────────┐ ┌─────────┴─────────────┐
+            │    rtl-cosim-check     │ │  gem5 RtlCore         │
+            │  standalone checker    │ │  SimObject adapter    │
+            │  (no gem5 required)    │ │  (classic and Ruby)   │
+            └────────────────────────┘ └───────────────────────┘
+```
+
+The same protocol transactors run under both front ends, so a vendor library
+that passes `rtl-cosim-check` behaves identically once connected to a gem5
+memory system.
 
 ## Build and test
 
@@ -93,6 +129,246 @@ This requires a 64-bit RISC-V bare-metal GCC. The independently buildable C910
 DLL, signal map, low-power contract, and test inventory are documented in
 `ext/rtl/pulp-c910/README.md`.
 
+For AddressSanitizer and UndefinedBehaviorSanitizer:
+
+```bash
+cmake -S src/rtl -B build/rtl-cosim-sanitize \
+  -DRTL_COSIM_BUILD_TESTS=ON \
+  -DRTL_COSIM_BUILD_PULP_FIXTURES=ON \
+  -DRTL_COSIM_ENABLE_SANITIZERS=ON \
+  -DOBJCACHE_ENABLED=OFF \
+  -DCMAKE_BUILD_TYPE=Debug
+cmake --build build/rtl-cosim-sanitize -j
+ctest --test-dir build/rtl-cosim-sanitize --output-on-failure
+```
+
+LeakSanitizer cannot run under some debuggers and managed `ptrace`
+environments. In that case, set `ASAN_OPTIONS=detect_leaks=0` while running
+the tests; address and undefined-behavior checks remain enabled, but leak
+checking must be repeated in an unrestricted environment.
+
+## rtl-cosim-check
+
+`rtl-cosim-check` validates a vendor shared library and its protocol behavior
+without gem5. It is the first tool to run against any new vendor adapter and
+the reference environment for reproducing protocol bugs in isolation.
+
+```bash
+build/rtl-cosim/rtl-cosim-check VENDOR_LIBRARY CHECKER_JSON
+```
+
+The checker resolves the V1 factory symbols, creates one core, validates all
+discovery metadata, loads configured images, drives inputs and reset, attaches
+memory or scripted transactions to every discovered bus, and clocks the model
+to idle, finish, error, or the mandatory cycle limit.
+
+### Run phases and exit codes
+
+```text
+ rtl-cosim-check VENDOR_LIBRARY CHECKER_JSON
+ │
+ ├─▶ 1. Parse command line and JSON ─────────── failure ──▶ exit 1
+ │
+ ├─▶ 2. dlopen library, resolve V1 factories,
+ │      createCore(core.config) ─────────────── failure ──▶ exit 2
+ │
+ ├─▶ 3. validateModel(): protocol profiles,
+ │      roles, directions, widths; print
+ │      the discovery report ────────────────── failure ──▶ exit 3
+ │      │
+ │      └─ AXI3-ACE bus present ────── structural stop ───▶ exit 0
+ │
+ ├─▶ 4. Load images into TCM backdoors or
+ │      external sparse memory
+ │
+ ├─▶ 5. Drive all bus inputs to zero, apply
+ │      "inputs", assert reset for
+ │      reset.assert_cycles, release reset
+ │
+ ├─▶ 6. Clocked main loop ──── vendor/protocol failure ───▶ exit 4
+ │      │
+ │      ├─ idle or model finish ──────────────────────────▶ exit 0
+ │      └─ run.max_cycles reached ────────────────────────▶ exit 5
+ │
+ └─▶ 7. Print traffic and callback statistics
+```
+
+Process status is stable for automation:
+
+| Status | Meaning |
+| ---: | --- |
+| 0 | Successful idle, finish, or ACE structural-validation stop |
+| 1 | Command-line or JSON configuration error |
+| 2 | Library, V1 entry-point, or core-construction error |
+| 3 | Discovery or protocol-profile validation error |
+| 4 | Runtime, signal, clock, or protocol error |
+| 5 | Cycle limit reached |
+
+The discovery report, traffic counters, and stop reason go to standard
+output; warnings and errors go to standard error. The traffic summary is
+printed even when the run fails, so the last observed counters are always
+available to scripts and logs.
+
+### Testbench topology
+
+Every discovered bus is attached automatically, keyed by its role. Initiator
+buses (the model issues requests) are served by a latency-modeling memory
+backend over one shared sparse memory. Target buses (the model services
+requests) are driven by transaction scripts from the JSON configuration.
+
+```text
+           ┌───────────────────────────────────────────────┐
+           │               Vendor RTL model                │
+           │                                               │
+           │   initiator bus(es)           target bus(es)  │
+           └──────┬────────▲───────────────▲───────┬───────┘
+     pin-level    │ req    │ rsp       req │       │ rsp
+     APB/AXI   ┌──▼────────┴───┐       ┌───┴───────▼───┐
+   handshakes  │   initiator   │       │    target     │
+               │   transactor  │       │   transactor  │
+               └──┬────────▲───┘       └───▲───────┬───┘
+     neutral      │ req    │ rsp       req │       │ rsp
+  MemoryRequest ┌─▼────────┴────┐   ┌──────┴───────▼───────┐
+ MemoryResponse │ MemoryBackend │   │ ScriptedTransaction- │
+                │ latency_cycles│   │ Source: scripts from │
+                │ error_ranges  │   │ "transactions", with │
+                │ max_pending   │   │ response expectations│
+                └──────┬────────┘   └──────────────────────┘
+                       │
+                ┌──────▼───────┐
+                │ SparseMemory │   one memory shared by all
+                │  ("memory")  │   initiator buses
+                └──────────────┘
+```
+
+Target-bus transaction scripts are keyed by the discovered bus name; naming a
+bus that does not exist, or one that is not a target, is a configuration
+error. Read responses are checked against `expect_data` and `expect_error`;
+any mismatch is reported per bus and fails the run with exit code 4.
+
+### The clocked main loop
+
+Each checker cycle walks all transactors through the same three-phase
+handshake protocol that the gem5 adapter uses, wrapped around the vendor's
+`settle()` and `clock()` operations:
+
+```text
+          one checker cycle (repeated until stop)
+┌────────────────────────────────────────────────────────────┐
+│  beforeClock()   every transactor drives all RTL bus       │
+│       │          inputs for the upcoming active edge       │
+│       ▼                                                    │
+│  settle()        vendor evaluates combinational logic      │
+│       │                                                    │
+│       ▼                                                    │
+│  afterSettle()   capture only payloads whose VALID/READY   │
+│       │          handshake is active this cycle            │
+│       ▼                                                    │
+│  clock()         vendor toggles its single physical clock  │
+│       │          one full cycle                            │
+│       ▼                                                    │
+│  afterClock()    commit the captured handshakes            │
+│       │                                                    │
+│       ▼                                                    │
+│  advance()       memory latency and script timing advance  │
+│       │                                                    │
+│       ▼                                                    │
+│  idle check      core, transactors, backends, and sources  │
+│                  all idle → stop when stop_on_idle is set  │
+└────────────────────────────────────────────────────────────┘
+```
+
+The loop stops on the first transactor or vendor error, when the model
+reports finish (an error if `stop_on_finish` is false), when everything is
+idle and `stop_on_idle` is set, or when `run.max_cycles` is exhausted.
+
+During the run, one counting callback is subscribed to every RTL output
+signal; the final `callbacks: updates=N` line verifies that the vendor's
+change-notification contract is exercised.
+
+### Checker JSON reference
+
+All top-level sections are optional; unknown members anywhere in the file are
+rejected. Numeric fields are plain JSON unsigned integers. Hexadecimal
+strings are accepted only for signal input values and data payloads.
+
+| Field | Default | Meaning |
+| --- | ---: | --- |
+| `core.config` | `{}` | Object serialized unchanged for `createCore()` |
+| `reset.assert_cycles` | 5 | Complete cycles with reset asserted |
+| `inputs` | — | Standalone input name → integer or hex string |
+| `memory.base` | 0 | External sparse memory base address |
+| `memory.size` | 64 MiB | External sparse memory size |
+| `memory.latency_cycles` | 1 | Cycles before a response is ready |
+| `memory.max_pending` | 64 | Outstanding request limit (must be > 0) |
+| `memory.error_ranges` | `[]` | `{base, size}` ranges that respond SLVERR |
+| `memory.images` | `[]` | `{path, format, address}` load list |
+| `transactions.<bus>` | — | Request script for the named target bus |
+| `run.max_cycles` | 1000000 | Mandatory cycle limit (must be > 0) |
+| `run.stop_on_idle` | true | Stop when the whole system proves idle |
+| `run.stop_on_finish` | true | Treat vendor finish as success |
+
+Each entry of a `transactions.<bus>` array describes one request and its
+expected response:
+
+| Field | Default | Meaning |
+| --- | ---: | --- |
+| `address` | required | Start address of the transaction |
+| `beat_bytes` | required | Bytes per beat (must be > 0) |
+| `beats` | 1 | Number of beats |
+| `burst` | `increment` | `fixed`, `increment`, or `wrap` |
+| `write` | false | Direction; writes require `data` |
+| `id` | 0 | Bus transaction ID (AXI per-ID ordering applies) |
+| `token` | assigned | Unique-per-bus tag; auto-assigned when absent |
+| `data` | — | Write payload, `beats * beat_bytes` bytes |
+| `byte_enable` | all ones | Per-byte write strobes, same length as data |
+| `expect_error` | false | Require an error response |
+| `expect_data` | — | Expected read payload, `beats * beat_bytes` bytes |
+
+`data`, `byte_enable`, and `expect_data` accept either a JSON array of bytes
+in increasing-address order or a hex string. A bare hex string lists bytes in
+increasing-address order; a `0x`-prefixed string is one little-endian number.
+Signal values in `inputs` are always numeric — a decimal integer or a
+`0x`-prefixed hex string — and must fit the discovered signal width.
+
+Image formats are `raw`, `elf`, `coff`, or `auto`. Relative image paths are
+resolved relative to the checker JSON. Loadable segments use a matching TCM
+backdoor when available and otherwise use external sparse memory; BSS tails
+are zero-filled.
+
+A complete example exercising both bus directions:
+
+```json
+{
+  "core": {"config": {"fixture": "cpp"}},
+  "reset": {"assert_cycles": 4},
+  "inputs": {"boot_mode": 1, "vector_input": "0x090807060504030201"},
+  "memory": {
+    "base": 0,
+    "size": 67108864,
+    "latency_cycles": 2,
+    "max_pending": 8,
+    "error_ranges": [{"base": 61440, "size": 4096}],
+    "images": [{"path": "boot.elf", "format": "elf"}]
+  },
+  "transactions": {
+    "cfg_apb": [
+      {"address": 4096, "beat_bytes": 4, "write": true,
+       "data": "deadbeef"},
+      {"address": 4096, "beat_bytes": 4,
+       "expect_data": "deadbeef"},
+      {"address": 61440, "beat_bytes": 4,
+       "expect_error": true}
+    ]
+  },
+  "run": {"max_cycles": 200000, "stop_on_idle": true}
+}
+```
+
+Working configurations used by the unit tests live under `tests/config`, and
+the SCR1 and C910 trees ship full bare-metal scenarios that run entirely
+through `rtl-cosim-check`.
+
 ## gem5 integration
 
 Build gem5 with the Ruby protocol used by the common two-core configuration:
@@ -106,7 +382,23 @@ The same `configs/example/rtl_cosim/scr1_two_core.py` script selects either
 `--memory-system classic` or `--memory-system ruby`. It creates two SCR1
 cores, connects their named instruction and data AXI4 buses, and uses either
 private classic L1 caches with a shared L2 or Ruby `MESI_Two_Level` with
-`SimpleNetwork`.
+`SimpleNetwork`:
+
+```text
+   ┌──────────────┐        ┌──────────────┐
+   │ SCR1 core 0  │        │ SCR1 core 1  │    vendor RTL models
+   │ imem   dmem  │        │ imem   dmem  │    behind RtlCore
+   └──┬──────┬────┘        └──┬──────┬────┘    SimObjects
+      │ AXI4 │                │ AXI4 │
+   ┌──▼──────▼────────────────▼──────▼────┐
+   │  classic: private L1s + shared L2    │
+   │  ruby:    MESI_Two_Level over        │
+   │           SimpleNetwork              │
+   └──────────────────┬───────────────────┘
+                 ┌────▼─────┐
+                 │  memory  │
+                 └──────────┘
+```
 
 For example:
 
@@ -147,24 +439,6 @@ Success prints `RTL_COSIM_C910_PASS`. The validation controller exits with a
 nonzero status on timeout or a byte-exact signature mismatch; packet or
 transactor protocol failures remain fatal simulation errors.
 
-For AddressSanitizer and UndefinedBehaviorSanitizer:
-
-```bash
-cmake -S src/rtl -B build/rtl-cosim-sanitize \
-  -DRTL_COSIM_BUILD_TESTS=ON \
-  -DRTL_COSIM_BUILD_PULP_FIXTURES=ON \
-  -DRTL_COSIM_ENABLE_SANITIZERS=ON \
-  -DOBJCACHE_ENABLED=OFF \
-  -DCMAKE_BUILD_TYPE=Debug
-cmake --build build/rtl-cosim-sanitize -j
-ctest --test-dir build/rtl-cosim-sanitize --output-on-failure
-```
-
-LeakSanitizer cannot run under some debuggers and managed `ptrace`
-environments. In that case, set `ASAN_OPTIONS=detect_leaks=0` while running
-the tests; address and undefined-behavior checks remain enabled, but leak
-checking must be repeated in an unrestricted environment.
-
 ## Architecture
 
 `ModelLoader` owns the shared library, manager, and one core in destruction
@@ -191,46 +465,6 @@ Neutral request data is compact: each beat occupies `beatBytes` consecutive
 bytes in increasing-address order. Transactors map that compact representation
 to the correct physical bus lanes. Values crossing the vendor API use
 little-endian bytes, with RTL bit zero in bit zero of byte zero.
-
-## Running the checker
-
-```bash
-build/rtl-cosim/rtl-cosim-check VENDOR_LIBRARY CHECKER_JSON
-```
-
-The checker resolves the V1 factory symbols, creates one core, validates all
-discovery metadata, loads configured images, drives inputs and reset, attaches
-memory or scripted transactions to every bus, and clocks to idle, finish,
-error, or the mandatory cycle limit. Initiator buses share one sparse memory.
-Target-bus transactions are keyed by the discovered bus name.
-
-Important JSON fields are:
-
-- `core.config`: object serialized unchanged for `createCore()`.
-- `reset.assert_cycles`: number of complete cycles with reset asserted.
-- `inputs`: standalone input names mapped to integers or hexadecimal strings.
-- `memory`: `base`, `size`, `latency_cycles`, `max_pending`, `error_ranges`,
-  and an `images` array containing `path`, `format`, and raw `address`.
-- `transactions`: per-target-bus read/write scripts. Requests specify address,
-  ID, beat size/count, burst, data, and byte enables. `expect_data` and
-  `expect_error` validate responses.
-- `run`: `max_cycles`, `stop_on_idle`, and `stop_on_finish`.
-
-Image formats are `raw`, `elf`, `coff`, or `auto`. Relative image paths are
-resolved relative to the checker JSON. Loadable segments use a matching TCM
-backdoor when available and otherwise use external sparse memory; BSS tails
-are zero-filled.
-
-Process status is stable for automation:
-
-| Status | Meaning |
-| ---: | --- |
-| 0 | Successful idle, finish, or ACE structural-validation stop |
-| 1 | Command-line or JSON configuration error |
-| 2 | Library, V1 entry-point, or core-construction error |
-| 3 | Discovery or protocol-profile validation error |
-| 4 | Runtime, signal, clock, or protocol error |
-| 5 | Cycle limit reached |
 
 ## Vendor adapter checklist
 
