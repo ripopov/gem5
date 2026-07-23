@@ -1,5 +1,6 @@
 CROSS_COMPILE ?= riscv64-linux-gnu-
 CC = $(CROSS_COMPILE)gcc
+DINING_CC ?= riscv64-linux-musl-gcc
 CFLAGS = -march=rv64imafdc_zicsr_zifencei -mabi=lp64d \
 	-nostdlib -nostartfiles -static
 LDFLAGS = -Wl,--build-id=none -Wl,-Ttext=0x80000000 -Wl,-e,_start
@@ -10,7 +11,8 @@ INITRAMFS_DIR = .jitcpu-linux-initramfs
 
 all: jitcpu-smoke jitcpu-switch jitcpu-repeated-switch \
 	jitcpu-smp-repeated-switch jitcpu-smp-wfi-repeated-switch \
-	jitcpu-linux-init.cpio jitcpu-linux-smp-init.cpio
+	jitcpu-16core-mesh-switch jitcpu-linux-init.cpio \
+	jitcpu-linux-smp-init.cpio jitcpu-dining-philosophers.cpio
 
 jitcpu-smoke: jitcpu-smoke.S
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $<
@@ -27,11 +29,19 @@ jitcpu-smp-repeated-switch: jitcpu-smp-repeated-switch.S
 jitcpu-smp-wfi-repeated-switch: jitcpu-smp-wfi-repeated-switch.S
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $<
 
+jitcpu-16core-mesh-switch: jitcpu-16core-mesh-switch.S
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $<
+
 jitcpu-linux-init: jitcpu-linux-init.S
 	$(CC) $(CFLAGS) $(USER_LDFLAGS) -o $@ $<
 
 jitcpu-linux-smp-init: jitcpu-linux-smp-init.S
 	$(CC) $(CFLAGS) $(USER_LDFLAGS) -o $@ $<
+
+jitcpu-dining-philosophers: jitcpu-dining-philosophers.c
+	$(DINING_CC) -O2 -g0 -static -pthread \
+		-march=rv64imafdc_zicsr_zifencei \
+		-mabi=lp64d -Wl,--build-id=none -Wall -Wextra -Werror -o $@ $<
 
 %.cpio: %
 	rm -rf $(INITRAMFS_DIR)
@@ -46,5 +56,7 @@ clean:
 	rm -rf $(INITRAMFS_DIR)
 	rm -f jitcpu-smoke jitcpu-switch jitcpu-repeated-switch \
 		jitcpu-smp-repeated-switch jitcpu-smp-wfi-repeated-switch \
+		jitcpu-16core-mesh-switch \
 		jitcpu-linux-init jitcpu-linux-init.cpio \
-		jitcpu-linux-smp-init jitcpu-linux-smp-init.cpio
+		jitcpu-linux-smp-init jitcpu-linux-smp-init.cpio \
+		jitcpu-dining-philosophers jitcpu-dining-philosophers.cpio

@@ -1,5 +1,6 @@
 import argparse
 import os
+import re
 
 import m5
 from m5 import params
@@ -37,6 +38,13 @@ addToPath(os.path.join(m5.util.repoPath(), "configs"))
 
 from common import Options
 from ruby import Ruby
+from jitcpu_16core_mesh import (
+    add_16core_mesh_option,
+    apply_16core_mesh_options,
+    configure_ruby_options,
+    validate_16core_build,
+    validate_16core_mesh,
+)
 
 
 def generate_dtb(system, cpus, output):
@@ -70,7 +78,7 @@ def generate_dtb(system, cpus, output):
     fdt.writeDtbFile(output)
 
 
-def ruby_options(network, num_cpus, num_dirs, num_l3caches):
+def ruby_options(network, num_cpus, num_dirs, num_l3caches, mesh_4x4):
     parser = argparse.ArgumentParser(add_help=False)
     Options.addCommonOptions(parser)
     Ruby.define_options(parser)
@@ -84,6 +92,7 @@ def ruby_options(network, num_cpus, num_dirs, num_l3caches):
     options.access_backing_store = num_dirs > 1
     options.topology = "Crossbar"
     options.network = network
+    configure_ruby_options(options, mesh_4x4)
     return options
 
 
@@ -111,7 +120,16 @@ def stat_value(name):
 
 
 def cpu_user_instructions(cpu):
-    return stat_value(f"{cpu.path()}.commitStats0.numUserInsts")
+    leaf = "commitStats0.numUserInsts"
+    try:
+        return stat_value(f"{cpu.path()}.{leaf}")
+    except KeyError:
+        # SimObject vector paths are zero-padded at 10+ entries, while the
+        # corresponding stat names are not. Use the stable CPU id spelling.
+        collection = (
+            "o3" if any(cpu is candidate for candidate in o3_cpus) else "cpu"
+        )
+        return stat_value(f"system.{collection}{int(cpu.cpu_id)}.{leaf}")
 
 
 def ruby_cache_accesses():
@@ -134,8 +152,14 @@ def ruby_memory_bytes():
     ]
 
 
-def check_guest_log():
+def read_guest_log():
     terminal_path = os.path.join(m5.options.outdir, "system.platform.terminal")
+    with open(terminal_path, encoding="utf-8", errors="replace") as terminal:
+        return terminal_path, terminal.read()
+
+
+def check_guest_log(required_markers=()):
+    terminal_path, guest_log = read_guest_log()
     failure_markers = (
         "Kernel panic",
         "Oops:",
@@ -145,15 +169,24 @@ def check_guest_log():
         "Instruction access fault",
         "Load access fault",
         "Store/AMO access fault",
+        "Couldn't find cpu id",
+        "failed to come online",
+        "Failed to bring up CPU",
+        "Illegal instruction",
+        "JITCPU-DINING FAIL",
     )
-
-    with open(terminal_path, encoding="utf-8", errors="replace") as terminal:
-        guest_log = terminal.read()
 
     detected = [marker for marker in failure_markers if marker in guest_log]
     if detected:
         raise RuntimeError(
             "guest kernel failure marker(s) found: " + ", ".join(detected)
+        )
+    missing = [
+        marker for marker in required_markers if marker not in guest_log
+    ]
+    if missing:
+        raise RuntimeError(
+            "guest workload marker(s) missing: " + ", ".join(missing)
         )
     print(f"Guest log check passed ({terminal_path})")
 
@@ -161,6 +194,13 @@ def check_guest_log():
 parser = argparse.ArgumentParser()
 parser.add_argument("linux_image")
 parser.add_argument("backend")
+parser.add_argument(
+    "--kernel",
+    help=(
+        "separate RISC-V Linux ELF loaded at 0x80200000; linux_image is "
+        "then the OpenSBI bootloader"
+    ),
+)
 parser.add_argument("--cpu", choices=("jit", "noncaching"), default="jit")
 parser.add_argument("--num-cpus", type=int, default=1)
 parser.add_argument("--num-dirs", type=int, default=1)
@@ -173,6 +213,7 @@ parser.add_argument("--ruby-chi", action="store_true")
 parser.add_argument(
     "--ruby-network", choices=("simple", "garnet"), default="simple"
 )
+add_16core_mesh_option(parser)
 parser.add_argument("--repeated-switches", type=int, default=0)
 parser.add_argument("--phase-ticks", type=int, default=10_000_000)
 parser.add_argument("--final-o3-ticks", type=int, default=50_000_000)
@@ -180,7 +221,13 @@ parser.add_argument("--initrd")
 parser.add_argument(
     "--initrd-addr", type=lambda value: int(value, 0), default=0x88000000
 )
+parser.add_argument(
+    "--workload-handoff",
+    action="store_true",
+    help="run a guest-coordinated one-way JitCPU-to-O3 workload handoff",
+)
 args = parser.parse_args()
+apply_16core_mesh_options(args)
 
 if args.num_cpus < 1:
     parser.error("--num-cpus must be at least 1")
@@ -190,6 +237,13 @@ if args.num_l3caches < 1:
     parser.error("--num-l3caches must be at least 1")
 if args.ruby_chi and buildEnv["PROTOCOL"] != "CHI":
     parser.error("--ruby-chi requires a gem5 binary built with PROTOCOL=CHI")
+if args.chi_4x4_mesh:
+    validate_16core_build(buildEnv)
+    if not args.kernel:
+        parser.error(
+            "--chi-4x4-mesh requires --kernel so the 16-hart-capable Linux "
+            "kernel is separate from the OpenSBI bootloader"
+        )
 if args.ruby_network != "simple" and not args.ruby_chi:
     parser.error("--ruby-network requires --ruby-chi")
 if args.repeated_switches:
@@ -202,10 +256,23 @@ if args.repeated_switches:
             "--repeated-switches requires the JitCPU Linux test initramfs"
         )
     args.switch_to_o3 = True
+if args.workload_handoff:
+    if not args.chi_4x4_mesh:
+        parser.error("--workload-handoff requires --chi-4x4-mesh")
+    if args.repeated_switches:
+        parser.error("--workload-handoff cannot be combined with switches")
+    if not args.initrd:
+        parser.error("--workload-handoff requires --initrd")
+    args.switch_to_o3 = True
 
 system = RiscvSystem()
 system.mem_mode = "atomic_noncaching"
-system.mem_ranges = [AddrRange(start=0x80000000, size="256MiB")]
+system.mem_ranges = [
+    AddrRange(
+        start=0x80000000,
+        size="1GiB" if args.chi_4x4_mesh else "256MiB",
+    )
+]
 
 system.iobus = IOXBar()
 if not args.ruby_chi:
@@ -304,6 +371,7 @@ if args.ruby_chi:
         args.num_cpus,
         args.num_dirs,
         args.num_l3caches,
+        args.chi_4x4_mesh,
     )
     Ruby.create_system(
         ruby_args,
@@ -335,6 +403,8 @@ if args.ruby_chi:
         f"Configured {args.num_cpus} CPU cores, {args.num_l3caches} HNFs, "
         f"and {len(system.mem_ctrls)} memory controllers"
     )
+    if args.chi_4x4_mesh:
+        validate_16core_mesh(system)
 else:
     system.mem_ctrl = MemCtrl()
     system.mem_ctrl.dram = DDR3_1600_8x8(range=system.mem_ranges[0])
@@ -346,6 +416,8 @@ if args.initrd:
     system.workload = RiscvBootloaderKernelWorkload(
         bootloader_filename=args.linux_image,
         bootloader_addr=0x80000000,
+        object_file=args.kernel or "",
+        kernel_addr=0x80200000,
         entry_point=0x80000000,
         dtb_filename=dtb_path,
         dtb_addr=0x87E00000,
@@ -438,6 +510,74 @@ if args.switch_to_o3:
         raise RuntimeError("Linux did not reach its userspace m5 exit")
 
     validate_linux_phase(jit_cpus, "jit", "Linux boot phase")
+
+    if args.workload_handoff:
+        check_guest_log(
+            (
+                "JITCPU-DINING READY",
+                "JITCPU-DINING PRE-SWITCH-PASS",
+            )
+        )
+        m5.switchCpus(
+            system,
+            list(zip(jit_cpus, o3_cpus)),
+            is_ruby=True,
+        )
+        check_memory_mode("o3")
+        print(
+            f"Dining philosophers switched 16 JitCPUs -> 16 O3CPUs @ "
+            f"tick {m5.curTick()}, memory mode {system.getMemoryMode()}"
+        )
+        m5.stats.reset()
+        exit_event = m5.simulate(args.o3_ticks)
+        print(
+            f"Dining philosophers O3 phase stopped @ tick {m5.curTick()}: "
+            f"{exit_event.getCause()}"
+        )
+        if exit_event.getCause() != "m5_exit instruction encountered":
+            raise RuntimeError(
+                "dining philosophers did not finish on O3 before the "
+                f"{args.o3_ticks}-tick timeout"
+            )
+        validate_linux_phase(o3_cpus, "o3", "Dining philosophers O3 phase")
+        check_memory_mode("o3")
+        check_guest_log(
+            (
+                "JITCPU-DINING READY",
+                "JITCPU-DINING PRE-SWITCH-PASS",
+                "JITCPU-DINING POST-SWITCH-PROGRESS",
+                "JITCPU-DINING PASS",
+            )
+        )
+        _, guest_log = read_guest_log()
+        online = re.findall(r"JITCPU-DINING ONLINE cpus=(\d+)", guest_log)
+        affinity = re.findall(
+            r"JITCPU-DINING AFFINITY philosopher=(\d+) cpu=(\d+)",
+            guest_log,
+        )
+        progress = re.findall(
+            r"JITCPU-DINING POST philosopher=(\d+) cpu=(\d+)", guest_log
+        )
+        if online != ["16"]:
+            raise RuntimeError(
+                f"guest online-CPU report is {online}, expected 16"
+            )
+        expected_pairs = {(str(index), str(index)) for index in range(16)}
+        if set(affinity) != expected_pairs:
+            raise RuntimeError(
+                f"guest affinity reports are {sorted(set(affinity))}, "
+                f"expected {sorted(expected_pairs)}"
+            )
+        if set(progress) != expected_pairs:
+            raise RuntimeError(
+                f"guest post-switch reports are {sorted(set(progress))}, "
+                f"expected {sorted(expected_pairs)}"
+            )
+        print(
+            "16-core Linux dining-philosophers handoff passed on O3 in "
+            f"timing mode @ tick {m5.curTick()}"
+        )
+        raise SystemExit(0)
 
     if args.repeated_switches:
         active_cpus = jit_cpus

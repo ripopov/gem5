@@ -18,7 +18,9 @@ trace-driven, protocol-coherent hierarchy writeback and invalidation using
 The proof-of-concept ISA is RV64GC plus Zicsr and Zifencei, MSU privilege, and
 Sv39. JitCPU and O3 use the same `RiscvISA` configuration. The current test
 configurations disable V, H, Zicbom, and Zicboz so code accepted during a JIT
-phase remains compatible with O3.
+phase remains compatible with O3. The QEMU backend also disables SSTC: gem5
+owns simulated time and CLINT interrupts, so Linux uses OpenSBI's timer service
+instead of an unsynchronized QEMU virtual timer.
 
 ### Measured performance (2026-07-22)
 
@@ -56,9 +58,10 @@ host instruction throughput.
 
 Current limitations are:
 
-- RISC-V RV64 only. Four harts are qualified; larger systems have not yet been
-  stress-tested.
-- No vector or hypervisor extension support.
+- RISC-V RV64 only. A 16-hart one-way JIT-to-O3 handoff is qualified with CHI
+  SimpleNetwork; repeated bidirectional switching remains qualified through
+  four harts.
+- No vector, hypervisor, or SSTC extension support.
 - One shared QEMU runtime owns a fixed number of vCPUs and one physical address
   space per gem5 process. All vCPUs execute through QEMU's single-threaded TCG
   mode, so multicore correctness is supported but host-side JIT execution is
@@ -68,12 +71,12 @@ Current limitations are:
   quiescence/empty-hierarchy checks before they can claim equivalent support.
 - JitCPU performs fast functional memory accesses; it does not model detailed
   cache or interconnect timing.
-- The Linux two-controller configuration uses Ruby's canonical functional
+- Multi-controller Linux configurations use Ruby's canonical functional
   backing store because interleaved DRAM ranges are not host-contiguous. The
-  directed bare-metal test disables that shortcut and checks writeback and
-  invalidation through both real interleaved controllers.
+  directed bare-metal tests disable that shortcut and check real interleaved
+  controller traffic.
 - Checkpoint restore, SMT, DMA races during maintenance, systems larger than
-  four harts, and performance targets beyond the current PoC need separate
+  16 harts, and performance targets beyond the current PoC need separate
   qualification.
 
 ## Source and licensing layout
@@ -194,10 +197,19 @@ Configure an actual CHI-enabled gem5 binary and build the test payloads:
 
 ```sh
 scons setconfig build/RISCV \
-  USE_JITCPU=y PROTOCOL=CHI RUBY_PROTOCOL_CHI=y
+  USE_JITCPU=y PROTOCOL=CHI RUBY_PROTOCOL_CHI=y \
+  NUMBER_BITS_PER_SET=128
 scons build/RISCV/gem5.opt -j"$(nproc)"
-make -C tests/test-progs/jitcpu-smoke/src
+make -C tests/test-progs/jitcpu-smoke/src \
+  DINING_CC=riscv64-linux-musl-gcc
 ```
+
+The 16-core pthread workload must be linked by an RV64 musl compiler. A static
+Ubuntu glibc build can contain RISC-V vector implementations selected at
+runtime even when the application is compiled with `-march=rv64imafdc`; those
+instructions are intentionally outside this PoC. Set `DINING_CC` (or the
+regression driver's `--musl-cc`) to the cross-musl compiler if it is not named
+`riscv64-linux-musl-gcc` in `PATH`.
 
 The initramfs targets create small static `/init` payloads. The single-core
 version executes a userspace `m5_exit` after Linux boot and then continuously
@@ -206,6 +218,139 @@ updates memory. The SMP version starts and pins four workers before its first
 shared atomic counter. These overlays are necessary for repeated switching
 because the fixed image's original init script returns after its `m5_exit`,
 which eventually causes Linux to panic after a one-way test has already ended.
+
+## 16-core 4x4 SimpleNetwork Linux handoff
+
+The reusable `--chi-4x4-mesh` configuration is intentionally SimpleNetwork
+only. It neither instantiates Garnet nor falls back to a crossbar. The 16 main
+routers are numbered in row-major order:
+
+```text
+ 0 --- 1 --- 2 --- 3
+ |     |     |     |
+ 4 --- 5 --- 6 --- 7
+ |     |     |     |
+ 8 --- 9 ---10 ---11
+ |     |     |     |
+12 ---13 ---14 ---15
+```
+
+Each router owns one RNF and one HNF. The four memory-side SNFs (and therefore
+the four interleaved memory controllers) attach at corner routers 0, 3, 12,
+and 15. The miscellaneous node attaches at router 5 and the I/O RNI at router
+10. This keeps CPU/home placement uniform, spreads memory traffic across both
+dimensions, and avoids placing I/O on a memory corner. Horizontal links have
+weight 1 and vertical links weight 2, giving deterministic XY routing.
+
+At startup, `jitcpu_16core_mesh.py` rejects any network other than
+`SimpleNetwork`, requires `CustomMesh`, and proves that main router IDs are
+exactly 0 through 15. It also requires exactly 48 directed nearest-neighbor
+links with the expected weights and checks every RNF, HNF, SNF, MN, and I/O
+router assignment. The system has a 1 GiB physical range and generates a DTB
+with 16 CPU nodes. `NUMBER_BITS_PER_SET=128` is required for the CHI NetDest
+capacity and is checked before instantiation.
+
+The Linux path uses the official separate gem5 OpenSBI and Linux resources so
+the kernel is not limited to eight harts. They can be obtained with:
+
+```sh
+build/RISCV/gem5.opt util/obtain-resource.py \
+  riscv-bootloader-opensbi-1.3.1 \
+  -p /tmp/riscv-bootloader-opensbi-1.3.1
+build/RISCV/gem5.opt util/obtain-resource.py \
+  riscv-linux-6.8.12-kernel \
+  -p /tmp/riscv-linux-6.8.12-kernel
+```
+
+The fast gate is a 16-hart bare-metal workload. Every hart initializes and
+checks a private 32 KiB footprint, participates in shared AMOs and barriers,
+preserves distinct integer/FP state across the whole-system switch, and then
+generates timing traffic on its corresponding RNF:
+
+```sh
+make -C tests/test-progs/jitcpu-smoke/src \
+  jitcpu-16core-mesh-switch
+build/RISCV/gem5.opt -d /tmp/jitcpu-mesh16-baremetal \
+  tests/gem5/jitcpu/configs/jitcpu_baremetal.py \
+  tests/test-progs/jitcpu-smoke/src/jitcpu-16core-mesh-switch \
+  "$QEMU_JIT_LIBRARY" --chi-4x4-mesh --switch-to-o3 \
+  --max-ticks 2000000000
+```
+
+The Linux `/init` is a static musl pthread application with 16 philosophers.
+Each worker is pinned to the correspondingly numbered Linux CPU and checks the
+actual assignment. Globally ordered fork locking is deadlock-free. A fixed
+seed drives shared cache-line updates; fork ownership, fork-use counts,
+per-worker checksums and meal counts, total meals, shared slots, and a shared
+atomic counter are independently recomputed. All workers complete 128 meals
+before `m5_exit`; the host drains and switches all 16 JitCPUs together; the
+same threads and shared state then complete another 1,024 meals on O3. The
+guest emits `READY`, `PRE-SWITCH-PASS`, `POST-SWITCH-PROGRESS`, and `PASS`, or
+uses a distinct `m5_fail` code on any invariant or timeout.
+
+Run the automated sequence with at least two Linux repetitions (three by
+default). It runs the bare-metal gate first and then the existing focused
+FLUSH and one-/four-core repeated-switch regressions. All invocations in this
+sequence use SimpleNetwork unless a separate legacy test explicitly requests
+another network:
+
+```sh
+python3 tests/gem5/jitcpu/run_16core_mesh_regression.py \
+  build/RISCV/gem5.opt "$QEMU_JIT_LIBRARY" \
+  /tmp/riscv-bootloader-opensbi-1.3.1 \
+  --kernel /tmp/riscv-linux-6.8.12-kernel \
+  --musl-cc riscv64-linux-musl-gcc \
+  --linux-runs 3 --timeout-seconds 3600 \
+  --outdir /tmp/jitcpu-16core-mesh-regression
+```
+
+### Observed 16-core results (2026-07-23)
+
+Validation used commit `4f629cda76` plus the changes described here, the
+pinned QEMU submodule, gem5's version-1.0.0 OpenSBI 1.3.1 and Linux 6.8.12
+resources, and the same Intel Core Ultra 7 265K host as the one-core benchmark
+above.
+
+- The bare-metal JIT phase reached its switch at tick 5,780,000 with progress
+  on all 16 harts and zero timing CHI messages. It completed on O3 at tick
+  18,261,000 in 12.11 host seconds. All 16 RNFs had 2,632--3,018 cache
+  accesses, all four controllers transferred 131,200--131,392 bytes, and the
+  network carried 248,436 messages.
+- Linux reported 16 CPUs online and all 16 affinity pairs. The pre-switch
+  barrier occurred at tick 688,164,893,000; every JitCPU retired userspace
+  instructions and Ruby carried zero timing messages. The final O3 exit was
+  tick 700,591,709,000. The guest validated 18,432 meals, an atomic total of
+  156,672, every per-worker checksum, every fork, and every shared slot.
+- The O3 interval retired 225,356--952,709 userspace instructions per core and
+  carried 9,670,840 SimpleNetwork CHI messages. Per-RNF cache accesses were
+  `866036, 876274, 845142, 832897, 924710, 847037, 872201, 839646, 859184,
+  873139, 851277, 930265, 635654, 300852, 684406, 7037502`; controller byte
+  totals were `931968, 895808, 1073728, 1222016`. Thus every RNF and every
+  controller was active after the switch.
+- Three complete Linux handoffs passed at the identical final tick. Two were
+  run consecutively by the repeatability driver and took 263.81 and 265.06
+  host seconds; the third was an independent direct acceptance run.
+- The existing SimpleNetwork suite remained green: focused FLUSH completed at
+  tick 2,365,351 with 343 requests and 37 duplicate pairs; single-core,
+  four-core active, and four-core WFI bare-metal tests completed 21 switches at
+  ticks 97,384,000, 2,511,378,000, and 3,480,995,000. Linux completed 11
+  single-core switches at tick 344,903,603,750 and 21 four-core switches at
+  tick 599,650,057,750. The maintenance-bypass negative control still failed
+  with the required stale-data code 9.
+
+JitCPU boot is functional execution: it directly accesses the canonical Ruby
+backing store in `atomic_noncaching` mode and intentionally produces no timing
+network traffic. After the switch, O3 accesses traverse the timing CHI
+hierarchy and the real 4x4 SimpleNetwork mesh. The switch still uses
+`m5.switchCpus(..., is_ruby=True)` and its drain/memory-mode machinery. A
+JIT-to-O3 switch begins with an empty Ruby hierarchy, so no dirty cache lines
+exist to flush; the unchanged trace-driven `RubyRequestType::FLUSH` path is
+exercised by the focused and reverse-switch regressions before this Linux test
+is considered qualified.
+
+This 16-core configuration qualifies a one-way JIT-to-O3 handoff only. It does
+not claim 16-core reverse/repeated switching, Garnet behavior, host-parallel
+TCG scaling, detailed timing during boot, or systems larger than 16 harts.
 
 ## Focused CHI FLUSH regression
 

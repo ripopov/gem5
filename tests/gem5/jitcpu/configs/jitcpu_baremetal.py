@@ -30,9 +30,16 @@ addToPath(os.path.join(m5.util.repoPath(), "configs"))
 
 from common import Options
 from ruby import Ruby
+from jitcpu_16core_mesh import (
+    add_16core_mesh_option,
+    apply_16core_mesh_options,
+    configure_ruby_options,
+    validate_16core_build,
+    validate_16core_mesh,
+)
 
 
-def ruby_options(network, num_cpus, num_dirs, num_l3caches):
+def ruby_options(network, num_cpus, num_dirs, num_l3caches, mesh_4x4):
     parser = argparse.ArgumentParser(add_help=False)
     Options.addCommonOptions(parser)
     Ruby.define_options(parser)
@@ -42,6 +49,7 @@ def ruby_options(network, num_cpus, num_dirs, num_l3caches):
     options.num_l3caches = num_l3caches
     options.topology = "Crossbar"
     options.network = network
+    configure_ruby_options(options, mesh_4x4)
     return options
 
 
@@ -62,7 +70,16 @@ def ruby_router_messages(ruby_system):
 
 
 def cpu_instructions(cpu):
-    return stat_value(f"{cpu.path()}.commitStats0.numInsts")
+    leaf = "commitStats0.numInsts"
+    try:
+        return stat_value(f"{cpu.path()}.{leaf}")
+    except KeyError:
+        # SimObject vector paths are zero-padded at 10+ entries, while the
+        # corresponding stat names are not. Use the stable CPU id spelling.
+        collection = (
+            "o3" if any(cpu is candidate for candidate in o3_cpus) else "cpu"
+        )
+        return stat_value(f"system.{collection}{int(cpu.cpu_id)}.{leaf}")
 
 
 def stat_value(name):
@@ -104,6 +121,7 @@ parser.add_argument("--ruby-chi", action="store_true")
 parser.add_argument(
     "--ruby-network", choices=("simple", "garnet"), default="simple"
 )
+add_16core_mesh_option(parser)
 parser.add_argument("--repeated-switches", type=int, default=0)
 parser.add_argument(
     "--unsafe-skip-ruby-maintenance",
@@ -111,6 +129,7 @@ parser.add_argument(
     help="test-only negative control for the O3-to-JitCPU switch",
 )
 args = parser.parse_args()
+apply_16core_mesh_options(args)
 
 if args.num_cpus < 1:
     parser.error("--num-cpus must be at least 1")
@@ -120,6 +139,8 @@ if args.num_l3caches < 1:
     parser.error("--num-l3caches must be at least 1")
 if args.ruby_chi and buildEnv["PROTOCOL"] != "CHI":
     parser.error("--ruby-chi requires a gem5 binary built with PROTOCOL=CHI")
+if args.chi_4x4_mesh:
+    validate_16core_build(buildEnv)
 if args.repeated_switches and not args.ruby_chi:
     parser.error("--repeated-switches requires --ruby-chi")
 if args.ruby_network != "simple" and not args.ruby_chi:
@@ -232,6 +253,7 @@ if args.ruby_chi:
         args.num_cpus,
         args.num_dirs,
         args.num_l3caches,
+        args.chi_4x4_mesh,
     )
     Ruby.create_system(
         ruby_args,
@@ -263,6 +285,8 @@ if args.ruby_chi:
         f"Configured {args.num_cpus} CPU cores, {args.num_l3caches} HNFs, "
         f"and {len(system.mem_ctrls)} memory controllers"
     )
+    if args.chi_4x4_mesh:
+        validate_16core_mesh(system)
 else:
     system.mem_ctrl = MemCtrl()
     system.mem_ctrl.dram = DDR3_1600_8x8(range=system.mem_ranges[0])
@@ -406,6 +430,7 @@ if args.repeated_switches:
 elif args.switch_to_o3:
     if exit_event.getCause() != "switchcpu":
         raise RuntimeError("JitCPU did not execute m5_switch_cpu")
+    validate_phase(jit_cpus, "cpu")
     m5.switchCpus(
         system,
         list(zip(jit_cpus, o3_cpus)),
@@ -415,6 +440,7 @@ elif args.switch_to_o3:
         f"Switched JitCPU -> O3CPU @ tick {m5.curTick()}, "
         f"memory mode {system.getMemoryMode()}"
     )
+    check_memory_mode("o3")
     m5.stats.reset()
     exit_event = m5.simulate(args.max_ticks)
     print(
@@ -425,3 +451,4 @@ elif args.switch_to_o3:
         raise RuntimeError(
             "O3CPU did not complete the S-mode PMP takeover regression"
         )
+    validate_phase(o3_cpus, "o3")

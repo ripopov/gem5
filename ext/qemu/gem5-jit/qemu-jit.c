@@ -217,7 +217,7 @@ jit_global_init(const Gem5QemuJitCallbacks *callbacks)
         (char *)"gem5-qemu-jit",
         (char *)"-machine", (char *)"none",
         (char *)"-cpu",
-        (char *)"rv64,v=false,h=false,zicbom=false,zicboz=false",
+        (char *)"rv64,v=false,h=false,sstc=false,zicbom=false,zicboz=false",
         (char *)"-accel", (char *)"tcg,thread=single",
         (char *)"-icount", (char *)"shift=0,sleep=off",
         (char *)"-S",

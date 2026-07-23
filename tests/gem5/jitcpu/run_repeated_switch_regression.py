@@ -56,6 +56,14 @@ parser.add_argument(
     type=Path,
     help="also run the Linux repeated-switch stress using this fixed image",
 )
+parser.add_argument(
+    "--linux-kernel",
+    type=Path,
+    help=(
+        "optional separate Linux ELF; when set, --linux-image is treated "
+        "as the OpenSBI bootloader"
+    ),
+)
 parser.add_argument("--linux-switches", type=int, default=11)
 parser.add_argument("--smp-linux-switches", type=int, default=21)
 parser.add_argument(
@@ -199,30 +207,36 @@ if args.linux_image:
     linux_image = args.linux_image.resolve()
     if not linux_image.is_file():
         parser.error(f"Linux image does not exist: {linux_image}")
+    linux_kernel = args.linux_kernel.resolve() if args.linux_kernel else None
+    if linux_kernel and not linux_kernel.is_file():
+        parser.error(f"Linux kernel does not exist: {linux_kernel}")
     if args.linux_switches < 3 or args.linux_switches % 2 == 0:
         parser.error("--linux-switches must be an odd value of at least 3")
     if args.smp_linux_switches < 3 or args.smp_linux_switches % 2 == 0:
         parser.error("--smp-linux-switches must be an odd value of at least 3")
 
+    linux_command = [
+        gem5,
+        f"--outdir={args.outdir / 'linux'}",
+        LINUX_CONFIG,
+        linux_image,
+        backend,
+        "--ruby-chi",
+        "--repeated-switches",
+        str(args.linux_switches),
+        "--phase-ticks",
+        "100000000",
+        "--final-o3-ticks",
+        "1000000000",
+        "--initrd",
+        initrd,
+        "--max-ticks",
+        "2000000000000",
+    ]
+    if linux_kernel:
+        linux_command.extend(["--kernel", linux_kernel])
     require_success(
-        [
-            gem5,
-            f"--outdir={args.outdir / 'linux'}",
-            LINUX_CONFIG,
-            linux_image,
-            backend,
-            "--ruby-chi",
-            "--repeated-switches",
-            str(args.linux_switches),
-            "--phase-ticks",
-            "100000000",
-            "--final-o3-ticks",
-            "1000000000",
-            "--initrd",
-            initrd,
-            "--max-ticks",
-            "2000000000000",
-        ],
+        linux_command,
         "Linux repeated-switch stress",
     )
 
@@ -253,6 +267,8 @@ if args.linux_image:
         ]
         if network == "garnet":
             command.extend(["--ruby-network", "garnet"])
+        if linux_kernel:
+            command.extend(["--kernel", linux_kernel])
         require_success(
             command,
             f"four-core/two-controller {network} Linux stress",

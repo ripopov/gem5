@@ -12,6 +12,11 @@ architectural and transient state while sharing one QEMU physical address
 space. They execute serially through `tcg,thread=single`, as required by the
 current embedded runtime.
 
+The embedded CPU deliberately disables SSTC. QEMU's SSTC implementation uses
+its own asynchronous virtual timer, whereas gem5 owns simulated time and the
+CLINT interrupt path. Linux therefore uses OpenSBI's timer service, which
+keeps timer interrupts synchronized with gem5 before and after a CPU switch.
+
 The QEMU source checkout is the clean, pinned submodule at `../repo`. Do not
 place adapter files in that checkout or patch it in place. The build helper at
 `util/jitcpu/build-qemu-jit.sh` copies the clean QEMU checkout, without Git

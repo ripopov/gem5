@@ -77,8 +77,20 @@ main(void)
 
     memcpy(memory, program, sizeof(program));
     for (instance = 0; instance < 2; ++instance) {
+        uint64_t value;
+
         if (gem5_qemu_jit_init(&callbacks[instance]) != 0) {
             fprintf(stderr, "adapter instance %u initialization failed\n",
+                    instance);
+            return 1;
+        }
+        /*
+         * SSTC needs a QEMU timer to post STIP asynchronously, but gem5 owns
+         * the event queue and CLINT interrupts. The embedded CPU must not
+         * advertise an unsynchronized internal timer implementation.
+         */
+        if (gem5_qemu_jit_get_csr(instance, 0x14d, &value) == 0) {
+            fprintf(stderr, "adapter instance %u unexpectedly exposes sstc\n",
                     instance);
             return 1;
         }
