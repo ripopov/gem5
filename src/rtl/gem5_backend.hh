@@ -88,6 +88,7 @@ class Gem5InitiatorBackend final : public TransactionBackend
     std::function<void()> _wakeup;
     std::unordered_map<std::uint64_t, PendingTransaction> _transactions;
     std::deque<PacketPtr> _requests;
+    std::deque<std::pair<std::uint64_t, std::size_t>> _completedWriteBeats;
     std::deque<std::pair<std::uint64_t, std::size_t>> _errorBeats;
     std::deque<MemoryResponse> _responses;
     std::vector<AddrRange> _errorRanges;

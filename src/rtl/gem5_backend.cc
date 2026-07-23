@@ -4,6 +4,7 @@
 #include "rtl/gem5_backend.hh"
 
 #include <algorithm>
+#include <iterator>
 #include <limits>
 #include <string>
 #include <utility>
@@ -30,6 +31,42 @@ beatAddress(const MemoryRequest &request, std::size_t beat)
     const std::uint64_t span = request.beatCount() * request.beatBytes;
     const std::uint64_t base = request.address / span * span;
     return base + (request.address - base + offset) % span;
+}
+
+struct PacketWindow
+{
+    Addr address = 0;
+    std::size_t dataOffset = 0;
+    std::size_t size = 0;
+};
+
+PacketWindow
+packetWindow(const MemoryRequest &request, std::size_t beat)
+{
+    PacketWindow window{
+        beatAddress(request, beat), beat * request.beatBytes,
+        request.beatBytes};
+    if (!request.write) {
+        return window;
+    }
+
+    const auto first = request.byteEnable.begin() + window.dataOffset;
+    const auto end = first + request.beatBytes;
+    const auto enabledFirst = std::find_if(
+        first, end, [](std::uint8_t value) { return value != 0; });
+    if (enabledFirst == end) {
+        window.size = 0;
+        return window;
+    }
+    const auto enabledLast = std::find_if(
+        std::make_reverse_iterator(end),
+        std::make_reverse_iterator(enabledFirst),
+        [](std::uint8_t value) { return value != 0; }).base();
+    const auto leading = static_cast<std::size_t>(enabledFirst - first);
+    window.address += leading;
+    window.dataOffset += leading;
+    window.size = static_cast<std::size_t>(enabledLast - enabledFirst);
+    return window;
 }
 
 } // anonymous namespace
@@ -79,14 +116,18 @@ PacketPtr
 Gem5InitiatorBackend::makePacket(const MemoryRequest &request,
                                  std::size_t beat)
 {
-    const auto size = static_cast<unsigned>(request.beatBytes);
+    const PacketWindow window = packetWindow(request, beat);
+    panic_if(window.size == 0,
+             "%s attempted to packetize an empty AXI write beat",
+             _port.name());
+    const auto size = static_cast<unsigned>(window.size);
     auto gem5Request = std::make_shared<Request>(
-        beatAddress(request, beat), size, Request::Flags(), _requestorId);
+        window.address, size, Request::Flags(), _requestorId);
     if (request.write) {
-        std::vector<bool> enables(request.beatBytes);
-        const std::size_t offset = beat * request.beatBytes;
-        std::transform(request.byteEnable.begin() + offset,
-                       request.byteEnable.begin() + offset + request.beatBytes,
+        std::vector<bool> enables(window.size);
+        std::transform(request.byteEnable.begin() + window.dataOffset,
+                       request.byteEnable.begin() +
+                           window.dataOffset + window.size,
                        enables.begin(),
                        [](std::uint8_t value) { return value != 0; });
         gem5Request->setByteEnable(enables);
@@ -97,11 +138,10 @@ Gem5InitiatorBackend::makePacket(const MemoryRequest &request,
     // getPtr() and setData() intentionally reject masked writes. Populate an
     // owned buffer before attaching it so arbitrary AMBA byte strobes remain
     // valid gem5 WriteReq packets.
-    auto *payload = new std::uint8_t[request.beatBytes]{};
+    auto *payload = new std::uint8_t[window.size]{};
     if (request.write) {
-        const std::size_t offset = beat * request.beatBytes;
-        std::copy(request.data.begin() + offset,
-                  request.data.begin() + offset + request.beatBytes,
+        std::copy(request.data.begin() + window.dataOffset,
+                  request.data.begin() + window.dataOffset + window.size,
                   payload);
     }
     packet->dataDynamic(payload);
@@ -127,10 +167,15 @@ Gem5InitiatorBackend::submit(const MemoryRequest &request)
     }
     _transactions.emplace(request.token, std::move(pending));
     for (std::size_t beat = 0; beat < request.beatCount(); ++beat) {
-        const Addr address = beatAddress(request, beat);
-        panic_if(request.beatBytes - 1 > MaxAddr - address,
+        const PacketWindow window = packetWindow(request, beat);
+        if (window.size == 0) {
+            _completedWriteBeats.emplace_back(request.token, beat);
+            continue;
+        }
+        const Addr address = window.address;
+        panic_if(window.size - 1 > MaxAddr - address,
                  "%s received an overflowing beat address", _port.name());
-        const Addr last = address + request.beatBytes - 1;
+        const Addr last = address + window.size - 1;
         const bool injectError = std::any_of(
             _errorRanges.begin(), _errorRanges.end(),
             [address, last](const AddrRange &range) {
@@ -173,6 +218,11 @@ void
 Gem5InitiatorBackend::advance()
 {
     pump();
+    while (!_completedWriteBeats.empty()) {
+        const auto [token, beat] = _completedWriteBeats.front();
+        _completedWriteBeats.pop_front();
+        completeBeat(token, beat, false, nullptr);
+    }
     while (!_errorBeats.empty()) {
         const auto [token, beat] = _errorBeats.front();
         _errorBeats.pop_front();
