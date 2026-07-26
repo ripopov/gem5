@@ -439,7 +439,8 @@ RiscvJitCPU::syncToBackend()
     if (backend->getCsr(RiscvISA::CSR_FRM) != frm) {
         backend->setCsr(RiscvISA::CSR_FRM, frm);
     }
-    backend->setMip(tc->readMiscReg(RiscvISA::MISCREG_IP));
+    pushedMip = tc->readMiscReg(RiscvISA::MISCREG_IP);
+    backend->setMip(pushedMip);
     backend->setPriv(privilege);
 }
 
@@ -494,13 +495,21 @@ RiscvJitCPU::syncFromBackend()
     // clear would immediately re-post the stale interrupt.  Supervisor
     // pending bits may originate from guest CSR execution in QEMU; legacy
     // SBI firmware, for example, converts MTIP into STIP for Linux.
+    //
+    // Both sides can move a supervisor bit during one batch: a translated
+    // MMIO access runs gem5 device code inline, and the PLIC recomputes its
+    // supervisor external line synchronously from that access.  Importing the
+    // whole mask would then overwrite the device level with the sample taken
+    // before the batch.  Import only the supervisor bits QEMU actually
+    // changed, which keeps every batch boundary consistent with what the
+    // detailed CPU would have observed at the same point.
     constexpr RegVal guest_pending_mask =
         RiscvISA::SSI_MASK | RiscvISA::STI_MASK | RiscvISA::SEI_MASK;
     const RegVal backend_mip = backend->getMip();
     const RegVal gem5_mip = tc->readMiscReg(RiscvISA::MISCREG_IP);
+    const RegVal import_mask = guest_pending_mask & ~(gem5_mip ^ pushedMip);
     const RegVal merged_mip =
-        (gem5_mip & ~guest_pending_mask) |
-        (backend_mip & guest_pending_mask);
+        (gem5_mip & ~import_mask) | (backend_mip & import_mask);
     if (gem5_mip != merged_mip) {
         tc->setMiscReg(RiscvISA::MISCREG_IP, merged_mip);
     }
@@ -643,22 +652,24 @@ RiscvJitCPU::tick()
         // interrupt. Poll only at the next gem5 event, avoiding a busy loop
         // while preserving device/timer event ordering.
         EventQueue *event_queue = eventQueue();
-        if (!event_queue->empty()) {
-            uint64_t poll_instructions =
-                std::max<uint64_t>(1, result.instructions);
-            if (event_queue->nextTick() <= curTick() &&
-                !hasNonJitEventAtOrBefore(event_queue, curTick())) {
-                // A halted peer at the same tick is not a reason to poll WFI
-                // every cycle.  Bound the wakeup delay by the normal JIT
-                // batch, matching the granularity already used while
-                // executing instructions.
-                poll_instructions = std::max(poll_instructions, batchSize);
-            }
-            const Tick after_instructions =
-                clockEdge(Cycles(poll_instructions));
-            schedule(tickEvent,
-                     std::max(after_instructions, event_queue->nextTick()));
+        uint64_t poll_instructions =
+            std::max<uint64_t>(1, result.instructions);
+        if (!event_queue->empty() && event_queue->nextTick() <= curTick() &&
+            !hasNonJitEventAtOrBefore(event_queue, curTick())) {
+            // A halted peer at the same tick is not a reason to poll WFI
+            // every cycle.  Bound the wakeup delay by the normal JIT
+            // batch, matching the granularity already used while
+            // executing instructions.
+            poll_instructions = std::max(poll_instructions, batchSize);
         }
+        Tick wakeup = clockEdge(Cycles(poll_instructions));
+        if (!event_queue->empty()) {
+            wakeup = std::max(wakeup, event_queue->nextTick());
+        }
+        // A suspended hart must always keep a tick scheduled: nothing else
+        // reactivates it, because the gem5 context stays runnable while only
+        // QEMU is halted.
+        reschedule(tickEvent, wakeup, true);
         return;
     }
 

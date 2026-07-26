@@ -63,6 +63,8 @@ class RiscvJitCPU : public NonCachingSimpleCPU
     const uint32_t backendInstanceCount;
     bool backendQueueLocked = false;
     bool backendIoAccessed = false;
+    /** Interrupt-pending value last exported to the backend. */
+    RegVal pushedMip = 0;
 
     void syncToBackend();
     void syncFromBackend();

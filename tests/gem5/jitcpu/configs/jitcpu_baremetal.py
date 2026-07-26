@@ -21,15 +21,14 @@ from m5.objects import (
     SystemXBar,
     VoltageDomain,
 )
+from m5.objects.RiscvCPU import RiscvO3CPU
 from m5.stats.gem5stats import get_simstat
 from m5.util import addToPath
 from m5.util.convert import toMemorySize
-from m5.objects.RiscvCPU import RiscvO3CPU
 
 addToPath(os.path.join(m5.util.repoPath(), "configs"))
 
 from common import Options
-from ruby import Ruby
 from jitcpu_16core_mesh import (
     add_16core_mesh_option,
     apply_16core_mesh_options,
@@ -37,6 +36,7 @@ from jitcpu_16core_mesh import (
     validate_16core_build,
     validate_16core_mesh,
 )
+from ruby import Ruby
 
 
 def ruby_options(network, num_cpus, num_dirs, num_l3caches, mesh_4x4):
@@ -54,9 +54,15 @@ def ruby_options(network, num_cpus, num_dirs, num_l3caches, mesh_4x4):
 
 
 def ruby_router_messages(ruby_system):
-    if args.ruby_network == "garnet":
-        packets = get_simstat(ruby_system.network)["packets_injected"]
-        return sum(int(value.value) for value in packets.value.values())
+    """Messages carried by the timing interconnect, or None if unavailable.
+
+    SimpleNetwork accounts every switch traversal in per-throttle group stats.
+    Garnet still registers its network counters as legacy stats, which are not
+    reachable through pystats, so its callers rely on the controller-side
+    activity checks instead.
+    """
+    if args.ruby_network != "simple":
+        return None
 
     network_stats = get_simstat(ruby_system.network)
     routers = network_stats["routers"].values["value"]
@@ -117,6 +123,21 @@ parser.add_argument("--max-ticks", type=int, default=100000)
 parser.add_argument("--num-cpus", type=int, default=1)
 parser.add_argument("--num-dirs", type=int, default=1)
 parser.add_argument("--num-l3caches", type=int, default=1)
+parser.add_argument(
+    "--batch-size",
+    type=int,
+    default=256,
+    help="JitCPU translated-instruction batch size",
+)
+parser.add_argument(
+    "--rtc-frequency",
+    default="100MHz",
+    help=(
+        "platform RTC frequency. The default keeps a device event every ten "
+        "simulated cycles, which caps every JitCPU batch there and maximizes "
+        "hart interleaving. Lower it to exercise full-length batches."
+    ),
+)
 parser.add_argument("--switch-to-o3", action="store_true")
 parser.add_argument("--ruby-chi", action="store_true")
 parser.add_argument(
@@ -172,7 +193,7 @@ if not args.ruby_chi:
     system.system_port = system.membus.cpu_side_ports
 
 system.platform = HiFive()
-system.platform.rtc = RiscvRTC(frequency="100MHz")
+system.platform.rtc = RiscvRTC(frequency=args.rtc_frequency)
 system.platform.clint.int_pin = system.platform.rtc.int_pin
 system.platform.pci_host.internal_connect()
 system.platform.pci_host.connect_upper_bus(system.iobus, True)
@@ -212,7 +233,7 @@ jit_cpus = [
         backend_path=args.backend,
         backend_instance=index,
         backend_instance_count=args.num_cpus,
-        batch_size=256,
+        batch_size=args.batch_size,
     )
     for index in range(args.num_cpus)
 ]
@@ -311,22 +332,44 @@ def validate_phase(cpus, cpu_name):
 
     if args.ruby_chi:
         messages = ruby_router_messages(system.ruby)
-        print(f"{cpu_name} generated {messages} timing CHI messages")
-        if cpu_name == "cpu" and messages != 0:
-            raise RuntimeError("JitCPU generated timing CHI traffic")
-        if cpu_name == "o3" and messages == 0:
-            raise RuntimeError("O3CPU generated no timing CHI traffic")
-        if cpu_name == "o3":
-            cache_accesses = ruby_cache_accesses()
-            memory_bytes = ruby_memory_bytes()
-            print(
-                f"{cpu_name} per-RNF CHI cache accesses: "
-                + ", ".join(str(value) for value in cache_accesses)
-            )
-            print(
-                f"{cpu_name} per-controller memory bytes: "
-                + ", ".join(str(value) for value in memory_bytes)
-            )
+        cache_accesses = ruby_cache_accesses()
+        memory_bytes = ruby_memory_bytes()
+        if messages is not None:
+            print(f"{cpu_name} generated {messages} timing CHI messages")
+        print(
+            f"{cpu_name} per-RNF CHI cache accesses: "
+            + ", ".join(str(value) for value in cache_accesses)
+        )
+        print(
+            f"{cpu_name} per-controller memory bytes: "
+            + ", ".join(str(value) for value in memory_bytes)
+        )
+        if cpu_name == "cpu":
+            # JitCPU executes uncached. Nothing may reach the timing
+            # hierarchy, on any network, from any requester.
+            if messages:
+                raise RuntimeError("JitCPU generated timing CHI traffic")
+            busy_rnfs = [
+                index
+                for index, value in enumerate(cache_accesses)
+                if value != 0
+            ]
+            if busy_rnfs:
+                raise RuntimeError(
+                    "JitCPU generated CHI cache accesses on RNF(s) "
+                    f"{busy_rnfs}"
+                )
+            busy_controllers = [
+                index for index, value in enumerate(memory_bytes) if value != 0
+            ]
+            if busy_controllers:
+                raise RuntimeError(
+                    "JitCPU generated timing traffic at memory controller(s) "
+                    f"{busy_controllers}"
+                )
+        else:
+            if messages == 0:
+                raise RuntimeError("O3CPU generated no timing CHI traffic")
             idle_rnfs = [
                 index
                 for index, value in enumerate(cache_accesses)

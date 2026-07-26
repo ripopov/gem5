@@ -3,6 +3,10 @@ CC = $(CROSS_COMPILE)gcc
 DINING_CC ?= riscv64-linux-musl-gcc
 DINING_SWITCHES ?= 5
 DINING_OTHER_PHASE_MEALS ?= 256
+# The wider SMP variants share the four-hart sources. A smaller per-hart
+# footprint keeps the serialized trace-driven FLUSH worklist proportional to
+# the four-hart runs while covering two to four times as many requesters.
+WIDE_SMP_LINES_PER_HART ?= 256
 CFLAGS = -march=rv64imafdc_zicsr_zifencei -mabi=lp64d \
 	-nostdlib -nostartfiles -static
 LDFLAGS = -Wl,--build-id=none -Wl,-Ttext=0x80000000 -Wl,-e,_start
@@ -13,6 +17,8 @@ INITRAMFS_DIR = .jitcpu-linux-initramfs
 
 all: jitcpu-smoke jitcpu-switch jitcpu-repeated-switch \
 	jitcpu-smp-repeated-switch jitcpu-smp-wfi-repeated-switch \
+	jitcpu-smp8-repeated-switch \
+	jitcpu-mesh16-repeated-switch jitcpu-mesh16-wfi-repeated-switch \
 	jitcpu-16core-mesh-switch jitcpu-linux-init.cpio \
 	jitcpu-linux-smp-init.cpio jitcpu-dining-philosophers.cpio \
 	jitcpu-dining-philosophers-repeated.cpio
@@ -31,6 +37,18 @@ jitcpu-smp-repeated-switch: jitcpu-smp-repeated-switch.S
 
 jitcpu-smp-wfi-repeated-switch: jitcpu-smp-wfi-repeated-switch.S
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $<
+
+jitcpu-smp8-repeated-switch: jitcpu-smp-repeated-switch.S
+	$(CC) $(CFLAGS) $(LDFLAGS) -DJITCPU_NUM_HARTS=8 \
+		-DJITCPU_LINES_PER_HART=$(WIDE_SMP_LINES_PER_HART) -o $@ $<
+
+jitcpu-mesh16-repeated-switch: jitcpu-smp-repeated-switch.S
+	$(CC) $(CFLAGS) $(LDFLAGS) -DJITCPU_NUM_HARTS=16 \
+		-DJITCPU_LINES_PER_HART=$(WIDE_SMP_LINES_PER_HART) -o $@ $<
+
+jitcpu-mesh16-wfi-repeated-switch: jitcpu-smp-wfi-repeated-switch.S
+	$(CC) $(CFLAGS) $(LDFLAGS) -DJITCPU_NUM_HARTS=16 \
+		-DJITCPU_LINES_PER_HART=$(WIDE_SMP_LINES_PER_HART) -o $@ $<
 
 jitcpu-16core-mesh-switch: jitcpu-16core-mesh-switch.S
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $<
@@ -67,6 +85,8 @@ clean:
 	rm -rf $(INITRAMFS_DIR)
 	rm -f jitcpu-smoke jitcpu-switch jitcpu-repeated-switch \
 		jitcpu-smp-repeated-switch jitcpu-smp-wfi-repeated-switch \
+		jitcpu-smp8-repeated-switch \
+		jitcpu-mesh16-repeated-switch jitcpu-mesh16-wfi-repeated-switch \
 		jitcpu-16core-mesh-switch \
 		jitcpu-linux-init jitcpu-linux-init.cpio \
 		jitcpu-linux-smp-init jitcpu-linux-smp-init.cpio \

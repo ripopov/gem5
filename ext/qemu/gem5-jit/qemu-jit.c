@@ -167,6 +167,13 @@ jit_run_on_vcpu(CPUState *cpu, run_on_cpu_data data)
     int64_t after;
     int64_t budget;
 
+    /* env.bins carries a gem5 pseudo-instruction encoding only while the
+     * translated code that stored it is the reason for this batch's EXCP_HLT.
+     * QEMU never clears it, and WFI raises the same EXCP_HLT, so a stale value
+     * would turn every later WFI into a spurious repeat of the last pseudo
+     * instruction. Clear it so only this batch can set it. */
+    hart->riscv_cpu->env.bins = 0;
+
     /* cpu_exec() is normally entered by QEMU's round-robin TCG loop with the
      * BQL dropped. Keep exactly the same locking and icount protocol here. */
     qatomic_set(&cpu->exit_request, false);
@@ -187,7 +194,7 @@ jit_run_on_vcpu(CPUState *cpu, run_on_cpu_data data)
     bql_lock();
 
     request->result.instructions = after - before;
-    if (request->result.qemu_exception == EXCP_HLT &&
+    if (request->result.qemu_exception == EXCP_HLT && !cpu->halted &&
         (hart->riscv_cpu->env.bins & 0x01ffffff) == 0x7b) {
         request->result.reason = GEM5_QEMU_JIT_EXIT_M5OP;
         request->result.m5_function = hart->riscv_cpu->env.bins >> 25;

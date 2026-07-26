@@ -1,12 +1,21 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 
-    .equ NUM_HARTS,        4
+#ifndef JITCPU_NUM_HARTS
+#define JITCPU_NUM_HARTS 4
+#endif
+#ifndef JITCPU_LINES_PER_HART
+#define JITCPU_LINES_PER_HART 1024
+#endif
+
+    .equ NUM_HARTS,        JITCPU_NUM_HARTS
     .equ LAST_SWITCH,      21
     .equ CLINT_MSIP,       0x02000000
     .equ LINE_SIZE,        64
-    .equ LINES_PER_HART,   1024
+    .equ LINES_PER_HART,   JITCPU_LINES_PER_HART
     .equ WORKING_SET_SIZE, (LINE_SIZE * LINES_PER_HART)
     .equ STACK_SIZE,       4096
+    .equ M5_SUM_RESULT,    0x1234
+    .equ WFI_SENTINEL,     0x5eed
 
     .section .text.init
     .option norvc
@@ -51,7 +60,22 @@ _start:
     amoadd.w.aqrl zero, t1, (t0)
 
 secondary_wait:
+    /*
+     * Suspend immediately after a gem5 pseudo instruction. Both are reported
+     * to the JIT backend through the same QEMU EXCP_HLT exit, so a hart that
+     * has just executed one must still be seen to suspend: the pseudo
+     * instruction must not be replayed as the reason for this WFI.
+     */
+    call    check_m5_sum
+    li      a0, WFI_SENTINEL
     wfi
+    j       8f
+    /* A replayed pseudo instruction retires the WFI and skips the branch. */
+    j       fail_wfi_replay
+8:
+    li      t0, WFI_SENTINEL
+    bne     a0, t0, fail_wfi_replay
+
     la      t0, release_phase
     ld      t1, 0(t0)
     addi    t2, s0, 1
@@ -110,9 +134,12 @@ driver_switch:
     /* Wake each suspended hart through its own CLINT MSIP register. */
     li      t0, CLINT_MSIP + 4
     li      t1, 1
+    li      t2, NUM_HARTS - 1
+7:
     sw      t1, 0(t0)
-    sw      t1, 4(t0)
-    sw      t1, 8(t0)
+    addi    t0, t0, 4
+    addi    t2, t2, -1
+    bnez    t2, 7b
 
     la      t0, arrived_harts
 2:
@@ -150,6 +177,22 @@ check_state:
     xor     t0, t0, s1
     fmv.x.d t1, f8
     bne     t1, t0, fail_float
+    ret
+
+/*
+ * M5OP_SUM is the gem5 pseudo-instruction sanity check: it returns the sum of
+ * its first six arguments. Both CPU models must implement it identically.
+ */
+check_m5_sum:
+    li      a0, 0x1000
+    li      a1, 0x200
+    li      a2, 0x30
+    li      a3, 4
+    li      a4, 0
+    li      a5, 0
+    .word   0x4600007b       /* M5OP_SUM (0x23). */
+    li      t0, M5_SUM_RESULT
+    bne     a0, t0, fail_m5op
     ret
 
 /* Let secondaries retire their post-arrival branch and enter WFI. */
@@ -243,6 +286,12 @@ fail_atomic:
     j       fail
 fail_trap:
     li      a1, 46
+    j       fail
+fail_m5op:
+    li      a1, 47
+    j       fail
+fail_wfi_replay:
+    li      a1, 48
 fail:
     li      a0, 0
     .word   0x4400007b       /* M5OP_FAIL (0x22). */
@@ -257,7 +306,7 @@ ready_harts:    .word 0
 arrived_harts:  .word 0
     .align 3
 interrupt_counts:
-    .dword 0, 0, 0, 0
+    .skip (8 * NUM_HARTS)
 
     .section .bss
     .align 12

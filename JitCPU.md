@@ -14,8 +14,8 @@ The qualified configuration is:
 - machine, supervisor, and user privilege modes;
 - classic `atomic_noncaching`, or Ruby CHI with SimpleNetwork;
 - any number of alternating whole-system JitCPU/O3CPU switches tested up to
-  21 switches on four harts and five userspace-coordinated switches on 16
-  harts; and
+  21 switches on one, four, eight, and sixteen harts, and five
+  userspace-coordinated switches on 16 harts; and
 - a 16-hart CHI 4x4 SimpleNetwork mesh with 16 RNFs, 16 HNFs, four SNFs, four
   interleaved memory controllers, one miscellaneous node, and one I/O RNI.
 
@@ -177,12 +177,39 @@ CLINT time. Machine interrupt-pending bits remain owned by gem5 devices.
 Supervisor software, timer, and external pending bits written by guest
 firmware are merged back from QEMU so SBI and Linux CSR behavior is preserved.
 
+That merge is a delta, not a wholesale copy. A translated MMIO access runs
+gem5 device code inline, and the PLIC recomputes its supervisor external line
+from within that access, so a batch can change a supervisor pending bit on
+both sides. Only the supervisor bits QEMU actually modified are imported,
+which leaves every batch boundary consistent with what the detailed CPU would
+have observed at the same point.
+
+Batch length is bounded by the next device event, so the platform RTC period
+sets an upper bound on it. At the 100 MHz RTC used by the bare-metal tests
+every batch stops after ten instructions regardless of `batch_size`, which
+maximizes hart interleaving; the 1 MHz RTC used by the Linux tests lets a
+full batch run.
+
 ### 4.4 Pseudo instructions and failures
 
 The adapter recognizes RISC-V m5 pseudo instructions, returns their function
 number, and lets gem5 execute the existing pseudo-instruction implementation.
 Any unexpected QEMU exception or executor exit is fatal and reports the QEMU
 exception and guest PC; it is never silently interpreted as normal progress.
+
+QEMU reports both a pseudo instruction and a WFI through the same `EXCP_HLT`
+executor exit, and distinguishes them by the instruction word the translated
+code stored in `env.bins`. QEMU never clears that field, so the adapter clears
+it before every batch and additionally requires the vCPU not to be halted.
+Otherwise the first WFI executed after any pseudo instruction on the same hart
+is reported as a repeat of that pseudo instruction, which both re-runs its side
+effects and advances the guest PC past the instruction following the WFI.
+
+A whole-system switch is a request to the simulation script, so exactly one
+hart may execute `m5_switch_cpu` per handoff. gem5 does not coalesce
+simultaneous exit events: additional harts raising it in the same tick leave
+extra `switchcpu` exits queued, which the script observes as spurious
+zero-progress phases after the switch it performed.
 
 ## 5. ISA and architectural-state contract
 
@@ -344,7 +371,10 @@ The patch intentionally limits common-code changes to the following hooks:
 Garnet receives generic `isEmpty()` accounting so Ruby drain does not become
 incorrect when it is selected elsewhere, but JitCPU switching is qualified
 only with SimpleNetwork. No Garnet-specific JitCPU test API or automated
-Garnet run is part of this patch.
+Garnet run is part of this patch. Garnet still registers its network counters
+as legacy statistics, which pystats cannot reach, so the test configuration
+reports no interconnect message count for it and relies on the network-model
+independent per-RNF and per-controller checks instead.
 
 ## 9. Build and configuration
 
@@ -439,19 +469,28 @@ Correctness is gated in layers:
 | Layer | Coverage |
 | --- | --- |
 | QEMU smoke | two harts, independent PC/GPR state, `mhartid`, FCSR while FS is Off, execution and invalidation |
-| Focused CHI FLUSH | four requesters, four HNFs, two interleaved controllers, normal traffic, eviction, periodic FLUSH, concurrent duplicate FLUSH |
+| Focused CHI FLUSH | four and eight requesters over four and eight HNFs and two and four interleaved controllers; normal traffic, eviction, periodic FLUSH, concurrent duplicate FLUSH |
 | Single-hart bare metal | 21 switches; PC, GPR/FPR, CSR, PMP, page tables, self-modifying code, AMO/LR-SC, MMIO, CLINT, m5ops, dirty writeback, clean invalidation |
 | Negative control | skips maintenance and must fail with stale-data code 9 |
-| Four-hart bare metal | 21 switches; private footprints, barriers, shared AMOs, per-RNF/controller traffic |
-| Four-hart WFI/MSIP | 21 switches; sleeping takeover, per-hart interrupt wake/clear/re-arm |
+| Four-hart bare metal | 21 switches; private footprints, barriers, shared AMOs, per-RNF/controller traffic, guest/device interrupt-pending merge |
+| Four-hart WFI/MSIP | 21 switches; sleeping takeover, per-hart interrupt wake/clear/re-arm, pseudo-instruction and WFI sharing one executor exit |
+| Batch-length regimes | the four-hart active and WFI payloads repeated with single-instruction batches and with long batches on a slow RTC |
+| Eight-hart bare metal | 21 switches over eight requesters, four controllers, and eight HNFs |
 | Linux 1/4 hart | boot on JitCPU, 11/21 switches, pinned userspace progress, mode and traffic checks, kernel-log scan |
-| 16-hart mesh bare metal | all harts/RNFs/controllers, state and traffic across JitCPU-to-O3 |
+| 16-hart mesh bare metal | all harts/RNFs/controllers, state and traffic across JitCPU-to-O3, plus 21 active and 21 WFI switches on the 4x4 mesh |
 | 16-hart Linux | repeatable boot/handoff and five guest-coordinated alternating switches with dining-philosophers invariants |
+
+Every JitCPU phase must additionally show zero CHI cache accesses on every
+RNF and zero traffic at every memory controller, not only zero interconnect
+messages. That makes the uncached-execution invariant independent of the
+network model in use.
 
 The directed tests, not Linux alone, are the primary correctness gate because
 they explicitly prove the architectural and cache-maintenance invariants.
 
-Run the focused and 1/4-hart SimpleNetwork suite:
+Run the focused FLUSH and bare-metal SimpleNetwork suite, which covers one,
+four, eight, and sixteen harts and both batch-length regimes. It takes a few
+minutes without the optional Linux arguments:
 
 ```sh
 python3 tests/gem5/jitcpu/run_repeated_switch_regression.py \
@@ -503,7 +542,11 @@ phase advances every CPU and exercises every expected RNF/controller.
 - Checkpoint restore with a live backend, SMT, DMA racing with maintenance,
   Garnet switching, and systems larger than 16 harts are not qualified.
 - Batch execution makes detailed privilege-mode statistics approximate and
-  bounds event responsiveness by the chosen batch size.
+  bounds event responsiveness by the chosen batch size. The effective batch
+  is also capped by the next device event, so a fast platform timer can make
+  `batch_size` inert.
+- Exactly one hart may request a whole-system switch per handoff. gem5 does
+  not coalesce simultaneous exit events.
 - The scalar ISA overlap is deliberately narrower than either simulator's
   complete RISC-V support. Workloads must not select unsupported extensions
   at run time.

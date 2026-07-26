@@ -1,11 +1,21 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 
-    .equ NUM_HARTS,        4
+#ifndef JITCPU_NUM_HARTS
+#define JITCPU_NUM_HARTS 4
+#endif
+#ifndef JITCPU_LINES_PER_HART
+#define JITCPU_LINES_PER_HART 1024
+#endif
+
+    .equ NUM_HARTS,        JITCPU_NUM_HARTS
     .equ LAST_SWITCH,      20
     .equ LINE_SIZE,        64
-    .equ LINES_PER_HART,   1024
+    .equ LINES_PER_HART,   JITCPU_LINES_PER_HART
     .equ WORKING_SET_SIZE, (LINE_SIZE * LINES_PER_HART)
     .equ STACK_SIZE,       4096
+    .equ SEI_MASK,         (1 << 9)
+    .equ PLIC_PRIORITY1,   0x0C000004
+    .equ SETTLE_COUNT,     2048
 
     .section .text.init
     .option norvc
@@ -141,6 +151,8 @@ wait_arrived:
     mul     t2, t2, t3
     bne     t1, t2, fail_atomic
 
+    call    check_interrupt_handoff
+
     li      t0, LAST_SWITCH
     bgtu    s0, t0, finished
 
@@ -171,6 +183,48 @@ finished:
 2:
     j       2b
 
+/*
+ * Interrupt-pending bits have two owners: guest CSR writes and the platform
+ * interrupt controller. Raise mip.SEIP from M mode and confirm the guest
+ * write is visible, then touch the PLIC, which recomputes its external lines
+ * from that MMIO access and drops the bit again. Both CPU models must reach
+ * the same result, in every phase.
+ *
+ * mie stays zero across the sequence so the pending bit is never taken, and
+ * the delay loops retire enough instructions to cross a JIT batch boundary in
+ * either direction.
+ */
+check_interrupt_handoff:
+    csrr    t4, mie
+    csrw    mie, zero
+    li      t0, SEI_MASK
+    csrs    mip, t0
+
+    li      t2, SETTLE_COUNT
+4:
+    addi    t2, t2, -1
+    bnez    t2, 4b
+
+    csrr    t1, mip
+    and     t1, t1, t0
+    beqz    t1, fail_interrupt
+
+    li      t1, PLIC_PRIORITY1
+    sw      zero, 0(t1)
+
+    li      t2, SETTLE_COUNT
+5:
+    addi    t2, t2, -1
+    bnez    t2, 5b
+
+    fence   rw, rw
+    csrr    t1, mip
+    and     t1, t1, t0
+    bnez    t1, fail_interrupt
+
+    csrw    mie, t4
+    ret
+
 fail_hart:
     li      a1, 30
     j       fail
@@ -188,6 +242,9 @@ fail_memory:
     j       fail
 fail_atomic:
     li      a1, 35
+    j       fail
+fail_interrupt:
+    li      a1, 36
 fail:
     li      a0, 0
     .word   0x4400007b       /* M5OP_FAIL (0x22). */

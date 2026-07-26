@@ -3005,11 +3005,17 @@ action(Send_WBData, desc="") {
   }
 }
 
+// Reaching SendWBData in BUSY_INTR is only legal when Send_WriteNoSnp
+// suppressed the write for a clean FLUSH. Any other flow that arrives here
+// would silently leave the interruptable state, so fail closed instead of
+// relying on an assertion that optimized builds compile out.
 action(Complete_Suppressed_Flush_Write, desc="") {
-  assert(is_HN);
-  assert(tbe.reqType == CHIRequestType:FlushLine);
-  assert(tbe.dataDirty == false);
-  assert(tbe.expected_req_resp.hasExpected() == false);
+  if ((is_HN == false) ||
+      (tbe.reqType != CHIRequestType:FlushLine) ||
+      tbe.dataDirty ||
+      tbe.expected_req_resp.hasExpected()) {
+    error("SendWBData reached BUSY_INTR outside a suppressed FLUSH write\n");
+  }
 }
 
 action(Send_WUData, desc="") {
