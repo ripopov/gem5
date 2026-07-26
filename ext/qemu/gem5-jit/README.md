@@ -35,16 +35,25 @@ sudo apt install \
   python3-dev libglib2.0-dev libpixman-1-dev libfdt-dev libffi-dev
 ```
 
+On Apple Silicon macOS with Homebrew, install:
+
+```sh
+brew install \
+  meson ninja pkgconf glib pixman dtc \
+  riscv-gnu-toolchain isl libmpc mpfr
+```
+
 Run the helper from the gem5 repository root:
 
 ```sh
-git submodule update --init ext/qemu/repo
+git submodule update --init --depth 1 ext/qemu/repo
 util/jitcpu/build-qemu-jit.sh
 ```
 
 The helper also runs `gem5-qemu-jit-smoke`. It initializes two harts with
 different `mhartid` values and checks independent PC/GPR state, execution,
-FFLAGS/FRM transfer while FS is Off, and translation invalidation.
+FFLAGS/FRM transfer while FS is Off, and translation invalidation. The final
+backend path ends in `.so` on Linux and `.dylib` on macOS.
 
 The adapter and integration patch are GPL-2.0-or-later. Dynamic loading is an
 engineering boundary, not a guarantee that distributing gem5 with the

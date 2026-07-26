@@ -65,7 +65,7 @@ class GarnetNetwork : public Network
     GarnetNetwork(const Params &p);
     ~GarnetNetwork() = default;
 
-    void init();
+    void init() override;
 
     const char *garnetVersion = "3.0";
 
@@ -98,24 +98,24 @@ class GarnetNetwork : public Network
 
     // Methods used by Topology to setup the network
     void makeExtOutLink(SwitchID src, NodeID dest, BasicLink* link,
-                     std::vector<NetDest>& routing_table_entry);
+                     std::vector<NetDest>& routing_table_entry) override;
     void makeExtInLink(NodeID src, SwitchID dest, BasicLink* link,
-                    std::vector<NetDest>& routing_table_entry);
+                    std::vector<NetDest>& routing_table_entry) override;
     void makeInternalLink(SwitchID src, SwitchID dest, BasicLink* link,
                           std::vector<NetDest>& routing_table_entry,
                           PortDirection src_outport_dirn,
-                          PortDirection dest_inport_dirn);
+                          PortDirection dest_inport_dirn) override;
 
-    bool functionalRead(Packet *pkt, WriteMask &mask);
+    bool functionalRead(Packet *pkt, WriteMask &mask) override;
     //! Function for performing a functional write. The return value
     //! indicates the number of messages that were written.
-    uint32_t functionalWrite(Packet *pkt);
+    uint32_t functionalWrite(Packet *pkt) override;
 
     // Stats
-    void collateStats();
-    void regStats();
-    void resetStats();
-    void print(std::ostream& out) const;
+    void collateStats() override;
+    void regStats() override;
+    void resetStats() override;
+    void print(std::ostream& out) const override;
     bool isEmpty() const override;
 
     // increment counters

@@ -116,15 +116,21 @@ write_line:
     xor     t0, t0, t1
     fmv.d.x f8, t0
 
-    /* All four harts must finish before hart zero requests the handoff. */
+    /*
+     * All four harts must finish before hart zero requests the handoff.
+     * Keep arrivals monotonic so hart zero cannot reset the counter before a
+     * secondary hart has observed the previous generation.
+     */
     fence   rw, rw
     la      t0, arrived
     li      t1, 1
     amoadd.w.aqrl zero, t1, (t0)
 wait_arrived:
     lw      t1, 0(t0)
-    li      t2, NUM_HARTS
-    bne     t1, t2, wait_arrived
+    addi    t2, s0, 1
+    li      t3, NUM_HARTS
+    mul     t2, t2, t3
+    bltu    t1, t2, wait_arrived
     fence   rw, rw
     bnez    s1, wait_release
 
@@ -141,8 +147,6 @@ wait_arrived:
     /* M5OP_SWITCH_CPU (0x52). Execution resumes here in the other model. */
     .word   0xa400007b
 
-    la      t0, arrived
-    sw      zero, 0(t0)
     addi    t1, s0, 1
     fence   rw, rw
     la      t0, release_phase

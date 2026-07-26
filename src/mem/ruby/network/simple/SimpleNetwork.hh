@@ -68,33 +68,33 @@ class SimpleNetwork : public Network
     SimpleNetwork(const Params &p);
     ~SimpleNetwork() = default;
 
-    void init();
+    void init() override;
 
     int getBufferSize() { return m_buffer_size; }
     int getEndpointBandwidth() { return m_endpoint_bandwidth; }
 
     void
-    collateStats()
+    collateStats() override
     {} // SimpleNetwork uses new-style stats
 
     bool isVNetOrdered(int vnet) const { return m_ordered[vnet]; }
 
     // Methods used by Topology to setup the network
     void makeExtOutLink(SwitchID src, NodeID dest, BasicLink* link,
-                     std::vector<NetDest>& routing_table_entry);
+                     std::vector<NetDest>& routing_table_entry) override;
     void makeExtInLink(NodeID src, SwitchID dest, BasicLink* link,
-                    std::vector<NetDest>& routing_table_entry);
+                    std::vector<NetDest>& routing_table_entry) override;
     void makeInternalLink(SwitchID src, SwitchID dest, BasicLink* link,
                           std::vector<NetDest>& routing_table_entry,
                           PortDirection src_outport,
-                          PortDirection dst_inport);
+                          PortDirection dst_inport) override;
 
-    void print(std::ostream& out) const;
+    void print(std::ostream& out) const override;
     bool isEmpty() const override;
 
-    bool functionalRead(Packet *pkt);
-    bool functionalRead(Packet *pkt, WriteMask &mask);
-    uint32_t functionalWrite(Packet *pkt);
+    bool functionalRead(Packet *pkt) override;
+    bool functionalRead(Packet *pkt, WriteMask &mask) override;
+    uint32_t functionalWrite(Packet *pkt) override;
 
   private:
     void addLink(SwitchID src, SwitchID dest, int link_latency);

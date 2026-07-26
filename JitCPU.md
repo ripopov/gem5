@@ -366,23 +366,40 @@ The 16-core static pthread payload additionally needs an RV64 musl cross
 compiler. Set `--musl-cc` to its executable; this is normally installed from
 a musl cross-toolchain rather than Ubuntu's glibc cross package.
 
-### 9.2 Build
+### 9.2 macOS host packages
+
+On an Apple Silicon macOS host with Homebrew, install:
 
 ```sh
-git submodule update --init ext/qemu/repo
+brew install \
+  scons meson ninja pkgconf glib pixman dtc \
+  riscv-gnu-toolchain isl libmpc mpfr
+```
+
+The `isl`, `libmpc`, and `mpfr` formulae provide the runtime libraries used by
+Homebrew's RISC-V cross compiler.
+
+### 9.3 Build
+
+```sh
+git submodule update --init --depth 1 ext/qemu/repo
 util/jitcpu/build-qemu-jit.sh
 
 scons setconfig build/RISCV \
-  USE_JITCPU=y PROTOCOL=CHI RUBY_PROTOCOL_CHI=y \
+  USE_RISCV_ISA=y USE_JITCPU=y \
+  PROTOCOL=CHI RUBY_PROTOCOL_CHI=y \
   NUMBER_BITS_PER_SET=128
 scons build/RISCV/gem5.opt -j"$(nproc)"
 ```
 
+On macOS, replace `$(nproc)` with `$(sysctl -n hw.logicalcpu)`.
+
 The helper builds and runs the two-hart QEMU adapter smoke test, then prints
-the backend path, normally:
+the backend path. It uses `.so` on Linux and `.dylib` on macOS:
 
 ```text
 build/qemu-jit/libgem5-qemu-jit.so
+build/qemu-jit/libgem5-qemu-jit.dylib
 ```
 
 A configuration must instantiate one `RiscvJitCPU` per hart, set the same
@@ -444,6 +461,9 @@ python3 tests/gem5/jitcpu/run_repeated_switch_regression.py \
   --outdir /tmp/jitcpu-repeated
 ```
 
+Use `build/qemu-jit/libgem5-qemu-jit.dylib` for the backend argument on
+macOS.
+
 Run the complete 16-hart acceptance suite, which also invokes the preceding
 suite unless `--skip-existing-regressions` is explicitly supplied:
 
@@ -456,6 +476,9 @@ python3 tests/gem5/jitcpu/run_16core_mesh_regression.py \
   --timeout-seconds 3600 \
   --outdir /tmp/jitcpu-16core
 ```
+
+Use `build/qemu-jit/libgem5-qemu-jit.dylib` for the backend argument on
+macOS.
 
 The 16-core driver requires at least two identical Linux runs, validates the
 guest terminal markers and final ticks, rejects vector instructions in the

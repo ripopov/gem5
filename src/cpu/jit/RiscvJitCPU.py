@@ -1,9 +1,14 @@
+import sys
+
 from m5.objects.BaseNonCachingSimpleCPU import BaseNonCachingSimpleCPU
 from m5.objects.RiscvDecoder import RiscvDecoder
 from m5.objects.RiscvInterrupts import RiscvInterrupts
 from m5.objects.RiscvISA import RiscvISA
 from m5.objects.RiscvMMU import RiscvMMU
-from m5.params import Param, Unsigned
+from m5.params import (
+    Param,
+    Unsigned,
+)
 
 
 class RiscvJitCPU(BaseNonCachingSimpleCPU):
@@ -27,7 +32,11 @@ class RiscvJitCPU(BaseNonCachingSimpleCPU):
     numThreads = 1
 
     backend_path = Param.String(
-        "libgem5-qemu-jit.so",
+        (
+            "libgem5-qemu-jit.dylib"
+            if sys.platform == "darwin"
+            else "libgem5-qemu-jit.so"
+        ),
         "Path to the QEMU/TCG JitCPU backend shared library",
     )
     backend_instance = Param.Unsigned(

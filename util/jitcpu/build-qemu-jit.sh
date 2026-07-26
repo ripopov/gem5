@@ -8,6 +8,15 @@ qemu_repo="$integration_dir/repo"
 adapter_dir="$integration_dir/gem5-jit"
 patch_file="$adapter_dir/qemu.patch"
 
+case "$(uname -s)" in
+    Darwin)
+        backend_library="libgem5-qemu-jit.dylib"
+        ;;
+    *)
+        backend_library="libgem5-qemu-jit.so"
+        ;;
+esac
+
 mkdir -p "$build_dir"
 build_dir=$(CDPATH= cd -- "$build_dir" && pwd)
 source_dir="$build_dir.qemu-source"
@@ -59,7 +68,7 @@ elif [ ! -f "$source_stamp" ] ||
     exit 1
 fi
 
-ninja -C "$build_dir" libgem5-qemu-jit.so gem5-qemu-jit-smoke
+ninja -C "$build_dir" "$backend_library" gem5-qemu-jit-smoke
 "$build_dir/gem5-qemu-jit-smoke"
 
-printf '%s\n' "$build_dir/libgem5-qemu-jit.so"
+printf '%s\n' "$build_dir/$backend_library"
