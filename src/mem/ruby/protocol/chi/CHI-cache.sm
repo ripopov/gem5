@@ -312,6 +312,8 @@ machine(MachineType:Cache, "Cache coherency protocol") :
     Store,                       desc="", in_trans="yes";
     AtomicLoad,                  desc="", in_trans="yes";
     AtomicStore,                 desc="", in_trans="yes";
+    Flush,                       desc="Forward a Ruby FLUSH to the point of coherence", in_trans="yes";
+    Flush_PoC,                   desc="Clean and invalidate a line at the point of coherence", in_trans="yes";
     Prefetch,                    desc="", in_trans="yes";
     ReadShared,                  desc="", in_trans="yes";
     ReadNotSharedDirty,          desc="", in_trans="yes";
@@ -356,6 +358,7 @@ machine(MachineType:Cache, "Cache coherency protocol") :
 
     // Events triggered by incoming response messages
     // See CHIResponseType in CHi-msg.sm for descriptions
+    FlushAck,                desc="Hierarchy-wide FLUSH completed";
     CompAck,                 desc="";
     Comp_I,                  desc="";
     Comp_UC,                 desc="";
@@ -486,6 +489,7 @@ machine(MachineType:Cache, "Cache coherency protocol") :
     SendWriteNoSnp,            out_trans="yes", desc="Send a WriteNoSnp for a full line";
     SendWriteNoSnpPartial,     out_trans="yes", desc="Send a WriteNoSnpPtl";
     SendWriteUnique,           out_trans="yes", desc="Send a WriteUniquePtl";
+    SendFlush,                 out_trans="yes", desc="Send a Ruby FLUSH toward the point of coherence";
     SendWBData,                desc="Send writeback data";
     SendWUData,                desc="Send write unique data";
     SendWUDataCB,              desc="Send write unique data from a sequencer callback";
@@ -516,6 +520,7 @@ machine(MachineType:Cache, "Cache coherency protocol") :
     SendCompUCResp, desc="Ack CleanUnique with Comp_UC";
     SendCompUCRespStale, desc="Ack stale CleanUnique with Comp_UC";
     SendCompUDResp, desc="Ack MakeReadUnique with Comp_UD_PD";
+    CompleteFlush, desc="Complete FLUSH locally or acknowledge it upstream";
 
     // Checks if an upgrade using a CleanUnique was sucessfull
     CheckUpgrade_FromStore, desc="Upgrade needed by a Store";
@@ -801,6 +806,7 @@ machine(MachineType:Cache, "Cache coherency protocol") :
     void allocate(Addr);
     void deallocate(Addr);
     void flushEntries();
+    int getNumEntries();
     DirEntry lookup(Addr);
     bool isTagPresent(Addr);
   }

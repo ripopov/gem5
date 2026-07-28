@@ -141,6 +141,17 @@ Switch::print(std::ostream& out) const
 }
 
 bool
+Switch::isEmpty() const
+{
+    for (const auto *buffer : m_port_buffers) {
+        if (buffer && !buffer->isEmpty()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool
 Switch::functionalRead(Packet *pkt)
 {
     for (unsigned int i = 0; i < m_port_buffers.size(); ++i) {

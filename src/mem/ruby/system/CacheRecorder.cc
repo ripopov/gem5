@@ -74,6 +74,10 @@ CacheRecorder::CacheRecorder(uint8_t* uncompressed_trace,
 
 CacheRecorder::~CacheRecorder()
 {
+    for (auto *record : m_records) {
+        free(record);
+    }
+
     if (m_uncompressed_trace != NULL) {
         delete [] m_uncompressed_trace;
         m_uncompressed_trace = NULL;

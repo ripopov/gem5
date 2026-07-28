@@ -66,7 +66,7 @@ class RubySystem : public ClockedObject
   public:
     PARAMS(RubySystem);
     RubySystem(const Params &p);
-    ~RubySystem();
+    ~RubySystem() override;
 
     // config accessors
     int getRandomization() { return m_randomization; }
@@ -95,8 +95,10 @@ class RubySystem : public ClockedObject
     void resetStats() override;
 
     void memWriteback() override;
+    void memInvalidate() override;
     void serialize(CheckpointOut &cp) const override;
     void unserialize(CheckpointIn &cp) override;
+    DrainState drain() override;
     void drainResume() override;
     void process();
     void init() override;
@@ -137,6 +139,15 @@ class RubySystem : public ClockedObject
                                      uint64_t uncompressed_trace_size);
 
     void processRubyEvent();
+    bool coherenceQuiescent() const;
+
+    /**
+     * Run the event loop until the transactions the cache recorder has
+     * already injected have retired. The recorder stops the loop as soon as
+     * it runs out of records to issue, but it keeps several requests in
+     * flight, so the last ones are still live at that point.
+     */
+    void settleRecorderTraffic();
 
     // Called from `functionalRead` depending on if the protocol needs
     // partial functional reads.
@@ -152,6 +163,9 @@ class RubySystem : public ClockedObject
 
     bool m_warmup_enabled = false;
     bool m_cooldown_enabled = false;
+    /** The recorder is done issuing, but its transactions are in flight. */
+    bool m_settling = false;
+    bool m_draining = false;
     memory::SimpleMemory *m_phys_mem;
     const bool m_access_backing_store;
 

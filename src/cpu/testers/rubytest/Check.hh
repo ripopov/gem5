@@ -65,7 +65,7 @@ class Check
     void print(std::ostream& out) const;
 
   private:
-    void initiateFlush(Cycles current_time);
+    bool initiateFlush(Cycles current_time);
     void initiatePrefetch(Cycles current_time);
     void initiateAction(Cycles current_time);
     void initiateCheck(Cycles current_time);

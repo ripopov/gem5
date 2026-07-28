@@ -210,6 +210,9 @@ parser.add_argument(
     "--ruby-network", choices=("simple", "garnet"), default="simple"
 )
 add_16core_mesh_option(parser)
+parser.add_argument("--repeated-switches", type=int, default=0)
+parser.add_argument("--phase-ticks", type=int, default=10_000_000)
+parser.add_argument("--final-o3-ticks", type=int, default=50_000_000)
 parser.add_argument("--initrd")
 parser.add_argument(
     "--initrd-addr", type=lambda value: int(value, 0), default=0x88000000
@@ -218,6 +221,15 @@ parser.add_argument(
     "--workload-handoff",
     action="store_true",
     help="run a guest-coordinated one-way JitCPU-to-O3 workload handoff",
+)
+parser.add_argument(
+    "--workload-switches",
+    type=int,
+    default=0,
+    help=(
+        "perform this many guest-coordinated 16-core mesh switches; the "
+        "userspace workload must request and validate every phase"
+    ),
 )
 args = parser.parse_args()
 apply_16core_mesh_options(args)
@@ -239,11 +251,36 @@ if args.chi_4x4_mesh:
         )
 if args.ruby_network != "simple" and not args.ruby_chi:
     parser.error("--ruby-network requires --ruby-chi")
-if args.workload_handoff:
-    if not args.chi_4x4_mesh:
-        parser.error("--workload-handoff requires --chi-4x4-mesh")
+if args.repeated_switches:
+    if not args.ruby_chi:
+        parser.error("--repeated-switches requires --ruby-chi")
+    if args.repeated_switches < 3 or args.repeated_switches % 2 == 0:
+        parser.error("--repeated-switches must be an odd value of at least 3")
     if not args.initrd:
-        parser.error("--workload-handoff requires --initrd")
+        parser.error(
+            "--repeated-switches requires the JitCPU Linux test initramfs"
+        )
+    args.switch_to_o3 = True
+if args.workload_handoff:
+    if args.workload_switches:
+        parser.error(
+            "--workload-handoff cannot be combined with --workload-switches"
+        )
+    args.workload_switches = 1
+if args.workload_switches:
+    if not args.chi_4x4_mesh:
+        parser.error("--workload-switches requires --chi-4x4-mesh")
+    if args.repeated_switches:
+        parser.error(
+            "--workload-switches cannot be combined with "
+            "--repeated-switches"
+        )
+    if not args.workload_handoff and (
+        args.workload_switches < 3 or args.workload_switches % 2 == 0
+    ):
+        parser.error("--workload-switches must be an odd value of at least 3")
+    if not args.initrd:
+        parser.error("--workload-switches requires --initrd")
     args.switch_to_o3 = True
 
 system = RiscvSystem()
@@ -539,39 +576,129 @@ if args.switch_to_o3:
 
     validate_linux_phase(jit_cpus, "jit", "Linux boot phase")
 
-    if args.workload_handoff:
+    if args.workload_switches:
         validate_dining_guest_phase(0, "jit")
+        active_cpus = jit_cpus
+        active_model = "jit"
 
-        m5.switchCpus(
-            system,
-            list(zip(jit_cpus, o3_cpus)),
-            is_ruby=True,
-        )
-        check_memory_mode("o3")
-        print(
-            f"Dining philosophers handoff: active o3, memory mode "
-            f"{system.getMemoryMode()} @ tick {m5.curTick()}"
-        )
+        for switch_index in range(args.workload_switches):
+            if active_model == "jit":
+                next_cpus = o3_cpus
+                next_model = "o3"
+            else:
+                next_cpus = jit_cpus
+                next_model = "jit"
 
-        m5.stats.reset()
-        exit_event = m5.simulate(args.o3_ticks)
-        print(
-            f"Dining philosophers O3 phase stopped @ "
-            f"tick {m5.curTick()}: {exit_event.getCause()}"
-        )
-        if exit_event.getCause() != "m5_exit instruction encountered":
-            raise RuntimeError(
-                f"the dining philosophers O3 phase did not finish before "
-                f"the {args.o3_ticks}-tick timeout"
+            m5.switchCpus(
+                system,
+                list(zip(active_cpus, next_cpus)),
+                is_ruby=True,
             )
-        validate_linux_phase(o3_cpus, "o3", "Dining philosophers O3 phase")
-        check_memory_mode("o3")
-        validate_dining_guest_phase(1, "o3")
+            active_cpus = next_cpus
+            active_model = next_model
+            check_memory_mode(active_model)
+            print(
+                f"Dining philosophers switch {switch_index + 1}/"
+                f"{args.workload_switches}: active {active_model}, "
+                f"memory mode {system.getMemoryMode()} @ tick {m5.curTick()}"
+            )
 
-        check_guest_log(("JITCPU-DINING PASS workers=16 switches=1",))
+            m5.stats.reset()
+            exit_event = m5.simulate(args.o3_ticks)
+            print(
+                f"Dining philosophers phase {switch_index + 1} stopped @ "
+                f"tick {m5.curTick()}: {exit_event.getCause()}"
+            )
+            if exit_event.getCause() != "m5_exit instruction encountered":
+                raise RuntimeError(
+                    f"dining philosophers phase {switch_index + 1} did not "
+                    f"finish before the {args.o3_ticks}-tick timeout"
+                )
+            validate_linux_phase(
+                active_cpus,
+                active_model,
+                f"Dining philosophers phase {switch_index + 1}",
+            )
+            check_memory_mode(active_model)
+            validate_dining_guest_phase(switch_index + 1, active_model)
+
+        if active_model != "o3":
+            raise RuntimeError(
+                "dining philosophers repeated switching did not finish on O3"
+            )
+        check_guest_log(
+            (
+                f"JITCPU-DINING PASS workers=16 "
+                f"switches={args.workload_switches}",
+            )
+        )
+        if args.workload_switches == 1:
+            print(
+                "16-core Linux dining-philosophers handoff passed on O3 in "
+                f"timing mode @ tick {m5.curTick()}"
+            )
+        else:
+            print(
+                "16-core Linux dining-philosophers repeated-switch "
+                f"validation passed after {args.workload_switches} switches "
+                f"@ tick {m5.curTick()}"
+            )
+        raise SystemExit(0)
+
+    if args.repeated_switches:
+        active_cpus = jit_cpus
+        active_model = "jit"
+
+        for switch_index in range(args.repeated_switches):
+            if active_model == "jit":
+                next_cpus = o3_cpus
+                next_model = "o3"
+            else:
+                next_cpus = jit_cpus
+                next_model = "jit"
+
+            m5.switchCpus(
+                system,
+                list(zip(active_cpus, next_cpus)),
+                is_ruby=True,
+            )
+            active_cpus = next_cpus
+            active_model = next_model
+            check_memory_mode(active_model)
+            print(
+                f"Linux switch {switch_index + 1}/"
+                f"{args.repeated_switches}: active {active_model}, "
+                f"memory mode {system.getMemoryMode()}"
+            )
+
+            m5.stats.reset()
+            interval = (
+                args.final_o3_ticks
+                if switch_index == args.repeated_switches - 1
+                else args.phase_ticks
+            )
+            exit_event = m5.simulate(interval)
+            print(
+                f"Linux phase {switch_index + 1} stopped @ "
+                f"tick {m5.curTick()}: {exit_event.getCause()}"
+            )
+            if exit_event.getCause() != "simulate() limit reached":
+                raise RuntimeError(
+                    "Linux did not remain alive for the bounded phase: "
+                    f"{exit_event.getCause()}"
+                )
+            validate_linux_phase(
+                active_cpus,
+                active_model,
+                f"Linux phase {switch_index + 1}",
+            )
+
+        if active_model != "o3":
+            raise RuntimeError("Linux repeated switching did not finish on O3")
+        check_guest_log()
         print(
-            "16-core Linux dining-philosophers handoff passed on O3 in "
-            f"timing mode @ tick {m5.curTick()}"
+            "Linux repeated-switch validation passed after "
+            f"{args.repeated_switches} switches"
         )
         raise SystemExit(0)
 

@@ -178,6 +178,25 @@ SimpleNetwork::print(std::ostream& out) const
     out << "[SimpleNetwork]";
 }
 
+bool
+SimpleNetwork::isEmpty() const
+{
+    if (!Network::isEmpty()) {
+        return false;
+    }
+    for (const auto *buffer : m_int_link_buffers) {
+        if (buffer && !buffer->isEmpty()) {
+            return false;
+        }
+    }
+    for (const auto &[id, network_switch] : m_switches) {
+        if (!network_switch->isEmpty()) {
+            return false;
+        }
+    }
+    return true;
+}
+
 /*
  * The simple network has an array of switches. These switches have buffers
  * that need to be accessed for functional reads and writes. Also the links

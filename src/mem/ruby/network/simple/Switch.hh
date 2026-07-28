@@ -108,6 +108,7 @@ class Switch : public BasicRouter
     bool functionalRead(Packet *);
     bool functionalRead(Packet *, WriteMask&);
     uint32_t functionalWrite(Packet *);
+    bool isEmpty() const;
 
     BaseRoutingUnit& getRoutingUnit() { return m_routing_unit; }
 

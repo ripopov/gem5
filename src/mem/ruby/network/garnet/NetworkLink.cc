@@ -137,6 +137,13 @@ NetworkLink::resetStats()
 }
 
 bool
+NetworkLink::isEmpty() const
+{
+    return linkBuffer.isEmpty() &&
+           (!link_srcQueue || link_srcQueue->isEmpty());
+}
+
+bool
 NetworkLink::functionalRead(Packet *pkt, WriteMask &mask)
 {
     return linkBuffer.functionalRead(pkt, mask);

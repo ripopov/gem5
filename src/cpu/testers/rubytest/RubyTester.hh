@@ -121,6 +121,12 @@ class RubyTester : public ClockedObject
 
     void print(std::ostream& out) const;
     bool getCheckFlush() { return m_check_flush; }
+    uint64_t getFlushPeriod() const { return m_flush_period; }
+    bool getFlushDuplicates() const { return m_flush_duplicates; }
+    bool shouldIssuePeriodicFlush();
+    void noteFlushIssued(Cycles current_time);
+    void noteFlushCompleted(Cycles current_time);
+    void noteFlushDuplicatePairIssued() { ++m_flush_duplicate_pairs_issued; }
 
     void updateProgress(int idx, Addr address, Cycles current_time);
     void eraseProgress(int idx, Addr address);
@@ -153,6 +159,13 @@ class RubyTester : public ClockedObject
     int m_num_readers;
     int m_wakeup_frequency;
     bool m_check_flush;
+    const uint64_t m_flush_period;
+    const bool m_flush_duplicates;
+    uint64_t m_flush_attempts = 0;
+    uint64_t m_flush_requests_issued = 0;
+    uint64_t m_flush_requests_completed = 0;
+    uint64_t m_flush_duplicate_pairs_issued = 0;
+    Cycles m_last_flush_progress = Cycles(0);
     int m_num_inst_only_ports;
     int m_num_inst_data_ports;
 };

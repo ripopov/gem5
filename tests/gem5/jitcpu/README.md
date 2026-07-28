@@ -20,17 +20,27 @@ util/jitcpu/build-qemu-jit.sh          # -> build/qemu-jit/libgem5-qemu-jit.so
 ```
 
 Rerun `build-qemu-jit.sh` after every change under `ext/qemu/gem5-jit`. The
-configs take the backend as a path and load it with `dlopen`, so a shared
+drivers take the backend as a path and load it with `dlopen`, so a shared
 library left over from an older adapter is used without complaint, and the
 resulting failures look like CPU-model bugs rather than a stale build.
 
-The backend build also compiles and runs `gem5-qemu-jit-smoke`, a two-hart
-adapter unit test covering independent per-hart state, execution, and
-translation invalidation.
+## 2. Bare-metal and single/four-hart regressions
 
-## 2. Build the Linux artifacts
+These need only the cross toolchain, and cover 21 alternating JitCPU/O3
+switches on one, four and eight harts plus the 16-hart bare-metal mesh:
 
-The full-system runs need a kernel ELF, an OpenSBI bootloader and a musl
+```sh
+sudo apt install gcc-riscv64-linux-gnu
+
+tests/gem5/jitcpu/run_repeated_switch_regression.py \
+    build/RISCV/gem5.opt build/qemu-jit/libgem5-qemu-jit.so
+```
+
+Pass `--cross-compile` if your toolchain prefix is not `riscv64-linux-gnu-`.
+
+## 3. Build the Linux artifacts
+
+The full-system phases need a kernel ELF, an OpenSBI bootloader and a musl
 compiler for the pthread dining-philosophers workload. `build-linux-image.sh`
 produces all three:
 
@@ -45,60 +55,51 @@ It downloads Linux 6.12 and musl 1.2.5, then writes:
 
 | Artifact | Passed as |
 | --- | --- |
-| `build/jitcpu-linux/vmlinux` | `--kernel` |
+| `build/jitcpu-linux/vmlinux` | `--kernel` / `--linux-kernel` |
 | `build/jitcpu-linux/fw_jump.elf` | the positional Linux image |
-| `build/jitcpu-linux/bin/riscv64-linux-musl-gcc` | `DINING_CC` for the payload Makefile |
+| `build/jitcpu-linux/bin/riscv64-linux-musl-gcc` | `--musl-cc` |
 
 The kernel is `defconfig` plus `NR_CPUS=64`, an initramfs, the 8250 console
 and devtmpfs, with `RISCV_ISA_V` configured out. Userspace is pinned to
 `rv64gc`, because gem5's device tree advertises `rv64imafdc` and JitCPU
-decodes nothing beyond that plus Zicsr/Zifencei/Zba/Zbb/Zbs. Set
+decodes nothing beyond that plus Zicsr/Zifencei/Zba/Zbb/Zbs; the 16-core
+driver disassembles the workload and fails on any vector instruction. Set
 `KERNEL_VERSION`, `MUSL_VERSION`, `MARCH` or `JOBS` to override. Building the
 kernel is the long step; rerunning the script reuses it.
 
-Build the guest payloads:
+## 4. Full-system and 16-hart mesh regressions
+
+`run_repeated_switch_regression.py --linux-image` adds Linux repeated-switch
+stress on one and four harts to section 2:
 
 ```sh
-make -C tests/test-progs/jitcpu-smoke/src \
-    DINING_CC=build/jitcpu-linux/bin/riscv64-linux-musl-gcc
+tests/gem5/jitcpu/run_repeated_switch_regression.py \
+    build/RISCV/gem5.opt build/qemu-jit/libgem5-qemu-jit.so \
+    --linux-image build/jitcpu-linux/fw_jump.elf \
+    --linux-kernel build/jitcpu-linux/vmlinux
 ```
 
-## 3. Linux boot and one-way switch runs
-
-Single-hart Linux boot to userspace (the initramfs `init` executes `m5_exit`
-as its first userspace instruction), on classic memory and on Ruby CHI:
+`run_16core_mesh_regression.py` runs the 16-hart CHI 4x4 mesh suite: the
+bare-metal mesh handoff, repeated dining-philosophers runs checked for
+tick-identical results, a guest-coordinated multi-switch run, and finally
+the whole of section 2:
 
 ```sh
-build/RISCV/gem5.opt tests/gem5/jitcpu/configs/jitcpu_linux.py \
-    build/jitcpu-linux/fw_jump.elf build/qemu-jit/libgem5-qemu-jit.so \
+tests/gem5/jitcpu/run_16core_mesh_regression.py \
+    build/RISCV/gem5.opt build/qemu-jit/libgem5-qemu-jit.so \
+    build/jitcpu-linux/fw_jump.elf \
     --kernel build/jitcpu-linux/vmlinux \
-    --initrd tests/test-progs/jitcpu-smoke/src/jitcpu-linux-init.cpio
-
-build/RISCV/gem5.opt tests/gem5/jitcpu/configs/jitcpu_linux.py \
-    build/jitcpu-linux/fw_jump.elf build/qemu-jit/libgem5-qemu-jit.so \
-    --kernel build/jitcpu-linux/vmlinux \
-    --initrd tests/test-progs/jitcpu-smoke/src/jitcpu-linux-init.cpio \
-    --ruby-chi
+    --musl-cc build/jitcpu-linux/bin/riscv64-linux-musl-gcc
 ```
 
-Boot on JitCPU, then switch the hart to O3 and validate that the O3 phase
-makes userspace progress and (with `--ruby-chi`) drives CHI traffic:
+Add `--skip-existing-regressions` to run only the 16-hart part. If a Linux
+phase fails with "no userspace progress", raise `--linux-phase-ticks`: each
+bounded O3 phase has to outlast the RTC-interrupt backlog left by the
+preceding JitCPU phase, and the amount of catch-up scales with the kernel and
+the RTC frequency.
 
-```sh
-build/RISCV/gem5.opt tests/gem5/jitcpu/configs/jitcpu_linux.py \
-    build/jitcpu-linux/fw_jump.elf build/qemu-jit/libgem5-qemu-jit.so \
-    --kernel build/jitcpu-linux/vmlinux \
-    --initrd tests/test-progs/jitcpu-smoke/src/jitcpu-linux-init.cpio \
-    --ruby-chi --switch-to-o3 --o3-ticks 50000000
-```
-
-## 4. 16-hart CHI mesh boot and workload handoff
-
-The 16-hart dining-philosophers handoff boots Linux on 16 JitCPU harts on
-the validated CHI SimpleNetwork 4x4 mesh, runs the pinned pthread workload's
-first phase, performs one guest-coordinated whole-system switch to O3, and
-validates the second phase (per-worker checksums, affinity, per-RNF and
-per-controller traffic) on the timing hierarchy:
+Individual scenarios can also be driven straight from the configs, for
+example one 16-hart dining-philosophers handoff:
 
 ```sh
 build/RISCV/gem5.opt tests/gem5/jitcpu/configs/jitcpu_linux.py \
@@ -109,17 +110,14 @@ build/RISCV/gem5.opt tests/gem5/jitcpu/configs/jitcpu_linux.py \
     --max-ticks 2000000000000 --o3-ticks 50000000000
 ```
 
-Every JitCPU phase must show zero CHI messages, zero cache accesses on every
-RNF, and zero memory-controller traffic; the O3 phase must show the
-opposite. The configs enforce this and fail otherwise.
-
 ## Configurations
 
 | File | Purpose |
 | --- | --- |
-| `jitcpu_linux.py` | full-system Linux boot and one-way JitCPU-to-O3 switch |
-| `jitcpu_common.py` | Ruby options and stat helpers |
+| `jitcpu_baremetal.py` | bare-metal JitCPU/O3 switching, classic or CHI |
+| `jitcpu_linux.py` | full-system Linux with repeated switches |
+| `jitcpu_common.py` | Ruby options and stat helpers both configs share |
 | `jitcpu_16core_mesh.py` | 16-hart CHI mesh setup and mesh validation |
-| `chi_mesh_4x4.py` | the 4x4 mesh topology |
+| `chi_mesh_4x4.py` | the 4x4 mesh topology those two share |
 
-See `src/cpu/jit/README.md` for what the runs check and why.
+See `src/cpu/jit/README.md` for what the regressions check and why.

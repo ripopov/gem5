@@ -115,6 +115,9 @@ class Network : public ClockedObject
     virtual void collateStats() = 0;
     virtual void print(std::ostream& out) const = 0;
 
+    /** True only when no protocol message remains in this network. */
+    virtual bool isEmpty() const;
+
     /*
      * Virtual functions for functionally reading and writing packets in
      * the network. Each network needs to implement these for functional

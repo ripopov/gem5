@@ -296,6 +296,22 @@ void processRetryQueue() {
 ////////////////////////////////////////////////////////////////////////////
 // Other
 
+// Keep generic Ruby drain aware of DVM transactions and internal queues.
+public bool coherenceQuiescent() {
+  return (storDvmTBEs.size() == 0) &&
+         (storDvmTBEs.reserved() == 0) &&
+         !storDvmTBEs.hasPossibleRetry() &&
+         !needsToCheckPendingOps &&
+         (mandatoryQueue.getSize(clockEdge()) == 0) &&
+         (triggerQueue.getSize(clockEdge()) == 0) &&
+         triggerQueue.isStallMapEmpty() &&
+         (retryTriggerQueue.getSize(clockEdge()) == 0) &&
+         (schedRspTriggerQueue.getSize(clockEdge()) == 0) &&
+         (reqRdy.getSize(clockEdge()) == 0) &&
+         reqRdy.isStallMapEmpty() &&
+         (snpRdy.getSize(clockEdge()) == 0);
+}
+
 void printResources() {
   DPRINTF(RubySlicc, "Resources(used/rsvd/max): dvmTBEs=%d/%d/%d\n",
                 storDvmTBEs.size(), storDvmTBEs.reserved(), storDvmTBEs.capacity());

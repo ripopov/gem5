@@ -398,6 +398,12 @@ def memInvalidate(root):
         obj.memInvalidate()
 
 
+def _drain_after_mem_writeback():
+    """Drain transactions created while the system was already drained."""
+    _drain_manager.resume()
+    drain()
+
+
 def checkpoint(dir):
     root = Root.getInstance()
     if not isinstance(root, Root):
@@ -405,6 +411,7 @@ def checkpoint(dir):
 
     drain()
     memWriteback(root)
+    _drain_after_mem_writeback()
 
     # Recursively create the checkpoint directory if it does not exist.
     os.makedirs(dir, exist_ok=True)
@@ -506,6 +513,14 @@ def switchCpus(system, cpuList, verbose=True, is_ruby=False):
         # hardware virtualized CPU.
         if memory_mode == MemoryMode("atomic_noncaching").getValue():
             memWriteback(system)
+
+            # Cache maintenance can enqueue new downstream memory traffic
+            # while the drain manager still describes the pre-maintenance
+            # system as drained.  Re-arm and drain once more so posted
+            # writebacks have reached memory before the hierarchy is
+            # declared empty and uncached execution starts.
+            _drain_after_mem_writeback()
+
             memInvalidate(system)
 
         _changeMemoryMode(system, memory_mode)

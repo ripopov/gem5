@@ -94,6 +94,8 @@ class PerfectCacheMemory
     // Flush all entries within the cache
     void flushEntries();
 
+    int getNumEntries() const { return m_map.size(); }
+
     // Returns with the physical address of the conflicting cache line
     Addr cacheProbe(Addr newAddress) const;
 

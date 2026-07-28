@@ -65,7 +65,7 @@ class GarnetNetwork : public Network
     GarnetNetwork(const Params &p);
     ~GarnetNetwork() = default;
 
-    void init();
+    void init() override;
 
     const char *garnetVersion = "3.0";
 
@@ -98,28 +98,41 @@ class GarnetNetwork : public Network
 
     // Methods used by Topology to setup the network
     void makeExtOutLink(SwitchID src, NodeID dest, BasicLink* link,
-                     std::vector<NetDest>& routing_table_entry);
+                     std::vector<NetDest>& routing_table_entry) override;
     void makeExtInLink(NodeID src, SwitchID dest, BasicLink* link,
-                    std::vector<NetDest>& routing_table_entry);
+                    std::vector<NetDest>& routing_table_entry) override;
     void makeInternalLink(SwitchID src, SwitchID dest, BasicLink* link,
                           std::vector<NetDest>& routing_table_entry,
                           PortDirection src_outport_dirn,
-                          PortDirection dest_inport_dirn);
+                          PortDirection dest_inport_dirn) override;
 
-    bool functionalRead(Packet *pkt, WriteMask &mask);
+    bool functionalRead(Packet *pkt, WriteMask &mask) override;
     //! Function for performing a functional write. The return value
     //! indicates the number of messages that were written.
-    uint32_t functionalWrite(Packet *pkt);
+    uint32_t functionalWrite(Packet *pkt) override;
 
     // Stats
-    void collateStats();
-    void regStats();
-    void resetStats();
-    void print(std::ostream& out) const;
+    void collateStats() override;
+    void regStats() override;
+    void resetStats() override;
+    void print(std::ostream& out) const override;
+    bool isEmpty() const override;
 
     // increment counters
-    void increment_injected_packets(int vnet) { m_packets_injected[vnet]++; }
-    void increment_received_packets(int vnet) { m_packets_received[vnet]++; }
+    void
+    increment_injected_packets(int vnet)
+    {
+        m_packets_injected[vnet]++;
+        ++m_packets_in_flight;
+    }
+
+    void
+    increment_received_packets(int vnet)
+    {
+        m_packets_received[vnet]++;
+        assert(m_packets_in_flight > 0);
+        --m_packets_in_flight;
+    }
 
     void
     increment_packet_network_latency(Tick latency, int vnet)
@@ -202,6 +215,10 @@ class GarnetNetwork : public Network
 
     std::vector<std::vector<statistics::Scalar *>> m_data_traffic_distribution;
     std::vector<std::vector<statistics::Scalar *>> m_ctrl_traffic_distribution;
+
+    // Unlike the packet statistics, this count is not cleared by a stats
+    // reset while a packet is traversing the network.
+    uint64_t m_packets_in_flight = 0;
 
   private:
     GarnetNetwork(const GarnetNetwork& obj);

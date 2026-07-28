@@ -43,6 +43,7 @@
 #include "base/logging.hh"
 #include "mem/ruby/common/MachineID.hh"
 #include "mem/ruby/network/BasicLink.hh"
+#include "mem/ruby/network/MessageBuffer.hh"
 #include "mem/ruby/system/RubySystem.hh"
 
 namespace gem5
@@ -160,6 +161,26 @@ Network::~Network()
     }
 
     delete m_topology_ptr;
+}
+
+bool
+Network::isEmpty() const
+{
+    for (const auto &node_queues : m_toNetQueues) {
+        for (const auto *queue : node_queues) {
+            if (queue && !queue->isEmpty()) {
+                return false;
+            }
+        }
+    }
+    for (const auto &node_queues : m_fromNetQueues) {
+        for (const auto *queue : node_queues) {
+            if (queue && !queue->isEmpty()) {
+                return false;
+            }
+        }
+    }
+    return true;
 }
 
 uint32_t
