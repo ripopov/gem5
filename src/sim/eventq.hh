@@ -848,6 +848,27 @@ class EventQueue
     Tick getCurTick() const { return _curTick; }
     Event *getHead() const { return head; }
 
+    /**
+     * Return whether a scheduled event at or before @p when satisfies the
+     * supplied predicate.  This includes every event in a same-time,
+     * same-priority bin rather than inspecting only the queue head.
+     */
+    template <class Predicate>
+    bool
+    anyEventAtOrBefore(Tick when, Predicate predicate) const
+    {
+        for (const Event *bin = head;
+             bin && bin->when() <= when; bin = bin->nextBin) {
+            for (const Event *event = bin; event;
+                 event = event->nextInBin) {
+                if (predicate(event)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     Event *serviceOne();
 
     /**

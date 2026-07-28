@@ -77,9 +77,30 @@ class Clint : public BasicPioDevice
     SignalSinkPort<bool> reset;
     bool resetMtimecmp;
 
+  // Lazy timer mode: mtime derived from curTick, no per-tick events
+  protected:
+    /** mtime period in ticks; non-zero selects lazy mode. */
+    const Tick lazyRtcPeriod;
+    /** curTick at which mtime last became authoritative (write/reset). */
+    Tick lazyTickBase = 0;
+    /** mtime value at lazyTickBase. */
+    uint64_t lazyMtimeBase = 0;
+    /** One deadline event per hart, fired when mtime reaches mtimecmp. */
+    std::vector<EventFunctionWrapper> mtimecmpEvents;
+
+    void scheduleMtimecmpEvent(int context_id);
+
+  public:
+    bool lazyRtc() const { return lazyRtcPeriod != 0; }
+
+    /** Current mtime value, valid in both timer modes. */
+    uint64_t mtimeNow() const;
+
   public:
     typedef ClintParams Params;
     Clint(const Params &params);
+
+    void startup() override;
 
   // RTC Signal
   public:

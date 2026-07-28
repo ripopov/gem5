@@ -1,0 +1,30 @@
+# Copyright (c) 2026 Roman Popov
+# SPDX-License-Identifier: BSD-3-Clause
+
+FROM ubuntu:24.04
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install --no-install-recommends -y \
+        bc \
+        binutils-riscv64-linux-gnu \
+        bison \
+        build-essential \
+        bzip2 \
+        ca-certificates \
+        cpio \
+        curl \
+        file \
+        flex \
+        gcc-riscv64-linux-gnu \
+        libc6-dev-riscv64-cross \
+        libelf-dev \
+        libssl-dev \
+        opensbi \
+        perl \
+        python3 \
+        rsync \
+        xz-utils \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /gem5

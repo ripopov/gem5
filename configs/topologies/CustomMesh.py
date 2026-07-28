@@ -260,6 +260,7 @@ class CustomMesh(SimpleTopology):
         self._Router = Router
 
         self.node_router_latency = 1 if options.network == "garnet" else 0
+        self._router_link_latency = options.router_link_latency
         self._custom_links = options.custom_links
 
         # classify nodes into different types

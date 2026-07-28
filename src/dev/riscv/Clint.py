@@ -61,6 +61,14 @@ class Clint(BasicPioDevice):
     mtimecmp_reset_value = Param.UInt64(
         0xFFFFFFFFFFFFFFFF, "mtimecmp reset value"
     )
+    rtc_period = Param.Latency(
+        "0s",
+        "When non-zero, run the timer lazily: mtime is computed from "
+        "curTick at this period and events are scheduled only at mtimecmp "
+        "deadlines, instead of counting one int_pin event per mtime tick. "
+        "Guest-visible mtime values and MTIP edges are identical; leave "
+        "int_pin unconnected in this mode.",
+    )
 
     def generateDeviceTree(self, state):
         node = self.generateBasicPioDeviceNode(

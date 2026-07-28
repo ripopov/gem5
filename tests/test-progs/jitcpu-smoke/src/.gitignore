@@ -1,0 +1,7 @@
+/.jitcpu-linux-initramfs
+/jitcpu-linux-init
+/jitcpu-linux-init.cpio
+/jitcpu-linux-smp-init
+/jitcpu-linux-smp-init.cpio
+/jitcpu-dining-philosophers
+/jitcpu-dining-philosophers.cpio

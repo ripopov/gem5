@@ -104,7 +104,7 @@ class MMU : public BaseMMU
       MMU *ommu = dynamic_cast<MMU*>(old_mmu);
       BaseMMU::takeOverFrom(ommu);
       pma->takeOverFrom(ommu->pma);
-
+      getPMP()->takeOverFrom(ommu->getPMP());
     }
 
     void

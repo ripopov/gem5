@@ -139,6 +139,14 @@ class Terminal : public SerialDevice
      * empty string if no listener is attached or configured.
      */
     std::string getListenerOutput() const;
+    /**
+     * Poll the attached host socket without blocking and, if input is ready,
+     * move it into the serial receive buffer.
+     *
+     * This is useful for configurations which deliberately return from the
+     * simulation loop to service interactive host I/O.
+     */
+    bool pollInput();
     void data();
 
     void read(uint8_t &c) { read(&c, 1); }

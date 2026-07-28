@@ -57,6 +57,7 @@ Clint::Clint(const Params &params) :
     signal(params.name + ".signal", 0, this, INT_RTC),
     reset(params.name + ".reset"),
     resetMtimecmp(params.reset_mtimecmp),
+    lazyRtcPeriod(params.rtc_period),
     registers(params.name + ".registers", params.pio_addr, this,
               params.mtimecmp_reset_value)
 {
@@ -65,6 +66,61 @@ Clint::Clint(const Params &params) :
               doReset();
           }
       });
+
+      for (int i = 0; i < nThread; i++) {
+          mtimecmpEvents.emplace_back(
+              [this, i]{ updateMTIP(i); },
+              csprintf("%s.mtimecmp_event[%d]", params.name, i));
+      }
+}
+
+uint64_t
+Clint::mtimeNow() const
+{
+    if (!lazyRtc()) {
+        return registers.mtime.get();
+    }
+    return lazyMtimeBase + (curTick() - lazyTickBase) / lazyRtcPeriod;
+}
+
+void
+Clint::scheduleMtimecmpEvent(int context_id)
+{
+    assert(lazyRtc());
+    auto &event = mtimecmpEvents[context_id];
+    if (event.scheduled()) {
+        deschedule(event);
+    }
+
+    const uint64_t mtimecmp = registers.mtimecmp[context_id].get();
+    if (mtimecmp <= mtimeNow()) {
+        // MTIP is already due; updateMTIP has posted it.
+        return;
+    }
+
+    const uint64_t remaining = mtimecmp - lazyMtimeBase;
+    if (remaining > (MaxTick - lazyTickBase) / lazyRtcPeriod) {
+        // The deadline (e.g. the mtimecmp reset value) is beyond the
+        // representable simulation horizon.
+        return;
+    }
+    schedule(event, lazyTickBase + remaining * lazyRtcPeriod);
+}
+
+void
+Clint::startup()
+{
+    BasicPioDevice::startup();
+
+    if (!lazyRtc()) {
+        return;
+    }
+    // Covers both a fresh boot and checkpoint restore: unserialize may not
+    // schedule events, so deadlines are (re)established here.
+    for (int context_id = 0; context_id < nThread; context_id++) {
+        updateMTIP(context_id);
+        scheduleMtimecmpEvent(context_id);
+    }
 }
 
 void
@@ -73,6 +129,11 @@ Clint::raiseInterruptPin(int id)
     // Increment mtime when received RTC signal
     uint64_t& mtime = registers.mtime.get();
     if (id == INT_RTC) {
+        if (lazyRtc()) {
+            // Lazy mode derives mtime from curTick and drives MTIP from
+            // mtimecmp deadline events; pin ticks would double-count time.
+            return;
+        }
         mtime++;
     }
 
@@ -123,6 +184,9 @@ Clint::ClintRegisters::init()
     addRegister(reserved[1]);
     auto write_cb = std::bind(&Clint::writeMTIME, clint, _1, _2);
     mtime.writer(write_cb);
+    if (clint->lazyRtc()) {
+        mtime.reader([this](auto &reg) { return clint->mtimeNow(); });
+    }
     addRegister(mtime);
     if (reserved2_size > 0) {
         addRegister(reserved[2]);
@@ -142,14 +206,24 @@ Clint::writeMTIMECMP(Register64 &reg, const uint64_t &data,
 {
     reg.update(data);
     updateMTIP(thread_id);
+    if (lazyRtc()) {
+        scheduleMtimecmpEvent(thread_id);
+    }
 }
 
 void
 Clint::writeMTIME(Register64 &reg, const uint64_t &data)
 {
     reg.update(data);
+    if (lazyRtc()) {
+        lazyMtimeBase = data;
+        lazyTickBase = curTick();
+    }
     for (int context_id = 0; context_id < nThread; context_id++) {
         updateMTIP(context_id);
+        if (lazyRtc()) {
+            scheduleMtimecmpEvent(context_id);
+        }
     }
 }
 
@@ -223,7 +297,10 @@ Clint::serialize(CheckpointOut &cp) const
     for (auto const &reg: registers.mtimecmp) {
         paramOut(cp, reg.name(), reg);
     }
-    paramOut(cp, "mtime", registers.mtime);
+    // In lazy mode the raw register lags mtimeNow(); serialize the
+    // authoritative value so both modes restore identically.
+    const uint64_t mtime = mtimeNow();
+    paramOut(cp, "mtime", mtime);
 }
 
 void
@@ -235,7 +312,12 @@ Clint::unserialize(CheckpointIn &cp)
     for (auto &reg: registers.mtimecmp) {
         paramIn(cp, reg.name(), reg);
     }
-    paramIn(cp, "mtime", registers.mtime);
+    uint64_t mtime = 0;
+    paramIn(cp, "mtime", mtime);
+    registers.mtime.update(mtime);
+    lazyMtimeBase = mtime;
+    lazyTickBase = curTick();
+    // Deadline events are (re)scheduled in startup().
 }
 
 void
@@ -257,7 +339,7 @@ void
 Clint::updateMTIP(const int context_id)
 {
     auto tc = system->threads[context_id];
-    auto mtime = registers.mtime.get();
+    auto mtime = mtimeNow();
     uint64_t mtimecmp = registers.mtimecmp[context_id].get();
     // Post timer interrupt
     if (mtime >= mtimecmp) {
@@ -277,6 +359,10 @@ Clint::updateMTIP(const int context_id)
 void
 Clint::doReset() {
     registers.mtime.reset();
+    if (lazyRtc()) {
+        lazyMtimeBase = 0;
+        lazyTickBase = curTick();
+    }
     for (int i = 0; i < nThread; i++) {
         // According to the spec, the mtimecmp is in unknown state
         // Assume we will change the mtimecmp registers to specify value
@@ -285,6 +371,9 @@ Clint::doReset() {
             registers.mtimecmp[i].reset();
         }
         updateMTIP(i);
+        if (lazyRtc()) {
+            scheduleMtimecmpEvent(i);
+        }
         registers.msip[i].reset();
         updateMSIP(i);
     }

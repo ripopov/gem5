@@ -71,3 +71,8 @@ class Terminal(SerialDevice):
     def hasListener(self):
         """Returns True if a listener is attached to this terminal."""
         pass
+
+    @cxxMethod
+    def pollInput(self):
+        """Synchronously move pending host input into the receive buffer."""
+        pass

@@ -245,6 +245,30 @@ Terminal::data()
     }
 }
 
+bool
+Terminal::pollInput()
+{
+    if (data_fd < 0)
+        return false;
+
+    struct pollfd pfd = {data_fd, POLLIN, 0};
+    int ready;
+    do {
+        ready = ::poll(&pfd, 1, 0);
+    } while (ready == -1 && errno == EINTR);
+
+    if (ready <= 0)
+        return false;
+
+    if (pfd.revents & POLLIN) {
+        data();
+        return true;
+    }
+    if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL))
+        detach();
+    return false;
+}
+
 size_t
 Terminal::read(uint8_t *buf, size_t len)
 {
