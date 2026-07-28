@@ -46,7 +46,7 @@ uint64_t
 RiscvSystem::tryReadMtime() const
 {
     panic_if(!_clint, "Can't get CLINT device in RiscvSystem");
-    return _clint->registers.mtime.get();
+    return _clint->mtimeNow();
 }
 
 } // namespace gem5

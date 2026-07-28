@@ -1,0 +1,102 @@
+diff --git a/meson.build b/meson.build
+index 164328ded8..5fcda08b14 100644
+--- a/meson.build
++++ b/meson.build
+@@ -4393,6 +4393,29 @@ foreach target : target_dirs
+                  c_args: c_args,
+                  build_by_default: false)
+ 
++  # gem5's RISC-V JitCPU embeds the TCG system emulator behind a small C interface.
++  # Keep this target RISC-V-only and do not expose QEMU headers to gem5.
++  if target == 'riscv64-softmmu' and get_option('gem5_jit_dir') != ''
++    gem5_jit_dir = get_option('gem5_jit_dir')
++    gem5_jit_lib = shared_library(
++      'gem5-qemu-jit', files(gem5_jit_dir / 'qemu-jit.c'),
++      name_prefix: 'lib',
++      install: false,
++      build_by_default: false,
++      c_args: c_args,
++      dependencies: arch_deps + [target_stubs],
++      objects: lib.extract_all_objects(recursive: true),
++      link_depends: [block_syms, qemu_syms],
++      link_args: link_args)
++    gem5_jit_smoke = executable(
++      'gem5-qemu-jit-smoke', files(gem5_jit_dir / 'qemu-jit-smoke.c'),
++      link_with: gem5_jit_lib,
++      install: false,
++      build_by_default: false)
++    test('gem5-qemu-jit-smoke', gem5_jit_smoke,
++         suite: ['unit', 'gem5-jit'])
++  endif
++
+   if target.endswith('-softmmu')
+     execs = [{
+       'name': 'qemu-system-' + target_name,
+diff --git a/meson_options.txt b/meson_options.txt
+index a07cb47d35..d3c38009ec 100644
+--- a/meson_options.txt
++++ b/meson_options.txt
+@@ -2,6 +2,9 @@
+ # on the configure script command line.  If you add more, list them in
+ # scripts/meson-buildoptions.py's SKIP_OPTIONS constant too.
+ 
++option('gem5_jit_dir', type : 'string', value : '',
++       description: 'Path to the external gem5 JitCPU QEMU adapter sources')
++
+ option('qemu_suffix', type : 'string', value: 'qemu',
+        description: 'Suffix for QEMU data/modules/config directories (can be empty)')
+ option('docdir', type : 'string', value : 'share/doc',
+diff --git a/scripts/meson-buildoptions.py b/scripts/meson-buildoptions.py
+index 9e3a75c8b1..79b704a498 100644
+--- a/scripts/meson-buildoptions.py
++++ b/scripts/meson-buildoptions.py
+@@ -30,6 +30,7 @@
+ SKIP_OPTIONS = {
+     "default_devices",
+     "fuzzing_engine",
++    "gem5_jit_dir",
+ }
+ 
+ # Options whose name doesn't match the option for backwards compatibility
+diff --git a/target/riscv/cpu.h b/target/riscv/cpu.h
+index c9dfa7daff..455df878ee 100644
+--- a/target/riscv/cpu.h
++++ b/target/riscv/cpu.h
+@@ -925,6 +925,10 @@ static inline uint32_t vext_get_vlmax(uint32_t vlenb, uint32_t vsew,
+ 
+ bool riscv_cpu_is_32bit(RISCVCPU *cpu);
+ 
++/* Enabled only by the embedded gem5 JitCPU adapter. Standard QEMU treats
++ * gem5 pseudo-instruction encodings as ordinary unsupported custom opcodes. */
++extern bool riscv_gem5_jit_enabled;
++
+ bool riscv_cpu_virt_mem_enabled(CPURISCVState *env, bool is_vm_ldst);
+ RISCVPmPmm riscv_pm_get_pmm(CPURISCVState *env);
+ RISCVPmPmm riscv_pm_get_vm_ldst_pmm(CPURISCVState *env);
+diff --git a/target/riscv/tcg/translate.c b/target/riscv/tcg/translate.c
+index 9684dbe752..0eea2e26ba 100644
+--- a/target/riscv/tcg/translate.c
++++ b/target/riscv/tcg/translate.c
+@@ -44,6 +44,8 @@ static TCGv_i32 cpu_vl, cpu_vstart;
+ static TCGv load_res;
+ static TCGv load_val;
+ 
++bool riscv_gem5_jit_enabled;
++
+ /*
+  * If an operation is being performed on less than TARGET_LONG_BITS,
+  * it may require the inputs to be sign- or zero-extended; which will
+@@ -1292,6 +1294,13 @@ static void decode_opc(CPURISCVState *env, DisasContext *ctx)
+                                                    ctx->base.pc_next + 2,
+                                                    MO_LE));
+         }
++        if (riscv_gem5_jit_enabled && (opcode & 0x01ffffff) == 0x7b) {
++            ctx->opcode = opcode;
++            tcg_gen_st_i64(tcg_constant_i64(opcode), tcg_env,
++                           offsetof(CPURISCVState, bins));
++            generate_exception(ctx, EXCP_HLT);
++            return;
++        }
+         ctx->opcode = opcode;
+ 
+         for (guint i = 0; i < ctx->decoders->len; ++i) {

@@ -28,6 +28,7 @@
  */
 
 #include "arch/riscv/pmp.hh"
+
 #include "arch/generic/tlb.hh"
 #include "arch/riscv/faults.hh"
 #include "arch/riscv/isa.hh"
@@ -53,6 +54,17 @@ PMP::PMP(const Params &params) :
     numRules(0)
 {
     pmpTable.resize(pmpEntries);
+}
+
+void
+PMP::takeOverFrom(const PMP *old)
+{
+    fatal_if(pmpEntries != old->pmpEntries,
+             "Cannot transfer PMP state between tables with %d and %d "
+             "entries", pmpEntries, old->pmpEntries);
+
+    pmpTable = old->pmpTable;
+    numRules = old->numRules;
 }
 
 Fault
