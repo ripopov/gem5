@@ -1,0 +1,1570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RISC-V JitCPU for gem5</title>
+<style>
+/* ---------- cool near-black, flat ----------
+   The palette is Style B's — cyan is gem5/JitCPU, violet is QEMU/O3, magenta is the
+   backup section, everything structural stays grey — but nothing blooms: no light
+   source, no halos, no bevels. Depth comes from a lightness step and a hairline.
+   Type is the Swiss stack every platform already has, so the deck carries no
+   webfonts and renders identically offline. Helvetica and Arial ship 400 and 700
+   only, so weight jumps straight from regular to bold; nothing asks for 500 or 600. */
+:root{
+  --bg:#06070c;
+  --panel:oklch(.19 .018 265);
+  --panel-hi:oklch(.225 .020 265);
+  --line:oklch(.34 .020 265);
+  --line-soft:oklch(.27 .018 265);
+  --ink:oklch(.97 .006 265);
+  --muted:oklch(.79 .014 265);
+  --dim:oklch(.645 .020 265);
+  --jit:oklch(.85 .145 200);
+  --o3:oklch(.80 .145 300);
+  --hot:oklch(.72 .195 12);
+  --bk:oklch(.81 .155 340);
+  --sans:"Helvetica Neue",Helvetica,Arial,"Liberation Sans","Segoe UI",sans-serif;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono","DejaVu Sans Mono",monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--ink);font-family:var(--sans);
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+::selection{background:oklch(.85 .145 200 / .3);color:#fff}
+
+/* fine technical grid, faded toward the edges — the only thing on the ground */
+body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
+  background-image:
+    linear-gradient(oklch(.97 .006 265 / .035) 1px,transparent 1px),
+    linear-gradient(90deg,oklch(.97 .006 265 / .035) 1px,transparent 1px);
+  background-size:32px 32px;
+  -webkit-mask-image:radial-gradient(115% 85% at 50% 42%,#000 20%,transparent 76%);
+  mask-image:radial-gradient(115% 85% at 50% 42%,#000 20%,transparent 76%)}
+
+#stage{position:absolute;left:50%;top:50%;width:1280px;height:720px;transform-origin:50% 50%;z-index:1}
+.slide{position:absolute;inset:0;padding:64px 72px;display:flex;flex-direction:column;overflow:hidden;
+  opacity:0;visibility:hidden;transform:translateX(64px) scale(.975);filter:blur(7px);
+  transition:opacity .46s ease,transform .46s ease,filter .46s ease,visibility 0s .46s}
+.slide.active{opacity:1;visibility:visible;transform:none;filter:none;
+  transition:opacity .5s ease .07s,transform .62s cubic-bezier(.16,1,.3,1) .07s,filter .5s ease .07s,visibility 0s}
+.slide.past{transform:translateX(-64px) scale(.975)}
+.slide>*{position:relative;z-index:1}
+
+/* ---------- typography ---------- */
+.eyebrow{display:flex;align-items:center;gap:12px;font-family:var(--mono);font-size:13px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--jit);font-weight:700;margin-bottom:17px}
+.eyebrow::before{content:"";width:24px;height:2px;flex:none;background:currentColor}
+h1{font-size:62px;line-height:1.03;letter-spacing:-.035em;font-weight:700;color:var(--ink);text-wrap:balance}
+h2{font-size:40px;line-height:1.1;letter-spacing:-.028em;font-weight:700;color:var(--ink);margin-bottom:8px;text-wrap:balance}
+.sub{font-size:22px;color:var(--muted);line-height:1.45;font-weight:400;text-wrap:pretty}
+.body{font-size:21px;line-height:1.5;color:var(--muted);text-wrap:pretty}
+b,strong{color:var(--ink);font-weight:700}
+code,.mono{font-family:var(--mono);font-size:.86em;color:var(--jit);
+  background:oklch(.85 .145 200 / .09);border:1px solid oklch(.55 .11 200 / .45);padding:0 5px;border-radius:4px}
+/* the right gutter keeps the last line clear of the slide number */
+.foot{position:absolute;left:72px;right:176px;bottom:34px;font-size:15px;color:var(--dim);line-height:1.4}
+/* a name is a handle for grepping later, never the subject of a sentence: say the
+   idea in words, then hang the identifier off the end where it can be ignored */
+.ptr{display:block;margin-top:7px;font-family:var(--mono);font-size:13px;color:var(--dim);letter-spacing:-.01em}
+
+/* ---------- fragments ---------- */
+.frag{opacity:0;transform:translateY(18px);filter:blur(5px);
+  transition:opacity .44s ease,transform .56s cubic-bezier(.16,1,.3,1),filter .44s ease}
+.frag.on{opacity:1;transform:none;filter:none}
+/* backup slides are answers to questions, not a walkthrough: no step reveals,
+   each one arrives whole (the script skips their fragments too) */
+.slide.bk .frag{opacity:1;transform:none;filter:none;transition:none}
+
+/* ---------- building blocks ----------
+   panels are a lightness step out of the ground plus a hairline, nothing more */
+.grid{display:grid;gap:22px}
+.card{background:var(--panel);border:1px solid var(--line-soft);border-radius:8px;padding:21px 24px}
+.card h3{font-size:19px;font-weight:700;margin-bottom:8px;letter-spacing:-.018em;color:var(--ink)}
+.card p{font-size:17px;line-height:1.45;color:var(--muted);text-wrap:pretty}
+.card .k{font-family:var(--mono);font-size:13px;color:var(--dim);display:block;margin-top:10px}
+
+ul.pts{list-style:none;display:flex;flex-direction:column;gap:16px}
+ul.pts li{position:relative;padding-left:28px;font-size:21px;line-height:1.45;color:var(--muted)}
+ul.pts li::before{content:"";position:absolute;left:5px;top:12px;width:8px;height:8px;border-radius:50%;
+  background:var(--jit)}
+
+.pill{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:13px;font-weight:700;
+  letter-spacing:.04em;padding:6px 14px;border-radius:999px;border:1px solid var(--line);color:var(--muted);
+  background:oklch(.97 .006 265 / .03)}
+.pill.jit{color:var(--jit);border-color:oklch(.55 .11 200 / .6);background:oklch(.85 .145 200 / .08)}
+.pill.o3{color:var(--o3);border-color:oklch(.52 .12 300 / .6);background:oklch(.80 .145 300 / .08)}
+
+/* ---------- bars ---------- */
+.barrow{display:flex;align-items:center;gap:18px;margin-bottom:16px}
+.barlab{width:210px;text-align:right;font-size:18px;color:var(--muted);flex:none}
+.barlab b{display:block;font-size:19px}
+.bartrack{flex:1;height:44px;background:oklch(.16 .016 265);border-radius:6px;position:relative;
+  box-shadow:inset 0 0 0 1px var(--line-soft)}
+.bar{height:100%;width:0;border-radius:6px;transition:width 1.3s cubic-bezier(.16,1,.3,1) .12s;
+  display:flex;align-items:center;justify-content:flex-end;padding-right:15px;font-weight:700;font-size:18px;
+  color:#04060c;white-space:nowrap}
+.frag.on .bar,.barrow.frag.on .bar{width:var(--w)}
+/* the model being replaced is structural grey; the replacement gets the accent */
+.bar.slow{background:oklch(.38 .022 265);color:var(--ink)}
+.bar.fast{background:oklch(.80 .155 200)}
+.bar.tiny{color:transparent}
+.bar.tiny::after{content:attr(data-lab);color:var(--jit);position:absolute;left:calc(var(--w) + 14px);font-weight:700}
+
+/* ---------- big numbers ---------- */
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+.stat{background:var(--panel);border:1px solid var(--line-soft);border-radius:8px;padding:22px 24px;text-align:center}
+.stat .n{font-size:52px;font-weight:700;letter-spacing:-.04em;line-height:1;font-variant-numeric:tabular-nums;
+  color:var(--jit)}
+.stat .n small{font-size:26px;font-weight:700;opacity:.72}
+.stat .t{margin-top:10px;font-size:16px;color:var(--muted);line-height:1.35}
+
+/* ---------- ring / loop diagram ---------- */
+.loop{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;align-items:stretch}
+.node{position:relative;background:var(--panel);border:1px solid var(--line-soft);border-radius:8px;padding:20px 18px;
+  transition:border-color .35s,background .35s,transform .35s}
+.node .num{font-family:var(--mono);font-size:13px;color:var(--dim);margin-bottom:8px;letter-spacing:.03em}
+.node h4{font-size:18px;font-weight:700;margin-bottom:7px;letter-spacing:-.018em;color:var(--ink)}
+.node p{font-size:15px;line-height:1.42;color:var(--muted);text-wrap:pretty}
+.node.frag.on{border-color:oklch(.65 .13 200 / .7);background:oklch(.85 .145 200 / .08)}
+.node.frag.on .num{color:var(--jit)}
+.arrow{position:absolute;right:-11px;top:50%;transform:translateY(-50%);color:var(--dim);font-size:19px;z-index:2}
+
+/* ---------- memory split ---------- */
+.split{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.path{border-radius:8px;padding:20px 22px;border:1px solid var(--line-soft);background:var(--panel)}
+.path.fast{background:oklch(.85 .145 200 / .07);border-color:oklch(.55 .11 200 / .5)}
+.path.slow{background:oklch(.80 .145 300 / .07);border-color:oklch(.52 .12 300 / .5)}
+.path .tag{font-size:13px;font-family:var(--mono);font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-bottom:9px}
+.path.fast .tag{color:var(--jit)} .path.slow .tag{color:var(--o3)}
+.path h4{font-size:19px;margin-bottom:7px;font-weight:700;letter-spacing:-.018em;color:var(--ink)}
+.path p{font-size:16px;line-height:1.45;color:var(--muted);text-wrap:pretty}
+
+/* ---------- dense technical lists ---------- */
+ul.mini{list-style:none;display:flex;flex-direction:column;gap:11px}
+ul.mini li{position:relative;padding-left:19px;font-size:16px;line-height:1.42;color:var(--muted);text-wrap:pretty}
+ul.mini li::before{content:"";position:absolute;left:2px;top:8px;width:6px;height:6px;border-radius:50%;
+  background:var(--jit)}
+.path.slow ul.mini li::before{background:var(--o3)}
+ul.mini.sm li{font-size:15px;line-height:1.4}
+/* "three things could break this" only reads as three if they are countable */
+ul.mini.num{counter-reset:threat}
+ul.mini.num li::before{counter-increment:threat;content:counter(threat);
+  left:0;top:0;width:auto;height:auto;border-radius:0;background:none;
+  font:700 13px/1.5 var(--mono);color:var(--jit)}
+h2.tight{font-size:36px}
+.card p.s{font-size:16px;line-height:1.5}
+.card p+p{margin-top:9px}
+table.kv{font-size:15px}
+table.kv th,table.kv td{padding:5px 9px}
+table.kv td:last-child,table.kv th:last-child{text-align:left}
+table.kv td:first-child{color:var(--ink);white-space:nowrap}
+
+/* ---------- timeline ---------- */
+.tl{position:relative;height:118px;margin:10px 0 6px}
+.tlbar{position:absolute;left:0;right:0;top:42px;height:34px;border-radius:6px;background:oklch(.16 .016 265);overflow:hidden;
+  box-shadow:inset 0 0 0 1px var(--line-soft)}
+.tlfill{height:100%;width:0;transition:width 1.2s cubic-bezier(.16,1,.3,1)}
+.frag.on .tlfill{width:var(--w)}
+.tlfill.jit{background:oklch(.80 .155 200)}
+.tlfill.o3{background:oklch(.70 .175 300);position:absolute;left:var(--x);top:0}
+.tlmark{position:absolute;top:14px;bottom:14px;width:2px;background:var(--hot)}
+.tlmark span{position:absolute;left:50%;transform:translateX(-50%);top:-24px;white-space:nowrap;font-size:14px;color:var(--hot);font-weight:700}
+.tlcap{position:absolute;top:86px;font-size:15px;color:var(--muted)}
+
+/* ---------- table ---------- */
+table{width:100%;border-collapse:collapse;font-size:18px}
+th,td{padding:11px 14px;text-align:right;border-bottom:1px solid oklch(.97 .006 265 / .085)}
+th:first-child,td:first-child{text-align:left}
+th{font-family:var(--mono);font-size:12.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--dim);font-weight:700}
+td{color:var(--muted);font-variant-numeric:tabular-nums}
+td b{color:var(--ink)}
+tr.hi td{color:var(--ink)} tr.hi td b{color:var(--jit)}
+
+/* ---------- backup section ----------
+   Deliberately unlike the main deck: a viewer who lands here by accident should
+   see at a glance that they have left the talk — a hatched ground and a magenta
+   stripe instead of the grid. Semantic colours are unchanged, so cyan still means
+   gem5 and violet still means QEMU. */
+.slide.bk{background:
+  repeating-linear-gradient(135deg,oklch(.185 .022 320) 0 1px,transparent 1px 20px),
+  oklch(.128 .016 315);
+  box-shadow:inset 4px 0 0 var(--bk)}
+.slide.bk .eyebrow{color:var(--bk)}
+.slide.bk .card,.slide.bk .node{background:oklch(.81 .155 340 / .07);border-color:oklch(.60 .13 340 / .4)}
+.slide.bk ul.mini li::before{background:var(--bk)}
+.bktag{position:absolute;right:72px;top:60px;font-family:var(--mono);font-size:12px;letter-spacing:.16em;
+  text-transform:uppercase;font-weight:700;color:var(--bk);border:1px solid oklch(.60 .13 340 / .55);
+  background:oklch(.81 .155 340 / .12);padding:5px 13px;border-radius:999px}
+
+/* who-holds-the-lock swimlane; a grid so the phases size themselves */
+.lane{display:grid;grid-template-columns:186px 1fr 2.15fr 1.05fr;gap:8px;align-items:stretch}
+.lane .lhdr{font-family:var(--mono);font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);padding:0 4px 2px}
+.lane .lname{font-size:16px;font-weight:700;color:var(--ink);display:flex;align-items:center;justify-content:flex-end;
+  text-align:right;padding-right:12px}
+.lane .cell{border-radius:6px;padding:11px 14px;font-size:14px;line-height:1.38;border:1px solid var(--line-soft)}
+.lane .held{font-weight:700}
+.lane .held.g{background:oklch(.85 .145 200 / .12);border-color:oklch(.55 .11 200 / .6);color:var(--jit)}
+.lane .held.q{background:oklch(.80 .145 300 / .12);border-color:oklch(.52 .12 300 / .6);color:var(--o3)}
+.lane .idle{background:oklch(.97 .006 265 / .02);border-style:dashed;color:var(--dim)}
+.lane .note{font-size:14px;color:var(--muted);line-height:1.4;padding:4px 4px 0}
+
+/* the two overlapping QEMU regions whose priority decides the whole routing */
+.regs{display:grid;grid-template-columns:92px 236px 1fr;gap:9px 16px;align-items:baseline}
+.regs .p{font:700 12.5px/1.5 var(--mono);text-align:right;letter-spacing:.04em}
+.regs .p.hi{color:var(--jit)} .regs .p.lo{color:var(--o3)}
+.regs .n{font-family:var(--mono);font-size:13px;color:var(--ink);line-height:1.5}
+.regs .d{font-size:14px;color:var(--muted);line-height:1.4}
+
+/* glossary: five columns, one vocabulary each, read left to right as guest → host.
+   Denser than any talk slide on purpose — this one is looked things up in, not read out */
+.gloss{display:grid;grid-template-columns:repeat(5,1fr);gap:0 16px;align-items:start}
+.gloss .col{display:flex;flex-direction:column;gap:8px}
+.gloss .ghdr{font-family:var(--mono);font-size:11px;letter-spacing:.11em;text-transform:uppercase;color:var(--bk);
+  font-weight:700;padding-bottom:5px;margin-bottom:1px;border-bottom:1px solid oklch(.60 .13 340 / .45)}
+.gloss .g{font-size:13px;line-height:1.35;color:var(--muted)}
+.gloss .g b{font-family:var(--mono);font-size:12.5px;font-weight:700;color:var(--bk)}
+.gloss .g i{font-style:normal;color:var(--ink)}
+
+/* where an atomic request actually goes, per configuration */
+.route{display:grid;grid-template-columns:150px 1fr 1fr;gap:10px 16px;align-items:baseline}
+.route .h{font-family:var(--mono);font-size:12px;letter-spacing:.11em;text-transform:uppercase;color:var(--dim)}
+.route .k{font-size:15px;font-weight:700;color:var(--ink);text-align:right;line-height:1.4}
+.route .v{font-size:14px;color:var(--muted);line-height:1.4}
+
+/* ---------- slide 7: the looping batch demo ----------
+   The slide is one diagram, so every box sits at an absolute stage coordinate
+   instead of being flowed: the driver at the foot of the file only ever
+   changes classes, widths, transforms and text, never geometry. Anything that
+   moves travels along a wire routed through a gutter that no box occupies,
+   which is what keeps the animation from covering anything up. */
+.demo .eyebrow{position:absolute;left:72px;top:64px;margin:0}
+.demo h2{position:absolute;left:72px;top:88px;width:1060px;margin:0}
+
+.dcap{position:absolute;left:72px;top:140px;width:1136px;height:30px;display:flex;align-items:center;gap:13px}
+.dstep{flex:none;width:118px;text-align:center;font-family:var(--mono);font-size:11px;font-weight:700;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--jit);border:1px solid oklch(.55 .11 200 / .55);
+  background:oklch(.85 .145 200 / .1);padding:5px 0;border-radius:999px}
+.dstep.q{color:var(--o3);border-color:oklch(.52 .12 300 / .6);background:oklch(.80 .145 300 / .1)}
+.dtxt{font-size:19px;line-height:1.3;color:var(--ink);white-space:nowrap}
+
+#ddiagram{position:absolute;inset:0}
+
+/* the wiring: dim by default, lit while its traffic is in flight */
+#dwire{position:absolute;left:0;top:0;pointer-events:none;z-index:3}
+.wbase{fill:none;stroke:oklch(.97 .006 265 / .16);stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round;
+  transition:stroke .3s ease}
+.wbase.on{stroke:oklch(.85 .145 200 / .5)}
+.wbase.on.q{stroke:oklch(.80 .145 300 / .55)}
+.wbase.on.h{stroke:oklch(.72 .195 12 / .6)}
+.wlab{fill:oklch(.55 .02 265);font-family:var(--mono);font-size:10px;letter-spacing:.07em}
+.wdot{fill:var(--jit);opacity:0}
+.wdot.q{fill:var(--o3)} .wdot.h{fill:var(--hot)}
+
+.dpanel{position:absolute;background:var(--panel);border:1px solid var(--line-soft);border-radius:10px}
+#dtcg{left:72px;top:182px;width:588px;height:264px}
+#dmem{left:692px;top:182px;width:516px;height:264px}
+.dph{position:absolute;left:18px;top:15px;font-family:var(--mono);font-size:12px;font-weight:700;
+  letter-spacing:.13em;text-transform:uppercase;color:var(--dim)}
+.dph.q{color:var(--o3)}
+.dphr{position:absolute;right:18px;top:16px;font-family:var(--mono);font-size:11px;color:var(--dim)}
+
+/* left panel: the code cache and the icount budget */
+.dpc{position:absolute;left:18px;top:43px;font-family:var(--mono);font-size:13px;color:var(--dim)}
+.dpc .k{font-size:10.5px;letter-spacing:.11em;text-transform:uppercase}
+.dpc b{color:var(--ink);font-weight:700}
+.dpriv{position:absolute;right:18px;top:45px;font-family:var(--mono);font-size:11px;color:var(--dim)}
+
+.dtb{position:absolute;top:70px;width:126px;height:92px;border-radius:7px;border:1px dashed var(--line-soft);
+  background:oklch(.97 .006 265 / .02);transition:border-color .25s,background .25s,box-shadow .25s}
+.dtb.cached{border-style:solid;border-color:var(--line-soft);background:oklch(.97 .006 265 / .04)}
+.dtb.xlat{border-style:solid;border-color:oklch(.52 .12 300 / .8);background:oklch(.80 .145 300 / .1)}
+.dtb.exec{border-style:solid;border-color:oklch(.65 .13 200 / .9);background:oklch(.85 .145 200 / .13);
+  box-shadow:0 0 0 1px oklch(.65 .13 200 / .45)}
+.dtb .tpc{position:absolute;left:9px;top:9px;font-family:var(--mono);font-size:11px;color:var(--muted)}
+.dtb.cold .tpc{color:var(--dim)}
+.dtb.exec .tpc{color:var(--jit)}
+.dtb .tst{position:absolute;left:9px;right:9px;height:6px;border-radius:3px;
+  background:oklch(.97 .006 265 / .06);overflow:hidden}
+.dtb .tst i{display:block;height:100%;width:0;border-radius:3px;background:var(--o3)}
+.dtb.cached .tst i{background:oklch(.46 .04 265)}
+.dtb.exec .tst i{background:oklch(.70 .12 200)}
+.dtb .s1{top:28px} .dtb .s2{top:38px} .dtb .s3{top:48px}
+.dtb .tlab{position:absolute;left:9px;top:60px;font-family:var(--mono);font-size:10px;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--dim)}
+.dtb.xlat .tlab{color:var(--o3)} .dtb.exec .tlab{color:var(--jit)}
+.dtb .tn{position:absolute;left:9px;top:76px;font-size:10.5px;color:var(--dim)}
+.dchain{position:absolute;top:106px;width:16px;height:18px;text-align:center;line-height:18px;font-size:15px;
+  color:oklch(.97 .006 265 / .16);transition:color .25s}
+.dchain.on{color:var(--jit)}
+
+#dbudlab{position:absolute;left:18px;top:175px;font-size:12.5px;color:var(--muted)}
+#dbudlab b{color:var(--ink);font-family:var(--mono);font-variant-numeric:tabular-nums}
+#dbudbar{position:absolute;left:18px;top:196px;width:552px;height:22px;border-radius:5px;
+  background:oklch(.145 .016 265);box-shadow:inset 0 0 0 1px var(--line-soft);overflow:hidden}
+#dbudfill{height:100%;width:0;background:oklch(.72 .135 200);border-radius:5px}
+#dbudnote{position:absolute;left:18px;top:228px;font-family:var(--mono);font-size:11px;color:var(--dim)}
+#dtbleg{position:absolute;right:18px;top:228px;font-family:var(--mono);font-size:11px;color:var(--dim)}
+
+/* right panel: which region answers, and who runs when it is not RAM */
+.mrow{position:absolute;left:18px;width:480px;border-radius:7px;border:1px solid var(--line-soft);
+  background:oklch(.97 .006 265 / .025);display:flex;align-items:center;gap:12px;padding:0 13px;
+  transition:border-color .25s,background .25s}
+#mram{top:46px;height:58px} #mmmio{top:112px;height:58px} #mdev{top:178px;height:62px}
+#mram.lit{border-color:oklch(.65 .13 200 / .85);background:oklch(.85 .145 200 / .12)}
+#mmmio.lit,#mdev.lit{border-color:oklch(.55 .12 300 / .85);background:oklch(.80 .145 300 / .12)}
+.mp{flex:none;width:50px;text-align:center;font-family:var(--mono);font-size:10px;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--dim);border:1px solid var(--line-soft);border-radius:4px;padding:3px 0}
+.mp.g{color:var(--jit);border-color:oklch(.55 .11 200 / .55)}
+.mn{flex:1;min-width:0}
+.mn b{display:block;font-family:var(--mono);font-size:12px;font-weight:700;color:var(--ink);white-space:nowrap}
+.mn span{display:block;font-family:var(--mono);font-size:10.5px;color:var(--dim);margin-top:3px;white-space:nowrap}
+.mtag{flex:none;width:122px;font-size:11px;line-height:1.25;color:var(--muted);text-align:right}
+.mct{flex:none;width:60px;text-align:right}
+.mct b{display:block;font-family:var(--mono);font-size:15px;font-weight:700;color:var(--ink);
+  font-variant-numeric:tabular-nums}
+.mct span{display:block;font-size:10px;color:var(--dim);margin-top:1px}
+
+/* the event queue drawn as what it is: marks on the simulated-time axis */
+#drailwrap{position:absolute;inset:0}
+.drlab{position:absolute;left:72px;top:487px;width:190px;text-align:right;font-family:var(--mono);
+  font-size:11.5px;letter-spacing:.06em;color:var(--dim);line-height:1.55}
+.drlab span{display:block;color:oklch(.52 .02 265)}
+#drail{position:absolute;left:280px;top:486px;width:900px;height:36px;border-radius:6px;
+  background:oklch(.145 .016 265);box-shadow:inset 0 0 0 1px var(--line-soft);overflow:hidden}
+#dbudget{position:absolute;top:0;bottom:0;left:0;width:0;
+  background:repeating-linear-gradient(135deg,oklch(.85 .145 200 / .13) 0 2px,transparent 2px 9px)}
+.dbar{position:absolute;top:0;bottom:0;left:0;width:0;background:oklch(.60 .11 200)}
+#dbarB{background:oklch(.52 .095 200);box-shadow:inset 1px 0 0 oklch(.145 .016 265)}
+#dghost{position:absolute;top:4px;bottom:4px;left:0;width:0;border:1px dashed oklch(.80 .14 200 / .85);
+  border-radius:4px;background:oklch(.85 .145 200 / .1);transition:opacity .3s ease}
+.drlabel{position:absolute;top:10px;height:16px;line-height:16px;text-align:center;font-family:var(--mono);
+  font-size:11px;font-weight:700;letter-spacing:.03em;color:#04060c;white-space:nowrap;overflow:hidden}
+.drlabel{transition:opacity .3s ease}
+.drlabel.gh{color:var(--jit)}
+.dmark{position:absolute;top:478px;height:50px;width:2px;background:var(--hot);border-radius:1px;
+  transition:opacity .4s ease}
+.dmark.peer{background:none;border-left:2px dashed oklch(.50 .02 265)}
+#dhead{position:absolute;top:469px;left:274px;width:0;height:0;border-left:6px solid transparent;
+  border-right:6px solid transparent;border-top:9px solid var(--jit)}
+.dev{position:absolute;top:534px;width:150px;margin-left:-75px;text-align:center;transition:opacity .4s}
+.dev .n{font-size:12.5px;line-height:1.2;color:var(--muted)}
+.dev .c{font-family:var(--mono);font-size:10.5px;color:var(--dim);margin-top:3px}
+.dev.fired .n{color:var(--hot)} .dev.fired .c{color:var(--hot)}
+#dpeer{position:absolute;left:280px;top:572px;font-size:11.5px;color:var(--dim);
+  border:1px dashed var(--line-soft);border-radius:999px;padding:3px 11px}
+#dbsz{position:absolute;right:100px;top:574px;font-family:var(--mono);font-size:11.5px;color:var(--dim)}
+
+/* the live readouts */
+#dstat{position:absolute;left:72px;top:604px;width:1136px;height:36px;display:flex;align-items:center;gap:20px}
+.dsl{display:flex;align-items:center;gap:9px}
+.dsl .k{font-family:var(--mono);font-size:10.5px;letter-spacing:.11em;text-transform:uppercase;color:var(--dim)}
+.dsl b{font-family:var(--mono);font-size:15px;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums}
+.dseg{position:relative;display:flex;border:1px solid var(--line-soft);border-radius:999px;overflow:hidden;
+  background:oklch(.97 .006 265 / .03)}
+.dseg i{position:absolute;left:0;top:0;bottom:0;width:50%;background:oklch(.85 .145 200 / .2);
+  transition:transform .5s cubic-bezier(.16,1,.3,1),background .5s ease}
+.dseg.b i{transform:translateX(100%);background:oklch(.80 .145 300 / .22)}
+.dseg u{position:relative;width:54px;text-align:center;font-family:var(--mono);font-size:10.5px;font-weight:700;
+  letter-spacing:.06em;text-decoration:none;padding:5px 0;color:var(--dim);transition:color .3s}
+.dseg u.a{color:var(--ink)}
+.xc{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;
+  color:oklch(.46 .02 265);border:1px solid oklch(.29 .018 265);border-radius:999px;padding:4px 9px;
+  transition:color .25s,border-color .25s,background .25s}
+.xc.on{color:var(--hot);border-color:oklch(.55 .15 12 / .7);background:oklch(.72 .195 12 / .12)}
+
+/* ---------- chrome ---------- */
+#prog{position:fixed;left:0;top:0;height:3px;background:var(--jit);width:0;
+  transition:width .5s cubic-bezier(.16,1,.3,1);z-index:20}
+#prog.bk{background:var(--bk)}
+/* the slide number rides inside the stage, so it scales with everything else and
+   never creeps over the foot note at some other window size */
+#count{position:absolute;right:72px;bottom:26px;z-index:20;display:flex;align-items:baseline;gap:6px;
+  font-family:var(--mono);font-size:26px;font-weight:700;line-height:1;letter-spacing:.02em;
+  font-variant-numeric:tabular-nums;color:var(--jit);
+  background:var(--panel);border:1px solid var(--line);padding:9px 15px;border-radius:999px}
+#count.bk{color:var(--bk)}
+#count .of{font-size:17px;font-weight:400;color:var(--dim);letter-spacing:.04em}
+#hint{position:fixed;left:50%;top:16px;transform:translateX(-50%);font-size:13px;color:var(--dim);z-index:20;
+  background:oklch(.17 .018 265);border:1px solid var(--line-soft);padding:7px 14px;border-radius:999px;
+  animation:fade 1s ease 5s forwards}
+@keyframes fade{to{opacity:0;visibility:hidden}}
+kbd{font-family:var(--mono);font-size:11px;border:1px solid var(--line);border-bottom-width:2px;border-radius:3px;
+  padding:1px 5px;color:var(--muted);background:var(--panel-hi)}
+
+/* ---------- fallbacks: no JS, or a viewer that asks for no motion ---------- */
+@media (prefers-reduced-motion:reduce){
+  .slide,.frag,.bar,.tlfill,.node,#prog,
+  .dtb,.mrow,.wbase,.dseg i,.dseg u,.xc,.dchain,.dev{transition:none !important;filter:none !important}
+  #hint{animation:none !important}
+}
+
+/* ---------- print / PDF ---------- */
+@page{size:1280px 720px;margin:0}
+@media print{
+  html,body{overflow:visible;height:auto;background:#06070c !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  body::before{display:none}
+  #stage{position:static;width:auto;height:auto;transform:none !important}
+  .slide{position:relative;inset:auto;width:1280px;height:720px;opacity:1 !important;visibility:visible !important;
+    transform:none !important;filter:none !important;page-break-after:always;break-after:page;page-break-inside:avoid;break-inside:avoid;flex:none}
+  .slide:last-child{page-break-after:auto;break-after:auto}
+  .frag{opacity:1 !important;transform:none !important;filter:none !important}
+  .bar{width:var(--w) !important} .tlfill{width:var(--w) !important}
+  .node.frag{border-color:oklch(.65 .13 200 / .7);background:oklch(.85 .145 200 / .08)}
+  #prog,#count,#hint{display:none}
+}
+</style>
+
+<noscript><style>
+  html,body{overflow:auto;height:auto}
+  #stage{position:static;width:1280px;height:auto;margin:0 auto;transform:none}
+  .slide{position:relative;inset:auto;height:720px;opacity:1;visibility:visible;transform:none;filter:none}
+  .frag{opacity:1;transform:none;filter:none}
+  .bar{width:var(--w)} .tlfill{width:var(--w)}
+  .node.frag{border-color:oklch(.65 .13 200 / .7);background:oklch(.85 .145 200 / .08)}
+  #count,#hint{display:none}
+</style></noscript>
+</head>
+<body>
+
+<div id="prog"></div>
+<div id="stage">
+
+<!-- ============ 1 ============ -->
+<section class="slide">
+  <div class="eyebrow">gem5 · RISC-V · full-system simulation</div>
+  <h1 style="font-size:58px">RiscvJitCPU</h1>
+  <div class="sub" style="margin-top:16px;max-width:980px;font-size:23px">
+    A QEMU/TCG execution backend for RISC-V fast-forwarding, with one-way
+    <b>RiscvO3CPU takeover</b> at the region of interest.
+  </div>
+
+  <div class="frag body" style="margin-top:30px;max-width:1010px;font-size:19px">
+    gem5 has no RISC-V KVM CPU, leaving <b>AtomicSimpleCPU</b> as its fastest conventional
+    fast-forward model. Its interpreter retires one instruction per CPU tick through the
+    atomic memory path, sustaining <b>2.95 Minst/s</b> on this host; Linux 6.12 reaches the
+    first userspace instruction after ~290 M guest instructions.
+  </div>
+
+  <div style="margin-top:30px">
+    <div class="barrow frag" style="--w:96%">
+      <div class="barlab"><b>AtomicSimpleCPU</b>classic memory system</div>
+      <div class="bartrack"><div class="bar slow">98.7 s wall · 2.95 Minst/s</div></div>
+    </div>
+    <div class="barrow frag" style="--w:1.6%">
+      <div class="barlab"><b>RiscvJitCPU</b>classic memory system</div>
+      <div class="bartrack"><div class="bar fast tiny" data-lab="1.6 s wall · 281.5 Minst/s"></div></div>
+    </div>
+  </div>
+
+  <div class="foot">Same config file, same platform, same memory mode — only <span class="mono">--cpu</span> differs.
+  1 hart @ 1 GHz, 256 MiB, HiFive, OpenSBI <span class="mono">fw_jump.elf</span> + Linux 6.12 + initramfs,
+  on an Intel Core Ultra 7 265K.</div>
+</section>
+
+<!-- ============ 2 ============ -->
+<section class="slide">
+  <div class="eyebrow">Structure</div>
+  <h2 class="tight">Partition execution from platform semantics</h2>
+  <div class="sub" style="max-width:1030px;margin-bottom:4px;font-size:20px">
+    TCG supplies translated instruction execution; gem5 remains authoritative for
+    <b>simulated time, physical memory, devices, interrupts and scheduling.</b>
+  </div>
+
+  <div class="split frag" style="margin-top:18px;align-items:start">
+    <div class="path fast">
+      <div class="tag">gem5 integration</div>
+      <h4>NonCachingSimpleCPU with a batched tick</h4>
+      <ul class="mini sm" style="margin-top:13px">
+        <li><b>RiscvJitCPU</b> derives from the <span class="mono">atomic_noncaching</span> CPU and overrides
+          <span class="mono">tick()</span> to retire an instruction batch through TCG. Ports, drain/switch-out/takeover,
+          interrupt controller, MMU and statistics remain standard gem5 machinery.<span class="ptr">RiscvJitCPU : NonCachingSimpleCPU · tick()</span></li>
+        <li>Initialization qualifies the guest ISA against the backend contract: <b>RV64GC</b> plus the
+          bit-manipulation extensions; no vector, hypervisor or cache-block-management extensions.</li>
+        <li>Each gem5 hart owns one QEMU vCPU. The first instance performs process-wide backend initialization.</li>
+      </ul>
+    </div>
+    <div class="path slow">
+      <div class="tag">QEMU execution backend</div>
+      <h4>TCG under an instruction-count budget</h4>
+      <ul class="mini sm" style="margin-top:13px">
+        <li><b>TCG</b> translates guest basic blocks into cached host translation blocks (TBs); direct chaining
+          keeps steady-state execution out of the dispatcher.</li>
+        <li><b>Machine-less, single-threaded TCG.</b> QEMU instantiates no board, devices or RAM. One executor
+          serializes all vCPUs, preserving gem5's single-event-queue execution model.<span class="ptr">-machine none · -accel tcg,thread=single</span></li>
+        <li><b>Deterministic instruction counting.</b> QEMU's icount mode enforces an exact retirement budget
+          for each batch.<span class="ptr">-icount shift=0,sleep=off</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="foot frag"><b>Runtime ABI boundary.</b> A pinned QEMU submodule builds one shared library that gem5
+  loads through a small C interface. gem5 compiles without QEMU headers,
+  <span class="mono">USE_JITCPU=n</span> removes the model outright, and the GPL backend never links into the BSD-licensed
+  binary. The integration adds about 2,950 lines without introducing a second RISC-V decoder.</div>
+</section>
+
+<!-- ============ 3 ============ -->
+<section class="slide">
+  <div class="eyebrow">Execution</div>
+  <h2 class="tight">Amortize dispatch across a bounded instruction batch</h2>
+  <div class="sub" style="margin-bottom:8px;max-width:1030px;font-size:20px">
+    AtomicSimpleCPU pays interpreter and event-dispatch overhead per instruction.
+    <b>JitCPU retires up to 65,536 instructions per tick</b> without crossing the next scheduled event.
+  </div>
+
+  <div class="loop">
+    <div class="node frag">
+      <div class="num">STEP 1</div><h4>Export architectural state</h4>
+      <p>GPRs, FPRs, PC, privilege state, CSRs and interrupt state are synchronized from gem5's ThreadContext to the QEMU vCPU.<span class="ptr">syncToBackend()</span></p>
+      <div class="arrow">→</div>
+    </div>
+    <div class="node frag">
+      <div class="num">STEP 2</div><h4>Bound the instruction batch</h4>
+      <p>The configured budget is clamped by instruction-count events and the next foreign event-queue entry.<span class="ptr">executionBudget()</span></p>
+      <div class="arrow">→</div>
+    </div>
+    <div class="node frag">
+      <div class="num">STEP 3</div><h4>Execute translated code</h4>
+      <p>The event-queue lock transfers to QEMU's executor, which runs until icount exhaustion or an asynchronous exit.</p>
+      <div class="arrow">→</div>
+    </div>
+    <div class="node frag">
+      <div class="num">STEP 4</div><h4>Commit the batch</h4>
+      <p>State is imported, retirement statistics update in bulk, and the next CPU tick is scheduled one cycle per retired instruction later.<span class="ptr">syncFromBackend()</span></p>
+    </div>
+  </div>
+
+  <div class="split frag" style="margin-top:10px">
+    <div class="path fast">
+      <div class="tag">Direct path — mapped RAM</div>
+      <p>QEMU maps gem5's host backing store into its physical address space. A TCG load or store becomes a direct
+      host access with no gem5 callback or Packet. <b>Controller interleaving adds no overhead:</b> contiguous
+      interleaved ranges share one linear backing-store mapping.</p>
+    </div>
+    <div class="path slow">
+      <div class="tag">Callback path — MMIO / callback-backed GPA</div>
+      <p>Addresses without a direct RAM mapping invoke gem5, which emits an atomic Packet on the CPU data port.
+      Device accesses retain the platform model's normal functional semantics, including through Ruby.<span class="ptr">physicalAccess()</span></p>
+    </div>
+  </div>
+  <div class="foot">With Ruby, QEMU maps Ruby's functional backing store — the same storage reached by Ruby functional
+  accesses — so there is one authoritative memory image. JitCPU charges one cycle per retired instruction after each
+  batch; IPC is 1 by construction.</div>
+</section>
+
+<!-- ============ 4 ============ -->
+<section class="slide">
+  <div class="eyebrow">Consistency</div>
+  <h2 class="tight">Preserve event ordering across run-ahead</h2>
+  <div class="sub" style="max-width:1030px;margin-bottom:12px;font-size:20px">
+    A batch cannot straddle an instruction-count event or a pre-scheduled event-queue entry.
+    Clamping to the next scheduled-event boundary handles ordering; <b>three cases require explicit ownership rules.</b>
+  </div>
+
+  <div class="tl frag" style="--w:38%;margin-bottom:0">
+    <div class="tlbar"><div class="tlfill jit"></div></div>
+    <div class="tlmark" style="left:38%"><span>next foreign event</span></div>
+    <div class="tlcap" style="left:0">configured batch: 65,536 instructions</div>
+    <div class="tlcap" style="left:38%;color:var(--jit)">→ clamp here; dispatch the event before the next batch</div>
+  </div>
+
+  <div class="grid" style="grid-template-columns:1.25fr .95fr;margin-top:10px;align-items:start">
+    <ul class="mini sm num frag" style="gap:10px">
+      <li><b>Guest-visible timebase.</b> QEMU virtual timers are disabled; <span class="mono">rdtime</span> and CLINT
+        state derive from gem5 ticks. Host execution time never enters architectural state.</li>
+      <li><b>Peer CPU tick events.</b> Co-scheduled JitCPU ticks are excluded from the batch bound, avoiding multicore
+        lock-step at one instruction per batch. Device, timer and other foreign events still terminate the
+        batch.<span class="ptr">EventQueue::anyEventAtOrBefore()</span></li>
+      <li><b>Interrupt-pending ownership.</b> gem5 remains authoritative for CLINT/PLIC-driven M-mode bits.
+        S-mode bits use a delta merge; if gem5 changed a bit during the batch, its value wins.</li>
+    </ul>
+
+    <div class="frag">
+      <table class="kv">
+        <tr><th>Exit reason</th><th>Disposition</th></tr>
+        <tr><td>icount budget exhausted</td><td>schedule the next tick after N cycles</td></tr>
+        <tr><td>foreign gem5 event due</td><td>request <span class="mono">cpu_exit</span>; dispatch event first</td></tr>
+        <tr><td>MMIO / non-memory access</td><td>exit at the instruction boundary</td></tr>
+        <tr><td>WFI</td><td>reschedule at the next interrupt-capable event</td></tr>
+        <tr><td>m5 pseudo-instruction</td><td>execute gem5's existing pseudo-op handler</td></tr>
+        <tr><td>exception / backend error</td><td>fatal with guest PC; never suppressed</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="foot">During a batch, QEMU's executor owns the event-queue lock. A translated MMIO store invokes gem5's
+  device model synchronously on that thread, where the device may enqueue new events and request an early exit.</div>
+</section>
+
+<!-- ============ 5 ============ -->
+<section class="slide">
+  <div class="eyebrow">Switching</div>
+  <h2 class="tight">JitCPU → O3 takeover starts from a cold hierarchy</h2>
+  <div class="sub" style="max-width:1030px;margin-bottom:12px;font-size:20px">
+    The standard sequence applies: <b>drain → switchOut → memory-mode transition → takeOverFrom.</b>
+    Both CPU sets are instantiated; only one set is active.
+  </div>
+
+  <div class="tl frag" style="--w:34%;height:112px">
+    <div class="tlbar">
+      <div class="tlfill jit"></div>
+      <div class="tlfill o3" style="--x:34%;--w:66%"></div>
+    </div>
+    <div class="tlmark" style="left:34%"><span>m5_switch_cpu</span></div>
+    <div class="tlcap" style="left:0;color:var(--jit)">fast-forward · memory reached directly · IPC 1</div>
+    <div class="tlcap" style="left:35.5%;color:var(--o3)">detailed · O3 pipeline, caches, Ruby CHI</div>
+  </div>
+
+  <div class="grid frag" style="grid-template-columns:1fr 1.15fr;margin-top:14px;align-items:start">
+    <div class="card">
+      <h3>No cache maintenance on this edge</h3>
+      <p class="s" style="font-size:15px">JitCPU issues no timing requests and updates the functional backing store
+      directly. The cache/coherence/network hierarchy therefore has no resident or in-flight state; O3 begins with
+      cold caches after the normal gem5 takeover sequence.</p>
+      <p class="s" style="font-size:15px"><b>Single switch initiator.</b> Exactly one hart may issue
+      <span class="mono">m5_switch_cpu</span>; gem5 does not coalesce concurrent simulation-exit requests.</p>
+    </div>
+    <div class="card">
+      <h3>State outside ThreadContext</h3>
+      <p class="s" style="font-size:15px"><b>Decoded PMP state.</b> Raw PMP CSRs transfer with ThreadContext, but gem5's
+      decoded rule table does not. MMU takeover now copies it explicitly to prevent stale access permissions.<span class="ptr">PMP::takeOverFrom()</span></p>
+      <p class="s" style="font-size:15px"><b>Backend microarchitectural state.</b> On a later takeover into JitCPU,
+      the TB cache, software TLB, halted state, pending exception and LR/SC reservation are invalidated rather than transferred.</p>
+    </div>
+  </div>
+
+  <div class="foot"><b>The reverse edge is deferred to the second commit.</b> O3 → JitCPU requires a hierarchy-wide,
+  acknowledged clean-and-invalidate before functional backing-store access, followed by a quiescence check over
+  controllers and the interconnect.</div>
+</section>
+
+<!-- ============ 6 ============ -->
+<section class="slide">
+  <div class="eyebrow">Measurement</div>
+  <h2 class="tight">Linux 6.12 boot to userspace, JitCPU vs AtomicSimpleCPU</h2>
+
+  <!-- final values live in the markup: correct even if the count-up never runs -->
+  <div class="stats frag" style="margin-top:16px">
+    <div class="stat" style="padding:12px 20px"><div class="n" style="font-size:42px" data-count="61.7" data-dec="1">61.7<small>×</small></div>
+      <div class="t" style="margin-top:7px">end-to-end wall clock</div></div>
+    <div class="stat" style="padding:12px 20px"><div class="n" style="font-size:42px" data-count="80.6" data-dec="1">80.6<small>×</small></div>
+      <div class="t" style="margin-top:7px">gem5 simulation host time</div></div>
+    <div class="stat" style="padding:12px 20px"><div class="n" style="font-size:42px" data-count="95.4" data-dec="1">95.4<small>×</small></div>
+      <div class="t" style="margin-top:7px">guest-instruction throughput</div></div>
+  </div>
+
+  <table class="frag" style="margin-top:12px;font-size:16px">
+    <tr><th>Configuration</th><th>guest insts</th><th>gem5 host time</th><th>wall</th><th>rate</th></tr>
+    <tr class="hi"><td><b>RiscvJitCPU</b>, classic memory system <span style="color:var(--dim)">(5 runs)</span></td>
+      <td>343,482,657</td><td><b>1.22 s</b></td><td><b>1.60 s</b></td><td><b>281.5 M/s</b></td></tr>
+    <tr class="hi"><td><b>RiscvJitCPU</b>, Ruby CHI SimpleNetwork <span style="color:var(--dim)">(3 runs)</span></td>
+      <td>343,482,657</td><td>1.30 s</td><td>2.34 s</td><td>264.2 M/s</td></tr>
+    <tr><td>AtomicSimpleCPU, classic memory system <span style="color:var(--dim)">(3 runs)</span></td>
+      <td>289,833,994</td><td>98.35 s</td><td>98.71 s</td><td>2.95 M/s</td></tr>
+  </table>
+
+  <div class="card frag" style="margin-top:10px;padding:13px 22px;border-color:oklch(.52 .12 300 / .5);background:oklch(.80 .145 300 / .07)">
+    <h3 style="color:var(--o3)">Event density, not batch size, set the ceiling</h3>
+    <p class="s" style="font-size:15px;line-height:1.44">A batch runs only until the next event already sitting in gem5's
+    queue, so anything periodic in there is the real limit. The CLINT advanced its free-running <span class="mono">mtime</span>
+    counter one event at a time — 1 MHz, one per microsecond, 1,000 cycles of a 1 GHz CPU — and almost none of them were
+    interrupts: a hart traps only when <span class="mono">mtime</span> reaches the <span class="mono">mtimecmp</span> deadline
+    it programmed, milliseconds apart.</p>
+    <p class="s" style="font-size:15px;line-height:1.44;margin-top:7px">Every batch was therefore cut to ~1,000 instructions
+    and the configured size was irrelevant: 1,024 and 65,536 both measured 4.50 s, 22× rather than 61×. Lazy mode computes
+    <span class="mono">mtime</span> from the current tick on read and queues only the deadlines the guest actually
+    set.<span class="ptr" style="margin-top:5px">Clint.rtc_period</span></p>
+  </div>
+
+  <div class="foot">AtomicSimpleCPU retires a bit-identical 289,833,994 instructions with the lazy timer and without it; JitCPU's
+  own count moves −0.45%, because batch boundaries change WFI wake-up granularity. The two models
+  follow different deterministic idle and timer-interrupt paths;
+  medians shown, &lt;3% spread.</div>
+</section>
+
+<!-- ============ 7 ============ -->
+<!-- One looping animated diagram. Every moving part is driven from a single
+     normalised time by the demo driver at the foot of the file, so nothing can
+     drift out of sync. The markup below holds a mid-batch still frame, which is
+     what a viewer sees in print or with scripting turned off. -->
+<section class="slide demo" id="s7">
+  <div class="eyebrow">Execution · animated</div>
+  <h2 class="tight">One batch, end to end</h2>
+
+  <div class="dcap"><span class="dstep q" id="dstep">device</span><span class="dtxt" id="dtxt">gem5's device model runs inline on this thread — and schedules an event of its own.</span></div>
+
+  <div id="ddiagram">
+
+    <!-- w1 gem5 to TCG · w2 cpu_exit · w4 device schedules · w5 fast path · w6 slow path -->
+    <svg id="dwire" viewBox="0 0 1280 720" width="1280" height="720" aria-hidden="true">
+      <path class="wbase" id="w1" d="M170,482 L170,446"/>
+      <path class="wbase" id="w2" d="M700,446 L700,462 L620,462 L620,446"/>
+      <path class="wbase" id="w4" d="M1000,446 L1000,462 L1127,462 L1127,478"/>
+      <path class="wbase" id="w5" d="M660,257 L710,257"/>
+      <path class="wbase" id="w6" d="M660,323 L700,323 L700,391 L710,391"/>
+      <text class="wlab" x="182" y="459">tick · state</text>
+      <text class="wlab" x="616" y="455">cpu_exit</text>
+      <text class="wlab" x="1004" y="455">schedules</text>
+    </svg>
+
+    <div class="dpanel" id="dtcg">
+      <div class="dph q">QEMU · TCG executor</div>
+      <div class="dphr">vCPU 0 · icount</div>
+      <div class="dpc"><span class="k">pc</span> <b id="dpcv">0xffffffff80003b6c</b></div>
+      <div class="dpriv" id="dpriv">S-mode</div>
+
+      <div class="dtb cached" id="tb0" style="left:18px">
+        <div class="tpc">…80003a1c</div>
+        <div class="tst s1"><i style="width:100%"></i></div>
+        <div class="tst s2"><i style="width:100%"></i></div>
+        <div class="tst s3"><i style="width:100%"></i></div>
+        <div class="tlab">cached</div>
+        <div class="tn">41 guest insts</div>
+      </div>
+      <div class="dchain on" id="ch0" style="left:144px">›</div>
+      <div class="dtb cached" id="tb1" style="left:160px">
+        <div class="tpc">…80003a48</div>
+        <div class="tst s1"><i style="width:100%"></i></div>
+        <div class="tst s2"><i style="width:100%"></i></div>
+        <div class="tst s3"><i style="width:100%"></i></div>
+        <div class="tlab">cached</div>
+        <div class="tn">27 guest insts</div>
+      </div>
+      <div class="dchain on" id="ch1" style="left:286px">›</div>
+      <div class="dtb cached" id="tb2" style="left:302px">
+        <div class="tpc">…80003b04</div>
+        <div class="tst s1"><i style="width:100%"></i></div>
+        <div class="tst s2"><i style="width:100%"></i></div>
+        <div class="tst s3"><i style="width:100%"></i></div>
+        <div class="tlab">cached</div>
+        <div class="tn">63 guest insts</div>
+      </div>
+      <div class="dchain on" id="ch2" style="left:428px">›</div>
+      <div class="dtb exec" id="tb3" style="left:444px">
+        <div class="tpc">…80003b60</div>
+        <div class="tst s1"><i style="width:100%"></i></div>
+        <div class="tst s2"><i style="width:100%"></i></div>
+        <div class="tst s3"><i style="width:100%"></i></div>
+        <div class="tlab">executing</div>
+        <div class="tn">18 guest insts</div>
+      </div>
+
+      <div id="dbudlab">icount budget — retired <b id="dbudn">798</b> of <b id="dbudd">1,200</b></div>
+      <div id="dbudbar"><div id="dbudfill" style="width:66.5%"></div></div>
+      <div id="dbudnote">batch_size 65,536 → clamped to the next event</div>
+      <div id="dtbleg">TB bars: guest ▸ TCG IR ▸ host code</div>
+    </div>
+
+    <div class="dpanel" id="dmem">
+      <div class="dph">guest physical address space</div>
+      <div class="dphr">MemoryRegion priority</div>
+
+      <div class="mrow" id="mram">
+        <div class="mp">prio 1</div>
+        <div class="mn"><b>gem5-jit-ram-0</b><span>0x8000_0000 · 256 MiB</span></div>
+        <div class="mtag">direct host access</div>
+        <div class="mct"><b id="dramn">207</b><span>accesses</span></div>
+      </div>
+
+      <div class="mrow" id="mmmio">
+        <div class="mp">prio 0</div>
+        <div class="mn"><b>gem5-jit-physical-memory</b><span>2⁶⁴ catch-all</span></div>
+        <div class="mtag">gem5 callback → atomic Packet</div>
+        <div class="mct"><b id="dmmion">1</b><span>packets</span></div>
+      </div>
+
+      <div class="mrow lit" id="mdev">
+        <div class="mp g">gem5</div>
+        <div class="mn"><b>RiscvUart8250 @0x10000000</b><span>runs on the TCG thread</span></div>
+        <div class="mtag">device model · schedules events</div>
+        <div class="mct"><b id="ddevn">1</b><span>events</span></div>
+      </div>
+    </div>
+
+    <div id="drailwrap">
+      <div class="drlab">gem5 · event queue<span>simulated time →</span></div>
+      <div id="drail">
+        <div id="dbudget" style="left:0;width:70.59%"></div>
+        <div class="dbar" id="dbarA"></div>
+        <div class="dbar" id="dbarB"></div>
+        <div id="dghost" style="left:0;width:46.94%"></div>
+        <div class="drlabel" id="dlabA"></div>
+        <div class="drlabel" id="dlabB"></div>
+        <div class="drlabel gh" id="dglab" style="left:0;width:46.94%">798 retired · not charged</div>
+      </div>
+      <div class="dmark peer" id="mkPeer" style="left:280px"></div>
+      <div class="dmark" id="mkClint" style="left:915px"></div>
+      <div class="dmark" id="mkUart" style="left:1127px"></div>
+      <div id="dhead"></div>
+      <div class="dev" id="evClint" style="left:916px"><div class="n">CLINT mtimecmp</div><div class="c" id="evClintC">+1,200 cycles</div></div>
+      <div class="dev" id="evUart" style="left:1128px"><div class="n">UART tx done</div><div class="c">+1,600 cycles</div></div>
+      <div id="dpeer">hart 1 tick · same cycle · ignored</div>
+      <div id="dbsz">batch_size 65,536 — far past this window</div>
+    </div>
+
+    <div id="dstat">
+      <div class="dsl"><span class="k">event-queue lock</span>
+        <span class="dseg b" id="dlock"><i></i><u id="dlg">gem5</u><u id="dlq" class="a">TCG</u></span></div>
+      <div class="dsl"><span class="k">cycle</span><b id="dcyc">4,271,318</b></div>
+      <div class="dsl"><span class="k">retired</span><b id="dret">798</b><span class="k">of <span id="dbud">1,200</span></span></div>
+      <div class="dsl"><span class="k">batch exit</span>
+        <span class="xc" id="xBud">budget</span><span class="xc" id="xEvt">event</span><span class="xc" id="xMmio">MMIO</span>
+        <span class="xc">WFI</span><span class="xc">m5 op</span><span class="xc">fault</span></div>
+    </div>
+
+  </div>
+
+  <div class="foot">One illustrative pair of batches, drawn to scale; the sequence, the bounds and the exit reasons are the model's own.</div>
+</section>
+
+<!-- ============ B1 ============ -->
+<section class="slide bk">
+  <div class="bktag">backup</div>
+  <div class="eyebrow">Backup · Execution</div>
+  <h2 class="tight">TCG owns the event queue during each instruction batch</h2>
+  <div class="sub" style="max-width:1010px;margin-bottom:14px;font-size:20px">
+    QEMU pins vCPU execution to a backend-created thread; <b>gem5 transfers event-queue ownership
+    instead of introducing concurrent simulation.</b>
+  </div>
+
+  <div class="lane frag">
+    <div class="lhdr"></div>
+    <div class="lhdr">before batch</div>
+    <div class="lhdr">during batch</div>
+    <div class="lhdr">after</div>
+
+    <div class="lname">gem5 event-loop thread</div>
+    <div class="cell held g">running</div>
+    <div class="cell idle">blocked on synchronous vCPU work</div>
+    <div class="cell held g">running</div>
+
+    <div class="lname">TCG vCPU executor</div>
+    <div class="cell idle">parked</div>
+    <div class="cell held q">running translated guest code</div>
+    <div class="cell idle">parked</div>
+
+    <div></div>
+    <div class="note" style="grid-column:2/5">The threads execute mutually exclusively. Control and event-queue
+    ownership migrate together, preserving a serialized, deterministic event stream.</div>
+  </div>
+
+  <div class="grid frag" style="grid-template-columns:repeat(3,1fr);margin-top:14px;gap:16px">
+    <div class="card" style="padding:14px 18px">
+      <h3 style="font-size:17px">vCPU thread affinity</h3>
+      <p class="s" style="font-size:14px">TCG execution relies on QEMU per-thread vCPU identity, exit handling and
+      icount state. QEMU creates the executor at startup; gem5 submits synchronous work to it and waits.<span class="ptr">run_on_cpu()</span></p>
+    </div>
+    <div class="card" style="padding:14px 18px">
+      <h3 style="font-size:17px">QEMU lock discipline</h3>
+      <p class="s" style="font-size:14px">The adapter follows QEMU's normal vCPU execution-loop lock ordering and
+      exit protocol. TCG therefore runs under the synchronization assumptions exercised upstream.</p>
+    </div>
+    <div class="card" style="padding:14px 18px">
+      <h3 style="font-size:17px">Existing event-queue handoff</h3>
+      <p class="s" style="font-size:14px">gem5 has supported event-queue ownership transfer since 2014 for
+      out-of-thread CPU execution and synchronous device access. JitCPU reuses that mechanism unchanged.</p>
+    </div>
+  </div>
+
+  <div class="foot">That 2014 commit, in its own words: <i>"devices need to be accessed across thread boundaries … when
+  fast-forwarding, it might be useful to run devices and CPUs in separate threads … primarily intended for KVM."</i> Twelve
+  years on, TCG has the same executor-to-device synchronization requirement.</div>
+</section>
+
+<!-- ============ B2 ============ -->
+<section class="slide bk">
+  <div class="bktag">backup</div>
+  <div class="eyebrow">Backup · Execution</div>
+  <h2 class="tight">TCG translation-block lifecycle and exits</h2>
+  <div class="sub" style="max-width:1030px;margin-bottom:12px;font-size:20px">
+    <b>TB boundaries, code-cache lookup, direct chaining and exits</b> determine steady-state execution overhead.
+  </div>
+
+  <div class="loop frag" style="grid-template-columns:repeat(3,1fr)">
+    <div class="node">
+      <div class="num">on TB miss</div><h4>Translate</h4>
+      <p>Guest instructions lower to TCG IR; the host backend then emits executable code for the translation block.</p>
+      <div class="arrow">→</div>
+    </div>
+    <div class="node">
+      <div class="num">physical PC + flags</div><h4>Cache</h4>
+      <p>The code cache indexes TBs by guest physical address and translation-relevant CPU state. Re-entry normally hits the cached TB.</p>
+      <div class="arrow">→</div>
+    </div>
+    <div class="node">
+      <div class="num">steady state</div><h4>Chain</h4>
+      <p>For eligible same-page successors, QEMU patches a direct host branch between TBs and bypasses dispatcher lookup.</p>
+    </div>
+  </div>
+
+  <div class="split frag" style="margin-top:12px">
+    <div class="path fast">
+      <div class="tag">Where a block ends</div>
+      <ul class="mini sm" style="margin-top:2px">
+        <li>Guest control transfer: branch, jump or return.</li>
+        <li>A guest page boundary; only the first instruction may straddle one.</li>
+        <li>The 512-instruction TB cap or translator output-buffer capacity.</li>
+        <li>The remaining <span class="mono">icount</span> budget for the current batch.</li>
+      </ul>
+    </div>
+    <div class="path slow">
+      <div class="tag">Out-of-line paths</div>
+      <ul class="mini sm" style="margin-top:2px">
+        <li>Generated loads and stores inline a QEMU software-TLB probe.</li>
+        <li>CSR/system operations and complex floating-point cases call QEMU C helpers.</li>
+        <li>Guest time reads call the adapter and resolve against gem5's CLINT timebase.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="foot">Per-vCPU icount state enforces the instruction budget: translated code decrements the counter on retirement,
+  while <span class="mono">cpu_exit</span> sets the asynchronous-exit half. If MMIO exits mid-TB, QEMU restores state and
+  re-executes with the faulting instruction last, preserving exact retirement accounting.</div>
+</section>
+
+<!-- ============ B3 ============ -->
+<section class="slide bk">
+  <div class="bktag">backup</div>
+  <div class="eyebrow">Backup · Memory</div>
+  <h2 class="tight">Physical-access routing and batch termination</h2>
+  <div class="sub" style="max-width:1030px;margin-bottom:10px;font-size:20px">
+    <b>QEMU MemoryRegion priority</b> selects direct host RAM or gem5's callback-backed address space.
+  </div>
+
+  <div class="regs frag">
+    <div class="p hi">priority 1</div>
+    <div class="n">gem5-jit-ram-<i>N</i></div>
+    <div class="d">One RAM MemoryRegion per mappable gem5 backing store. QEMU's software TLB caches
+      the resulting host pointer for direct subsequent access.</div>
+    <div class="p lo">priority 0</div>
+    <div class="n">gem5-jit-physical-memory</div>
+    <div class="d">One I/O MemoryRegion spanning the 64-bit GPA space. Every access through this
+      lower-priority catch-all invokes the gem5 callback.</div>
+  </div>
+
+  <div class="loop frag" style="margin-top:12px">
+    <div class="node">
+      <div class="num">generated access</div><h4>Probe QEMU's software TLB</h4>
+      <p>A RAM-entry hit resolves to a direct host load or store; no gem5 callback or Packet is issued.</p>
+      <div class="arrow">→</div>
+    </div>
+    <div class="node">
+      <div class="num">on TLB miss</div><h4>Resolve the MemoryRegion</h4>
+      <p>The highest-priority covering region wins; mapped RAM shadows the catch-all I/O region.</p>
+      <div class="arrow">→</div>
+    </div>
+    <div class="node">
+      <div class="num">I/O region</div><h4>Issue an atomic Packet</h4>
+      <p>The callbacks send a 1–8 byte, potentially unaligned request through the CPU data port.<span class="ptr">physicalAccess()</span></p>
+      <div class="arrow">→</div>
+    </div>
+    <div class="node">
+      <div class="num">post-callback</div><h4>Classify and request exit</h4>
+      <p>If gem5 classified the target as non-memory, the adapter requests a TCG exit at the next instruction boundary.<span class="ptr">jit_maybe_stop() → cpu_exit()</span></p>
+    </div>
+  </div>
+
+  <div class="path slow frag" style="margin-top:12px;padding:15px 20px">
+    <div class="tag">Early-exit predicate</div>
+    <p>The callback path alone does not terminate the batch. Exit is requested only when gem5 classifies the
+    address as <b>non-memory</b>; callback-backed functional memory may continue in the same batch.</p>
+  </div>
+
+  <div class="foot">Only the read/write callbacks run this predicate, so MMIO is the sole in-TCG access path that
+  terminates a batch early. Software-TLB hits on directly mapped RAM remain entirely inside generated host code,
+  allowing large batches.</div>
+</section>
+
+<!-- ============ B4 ============ -->
+<section class="slide bk">
+  <div class="bktag">backup</div>
+  <div class="eyebrow">Backup · Uncore</div>
+  <h2 class="tight"><span class="mono">atomic_noncaching</span> bypasses the timing hierarchy</h2>
+  <div class="sub" style="max-width:1030px;margin-bottom:14px;font-size:20px">
+    Platform and device functional behavior remains active; <b>cache, coherence, interconnect and
+    memory-system timing state is not exercised during fast-forward.</b>
+  </div>
+
+  <div class="route frag">
+    <div class="h">atomic Packet</div>
+    <div class="h">classic memory system</div>
+    <div class="h">Ruby / CHI</div>
+
+    <div class="k">RAM fallback</div>
+    <div class="v">An atomic request traverses the crossbar to the memory controller; the non-caching CPU has no
+      intervening cache port.</div>
+    <div class="v">Ruby maps the address to a directory for an atomic latency response, but data comes from its
+      functional backing store; no coherence state machine executes.</div>
+
+    <div class="k">MMIO</div>
+    <div class="v" style="grid-column:2/4">Both configurations invoke the same device SimObject synchronously and
+      return its atomic latency estimate; register semantics are unchanged from timing mode.</div>
+  </div>
+
+  <div class="split frag" style="margin-top:16px">
+    <div class="path fast">
+      <div class="tag">Functional platform behavior retained</div>
+      <ul class="mini sm" style="margin-top:2px">
+        <li>Timer, interrupt controller, console and disk SimObjects retain their functional behavior and schedule events.</li>
+        <li>The guest observes the same architectural interrupts and device-register semantics.</li>
+        <li>CPU, DMA and functional accesses converge on one authoritative host backing store.</li>
+      </ul>
+    </div>
+    <div class="path slow">
+      <div class="tag">Timing / coherence behavior bypassed</div>
+      <ul class="mini sm" style="margin-top:2px">
+        <li>No tag lookup, coherence transaction, network traversal, queueing or contention is modeled.</li>
+        <li>Atomic accesses complete synchronously; there are no outstanding or overlapping requests.</li>
+        <li>No resident cache/directory state or dirty data remains for the JitCPU → O3 takeover.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="foot">A 16-hart regression asserts zero CHI messages, RNF cache accesses and memory-controller traffic
+  during the JitCPU phase, then non-zero activity after O3 takeover. Direct-mapped JitCPU RAM accesses bypass even the
+  atomic Packet path used by AtomicSimpleCPU.</div>
+</section>
+
+<!-- ============ B5 ============ -->
+<section class="slide bk">
+  <div class="bktag">backup</div>
+  <div class="eyebrow">Backup · Measurement</div>
+  <h2 class="tight">Why the CLINT, not <span class="mono">batch_size</span>, decided how long a batch ran</h2>
+  <div class="sub" style="max-width:1040px;margin-bottom:13px;font-size:19px">
+    A batch ends at the next scheduled event. A free-running <span class="mono">mtime</span> counter puts
+    <b>one event in the queue per microsecond of guest time</b> — so the timer, not the parameter, set the batch length.
+  </div>
+
+  <div class="route" style="grid-template-columns:150px 1fr 1fr">
+    <div class="h">clint</div>
+    <div class="h">pin-driven RTC</div>
+    <div class="h">lazy mtime</div>
+
+    <div class="k">What is queued</div>
+    <div class="v">A <span class="mono">RiscvRTC</span> toggles the CLINT pin every RTC period; each toggle is an event that
+      bumps <span class="mono">mtime</span> and re-checks MTIP.</div>
+    <div class="v">Nothing periodic. <span class="mono">mtime</span> is computed from the current tick; the only events are
+      the <span class="mono">mtimecmp</span> deadlines the guest set.</div>
+
+    <div class="k">Distance to it</div>
+    <div class="v">1 µs of guest time at the SiFive-derived 1 MHz default — 1,000 cycles of a 1 GHz CPU.</div>
+    <div class="v">The next deadline the kernel set, usually milliseconds out; none at all while
+      <span class="mono">mtimecmp</span> holds its all-ones reset value.</div>
+
+    <div class="k">Batch actually run</div>
+    <div class="v">Clamped to <span class="mono">ticksToCycles(nextTick() − curTick())</span>: ~1,000 instructions, whether
+      the parameter said 1,024 or 65,536.<span class="ptr">RiscvJitCPU::executionBudget()</span></div>
+    <div class="v"><span class="mono">batch_size</span> binds again; 65,536 instructions run between returns to the
+      event queue.</div>
+  </div>
+
+  <div class="split" style="margin-top:13px">
+    <div class="path fast">
+      <div class="tag">How the counter is derived instead</div>
+      <ul class="mini sm" style="margin-top:2px">
+        <li><span class="mono">mtimeNow() = base + (curTick() − tickBase) / rtc_period</span> — floor division reproduces
+          the counted value exactly.</li>
+        <li>The <span class="mono">mtime</span> register gets a reader callback, so MMIO loads and guest time reads both
+          resolve through it.</li>
+        <li>Writing <span class="mono">mtimecmp</span> re-arms that hart's one deadline event; a deadline past the
+          simulation horizon schedules nothing.</li>
+      </ul>
+    </div>
+    <div class="path slow">
+      <div class="tag">What still has to hold</div>
+      <ul class="mini sm" style="margin-top:2px">
+        <li>MTIP is level-evaluated against <span class="mono">mtimeNow()</span> on every update, not only when a deadline
+          event fires.</li>
+        <li>Checkpoints serialize the derived value; <span class="mono">startup()</span> re-arms the deadlines
+          <span class="mono">unserialize</span> cannot schedule.</li>
+        <li>The RTC is left unconnected, and the pin handler ignores RTC ticks here, so a stray wire cannot double-count.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="foot">A guest write to <span class="mono">mtime</span> rebases the counter and drops the sub-period remainder
+  — the one behavioral difference from pin mode. The bare-metal regression keeps the classic RTC on purpose: a 100 MHz pin
+  caps batches at ~10 instructions and maximizes hart interleaving.</div>
+</section>
+
+<!-- ============ B6 ============ -->
+<section class="slide bk">
+  <div class="bktag">backup</div>
+  <div class="eyebrow">Backup · Reference</div>
+  <h2 class="tight">Terminology</h2>
+  <div class="sub" style="max-width:1010px;margin-bottom:16px;font-size:19px">
+    Every abbreviation the deck uses, grouped by where it comes from — the guest, its platform, and the two simulators.
+  </div>
+
+  <div class="gloss">
+    <div class="col">
+      <div class="ghdr">Guest ISA and state</div>
+      <div class="g"><b>ISA</b> <i>instruction set architecture</i> — here, RISC-V.</div>
+      <div class="g"><b>RV64GC</b> <i>64-bit RISC-V</i> — G bundles IMAFD with Zicsr and Zifencei; C adds the 16-bit compressed encodings.</div>
+      <div class="g"><b>GPR / FPR</b> <i>general-purpose and floating-point registers</i> — x0–x31 and f0–f31.</div>
+      <div class="g"><b>PC</b> <i>program counter</i>.</div>
+      <div class="g"><b>CSR</b> <i>control and status register</i> — privileged state such as mstatus, mie and satp.</div>
+      <div class="g"><b>M / S / U-mode</b> <i>machine, supervisor and user privilege</i> — firmware, kernel, applications.</div>
+    </div>
+
+    <div class="col">
+      <div class="ghdr">Guest memory and traps</div>
+      <div class="g"><b>MMU</b> <i>memory management unit</i> — the Sv39/Sv48 page-table walk from virtual to physical.</div>
+      <div class="g"><b>TLB</b> <i>translation lookaside buffer</i> — a cache of those walks; QEMU's is a software table.</div>
+      <div class="g"><b>PMP</b> <i>physical memory protection</i> — M-mode rules bounding what S- and U-mode may reach.</div>
+      <div class="g"><b>GPA</b> <i>guest physical address</i> — what the platform sees after translation.</div>
+      <div class="g"><b>WFI</b> <i>wait for interrupt</i> — the idle instruction; a hart stalls until one is pending.</div>
+      <div class="g"><b>LR/SC</b> <i>load-reserved / store-conditional</i> — RISC-V's atomic pair, on a per-hart reservation.</div>
+    </div>
+
+    <div class="col">
+      <div class="ghdr">Platform and firmware</div>
+      <div class="g"><b>hart</b> <i>hardware thread</i> — RISC-V's name for one architectural execution context.</div>
+      <div class="g"><b>SBI / OpenSBI</b> <i>Supervisor Binary Interface</i> — the M-mode runtime the kernel calls; OpenSBI implements it.</div>
+      <div class="g"><b>CLINT</b> <i>Core-Local Interruptor</i> — the mtime / mtimecmp timer and per-hart software interrupts.</div>
+      <div class="g"><b>PLIC</b> <i>Platform-Level Interrupt Controller</i> — device interrupts, routed to harts.</div>
+      <div class="g"><b>MMIO</b> <i>memory-mapped I/O</i> — an access landing on a device register rather than RAM.</div>
+      <div class="g"><b>DMA</b> <i>direct memory access</i> — memory traffic a device issues itself.</div>
+    </div>
+
+    <div class="col">
+      <div class="ghdr">QEMU · TCG</div>
+      <div class="g"><b>TCG</b> <i>Tiny Code Generator</i> — QEMU's dynamic binary translator.</div>
+      <div class="g"><b>IR</b> <i>intermediate representation</i> — TCG's target-independent form; guest code lowers to it, then to host code.</div>
+      <div class="g"><b>TB</b> <i>translation block</i> — one run of guest instructions translated as a unit.</div>
+      <div class="g"><b>vCPU</b> <i>virtual CPU</i> — QEMU's per-hart execution context and its thread.</div>
+      <div class="g"><b>icount</b> <i>instruction count</i> — the mode in which retirement, not host time, is the clock.</div>
+      <div class="g"><b>GPL / BSD</b> <i>the two licenses</i> — QEMU is GPL, gem5 BSD; the runtime boundary keeps them unlinked.</div>
+    </div>
+
+    <div class="col">
+      <div class="ghdr">gem5</div>
+      <div class="g"><b>O3</b> <i>out-of-order</i> — the detailed superscalar pipeline model, RiscvO3CPU.</div>
+      <div class="g"><b>IPC</b> <i>instructions per cycle</i>.</div>
+      <div class="g"><b>KVM</b> <i>Kernel-based Virtual Machine</i> — Linux's hardware virtualization; gem5 has x86 and Arm KVM CPUs, none for RISC-V.</div>
+      <div class="g"><b>CHI</b> <i>Coherent Hub Interface</i> — Arm's coherence protocol, one of Ruby's.</div>
+      <div class="g"><b>RNF</b> <i>Request Node, Fully coherent</i> — a CHI node owning a coherent cache.</div>
+      <div class="g"><b>ABI</b> <i>application binary interface</i> — here, the C boundary to the QEMU library.</div>
+    </div>
+  </div>
+
+  <div class="foot"><b>Minst/s</b> is millions of retired guest instructions per second of host time. Dim monospace elsewhere in
+  the deck — <span class="mono">syncToBackend()</span>, <span class="mono">Clint.rtc_period</span> — is a gem5 or QEMU
+  identifier to grep for, not an abbreviation.</div>
+</section>
+
+<div id="count"><b>1</b><span class="of">/ 7</span></div>
+</div><!-- /stage -->
+
+<div id="hint"><kbd>→</kbd> or <kbd>space</kbd> to advance &nbsp;·&nbsp; <kbd>F</kbd> fullscreen &nbsp;·&nbsp; <kbd>P</kbd> print to PDF</div>
+
+<script>
+(function(){
+  var stage   = document.getElementById('stage');
+  var slides  = [].slice.call(document.querySelectorAll('.slide'));
+  var prog    = document.getElementById('prog');
+  var counter = document.getElementById('count');
+  var si = 0, fi = 0;
+
+  /* backup slides show up whole, so they have no steps to walk: one press moves
+     to the next one, and their fragments are revealed by CSS alone */
+  function frags(i){ return slides[i].classList.contains('bk') ? []
+                                     : [].slice.call(slides[i].querySelectorAll('.frag')); }
+
+  /* backup slides sit after the deck and are numbered separately, so adding one
+     never changes what the main deck says its own length is */
+  var main = slides.filter(function(s){ return !s.classList.contains('bk'); }).length;
+  var extra = slides.length - main;
+  function hashFor(i){ return i < main ? '#' + (i + 1) : '#b' + (i - main + 1); }
+
+  /* scale the fixed 1280x720 stage to whatever window it lands in */
+  function fit(){
+    var s = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
+    stage.style.transform = 'translate(-50%,-50%) scale(' + s + ')';
+  }
+  window.addEventListener('resize', fit); fit();
+
+  var still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* count-up for the big numbers; the markup already holds the final value,
+     so skipping this animation is always safe */
+  function countUp(el){
+    if (el.dataset.done) return;
+    el.dataset.done = '1';
+    if (still) return;
+    var target = parseFloat(el.dataset.count),
+        dec    = parseInt(el.dataset.dec || '0', 10),
+        suffix = el.querySelector('small'),
+        tail   = suffix ? suffix.outerHTML : '',
+        t0     = null,
+        dur    = 1100;
+    function step(ts){
+      if (t0 === null) t0 = ts;
+      var p = Math.min((ts - t0) / dur, 1);
+      var e = 1 - Math.pow(1 - p, 3);
+      el.innerHTML = (p < 1 ? (target * e).toFixed(dec) : target.toFixed(dec)) + tail;
+      if (p < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+
+  function paint(){
+    slides.forEach(function(sl, i){
+      sl.classList.toggle('active', i === si);
+      sl.classList.toggle('past',  i <  si);
+    });
+    frags(si).forEach(function(f, i){
+      var on = i < fi;
+      f.classList.toggle('on', on);
+      if (on) [].forEach.call(f.querySelectorAll('[data-count]'), countUp);
+      if (on && f.hasAttribute('data-count')) countUp(f);
+    });
+    var bk = si >= main;
+    prog.classList.toggle('bk', bk);
+    prog.style.width = bk ? '100%'
+      : ((si + (frags(si).length ? fi / frags(si).length : 1)) / main * 100) + '%';
+    counter.classList.toggle('bk', bk);
+    counter.innerHTML = bk
+      ? '<b>' + (si - main + 1) + '</b><span class="of">/ ' + extra + '</span>'
+      : '<b>' + (si + 1) + '</b><span class="of">/ ' + main + '</span>';
+    /* file:// origins reject replaceState in some browsers — never let it break navigation */
+    try { var h = hashFor(si); if (location.hash !== h) history.replaceState(null, '', h); } catch (e) {}
+  }
+
+  function next(){
+    if (fi < frags(si).length) { fi++; }
+    else if (si < slides.length - 1) { si++; fi = 0; }
+    else return;
+    paint();
+  }
+  function prev(){
+    if (fi > 0) { fi--; }
+    else if (si > 0) { si--; fi = frags(si).length; }
+    else return;
+    paint();
+  }
+  function go(i){ si = Math.max(0, Math.min(slides.length - 1, i)); fi = 0; paint(); }
+
+  document.addEventListener('keydown', function(e){
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    switch (e.key) {
+      case 'ArrowRight': case 'ArrowDown': case ' ': case 'PageDown': case 'Enter':
+        e.preventDefault(); next(); break;
+      case 'ArrowLeft': case 'ArrowUp': case 'PageUp': case 'Backspace':
+        e.preventDefault(); prev(); break;
+      case 'Home': e.preventDefault(); go(0); break;
+      case 'End':  e.preventDefault(); go(slides.length - 1); break;
+      case 'f': case 'F':
+        e.preventDefault();
+        if (document.fullscreenElement) document.exitFullscreen();
+        else document.documentElement.requestFullscreen();
+        break;
+      case 'p': case 'P': e.preventDefault(); window.print(); break;
+      default:
+        if (e.key >= '1' && e.key <= '9') { e.preventDefault(); go(parseInt(e.key, 10) - 1); }
+    }
+  });
+
+  /* click / tap: right half forward, left half back */
+  document.addEventListener('click', function(e){
+    (e.clientX < window.innerWidth * 0.28 ? prev : next)();
+  });
+
+  /* reveal everything before printing, restore after */
+  window.addEventListener('beforeprint', function(){
+    slides.forEach(function(sl, i){ frags(i).forEach(function(f){ f.classList.add('on'); }); });
+    [].forEach.call(document.querySelectorAll('[data-count]'), function(el){
+      if (!el.dataset.done) {
+        el.dataset.done = '1';
+        var s = el.querySelector('small');
+        el.innerHTML = parseFloat(el.dataset.count).toFixed(parseInt(el.dataset.dec || '0', 10)) + (s ? s.outerHTML : '');
+      }
+    });
+  });
+  window.addEventListener('afterprint', paint);
+
+  /* #3 opens slide 3 fully revealed, #b1 the first backup slide — deep links and screenshots */
+  var bkm = /^#b(\d+)$/i.exec(location.hash || '');
+  var deep = bkm ? main + parseInt(bkm[1], 10) - 1
+                 : parseInt((location.hash || '').slice(1), 10) - 1;
+  if (deep >= 0 && deep < slides.length) { si = deep; fi = frags(si).length; }
+
+  paint();
+})();
+
+/* ---------- slide 7: the looping batch demo ----------
+   render(t) is a pure function of one normalised clock, so every moving part
+   stays in step by construction and any frame can be reproduced exactly — which
+   is what the poster frame for print, and the layout checks, both rely on.
+   The driver only writes classes, widths, transforms and text; all geometry
+   lives in the stylesheet. */
+(function(){
+  var slide = document.getElementById('s7');
+  if (!slide) return;
+  var id = function(x){ return document.getElementById(x); };
+
+  var CYCLE  = 36,            /* seconds per loop            */
+      POSTER = 18.2,          /* the still used for print    */
+      START  = 4271318,       /* the cycle this batch begins */
+      HOLD   = 33.1,          /* where the picture freezes   */
+      RESET  = 35.5,          /* where the loop snaps back   */
+      SPAN   = 1700,          /* cycles the rail covers      */
+      TRACK  = 900,           /* its width in px             */
+      LEFT   = 280;           /* its left edge in stage px   */
+
+  function clamp(v,a,b){ return v < a ? a : v > b ? b : v; }
+  function seg(t,a,b){ return clamp((t - a) / (b - a), 0, 1); }
+  function eo(p){ return 1 - Math.pow(1 - p, 3); }
+  function win(t,a,b){ return t >= a && t < b; }
+  function num(v){ return Math.round(v).toLocaleString('en-US'); }
+  function pw(t,p){                       /* piecewise-linear ramp */
+    if (t <= p[0][0]) return p[0][1];
+    for (var i = 1; i < p.length; i++)
+      if (t <= p[i][0]) {
+        var a = p[i-1], b = p[i];
+        return a[1] + (b[1] - a[1]) * (t - a[0]) / (b[0] - a[0]);
+      }
+    return p[p.length-1][1];
+  }
+  function px(c){ return c / SPAN * TRACK; }
+
+  /* the narration: [start, chip, line, which side is acting] */
+  var PH = [
+    [ 0.0,'tick',     "gem5's event queue fires this CPU's tick event.",'g'],
+    [ 1.8,'state out',"Architectural state is exported into the QEMU vCPU: GPRs, PC, CSRs, MIP.",'g'],
+    [ 3.6,'budget',   "The batch is bounded by the nearest foreign event — 1,200 cycles, not batch_size.",'g'],
+    [ 5.6,'peers',    "A peer hart's tick in the same cycle is ignored; respecting it would single-step the machine.",'g'],
+    [ 7.2,'lock',     "The event-queue lock moves to the TCG executor thread.",'g'],
+    [ 8.6,'translate',"Cold PC, code-cache miss: the guest block lowers to TCG IR, then to host code.",'q'],
+    [11.2,'chain',    "Cached and chained — the next block is entered through a patched host branch.",'q'],
+    [13.4,'fast path',"Loads and stores inside mapped RAM are direct host accesses: no callback, no Packet.",'q'],
+    [15.6,'slow path',"A UART store matches no RAM region and falls through to the catch-all.",'q'],
+    [17.4,'device',   "gem5's device model runs inline on this thread — and schedules an event of its own.",'q'],
+    [18.9,'cpu_exit', "Non-memory access: the batch stops at the next instruction boundary.",'q'],
+    [20.3,'commit',   "State is imported and time advances — one cycle per retired instruction, after the fact.",'g'],
+    [22.2,'batch 2',  "Second batch: every block hits the code cache, and the budget is whatever is left.",'g'],
+    [24.6,'clamp',    "Budget exhausted exactly at the deadline; gem5 dispatches the event before the next batch.",'g'],
+    [26.4,'interrupt',"The CLINT raises MTIP. gem5 owns the machine-level interrupt bits, not QEMU.",'g'],
+    [28.3,'loop',     "The next batch carries the pending interrupt in, the guest traps, and the loop repeats.",'g']
+  ];
+
+  /* How the retire counter moves inside each batch. The third one has no ending:
+     it is still retiring toward the UART deadline when the picture freezes at HOLD.
+     Its pace is batch one's, not batch two's, so that closing crawl reads as
+     ordinary execution rather than a stall. */
+  var RA = [[8.6,0],[9.9,12],[11.2,60],[12.7,240],[14.3,470],[15.6,650],[17.4,782],[18.9,812]],
+      RB = [[22.8,0],[23.3,95],[23.7,175],[24.0,250],[24.6,388]],
+      RC = [[28.9,0],[33.1,390]];
+
+  /* the four translation blocks: when each is translated, and when it runs */
+  var TBS = [
+    {pc:0x3a1c, n:41, x:[ 8.6, 9.9], e:[[ 9.9,11.2],[22.80,23.35],[24.05,24.45]]},
+    {pc:0x3a48, n:27, x:[11.2,11.9], e:[[11.9,12.7],[23.35,23.70]]},
+    {pc:0x3b04, n:63, x:[12.7,13.3], e:[[13.3,14.3],[23.70,24.05],[24.45,24.60]]},
+    {pc:0x3b60, n:18, x:[14.3,14.8], e:[[14.8,18.9],[24.60,24.90]]}
+  ];
+
+  var cap = document.querySelector('.dcap'), step = id('dstep'), txt = id('dtxt'),
+      diag = id('ddiagram'), lock = id('dlock'), lg = id('dlg'), lq = id('dlq'),
+      bar = { A: id('dbarA'), B: id('dbarB') },
+      ghost = id('dghost'), budget = id('dbudget'), head = id('dhead'),
+      labA = id('dlabA'), labB = id('dlabB'), glab = id('dglab'),
+      tb = [id('tb0'), id('tb1'), id('tb2'), id('tb3')],
+      ch = [id('ch0'), id('ch1'), id('ch2')],
+      mram = id('mram'), mmmio = id('mmmio'), mdev = id('mdev'),
+      evU = id('evUart'), evC = id('evClint'), mkC = id('mkClint'), mkU = id('mkUart'),
+      xc = { bud: id('xBud'), evt: id('xEvt'), mmio: id('xMmio') };
+
+  /* the wires, and the dots that travel along them */
+  var WS = [
+    {p:id('w1'), n:3, sp:2.6}, {p:id('w2'), n:2, sp:1.5}, {p:id('w4'), n:2, sp:1.1},
+    {p:id('w5'), n:3, sp:2.8}, {p:id('w6'), n:2, sp:1.3}
+  ];
+  WS.forEach(function(w){
+    w.len = w.p.getTotalLength();
+    w.dot = [];
+    for (var i = 0; i < w.n; i++) {
+      var c = document.createElementNS('http://www.w3.org/2000/svg','circle');
+      c.setAttribute('r','3.2'); c.setAttribute('class','wdot');
+      w.p.parentNode.appendChild(c); w.dot.push(c);
+    }
+  });
+
+  function wire(w, on, rev, cls, t){
+    w.p.setAttribute('class', 'wbase' + (on ? ' on ' + cls : ''));
+    for (var i = 0; i < w.n; i++) {
+      var d = w.dot[i];
+      if (!on) { d.style.opacity = 0; continue; }
+      var u = ((t * w.sp) + i / w.n) % 1,
+          pt = w.p.getPointAtLength((rev ? 1 - u : u) * w.len);
+      d.setAttribute('class', 'wdot ' + cls);
+      d.setAttribute('transform', 'translate(' + pt.x.toFixed(1) + ',' + pt.y.toFixed(1) + ')');
+      d.style.opacity = Math.min(1, Math.sin(u * Math.PI) * 2.4).toFixed(2);
+    }
+  }
+
+  var lastPh = -1;
+
+  function render(T){
+    /* ---- narration ------------------------------------------------------ */
+    var pi = 0, i, k;
+    for (i = 0; i < PH.length; i++) if (T >= PH[i][0]) pi = i;
+    if (pi !== lastPh) {
+      lastPh = pi;
+      step.textContent = PH[pi][1];
+      step.className = 'dstep' + (PH[pi][3] === 'q' ? ' q' : '');
+      txt.textContent = PH[pi][2];
+    }
+    var pe = pi + 1 < PH.length ? PH[pi+1][0] : CYCLE;
+    cap.style.opacity = Math.min(seg(T, PH[pi][0], PH[pi][0] + 0.3),
+                                 1 - seg(T, pe - 0.25, pe)).toFixed(3);
+
+    /* The loop dips out, snaps back to the opening state underneath, and comes
+       back up already at t = 0, so the wrap is seamless. Everything below runs
+       off t rather than T, which is also why a stalled clock leaves the opening
+       frame on screen rather than nothing at all. */
+    diag.style.opacity = (T < RESET ? 1 - seg(T, RESET - 0.4, RESET)
+                                    : seg(T, RESET, RESET + 0.4)).toFixed(3);
+    /* Past HOLD every frame is the HOLD frame — right down to the wire dots and
+       the flickering low bits of the PC — so the closing picture is genuinely
+       still for two seconds and not merely slow. */
+    var t = T < RESET ? Math.min(T, HOLD) : 0;
+
+    /* ---- who holds the event queue -------------------------------------- */
+    var tcg = win(t, 7.2, 20.2) || win(t, 22.8, 24.95) || t >= 28.9;
+    lock.classList.toggle('b', tcg);
+    lg.classList.toggle('a', !tcg);
+    lq.classList.toggle('a', tcg);
+
+    /* ---- retired instructions, and the cycles they are charged as -------- */
+    var raw = t < 8.6 ? 0 : t < 22.2 ? pw(t, RA) : t < 22.8 ? 0 : t < 26.4 ? pw(t, RB)
+            : t < 28.9 ? 0 : pw(t, RC),
+        cA  = eo(seg(t, 20.3, 20.9)),
+        cB  = eo(seg(t, 24.9, 25.5)),
+        hd  = 812 * cA + 388 * cB,
+        gh  = t < 20.3 ? raw : t < 22.2 ? 812 * (1 - cA)
+            : t < 24.9 ? raw : t < 26.4 ? 388 * (1 - cB) : raw,
+        /* the readout keeps the bound that governed the batch until the next
+           one is computed; the rail only hatches a bound that is still live */
+        bud = t < 3.6 ? 0 : t < 22.2 ? 1200 : t < 26.4 ? 388 : 400,
+        hat = t < 3.6 || (t >= 20.3 && t < 22.2) || (t >= 24.9 && t < 26.4) ? 0 : bud;
+
+    id('dcyc').textContent = num(START + hd);
+    id('dret').textContent = num(raw);
+    id('dbud').textContent = bud ? num(bud) : '—';
+    id('dbudn').textContent = num(raw);
+    id('dbudd').textContent = bud ? num(bud) : '—';
+    id('dbudfill').style.width = (bud ? clamp(raw / bud, 0, 1) * 100 : 0).toFixed(2) + '%';
+
+    /* ---- the rail ------------------------------------------------------- */
+    budget.style.left = px(hd).toFixed(1) + 'px';
+    budget.style.width = px(hat).toFixed(1) + 'px';
+    bar.A.style.width = px(Math.min(hd, 812)).toFixed(1) + 'px';
+    bar.B.style.left = px(812).toFixed(1) + 'px';
+    bar.B.style.width = px(Math.max(0, hd - 812)).toFixed(1) + 'px';
+    ghost.style.left = px(hd).toFixed(1) + 'px';
+    ghost.style.width = px(gh).toFixed(1) + 'px';
+    ghost.style.opacity = gh > 2 ? 1 : 0;
+    head.style.transform = 'translateX(' + px(hd).toFixed(1) + 'px)';
+
+    glab.style.left = px(hd).toFixed(1) + 'px';
+    glab.style.width = px(gh).toFixed(1) + 'px';
+    glab.textContent = num(raw) + ' retired · not charged';
+    glab.style.opacity = px(gh) > 190 ? 1 : 0;
+    labA.style.width = px(812).toFixed(1) + 'px';
+    labA.textContent = 'batch 1 · 812 cycles';
+    labA.style.opacity = hd >= 812 ? 1 : 0;
+    labB.style.left = px(812).toFixed(1) + 'px';
+    labB.style.width = px(388).toFixed(1) + 'px';
+    labB.textContent = 'batch 2 · 388';
+    labB.style.opacity = hd >= 1200 ? 1 : 0;
+
+    evU.style.opacity = mkU.style.opacity = t >= 18.1 ? 1 : 0;
+    var fired = t >= 26.4;
+    evC.classList.toggle('fired', fired);
+    id('evClintC').textContent = fired ? 'fired · MTIP set' : '+1,200 cycles';
+    mkC.style.boxShadow = fired && t < 27.4 ? '0 0 0 ' + (3 + 5 * Math.sin((t - 26.4) * 6)).toFixed(1)
+      + 'px oklch(.72 .195 12 / .22)' : 'none';
+
+    /* ---- the code cache ------------------------------------------------- */
+    var running = -1;
+    for (i = 0; i < 4; i++) {
+      var s = TBS[i], mode = 'cold', prog = 0, pc = s.pc, n = s.n;
+      if (i === 3 && t >= 28.3) {                 /* the trap vector is a fresh block */
+        pc = 0x0200; n = 12;
+        mode = t < 28.9 ? 'xlat' : 'exec';
+        prog = seg(t, 28.3, 28.9);
+      } else if (t >= s.x[1]) {
+        mode = 'cached'; prog = 1;
+        for (k = 0; k < s.e.length; k++) if (win(t, s.e[k][0], s.e[k][1])) mode = 'exec';
+      } else if (t >= s.x[0]) {
+        mode = 'xlat'; prog = seg(t, s.x[0], s.x[1]);
+      }
+      if (mode === 'exec') running = i;
+      tb[i].className = 'dtb ' + mode;
+      tb[i].children[0].textContent = '…' + (0x80000000 + pc).toString(16);
+      for (k = 0; k < 3; k++)
+        tb[i].children[1 + k].firstChild.style.width = (clamp(prog * 3 - k, 0, 1) * 100).toFixed(0) + '%';
+      tb[i].children[4].textContent =
+        mode === 'cold' ? 'not translated' : mode === 'xlat' ? 'translating' : mode === 'exec' ? 'executing' : 'cached';
+      tb[i].children[5].textContent = mode === 'cold' ? '—' : n + ' guest insts';
+    }
+    for (k = 0; k < 3; k++) ch[k].classList.toggle('on', tb[k+1].className.indexOf('exec') > 0);
+
+    var base = running < 0 ? 0x3b60 : (running === 3 && t >= 28.3 ? 0x0200 : TBS[running].pc);
+    id('dpcv').textContent = '0xffffffff' +
+      (0x80000000 + base + (running < 0 ? 0 : (Math.floor(t * 45) % 16) * 4)).toString(16);
+    id('dpriv').textContent = t >= 28.9 ? 'M-mode · trap' : 'S-mode';
+
+    /* ---- the two memory paths ------------------------------------------- */
+    var exec = running >= 0;
+    mram.classList.toggle('lit', exec && (t % 0.6) < 0.32);
+    id('dramn').textContent = num(raw * 0.26);
+    mmmio.classList.toggle('lit', win(t, 15.6, 17.6));
+    mdev.classList.toggle('lit', win(t, 17.4, 19.2));
+    var mmio = win(t, 15.9, 22.2) ? 1 : 0;
+    id('dmmion').textContent = mmio;
+    id('ddevn').textContent = t >= 18.1 && t < 22.2 ? 1 : 0;
+
+    /* ---- why the batch ended -------------------------------------------- */
+    xc.mmio.classList.toggle('on', win(t, 18.9, 20.3));
+    xc.bud.classList.toggle('on', win(t, 24.6, 26.4));
+    xc.evt.classList.toggle('on', false);
+
+    /* ---- the wires ------------------------------------------------------ */
+    wire(WS[0], win(t,1.8,3.5) || win(t,20.4,21.2) || win(t,22.2,22.75) || win(t,24.95,25.6) || win(t,28.3,28.9),
+         win(t,20.4,21.2) || win(t,24.95,25.6), '', t);
+    wire(WS[1], win(t,18.5,19.3), 0, 'h', t);
+    wire(WS[2], win(t,17.5,18.3), 0, '',  t);
+    wire(WS[3], exec, 0, '', t);
+    wire(WS[4], win(t,15.6,16.7), 0, 'q', t);
+  }
+
+  /* ---- the clock ------------------------------------------------------- */
+  var still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+      raf = 0, t0 = null, live = false;
+
+  function frame(ts){
+    if (!live) return;
+    if (t0 === null) t0 = ts;
+    render(((ts - t0) / 1000) % CYCLE);
+    raf = requestAnimationFrame(frame);
+  }
+  function play(){ if (live) return; live = true; t0 = null; raf = requestAnimationFrame(frame); }
+  function stop(){ live = false; cancelAnimationFrame(raf); }
+  function sync(){
+    if (!slide.classList.contains('active')) { stop(); return; }
+    if (still) { stop(); render(POSTER); } else play();
+  }
+
+  new MutationObserver(sync).observe(slide, {attributes:true, attributeFilter:['class']});
+  window.addEventListener('beforeprint', function(){ stop(); render(POSTER); });
+  window.addEventListener('afterprint', sync);
+  /* render one exact frame — used for the printed still and for layout checks */
+  window.jitDemoFrame = function(t){ stop(); lastPh = -1; render(t); };
+  sync();
+})();
+</script>
+</body>
+</html>

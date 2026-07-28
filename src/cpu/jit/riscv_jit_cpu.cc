@@ -724,7 +724,14 @@ RiscvJitCPU::physicalMemoryMap(size_t index, uint64_t *guestAddress,
                 "interleaved=%d\n",
                 store.range.start(), store.range.end(), store.kvmMap,
                 store.pmem, store.range.interleaved());
-        if (!store.kvmMap || !store.pmem || store.range.interleaved()) {
+        // PhysicalMemory merges interleaved ranges into the contiguous range
+        // they tile and refuses to back an interleaved range at all, so a
+        // backing store can never be interleaved. Direct mapping depends on
+        // that: the host image must be linear in guest physical address.
+        panic_if(store.range.interleaved(),
+                 "JitCPU backing store %s is interleaved",
+                 store.range.to_string());
+        if (!store.kvmMap || !store.pmem) {
             continue;
         }
         if (eligible++ != index) {

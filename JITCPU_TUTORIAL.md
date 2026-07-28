@@ -206,12 +206,33 @@ QEMU translated load or store
 ```
 
 [`physicalMemoryMap()`](src/cpu/jit/riscv_jit_cpu.cc#L713) enumerates gem5's
-backing store and offers every host-contiguous, writable, non-interleaved
-range for direct mapping. Everything else — device MMIO, but also interleaved
-DRAM ranges in the 16-core mesh — funnels through
+backing store and offers every kvm-mappable region for direct mapping.
+Everything else — device MMIO above all — funnels through
 [`physicalAccess()`](src/cpu/jit/riscv_jit_cpu.cc#L686), which builds real
 gem5 packets, so device models behave exactly as they would under any other
 CPU.
+
+**Interleaving costs the fast path nothing.** A CHI mesh spreads DRAM across
+several memory controllers with interleaved address ranges, but
+[`PhysicalMemory`](src/mem/physical.cc#L148) merges interleaved ranges that
+`mergesWith` each other into a single range covering their union and calls
+[`createBackingStore()`](src/mem/physical.cc#L231) on that — which
+[panics if the range is still interleaved](src/mem/physical.cc#L246) — then
+points every controller at the one `mmap`. The host image is linear in guest
+physical address however many controllers share it, so `getBackingStore()`
+can never report an interleaved range and the `interleaved()` guard in
+`physicalMemoryMap()` is unreachable. Running the 16-hart 4x4 mesh confirms
+it: 16 harts, 16 HNFs and 4 memory controllers, and the backend is offered
+one region spanning the whole 1 GiB.
+
+What does exclude a region is `kvm_map`. The Ruby configurations
+[enable `access_backing_store` whenever `--num-dirs` exceeds one](tests/gem5/jitcpu/configs/jitcpu_common.py#L34),
+which [clears `kvm_map` on the DRAM interfaces](configs/ruby/Ruby.py#L185)
+and creates `system.ruby.phys_mem`. That is then the region QEMU maps
+directly — and it is the same allocation Ruby's functional accesses reach, so
+the direct mapping and the slow path always see the same bytes. With a single
+directory there is no `access_backing_store` and the merged DRAM store is the
+mapped one instead.
 
 Two subtleties in that slow path:
 
