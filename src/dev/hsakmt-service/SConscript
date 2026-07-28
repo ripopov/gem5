@@ -1,0 +1,64 @@
+# -*- mode:python -*-
+
+Import('*')
+
+import os
+
+if not env['CONF']['BUILD_GPU']:
+    Return()
+
+kmd_prefix = ARGUMENTS.get(
+    'ROCJITSU_KMD_PREFIX', os.environ.get('ROCJITSU_KMD_PREFIX', ''))
+kmd_enabled = bool(kmd_prefix)
+
+sim_objects = ['HsakmtServerPlatform']
+if kmd_enabled:
+    kmd_include = os.path.join(kmd_prefix, 'include')
+    kmd_lib_dirs = [
+        path for path in (
+            os.path.join(kmd_prefix, 'lib'),
+            os.path.join(kmd_prefix, 'lib64'),
+        ) if os.path.isdir(path)
+    ]
+    if not os.path.isfile(
+            os.path.join(kmd_include, 'rocjitsu', 'kmd', 'server.h')):
+        raise RuntimeError(
+            'ROCJITSU_KMD_PREFIX does not contain rocjitsu/kmd/server.h')
+    if not kmd_lib_dirs:
+        raise RuntimeError(
+            'ROCJITSU_KMD_PREFIX has neither a lib nor lib64 directory')
+    env.Prepend(CPPPATH=[kmd_include], LIBPATH=kmd_lib_dirs)
+    env.Append(LIBS=['rocjitsu_kmd_server'], RPATH=kmd_lib_dirs)
+    sim_objects.append('RocjitsuKmdServer')
+
+SimObject('HsakmtService.py', sim_objects=sim_objects)
+DebugFlag('RocjitsuKmd')
+
+for source in (
+        'service/hsakmt_server_platform.cc',
+        'service/doorbell_bridge.cc',
+        'service/gpu_vm_manager.cc',
+        'service/queue_work_engine.cc',
+        'service/service_stats.cc',
+        'service/shared_region_allocator.cc',
+):
+    Source(source)
+
+if kmd_enabled:
+    Source('service/gem5_device_backend.cc')
+    Source('service/rocjitsu_kmd_server.cc')
+    GTest('gem5-device-backend-test',
+          'tests/gem5_device_backend_test.cpp',
+          'service/gem5_device_backend.cc')
+
+GTest('service-stats-test', 'tests/service_stats_test.cpp',
+      'service/service_stats.cc')
+GTest('shared-region-allocator-test',
+      'tests/shared_region_allocator_test.cpp',
+      'service/shared_region_allocator.cc')
+GTest('doorbell-bridge-test', 'tests/doorbell_bridge_test.cpp',
+      'service/doorbell_bridge.cc')
+GTest('gpu-vm-manager-test', 'tests/gpu_vm_manager_test.cpp',
+      'service/gpu_vm_manager.cc', 'service/service_stats.cc')
+GTest('queue-work-engine-test', 'tests/queue_work_engine_test.cpp',
+      'service/queue_work_engine.cc', 'service/service_stats.cc')

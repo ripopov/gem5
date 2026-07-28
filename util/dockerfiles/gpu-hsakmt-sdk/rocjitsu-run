@@ -1,0 +1,43 @@
+#!/bin/sh
+# Run an application through rocjitsu. --attach connects the interposer to the
+# gem5-hosted KMD endpoint; the other modes use rocjitsu's functional device.
+set -eu
+
+if [ "$#" -eq 0 ]; then
+    echo "usage: rocjitsu-run [--daemon|--attach] <application> [argument ...]" >&2
+    echo "  ROCJITSU_CONFIG selects the simulated device" \
+         "(default: gfx942_cdna3_kmd.json)" >&2
+    exit 2
+fi
+
+mode=
+if [ "$1" = "--daemon" ] || [ "$1" = "--attach" ]; then
+    mode=$1
+    shift
+fi
+
+# The CLI needs a writable runtime directory for its socket and config marker.
+: "${ROCJITSU_RUNTIME_DIR:=${TMPDIR:-/tmp}/rocjitsu-$(id -u)}"
+export ROCJITSU_RUNTIME_DIR
+mkdir -p "${ROCJITSU_RUNTIME_DIR}"
+
+if [ "${mode}" = "--attach" ]; then
+    exec rocjitsu --attach -- "$@"
+fi
+
+config=${ROCJITSU_CONFIG:-gfx942_cdna3_kmd.json}
+case "${config}" in
+    */*) ;;
+    *) config="${ROCJITSU_CONFIG_DIR:-/opt/rocjitsu/share/rocjitsu/configs}/${config}" ;;
+esac
+
+if [ ! -f "${config}" ]; then
+    echo "rocjitsu-run: no such config: ${config}" >&2
+    exit 2
+fi
+
+if [ "${mode}" = "--daemon" ]; then
+    exec rocjitsu --daemon --config "${config}" -- "$@"
+fi
+
+exec rocjitsu --config "${config}" -- "$@"

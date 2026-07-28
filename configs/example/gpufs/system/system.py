@@ -64,14 +64,17 @@ def makeGpuFSSystem(args):
     (TestCPUClass, test_mem_mode) = Simulation.getCPUClass(args.cpu_type)
     if test_mem_mode == "atomic":
         test_mem_mode = "atomic_noncaching"
-    disks = [args.disk_image]
+    disks = []
+    if args.disk_image:
+        disks.append(args.disk_image)
     if args.second_disk is not None:
         disks.extend([args.second_disk])
     bm = SysConfig(disks=disks, mem=args.mem_size)
     system = makeLinuxX86System(
         test_mem_mode, args.num_cpus, bm, True, cmdline=cmdline
     )
-    system.workload.object_file = binary(args.kernel)
+    if args.kernel:
+        system.workload.object_file = binary(args.kernel)
 
     # Set the cache line size for the entire system.
     system.cache_line_size = args.cacheline_size
@@ -216,56 +219,28 @@ def makeGpuFSSystem(args):
 
     # Setup PM4 packet processors
     pm4_procs = []
+
+    def make_pm4(ip_id, start, end):
+        return PM4PacketProcessor(
+            ip_id=ip_id,
+            mmio_range=AddrRange(start=start, end=end),
+            walker=VegaPagetableWalker(),
+        )
+
     if args.gpu_device == "MI300X" or args.gpu_device == "MI355X":
         # These MMIO addresses are based on the IP discovery file associated
         # with the disk image. Changes to these values require changes to the
         # discovery file base addresses.
-        pm4_procs.append(
-            PM4PacketProcessor(
-                ip_id=0, mmio_range=AddrRange(start=0xC000, end=0xD000)
-            )
-        )
-        pm4_procs.append(
-            PM4PacketProcessor(
-                ip_id=1, mmio_range=AddrRange(start=0x4C000, end=0x4D000)
-            )
-        )
-        pm4_procs.append(
-            PM4PacketProcessor(
-                ip_id=2, mmio_range=AddrRange(start=0x8C000, end=0x8D000)
-            )
-        )
-        pm4_procs.append(
-            PM4PacketProcessor(
-                ip_id=3, mmio_range=AddrRange(start=0xCC000, end=0xCD000)
-            )
-        )
-        pm4_procs.append(
-            PM4PacketProcessor(
-                ip_id=4, mmio_range=AddrRange(start=0x10C000, end=0x10D000)
-            )
-        )
-        pm4_procs.append(
-            PM4PacketProcessor(
-                ip_id=5, mmio_range=AddrRange(start=0x14C000, end=0x14D000)
-            )
-        )
-        pm4_procs.append(
-            PM4PacketProcessor(
-                ip_id=6, mmio_range=AddrRange(start=0x18C000, end=0x18D000)
-            )
-        )
-        pm4_procs.append(
-            PM4PacketProcessor(
-                ip_id=7, mmio_range=AddrRange(start=0x1CC000, end=0x1CD000)
-            )
-        )
+        pm4_procs.append(make_pm4(0, 0xC000, 0xD000))
+        pm4_procs.append(make_pm4(1, 0x4C000, 0x4D000))
+        pm4_procs.append(make_pm4(2, 0x8C000, 0x8D000))
+        pm4_procs.append(make_pm4(3, 0xCC000, 0xCD000))
+        pm4_procs.append(make_pm4(4, 0x10C000, 0x10D000))
+        pm4_procs.append(make_pm4(5, 0x14C000, 0x14D000))
+        pm4_procs.append(make_pm4(6, 0x18C000, 0x18D000))
+        pm4_procs.append(make_pm4(7, 0x1CC000, 0x1CD000))
     else:
-        pm4_procs.append(
-            PM4PacketProcessor(
-                ip_id=0, mmio_range=AddrRange(start=0xC000, end=0xD000)
-            )
-        )
+        pm4_procs.append(make_pm4(0, 0xC000, 0xD000))
 
     system.pc.south_bridge.gpu.pm4_pkt_procs = pm4_procs
 
@@ -294,7 +269,6 @@ def makeGpuFSSystem(args):
     system._dma_ports.append(cp_pt_walker)
     for sdma_pt_walker in sdma_pt_walkers:
         system._dma_ports.append(sdma_pt_walker)
-
     gpu_hsapp.pio = system.iobus.mem_side_ports
     gpu_cmd_proc.pio = system.iobus.mem_side_ports
     for sdma in sdma_engines:

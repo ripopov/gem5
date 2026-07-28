@@ -1,0 +1,48 @@
+---
+services:
+    gem5:
+        image: ${HSAKMT_RUNNER_IMAGE:-gem5-gpu-hsakmt-runner:local}
+        pull_policy: never
+        platform: ${HSAKMT_PLATFORM:-}
+        network_mode: none
+        shm_size: 2gb
+        environment:
+            HSAKMT_RUN_UID: ${HOST_UID:-1000}
+            HSAKMT_RUN_GID: ${HOST_GID:-1000}
+            ROCJITSU_RUNTIME_DIR: /run/rocjitsu
+            HSAKMT_RPC_SOCKET: /run/rocjitsu/daemon.sock
+            HSAKMT_OUTPUT_DIR: /outputs/${HSAKMT_RUN_ID:-current}
+            HSAKMT_GEM5_ARGS_FILE: /outputs/${HSAKMT_RUN_ID:-current}/gem5.args
+            HSAKMT_CONFIG_ARGS_FILE: /outputs/${HSAKMT_RUN_ID:-current}/config.args
+            HSAKMT_ABS_MAX_TICK: ${HSAKMT_ABS_MAX_TICK:-1000000000000}
+        volumes:
+            - rocjitsu-runtime:/run/rocjitsu
+            - ./work/runs:/outputs
+        command: [run]
+        healthcheck:
+            test: [CMD-SHELL, test -S /run/rocjitsu/daemon.sock]
+            interval: 1s
+            timeout: 1s
+            retries: 180
+        stop_grace_period: 15s
+
+    sdk:
+        image: ${HSAKMT_SDK_IMAGE:-gem5-gpu-hsakmt-sdk:local}
+        pull_policy: never
+        platform: ${HSAKMT_PLATFORM:-}
+        network_mode: none
+        user: ${HOST_UID:-1000}:${HOST_GID:-1000}
+        working_dir: /workspace
+        environment:
+            HOME: /tmp
+            ROCJITSU_RUNTIME_DIR: /run/rocjitsu
+        volumes:
+            - rocjitsu-runtime:/run/rocjitsu
+            - ./work/apps:/workspace/apps
+        depends_on:
+            gem5:
+                condition: service_healthy
+                restart: false
+
+volumes:
+    rocjitsu-runtime:

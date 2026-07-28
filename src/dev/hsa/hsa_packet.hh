@@ -100,13 +100,18 @@ struct _hsa_barrier_or_packet_t
     uint64_t completion_signal;
 };
 
-struct _hsa_generic_vendor_pkt
+struct _hsa_amd_aql_pm4_ib_pkt
 {
-    uint32_t padding[14];
+    uint16_t header;
+    uint16_t vendor_header;
+    uint32_t ib_jump[4];
+    uint32_t remaining_dwords;
+    uint32_t reserved[8];
     Addr completion_signal;
 };
+
 // All HSA AQL packets are 64 bytes. Confirm that here.
-static_assert(sizeof(_hsa_generic_vendor_pkt) == 64);
+static_assert(sizeof(_hsa_amd_aql_pm4_ib_pkt) == 64);
 
 } // namespace gem5
 

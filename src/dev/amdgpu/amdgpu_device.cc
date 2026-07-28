@@ -60,7 +60,8 @@ AMDGPUDevice::AMDGPUDevice(const AMDGPUDeviceParams &p)
       checkpoint_before_mmios(p.checkpoint_before_mmios),
       init_interrupt_count(0),
       _lastVMID(0),
-      deviceMem(name() + ".deviceMem", p.memories, false, "", false),
+      deviceMem(name() + ".deviceMem", p.memories, false,
+                p.shared_backstore, p.auto_unlink_shared_backstore),
       system(p.system),
       gpuId(p.gpu_id)
 {
@@ -273,6 +274,22 @@ AMDGPUDevice::AMDGPUDevice(const AMDGPUDeviceParams &p)
                     ipt_dword, ipTable[ipt_dword], fixup_addr);
         }
     }
+}
+
+std::optional<memory::BackingStoreEntry>
+AMDGPUDevice::getVramBackingStore(Addr paddr, Addr size) const
+{
+    if (size == 0 || paddr > MaxAddr - (size - 1))
+        return std::nullopt;
+
+    const Addr end = paddr + size;
+    for (const auto &entry : deviceMem.getBackingStore()) {
+        if (entry.shmFd >= 0 && paddr >= entry.range.start() &&
+            end <= entry.range.end()) {
+            return entry;
+        }
+    }
+    return std::nullopt;
 }
 
 void
@@ -854,6 +871,26 @@ AMDGPUDevice::setSDMAEngine(Addr offset, SDMAEngine *eng)
     sdmaEngs[offset] = eng;
 }
 
+void
+AMDGPUDevice::unsetSDMAEngine(Addr offset)
+{
+    sdmaEngs.erase(offset);
+}
+
+SDMAEngine *
+AMDGPUDevice::findSDMAEngine(Addr offset) const
+{
+    const auto it = sdmaEngs.find(offset);
+    return it == sdmaEngs.end() ? nullptr : it->second;
+}
+
+PM4PacketProcessor *
+AMDGPUDevice::getPM4PacketProcessor(int ip_id)
+{
+    const auto it = pm4PktProcs.find(ip_id);
+    return it == pm4PktProcs.end() ? nullptr : it->second;
+}
+
 SDMAEngine*
 AMDGPUDevice::getSDMAById(int id)
 {
@@ -1052,8 +1089,9 @@ void
 AMDGPUDevice::deallocatePasid(uint16_t pasid)
 {
     auto result = idMap.find(pasid);
-    assert(result != idMap.end());
-    if (result == idMap.end()) return;
+    if (result == idMap.end()) {
+        return;
+    }
     uint16_t vmid = result->second;
 
     idMap.erase(result);
@@ -1085,6 +1123,21 @@ AMDGPUDevice::mapDoorbellToVMID(Addr doorbell, uint16_t vmid)
     doorbellVMIDMap[doorbell] = vmid;
 }
 
+void
+AMDGPUDevice::unmapDoorbellFromVMID(Addr doorbell)
+{
+    doorbellVMIDMap.erase(doorbell);
+}
+
+std::optional<uint16_t>
+AMDGPUDevice::findVMID(Addr doorbell) const
+{
+    const auto it = doorbellVMIDMap.find(doorbell);
+    return it == doorbellVMIDMap.end()
+        ? std::nullopt
+        : std::optional<uint16_t>{it->second};
+}
+
 std::unordered_map<uint16_t, std::set<int>>&
 AMDGPUDevice::getUsedVMIDs()
 {
@@ -1095,6 +1148,15 @@ void
 AMDGPUDevice::insertQId(uint16_t vmid, int id)
 {
     usedVMIDs[vmid].insert(id);
+}
+
+void
+AMDGPUDevice::removeQId(uint16_t vmid, int id)
+{
+    const auto queues = usedVMIDs.find(vmid);
+    if (queues != usedVMIDs.end()) {
+        queues->second.erase(id);
+    }
 }
 
 } // namespace gem5

@@ -22,6 +22,19 @@ docker pull ghcr.io/gem5/gem5/ubuntu-24.04_all-dependencies:latest
 The gem5 Dockerfiles are available in this directory.
 All the currently supported Docker images, stored in the registry, are built using these Dockerfiles.
 
+### HSAKMT GPU Lab images
+
+The HSAKMT no-guest workflow uses a deliberately split image pair:
+
+- `gpu-hsakmt-sdk/` builds and runs HIP applications with ROCr 1.21 and the
+  rocjitsu KFD/DRM interposer.
+- `gpu-hsakmt-runner/` builds a self-contained gem5 HSAKMT server image and
+  the embeddable rocjitsu KMD library and runtime configuration.
+
+Use `gpu-lab/workspace/scripts/build-hsakmt-images.sh` to build a matching pair
+from the same source revision. The corresponding Compose workflow is described
+in `gpu-lab/RunningTheLab.md`.
+
 ### Docker buildx
 
 The Dockerfiles are built using the Docker buildx feature. The buildx feature is used to build multi-platform images which allow for a single Docker image container variants of the environment for a given set of hardware platforms (most notable ISAs). The buildx feature is available in Docker 19.03 and later versions.

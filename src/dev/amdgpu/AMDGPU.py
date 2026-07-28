@@ -99,6 +99,15 @@ class AMDGPUDevice(PciEndpoint):
     pm4_pkt_procs = VectorParam.PM4PacketProcessor("PM4 Packet Processor")
     memory_manager = Param.AMDGPUMemoryManager("GPU Memory Manager")
     memories = VectorParam.AbstractMemory([], "All memories in the device")
+    shared_backstore = Param.String(
+        "",
+        "Optional POSIX shared-memory name for the existing VRAM backing "
+        "store. Leave empty for private anonymous backing.",
+    )
+    auto_unlink_shared_backstore = Param.Bool(
+        False,
+        "Unlink the VRAM shared backstore when simulation exits.",
+    )
     device_ih = Param.AMDGPUInterruptHandler("GPU Interrupt handler")
 
 
@@ -122,6 +131,7 @@ class PM4PacketProcessor(DmaVirtDevice):
     # Default to 0 as the common case is one PM4 packet processor
     ip_id = Param.Int(0, "Instance ID of this PM4 processor")
     mmio_range = Param.AddrRange("Range of MMIO addresses")
+    walker = Param.VegaPagetableWalker("Page table walker")
 
 
 class AMDGPUMemoryManager(ClockedObject):

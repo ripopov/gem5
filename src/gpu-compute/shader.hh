@@ -314,6 +314,8 @@ class Shader : public ClockedObject
 
     void prepareInvalidate(HSAQueueEntry *task);
     void prepareFlush(GPUDynInstPtr gpuDynInst);
+    void acquireMemory(Addr base, Addr size,
+                       std::function<void()> completion);
 
     bool dispatchWorkgroups(HSAQueueEntry *task);
     Addr mmap(int length);

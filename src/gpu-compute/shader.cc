@@ -32,6 +32,7 @@
 #include "gpu-compute/shader.hh"
 
 #include <limits>
+#include <memory>
 
 #include "arch/amdgpu/common/gpu_translation_state.hh"
 #include "arch/amdgpu/common/tlb.hh"
@@ -236,6 +237,24 @@ Shader::prepareInvalidate(HSAQueueEntry *task) {
 
         // I don't like this. This is intrusive coding.
         cuList[i_cu]->resetRegisterPool();
+    }
+}
+
+void
+Shader::acquireMemory(
+    Addr base, Addr size, std::function<void()> completion)
+{
+    if (n_cu == 0) {
+        completion();
+        return;
+    }
+
+    auto pending = std::make_shared<unsigned>(n_cu);
+    for (int i = 0; i < n_cu; ++i) {
+        cuList[i]->doAcquireMem(base, size, [pending, completion] {
+            if (--*pending == 0)
+                completion();
+        });
     }
 }
 

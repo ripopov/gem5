@@ -563,6 +563,24 @@ ComputeUnit::doInvalidate(RequestPtr req, int kernId){
     injectGlobalMemFence(gpuDynInst, true, req);
 }
 
+void
+ComputeUnit::doAcquireMem(
+    Addr base, Addr size, std::function<void()> completion)
+{
+    const auto request_size = static_cast<unsigned>(
+        std::min<Addr>(size, std::numeric_limits<unsigned>::max()));
+    auto req = std::make_shared<Request>(
+        base, request_size, 0, vramRequestorId());
+    req->setCacheCoherenceFlags(Request::INV_L1);
+
+    auto *pkt = new Packet(req, MemCmd::MemSyncReq);
+    pkt->pushSenderState(
+        new DataPort::SenderState(this, 0, std::move(completion)));
+
+    auto *event = memPort[0].createMemReqEvent(pkt);
+    schedule(event, curTick() + req_tick_latency);
+}
+
 /**
  * trigger flush operation in the cu
  *
@@ -1023,7 +1041,13 @@ ComputeUnit::DataPort::handleResponse(PacketPtr pkt)
             ComputeUnit *cu = sender_state->computeUnit;
             assert(cu != nullptr);
 
-            if (pkt->req->isInvL2()) {
+            if (sender_state->completion) {
+                auto completion = std::move(sender_state->completion);
+                delete pkt->senderState;
+                delete pkt;
+                completion();
+                return true;
+            } else if (pkt->req->isInvL2()) {
                 cu->shader->decNumOutstandingInvL2s();
                 assert(cu->shader->getNumOutstandingInvL2s() >= 0);
             } else {
@@ -1558,7 +1582,9 @@ ComputeUnit::injectGlobalMemFence(GPUDynInstPtr gpuDynInst,
         } else {
           // kernel end flush of GL2 cache may be quiesced by Ruby if the
           // GL2 is a read-only cache
-          assert(shader->impl_kern_end_rel);
+          assert(shader->impl_kern_end_rel ||
+                 shader->dispatcher().hsaTask(gpuDynInst->kern_id)
+                     ->releaseFenceScope() != 0);
           assert(gpuDynInst->isEndOfKernel());
 
           req->setCacheCoherenceFlags(Request::FLUSH_L2);

@@ -1,0 +1,3 @@
+[submodule "ext/hsakmt-client/rocm-systems"]
+	path = ext/hsakmt-client/rocm-systems
+	url = https://github.com/ripopov/rocm-systems.git

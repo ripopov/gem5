@@ -43,6 +43,9 @@ namespace X86ISA
 
 class BareMetalWorkload : public Workload
 {
+  private:
+    const bool activateBootstrap;
+
   public:
     using Params = X86BareMetalWorkloadParams;
     BareMetalWorkload(const Params &p);

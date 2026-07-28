@@ -31,6 +31,8 @@
 
 #include "dev/hsa/hw_scheduler.hh"
 
+#include <algorithm>
+
 #include "base/compiler.hh"
 #include "base/trace.hh"
 #include "debug/HSAPacketProcessor.hh"
@@ -87,7 +89,7 @@ HWScheduler::registerNewQueue(uint64_t hostReadIndexPointer,
                               uint64_t queue_id,
                               uint32_t size, int doorbellSize,
                               GfxVersion gfxVersion,
-                              Addr offset, uint64_t rd_idx)
+                              Addr offset, uint64_t rd_idx, uint16_t vmid)
 {
     assert(queue_id < MAX_ACTIVE_QUEUES);
     // Map queue ID to doorbell.
@@ -111,7 +113,7 @@ HWScheduler::registerNewQueue(uint64_t hostReadIndexPointer,
 
     HSAQueueDescriptor* q_desc =
        new HSAQueueDescriptor(basePointer, offset,
-                              hostReadIndexPointer, size, gfxVersion);
+                              hostReadIndexPointer, size, gfxVersion, vmid);
     AQLRingBuffer* aql_buf =
         new AQLRingBuffer(NUM_DMA_BUFS, hsaPP->name());
     if (rd_idx > 0) {
@@ -335,13 +337,12 @@ HWScheduler::write(Addr db_addr, uint64_t doorbell_reg)
         panic("Writing to a non-existing queue (db_offset %x)", db_addr);
     }
     uint32_t al_idx = dbMap[db_addr];
-    // Modify the write pointer
-    activeList[al_idx].qDesc->writeIndex = doorbell_reg;
-    // If a queue is unmapped and remapped (common in full system) the qDesc
-    // gets reused. Keep the readIndex up to date so that when the HSA packet
-    // processor gets commands from host, the correct entry is read after
-    // remapping.
-    activeList[al_idx].qDesc->readIndex = doorbell_reg - 1;
+    // Doorbell values are monotonically increasing write indices. Multiple
+    // queue publications may be coalesced into one notification, so retain
+    // the consumer's existing read index and let the packet processor fetch
+    // every newly visible entry.
+    activeList[al_idx].qDesc->writeIndex =
+        std::max(activeList[al_idx].qDesc->writeIndex, doorbell_reg);
     DPRINTF(HSAPacketProcessor, "q %d readIndex %d writeIndex %d\n",
             al_idx, activeList[al_idx].qDesc->readIndex,
             activeList[al_idx].qDesc->writeIndex);

@@ -56,6 +56,7 @@ enum it_opcode_type
     IT_WAIT_REG_MEM                      = 0x3C,
     IT_INDIRECT_BUFFER                   = 0x3F,
     IT_RELEASE_MEM                       = 0x49,
+    IT_ACQUIRE_MEM                       = 0x58,
     IT_SET_UCONFIG_REG                   = 0x79,
     IT_SWITCH_BUFFER                     = 0x8B,
     IT_INVALIDATE_TLBS                   = 0x98,
@@ -391,6 +392,22 @@ typedef struct GEM5_PACKED
     uint32_t priv : 1;
 }  PM4IndirectBuf;
 static_assert(sizeof(PM4IndirectBuf) == 12);
+
+/**
+ * Payload shared by the gfx9 and gfx10+ ACQUIRE_MEM encodings. Gfx9 stops
+ * after pollInterval; later generations append gcrControl.
+ */
+typedef struct GEM5_PACKED
+{
+    uint32_t coherControl;
+    uint32_t coherSizeLo;
+    uint32_t coherSizeHi;
+    uint32_t coherBaseLo;
+    uint32_t coherBaseHi;
+    uint32_t pollInterval;
+    uint32_t gcrControl;
+} PM4AcquireMem;
+static_assert(sizeof(PM4AcquireMem) == 28);
 
 typedef struct GEM5_PACKED
 {

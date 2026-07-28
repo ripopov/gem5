@@ -45,6 +45,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <optional>
 
 #include "arch/amdgpu/vega/gpu_registers.hh"
 #include "base/logging.hh"
@@ -132,11 +133,18 @@ class GPUCommandProcessor : public DmaVirtDevice
                             [] (const uint64_t &) { });
     void updateHsaSignalAsync(Addr signal_handle, int64_t diff);
     void updateHsaSignalData(Addr value_addr, int64_t diff,
-                             uint64_t *prev_value);
-    void updateHsaSignalDone(uint64_t *signal_value);
+                             uint64_t *prev_value,
+                             std::optional<uint32_t> event_id = std::nullopt);
+    void updateHsaSignalDone(
+        Addr signal_handle, uint64_t *signal_value,
+        std::optional<uint32_t> event_id = std::nullopt);
+    void updateHsaMailboxCleared(uint64_t *mailbox_value,
+                                 uint32_t event_id);
     void updateHsaMailboxData(Addr signal_handle, uint64_t *mailbox_value);
     void updateHsaEventData(Addr signal_handle, uint64_t *event_value);
-    void updateHsaEventTs(Addr signal_handle, amd_event_t *event_value);
+    void updateHsaEventTs(
+        Addr signal_handle, amd_event_t *event_value,
+        std::optional<uint32_t> event_id = std::nullopt);
 
     uint64_t functionalReadHsaSignal(Addr signal_handle);
 

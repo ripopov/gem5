@@ -483,9 +483,10 @@ AMDGPUVM::UserTranslationGen::translate(Range &range) const
         next += AMDGPU_USER_PAGE_SIZE;
     }
 
-    // If we are not in system/host memory, change the address to the MMHUB
-    // aperture. This is mapped to the same backing memory as device memory.
-    if (!system_bit) {
+    // GPU execution uses the MMHUB shadow aperture to identify VRAM. DMA
+    // devices submit physical requests to Ruby instead, so their translation
+    // generators retain the underlying device-memory offset.
+    if (!system_bit && !devicePhysical) {
         paddr += vm->getMMHUBBase();
         assert(vm->inMMHUB(paddr));
     }

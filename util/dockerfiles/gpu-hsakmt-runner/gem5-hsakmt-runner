@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+fail() {
+    echo "gem5-hsakmt-runner: $*" >&2
+    exit 2
+}
+
+is_uint() {
+    [[ "$1" =~ ^[0-9]+$ ]]
+}
+
+run_uid="${HSAKMT_RUN_UID:-1000}"
+run_gid="${HSAKMT_RUN_GID:-1000}"
+socket="${HSAKMT_RPC_SOCKET:-/run/rocjitsu/daemon.sock}"
+runtime_root="${ROCJITSU_RUNTIME_DIR:-$(dirname "${socket}")}"
+output_dir="${HSAKMT_OUTPUT_DIR:-/outputs/current}"
+
+[[ $# -gt 0 ]] || fail "usage: gem5-hsakmt-runner run | <command>"
+is_uint "${run_uid}" || fail "HSAKMT_RUN_UID must be numeric"
+is_uint "${run_gid}" || fail "HSAKMT_RUN_GID must be numeric"
+[[ "${socket}" = /* ]] || fail "HSAKMT_RPC_SOCKET must be absolute"
+[[ "${runtime_root}" = /* && "${runtime_root}" != "/" ]] || \
+    fail "ROCJITSU_RUNTIME_DIR must be an absolute non-root directory"
+[[ "${output_dir}" = /* && "${output_dir}" != "/" ]] || \
+    fail "HSAKMT_OUTPUT_DIR must be an absolute non-root directory"
+
+socket_dir="$(dirname "${socket}")"
+[[ "${socket_dir}" == "${runtime_root}" ]] || \
+    fail "HSAKMT_RPC_SOCKET must be directly beneath ROCJITSU_RUNTIME_DIR"
+
+if [[ "$(id -u)" -eq 0 ]]; then
+    install -d -m 0770 "${runtime_root}"
+    install -d -m 0775 "${output_dir}"
+    # Numeric host IDs need not have matching passwd or group entries.
+    chown "${run_uid}:${run_gid}" "${runtime_root}" "${output_dir}"
+    run_as=(setpriv --reuid "${run_uid}" --regid "${run_gid}" --clear-groups)
+else
+    [[ "$(id -u)" -eq "${run_uid}" ]] || \
+        fail "container uid does not match HSAKMT_RUN_UID"
+    [[ "$(id -g)" -eq "${run_gid}" ]] || \
+        fail "container gid does not match HSAKMT_RUN_GID"
+    mkdir -p "${runtime_root}" "${output_dir}"
+    run_as=()
+fi
+
+rm -f "${socket}"
+rm -rf "${runtime_root}/topology" "${runtime_root}/drm"
+
+[[ -w "${runtime_root}" ]] || fail "runtime directory is not writable"
+[[ -w "${output_dir}" ]] || fail "output directory is not writable"
+
+if [[ "${1:-}" != "run" ]]; then
+    exec "${run_as[@]}" "$@"
+fi
+shift
+[[ $# -eq 0 ]] || fail "the run command does not accept positional arguments"
+
+gem5="${HSAKMT_GEM5:-/gem5/build/VEGA_X86/gem5.opt}"
+config="${HSAKMT_CONFIG:-/gem5/configs/example/gpufs/hsakmt_server.py}"
+abs_max_tick="${HSAKMT_ABS_MAX_TICK:-1000000000000}"
+extra_args_file="${HSAKMT_GEM5_ARGS_FILE:-}"
+config_args_file="${HSAKMT_CONFIG_ARGS_FILE:-}"
+
+[[ -x "${gem5}" ]] || fail "gem5 executable is missing: ${gem5}"
+[[ -f "${config}" ]] || fail "gem5 configuration is missing: ${config}"
+is_uint "${abs_max_tick}" || fail "HSAKMT_ABS_MAX_TICK must be numeric"
+
+extra_args=()
+if [[ -n "${extra_args_file}" ]]; then
+    [[ -f "${extra_args_file}" ]] || \
+        fail "gem5 argument file is missing: ${extra_args_file}"
+    mapfile -d '' -t extra_args < "${extra_args_file}"
+fi
+
+config_args=()
+if [[ -n "${config_args_file}" ]]; then
+    [[ -f "${config_args_file}" ]] || \
+        fail "gem5 config argument file is missing: ${config_args_file}"
+    mapfile -d '' -t config_args < "${config_args_file}"
+fi
+
+umask 0002
+exec "${run_as[@]}" "${gem5}" -d "${output_dir}" \
+    "${extra_args[@]}" "${config}" \
+    --num-compute-units=40 \
+    --mem-size=2GiB \
+    --dgpu-mem-size=1GiB \
+    --hsakmt-mmio-bar-base=0xece00000 \
+    "${config_args[@]}" \
+    --num-cpus=1 \
+    --cpu-type=X86TimingSimpleCPU \
+    --gpu-device=MI300X \
+    --rocjitsu-runtime-root="${runtime_root}" \
+    --hsakmt-rpc-socket="${socket}" \
+    --hsakmt-auto-start \
+    --hsakmt-exit-on-rpc-disconnect \
+    --simulate \
+    --abs-max-tick="${abs_max_tick}"

@@ -76,7 +76,8 @@ HSAPP_EVENT_DESCRIPTION_GENERATOR(QueueProcessEvent)
 HSAPacketProcessor::HSAPacketProcessor(const Params &p)
     : DmaVirtDevice(p), walker(p.walker),
       numHWQueues(p.numHWQueues), pioAddr(p.pioAddr),
-      pioSize(PAGE_SIZE), pioDelay(10), pktProcessDelay(p.pktProcessDelay)
+      pioSize(PAGE_SIZE), pioDelay(10), pktProcessDelay(p.pktProcessDelay),
+      stats(this)
 {
     DPRINTF(HSAPacketProcessor, "%s:\n", __FUNCTION__);
     hwSchdlr = new HWScheduler(this, p.wakeupDelay);
@@ -114,14 +115,15 @@ HSAPacketProcessor::setDeviceQueueDesc(uint64_t hostReadIndexPointer,
                                        uint64_t queue_id,
                                        uint32_t size, int doorbellSize,
                                        GfxVersion gfxVersion,
-                                       Addr offset, uint64_t rd_idx)
+                                       Addr offset, uint64_t rd_idx,
+                                       uint16_t vmid)
 {
     DPRINTF(HSAPacketProcessor,
              "%s:base = %p, qID = %d, ze = %d\n", __FUNCTION__,
              (void *)basePointer, queue_id, size);
     hwSchdlr->registerNewQueue(hostReadIndexPointer,
                                basePointer, queue_id, size, doorbellSize,
-                               gfxVersion, offset, rd_idx);
+                               gfxVersion, offset, rd_idx, vmid);
 }
 
 AddrRangeList
@@ -190,7 +192,7 @@ HSAPacketProcessor::translate(Addr vaddr, Addr size)
     // than the CPU page tables.
     return TranslationGenPtr(
         new AMDGPUVM::UserTranslationGen(&gpuDevice->getVM(), walker,
-                                         1 /* vmid */, vaddr, size));
+                                         1 /* vmid */, vaddr, size, true));
 }
 
 /**
@@ -306,6 +308,9 @@ HSAPacketProcessor::processPkt(void* pkt, uint32_t rl_idx, Addr host_pkt_addr)
     if (pkt_type == HSA_PACKET_TYPE_VENDOR_SPECIFIC) {
         DPRINTF(HSAPacketProcessor, "%s: submitting vendor specific pkt" \
                 " active list ID = %d\n", __FUNCTION__, rl_idx);
+        if (IS_BARRIER(disp_pkt)) {
+            regdQList[rl_idx]->setBarrierBit(true);
+        }
         // Submit packet to HSA device (dispatcher)
         gpu_device->submitVendorPkt((void *)disp_pkt, rl_idx, host_pkt_addr);
         is_submitted = UNBLOCKED;
@@ -454,6 +459,7 @@ HSAPacketProcessor::QueueProcessEvent::process()
         Addr host_addr = aqlRingBuffer->hostDispAddr();
         Q_STATE q_state = hsaPP->processPkt(pkt, rqIdx, host_addr);
         if (q_state == UNBLOCKED) {
+             hsaPP->stats.aqlPacketsSubmitted++;
              aqlRingBuffer->incDispIdx(1);
              DPRINTF(HSAPacketProcessor, "%s: Increment dispIdx[%d]\n",
                      __FUNCTION__, aqlRingBuffer->dispIdx());
@@ -668,6 +674,8 @@ HSAPacketProcessor::finishPkt(void *pvPkt, uint32_t rl_idx)
 {
     HSAQueueDescriptor* qDesc = regdQList[rl_idx]->qCntxt.qDesc;
 
+    stats.aqlPacketsRetired++;
+
     // if barrier bit was set and this is the last
     // outstanding packet from that queue,
     // unset it here
@@ -703,6 +711,16 @@ HSAPacketProcessor::finishPkt(void *pvPkt, uint32_t rl_idx)
                                         // when implementing
                                         // multi-process support
     }
+}
+
+HSAPacketProcessor::HSAPacketProcessorStats::HSAPacketProcessorStats(
+    statistics::Group *parent)
+    : statistics::Group(parent),
+      ADD_STAT(aqlPacketsSubmitted,
+               "number of AQL packets accepted for execution"),
+      ADD_STAT(aqlPacketsRetired,
+               "number of completed AQL packets retired from queues")
+{
 }
 
 void

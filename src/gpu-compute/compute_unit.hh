@@ -33,6 +33,7 @@
 #define __COMPUTE_UNIT_HH__
 
 #include <deque>
+#include <functional>
 #include <map>
 #include <unordered_set>
 #include <vector>
@@ -421,6 +422,7 @@ class ComputeUnit : public ClockedObject
                         bool fetchContext=false);
 
     void doInvalidate(RequestPtr req, int kernId);
+    void doAcquireMem(Addr base, Addr size, std::function<void()> completion);
     void doFlush(GPUDynInstPtr gpuDynInst);
     void doSQCInvalidate(RequestPtr req, int kernId);
 
@@ -545,6 +547,7 @@ class ComputeUnit : public ClockedObject
             GPUDynInstPtr _gpuDynInst;
             PortID port_index;
             Packet::SenderState *saved;
+            std::function<void()> completion;
 
             SenderState(GPUDynInstPtr gpuDynInst, PortID _port_index,
                         Packet::SenderState *sender_state=nullptr)
@@ -557,6 +560,13 @@ class ComputeUnit : public ClockedObject
                 : computeUnit(cu),
                   port_index(_port_index),
                   saved(sender_state) { }
+
+            SenderState(ComputeUnit *cu, PortID _port_index,
+                        std::function<void()> callback)
+                : computeUnit(cu),
+                  port_index(_port_index),
+                  saved(nullptr),
+                  completion(std::move(callback)) { }
         };
 
         class SystemHubEvent : public Event

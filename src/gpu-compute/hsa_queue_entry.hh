@@ -74,6 +74,10 @@ class HSAQueueEntry
           _hostDispPktAddr(host_pkt_addr),
           _completionSignal(((_hsa_dispatch_packet_t*)disp_pkt)
                             ->completion_signal),
+          _acquireFenceScope(
+              (((_hsa_dispatch_packet_t*)disp_pkt)->header >> 9) & 0x3),
+          _releaseFenceScope(
+              (((_hsa_dispatch_packet_t*)disp_pkt)->header >> 11) & 0x3),
           codeAddress(code_addr),
           kernargAddress(((_hsa_dispatch_packet_t*)disp_pkt)->kernarg_address),
           _outstandingInvs(-1), _outstandingWbs(0),
@@ -199,6 +203,18 @@ class HSAQueueEntry
     completionSignal() const
     {
         return _completionSignal;
+    }
+
+    uint8_t
+    acquireFenceScope() const
+    {
+        return _acquireFenceScope;
+    }
+
+    uint8_t
+    releaseFenceScope() const
+    {
+        return _releaseFenceScope;
     }
 
     Addr
@@ -495,6 +511,9 @@ class HSAQueueEntry
     Addr _hostDispPktAddr;
     // pointer to bool
     Addr _completionSignal;
+    // HSA packet header fence scopes retained through kernel execution.
+    uint8_t _acquireFenceScope;
+    uint8_t _releaseFenceScope;
     // base address of the raw machine code
     Addr codeAddress;
     // base address of the kernel args

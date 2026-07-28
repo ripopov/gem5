@@ -31,7 +31,10 @@
 
 #include "gpu-compute/gpu_command_processor.hh"
 
+#include <algorithm>
 #include <cassert>
+#include <cstring>
+#include <iterator>
 
 #include "arch/amdgpu/vega/pagetable_walker.hh"
 #include "base/chunk_generator.hh"
@@ -40,6 +43,8 @@
 #include "debug/GPUInitAbi.hh"
 #include "debug/GPUKernelInfo.hh"
 #include "dev/amdgpu/amdgpu_device.hh"
+#include "dev/amdgpu/interrupt_handler.hh"
+#include "dev/amdgpu/pm4_packet_processor.hh"
 #include "gpu-compute/compute_unit.hh"
 #include "gpu-compute/dispatcher.hh"
 #include "gpu-compute/shader.hh"
@@ -98,7 +103,7 @@ GPUCommandProcessor::translate(Addr vaddr, Addr size)
     // than the CPU page tables.
     return TranslationGenPtr(
         new AMDGPUVM::UserTranslationGen(&gpuDevice->getVM(), walker,
-                                         1 /* vmid */, vaddr, size));
+                                         1 /* vmid */, vaddr, size, true));
 }
 
 void
@@ -461,12 +466,14 @@ GPUCommandProcessor::updateHsaMailboxData(Addr signal_handle,
     DPRINTF(GPUCommandProc, "updateHsaMailboxData read %ld\n", *mailbox_value);
     if (*mailbox_value != 0) {
         // This is an interruptible signal. Now, read the
-        // event ID and directly communicate with the driver
-        // about that event notification.
+        // event ID. The interrupt itself is posted only after the timestamp,
+        // completion signal, and mailbox writes retire.
+        delete mailbox_value;
+        uint64_t *event_value = new uint64_t;
         auto cb = new DmaVirtCallback<uint64_t>(
             [ = ] (const uint64_t &)
-                { updateHsaEventData(signal_handle, mailbox_value); });
-        dmaReadVirt(event_addr, sizeof(uint64_t), cb, (void *)mailbox_value);
+                { updateHsaEventData(signal_handle, event_value); });
+        dmaReadVirt(event_addr, sizeof(uint64_t), cb, (void *)event_value);
     } else {
         delete mailbox_value;
 
@@ -490,14 +497,9 @@ void
 GPUCommandProcessor::updateHsaEventData(Addr signal_handle,
                                         uint64_t *event_value)
 {
-    Addr mailbox_addr = getHsaSignalMailboxAddr(signal_handle);
-
     DPRINTF(GPUCommandProc, "updateHsaEventData read %ld\n", *event_value);
-    // Write *event_value to the mailbox to clear the event
-    auto cb = new DmaVirtCallback<uint64_t>(
-        [ = ] (const uint64_t &)
-            { updateHsaSignalDone(event_value); }, *event_value);
-    dmaWriteVirt(mailbox_addr, sizeof(uint64_t), cb, &cb->dmaBuffer, 0);
+    uint32_t event_id = static_cast<uint32_t>(*event_value);
+    delete event_value;
 
     Addr ts_addr = signal_handle + offsetof(amd_signal_t, start_ts);
 
@@ -506,7 +508,7 @@ GPUCommandProcessor::updateHsaEventData(Addr signal_handle,
     event_ts->end_ts = curTick() / sim_clock::as_int::ns;
     auto cb2 = new DmaVirtCallback<uint64_t>(
         [ = ] (const uint64_t &)
-            { updateHsaEventTs(signal_handle, event_ts); });
+            { updateHsaEventTs(signal_handle, event_ts, event_id); });
     dmaWriteVirt(ts_addr, sizeof(amd_event_t), cb2, (void *)event_ts);
     DPRINTF(GPUCommandProc, "updateHsaEventData reading timestamp addr %lx\n",
             ts_addr);
@@ -516,7 +518,8 @@ GPUCommandProcessor::updateHsaEventData(Addr signal_handle,
 
 void
 GPUCommandProcessor::updateHsaEventTs(Addr signal_handle,
-                                      amd_event_t *ts)
+                                      amd_event_t *ts,
+                                      std::optional<uint32_t> event_id)
 {
     delete ts;
 
@@ -526,7 +529,7 @@ GPUCommandProcessor::updateHsaEventTs(Addr signal_handle,
     uint64_t *signalValue = new uint64_t;
     auto cb = new DmaVirtCallback<uint64_t>(
         [ = ] (const uint64_t &)
-            { updateHsaSignalData(value_addr, diff, signalValue); });
+            { updateHsaSignalData(value_addr, diff, signalValue, event_id); });
     dmaReadVirt(value_addr, sizeof(uint64_t), cb, (void *)signalValue);
     DPRINTF(GPUCommandProc, "updateHsaSignalAsync reading value addr %lx\n",
             value_addr);
@@ -534,22 +537,46 @@ GPUCommandProcessor::updateHsaEventTs(Addr signal_handle,
 
 void
 GPUCommandProcessor::updateHsaSignalData(Addr value_addr, int64_t diff,
-                                         uint64_t *prev_value)
+                                         uint64_t *prev_value,
+                                         std::optional<uint32_t> event_id)
 {
     // Reuse the value allocated for the read
     DPRINTF(GPUCommandProc, "updateHsaSignalData read %ld, writing %ld\n",
             *prev_value, *prev_value + diff);
     *prev_value += diff;
+    Addr signal_handle = value_addr - offsetof(amd_signal_t, value);
     auto cb = new DmaVirtCallback<uint64_t>(
         [ = ] (const uint64_t &)
-            { updateHsaSignalDone(prev_value); });
+            { updateHsaSignalDone(signal_handle, prev_value, event_id); });
     dmaWriteVirt(value_addr, sizeof(uint64_t), cb, (void *)prev_value);
 }
 
 void
-GPUCommandProcessor::updateHsaSignalDone(uint64_t *signal_value)
+GPUCommandProcessor::updateHsaSignalDone(
+    Addr signal_handle, uint64_t *signal_value,
+    std::optional<uint32_t> event_id)
 {
     delete signal_value;
+    if (!event_id)
+        return;
+
+    Addr mailbox_addr = getHsaSignalMailboxAddr(signal_handle);
+    uint64_t *mailbox_value = new uint64_t(*event_id);
+    auto cb = new DmaVirtCallback<uint64_t>(
+        [ = ] (const uint64_t &) {
+            updateHsaMailboxCleared(mailbox_value, *event_id);
+        });
+    dmaWriteVirt(mailbox_addr, sizeof(uint64_t), cb, mailbox_value, 0);
+}
+
+void
+GPUCommandProcessor::updateHsaMailboxCleared(
+    uint64_t *mailbox_value, uint32_t event_id)
+{
+    delete mailbox_value;
+    gpuDevice->getIH()->prepareInterruptCookie(
+        event_id, 0, SOC15_IH_CLIENTID_GRBM_CP, CP_EOP, 0);
+    gpuDevice->getIH()->submitInterruptCookie();
 }
 
 uint64_t
@@ -572,38 +599,36 @@ GPUCommandProcessor::updateHsaSignal(Addr signal_handle, uint64_t signal_value,
     Addr event_addr = getHsaSignalEventAddr(signal_handle);
     DPRINTF(GPUCommandProc, "Triggering completion signal: %x!\n", value_addr);
 
-    auto cb = new DmaVirtCallback<uint64_t>(function, signal_value);
-
-    dmaWriteVirt(value_addr, sizeof(Addr), cb, &cb->dmaBuffer, 0);
-
     auto tc = system()->threads[0];
     ConstVPtr<uint64_t> mailbox_ptr(mailbox_addr, tc);
-
-    // Notifying an event with its mailbox pointer is
-    // not supported in the current implementation. Just use
-    // mailbox pointer to distinguish between interruptible
-    // and default signal. Interruptible signal will have
-    // a valid mailbox pointer.
+    HsaSignalCallbackFunction completion = function;
     if (*mailbox_ptr != 0) {
-        // This is an interruptible signal. Now, read the
-        // event ID and directly communicate with the driver
-        // about that event notification.
         ConstVPtr<uint32_t> event_val(event_addr, tc);
-
         DPRINTF(GPUCommandProc, "Calling signal wakeup event on "
                 "signal event value %d\n", *event_val);
-
-        // The mailbox/wakeup signal uses the SE mode proxy port to write
-        // the event value. This is not available in full system mode so
-        // instead we need to issue a DMA write to the address. The value of
-        // *event_val clears the event.
+        uint32_t event_id = *event_val;
         if (FullSystem) {
-            auto cb = new DmaVirtCallback<uint64_t>(function, *event_val);
-            dmaWriteVirt(mailbox_addr, sizeof(Addr), cb, &cb->dmaBuffer, 0);
+            completion = [this, signal_handle, event_id, function](
+                             const uint64_t &value) {
+                function(value);
+                uint64_t *mailbox_value = new uint64_t(event_id);
+                auto cb = new DmaVirtCallback<uint64_t>(
+                    [this, mailbox_value, event_id](const uint64_t &) {
+                        updateHsaMailboxCleared(mailbox_value, event_id);
+                    });
+                dmaWriteVirt(getHsaSignalMailboxAddr(signal_handle),
+                             sizeof(uint64_t), cb, mailbox_value, 0);
+            };
         } else {
-            signalWakeupEvent(*event_val);
+            completion = [this, event_id, function](const uint64_t &value) {
+                function(value);
+                signalWakeupEvent(event_id);
+            };
         }
     }
+
+    auto cb = new DmaVirtCallback<uint64_t>(completion, signal_value);
+    dmaWriteVirt(value_addr, sizeof(Addr), cb, &cb->dmaBuffer, 0);
 }
 
 void
@@ -630,29 +655,55 @@ GPUCommandProcessor::driver()
  * in the runtime.
  */
 
-/**
- * TODO: For now we simply tell the HSAPP to finish the packet and write a
- * completion signal, if any. However, in the future proper handing may be
- * required for vendor specific packets.
- *
- * In the version of ROCm that is currently supported the runtime will send
- * packets that direct the CP to invalidate the GPU caches. We do this
- * automatically on each kernel launch in the CU, so that situation is safe
- * for now.
- */
 void
 GPUCommandProcessor::submitVendorPkt(void *raw_pkt, uint32_t queue_id,
     Addr host_pkt_addr)
 {
-    auto vendor_pkt = (_hsa_generic_vendor_pkt *)raw_pkt;
+    auto *vendor_pkt = static_cast<_hsa_amd_aql_pm4_ib_pkt *>(raw_pkt);
+    auto retire = [this, raw_pkt, queue_id,
+                   signal = vendor_pkt->completion_signal] {
+        if (signal)
+            sendCompletionSignal(signal);
+        hsaPP->finishPkt(raw_pkt, queue_id);
+    };
 
-    if (vendor_pkt->completion_signal) {
-        sendCompletionSignal(vendor_pkt->completion_signal);
+    PM4Header ib_header = {};
+    std::memcpy(&ib_header, &vendor_pkt->ib_jump[0], sizeof(ib_header));
+    const uint32_t ib_control = vendor_pkt->ib_jump[3];
+    const bool reserved_zero = std::all_of(
+        std::begin(vendor_pkt->reserved), std::end(vendor_pkt->reserved),
+        [](uint32_t value) { return value == 0; });
+    const bool valid =
+        vendor_pkt->vendor_header == 1 &&
+        vendor_pkt->remaining_dwords == 0xa &&
+        reserved_zero &&
+        ib_header.type == 3 &&
+        ib_header.opcode == IT_INDIRECT_BUFFER &&
+        ib_header.count == 2 &&
+        (vendor_pkt->ib_jump[1] & 0x3) == 0 &&
+        (vendor_pkt->ib_jump[2] & 0xffff0000) == 0 &&
+        (ib_control & (1u << 23)) != 0 &&
+        (ib_control & 0xfff00000) == (1u << 23) &&
+        (ib_control & 0xfffff) != 0;
+
+    PM4PacketProcessor *pm4 = gpuDevice->getPM4PacketProcessor();
+    HSAQueueDescriptor *queue = hsaPP->getQueueDesc(queue_id);
+    if (!valid || !pm4 || !queue || !queue->vmid) {
+        warn("Rejecting malformed or unsupported AMD PM4 AQL packet\n");
+        retire();
+        return;
     }
 
-    warn("Ignoring vendor packet\n");
+    const Addr ib_base =
+        (static_cast<Addr>(vendor_pkt->ib_jump[2] & 0xffff) << 32) |
+        vendor_pkt->ib_jump[1];
+    const uint32_t ib_dwords = ib_control & 0xfffff;
 
-    hsaPP->finishPkt(raw_pkt, queue_id);
+    if (!pm4->submitIndirectBuffer(
+            ib_base, ib_dwords, queue->vmid, retire)) {
+        warn("Rejecting AMD PM4 AQL packet with invalid indirect buffer\n");
+        retire();
+    }
 }
 
 /**

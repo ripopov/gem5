@@ -432,14 +432,16 @@ class AMDGPUVM : public Serializable
         AMDGPUVM *vm;
         VegaISA::Walker *walker;
         int vmid;
+        bool devicePhysical;
 
         void translate(Range &range) const override;
 
       public:
         UserTranslationGen(AMDGPUVM *_vm, VegaISA::Walker *_walker, int _vmid,
-                           Addr vaddr, Addr size)
+                           Addr vaddr, Addr size,
+                           bool _device_physical = false)
             : TranslationGen(vaddr, size), vm(_vm), walker(_walker),
-              vmid(_vmid)
+              vmid(_vmid), devicePhysical(_device_physical)
         {}
     };
 };

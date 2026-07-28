@@ -33,6 +33,8 @@
 #ifndef __DEV_AMDGPU_PM4_PACKET_PROCESSOR__
 #define __DEV_AMDGPU_PM4_PACKET_PROCESSOR__
 
+#include <functional>
+#include <memory>
 #include <unordered_map>
 
 #include "dev/amdgpu/amdgpu_device.hh"
@@ -46,12 +48,16 @@ namespace gem5
 
 class AMDGPUDevice;
 
-
-
+namespace VegaISA
+{
+class Walker;
+}
 
 class PM4PacketProcessor : public DmaVirtDevice
 {
     AMDGPUDevice *gpuDevice;
+    VegaISA::Walker *walker;
+    uint16_t translationVmid = 0;
     /* First graphics queue */
     PrimaryQueue pq;
     PM4MapQueues pq_pkt;
@@ -64,10 +70,30 @@ class PM4PacketProcessor : public DmaVirtDevice
     /* A map of PM4 queues based on doorbell offset */
     std::unordered_map<uint32_t, PM4Queue *> queuesMap;
 
+    struct ExternalSubmission
+    {
+        QueueDesc descriptor = {};
+        PM4Queue queue;
+        std::function<void()> completion;
+
+        ExternalSubmission(int id, Addr base, uint32_t dwords, uint16_t vmid,
+                           std::function<void()> callback);
+    };
+    std::unordered_map<PM4Queue *, std::unique_ptr<ExternalSubmission>>
+        externalSubmissions;
+    int nextExternalSubmissionId = -1;
+
     int _ipId;
     AddrRange _mmioRange;
 
     void unmapAllQueues(bool unmap_static);
+    void unmapQueueByDoorbell(Addr doorbell, uint32_t engine_sel);
+    void completeExternalSubmission(PM4Queue *q);
+    uint16_t queueVmid(PM4Queue *q) const;
+    void dmaReadQueueVirt(PM4Queue *q, Addr addr, unsigned size,
+                          DmaCallback *cb, void *data, Tick delay = 0);
+    void dmaWriteQueueVirt(PM4Queue *q, Addr addr, unsigned size,
+                           DmaCallback *cb, void *data, Tick delay = 0);
 
   public:
     PM4PacketProcessor(const PM4PacketProcessorParams &p);
@@ -124,6 +150,13 @@ class PM4PacketProcessor : public DmaVirtDevice
     void process(PM4Queue *q, Addr wptrOffset);
 
     /**
+     * Execute a PM4 indirect buffer supplied by another hardware command
+     * path. The callback runs only after every packet in the buffer retires.
+     */
+    bool submitIndirectBuffer(Addr base, uint32_t dwords, uint16_t vmid,
+                              std::function<void()> completion);
+
+    /**
      * Update read index on doorbell rings. We use write index, however read
      * index == write index when the queue is empty. This allows us to save
      * previous read index when a queue is remapped. The remapped queue will
@@ -156,6 +189,7 @@ class PM4PacketProcessor : public DmaVirtDevice
                         SDMAQueueDesc *mqd, uint16_t vmid);
     void releaseMem(PM4Queue *q, PM4ReleaseMem *pkt);
     void releaseMemDone(PM4Queue *q, PM4ReleaseMem *pkt, Addr addr);
+    void acquireMem(PM4Queue *q, PM4AcquireMem *pkt, PM4Header header);
     void runList(PM4Queue *q, PM4RunList *pkt);
     void indirectBuffer(PM4Queue *q, PM4IndirectBuf *pkt);
     void switchBuffer(PM4Queue *q, PM4SwitchBuf *pkt);

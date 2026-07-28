@@ -160,7 +160,8 @@ GPUDispatcher::exec()
         bool launched(false);
 
         // acq is needed before starting dispatch
-        if (shader->impl_kern_launch_acq) {
+        if (task->acquireFenceScope() != 0 ||
+            shader->impl_kern_launch_acq) {
             // try to invalidate cache
             shader->prepareInvalidate(task);
         } else {

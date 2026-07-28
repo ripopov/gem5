@@ -391,8 +391,16 @@ RubyPort::MemResponsePort::recvAtomic(PacketPtr pkt)
     AbstractController *mem_interface =
         rs->m_abstract_controls[mem_interface_type][id.getNum()];
     Tick latency = mem_interface->recvAtomic(pkt);
-    if (access_backing_store)
-        rs->getPhysMem()->access(pkt);
+    if (access_backing_store) {
+        // Device memory may overlap the system physical address space, so
+        // mirror the timing callback's lookup order when Ruby keeps a
+        // backing-store copy.
+        if (owner.system->isDeviceMemAddr(pkt)) {
+            owner.system->getDeviceMemory(pkt)->access(pkt);
+        } else {
+            rs->getPhysMem()->access(pkt);
+        }
+    }
     return latency;
 }
 
@@ -434,17 +442,24 @@ RubyPort::MemResponsePort::recvFunctional(PacketPtr pkt)
     assert(pkt->getAddr() + pkt->getSize() <=
            owner.makeLineAddress(pkt->getAddr()) + rs->getBlockSizeBytes());
 
-    if (pkt->req->getGPUFuncAccess()) {
-        pkt->req->requestorId(owner.m_controller->getRequestorId());
-    }
-
     if (access_backing_store) {
         // The attached physmem contains the official version of data.
         // The following command performs the real functional access.
         // This line should be removed once Ruby supplies the official version
         // of data.
-        rs->getPhysMem()->functionalAccess(pkt);
+        // Keep the original requestor ID here: device-memory ownership is
+        // keyed by that ID. The Ruby controller ID is only needed when the
+        // access is injected into Ruby below.
+        if (owner.system->isDeviceMemAddr(pkt)) {
+            owner.system->getDeviceMemory(pkt)->functionalAccess(pkt);
+        } else {
+            rs->getPhysMem()->functionalAccess(pkt);
+        }
     } else {
+        if (pkt->req->getGPUFuncAccess()) {
+            pkt->req->requestorId(owner.m_controller->getRequestorId());
+        }
+
         bool accessSucceeded = false;
         bool needsResponse = pkt->needsResponse();
 
@@ -646,8 +661,9 @@ RubyPort::MemResponsePort::hitCallback(PacketPtr pkt)
     }
 
     // Flush, acquire, release requests don't access physical memory
-    if (pkt->isFlush() || pkt->cmd == MemCmd::MemSyncReq
-        || pkt->cmd == MemCmd::WriteCompleteResp || pkt->req->hasNoAddr()) {
+    if (pkt->isFlush() || pkt->cmd == MemCmd::MemSyncReq ||
+        pkt->cmd == MemCmd::MemSyncResp ||
+        pkt->cmd == MemCmd::WriteCompleteResp || pkt->req->hasNoAddr()) {
         accessPhysMem = false;
     }
 

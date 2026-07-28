@@ -33,6 +33,7 @@
 #define __DEV_AMDGPU_AMDGPU_DEVICE_HH__
 
 #include <map>
+#include <optional>
 
 #include "base/bitunion.hh"
 #include "dev/amdgpu/amdgpu_defines.hh"
@@ -198,8 +199,10 @@ class AMDGPUDevice : public PciEndpoint
      * Get handles to GPU blocks.
      */
     AMDGPUInterruptHandler* getIH() { return deviceIH; }
+    PM4PacketProcessor* getPM4PacketProcessor(int ip_id = 0);
     SDMAEngine* getSDMAById(int id);
     SDMAEngine* getSDMAEngine(Addr offset);
+    SDMAEngine* findSDMAEngine(Addr offset) const;
     AMDGPUVM &getVM() { return gpuvm; }
     AMDGPUMemoryManager* getMemMgr() { return gpuMemMgr; }
     GPUCommandProcessor* CP() { return cp; }
@@ -211,6 +214,7 @@ class AMDGPUDevice : public PciEndpoint
     void unsetDoorbell(uint32_t offset);
     void processPendingDoorbells(uint32_t offset);
     void setSDMAEngine(Addr offset, SDMAEngine *eng);
+    void unsetSDMAEngine(Addr offset);
 
     /**
      * Register value getter/setter. Used by other GPU blocks to change
@@ -231,9 +235,12 @@ class AMDGPUDevice : public PciEndpoint
     void deallocatePasid(uint16_t pasid);
     void deallocateAllQueues(bool unmap_static);
     void mapDoorbellToVMID(Addr doorbell, uint16_t vmid);
+    void unmapDoorbellFromVMID(Addr doorbell);
+    std::optional<uint16_t> findVMID(Addr doorbell) const;
     uint16_t getVMID(Addr doorbell) { return doorbellVMIDMap[doorbell]; }
     std::unordered_map<uint16_t, std::set<int>>& getUsedVMIDs();
     void insertQId(uint16_t vmid, int id);
+    void removeQId(uint16_t vmid, int id);
 
     /* Device information */
     GfxVersion getGfxVersion() const { return gfx_version; }
@@ -247,6 +254,14 @@ class AMDGPUDevice : public PciEndpoint
     {
         return vramSize;
     }
+
+    /**
+     * Find the existing PhysicalMemory backing entry containing a VRAM slice.
+     * The returned entry borrows the shared-memory descriptor; callers that
+     * transfer it outside gem5 must duplicate the fd.
+     */
+    std::optional<memory::BackingStoreEntry>
+    getVramBackingStore(Addr paddr, Addr size) const;
 };
 
 } // namespace gem5

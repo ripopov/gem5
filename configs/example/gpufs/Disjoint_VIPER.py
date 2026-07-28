@@ -99,11 +99,16 @@ class Disjoint_VIPER(RubySystem):
         # Set access backing store if specified
         if options.access_backing_store:
             self.access_backing_store = True
+            self.phys_mem = SimpleMemory(
+                range=system.mem_ranges[0], in_addr_map=False
+            )
 
         # Assign the memory controllers to the system
         cpu_abstract_mems = []
         for mem_ctrl in system.mem_ctrls:
             cpu_abstract_mems.append(mem_ctrl.dram)
+        if options.access_backing_store:
+            cpu_abstract_mems.append(self.phys_mem)
         system.memories = cpu_abstract_mems
 
         gpu_abstract_mems = []
@@ -122,6 +127,11 @@ class Disjoint_VIPER(RubySystem):
 
         # Setup DMA controllers
         gpu_dma_types = ["VegaPagetableWalker", "AMDGPUMemoryManager"]
+        if getattr(options, "hsakmt_server_gpu_dma", False):
+            gpu_dma_types.append("HSAPacketProcessor")
+            gpu_dma_types.append("GPUCommandProcessor")
+            gpu_dma_types.append("AMDGPUInterruptHandler")
+            gpu_dma_types.append("PM4PacketProcessor")
 
         cpu_dma_ctrls = []
         gpu_dma_ctrls = []
@@ -137,7 +147,10 @@ class Disjoint_VIPER(RubySystem):
                 # IDE doesn't have a .type but seems like everything else does.
                 dma_seq.in_ports = dma_device
             elif dma_device.type in gpu_dma_types:
-                dma_seq.in_ports = dma_device.port
+                if hasattr(dma_device, "port"):
+                    dma_seq.in_ports = dma_device.port
+                else:
+                    dma_seq.in_ports = dma_device.dma
             else:
                 dma_seq.in_ports = dma_device.dma
 

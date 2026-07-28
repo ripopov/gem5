@@ -60,7 +60,8 @@ class HWScheduler
                           uint64_t queue_id,
                           uint32_t size, int doorbellSize,
                           GfxVersion gfxVersion,
-                          Addr offset = 0, uint64_t rd_idx = 0);
+                          Addr offset = 0, uint64_t rd_idx = 0,
+                          uint16_t vmid = 1);
     void unregisterQueue(uint64_t queue_id, int doorbellSize);
     void wakeup();
     void schedWakeup();
