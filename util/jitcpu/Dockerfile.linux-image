@@ -17,6 +17,7 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
         file \
         flex \
         gcc-riscv64-linux-gnu \
+        g++-riscv64-linux-gnu \
         libc6-dev-riscv64-cross \
         libelf-dev \
         libssl-dev \
@@ -24,6 +25,7 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
         perl \
         python3 \
         rsync \
+        scons \
         xz-utils \
     && rm -rf /var/lib/apt/lists/*
 

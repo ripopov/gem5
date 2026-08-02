@@ -218,7 +218,14 @@ parser.add_argument(
         "slices so serial input remains responsive"
     ),
 )
-parser.add_argument("--switch-to-o3", action="store_true")
+parser.add_argument(
+    "--switch-to-o3",
+    action="store_true",
+    help=(
+        "create switched-out O3 CPUs and hand off when userspace executes "
+        "m5 exit or m5 switchcpu"
+    ),
+)
 parser.add_argument("--o3-ticks", type=int, default=10_000_000)
 parser.add_argument("--ruby-chi", action="store_true")
 parser.add_argument(
@@ -606,8 +613,17 @@ print(
 )
 
 if args.switch_to_o3:
-    if exit_event.getCause() != "m5_exit instruction encountered":
-        raise RuntimeError("Linux did not reach its userspace m5 exit")
+    handoff_cause = exit_event.getCause()
+    if handoff_cause not in (
+        "m5_exit instruction encountered",
+        "switchcpu",
+    ):
+        raise RuntimeError(
+            "Linux did not reach a userspace m5 exit or switchcpu request"
+        )
+
+    if handoff_cause == "switchcpu":
+        print("Guest requested the JitCPU -> O3CPU handoff with m5 switchcpu")
 
     validate_linux_phase(jit_cpus, "jit", "Linux boot phase")
 

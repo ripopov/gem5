@@ -33,10 +33,12 @@ translation invalidation.
 The full-system runs need a kernel ELF and an OpenSBI bootloader. The
 regressions additionally use a musl compiler for the pthread
 dining-philosophers workload, while an interactive run uses the BusyBox
-initramfs. `build-linux-image.sh` produces all four on a Linux host:
+initramfs and a static `m5` utility. `build-linux-image.sh` produces all five
+on a Linux host:
 
 ```sh
 sudo apt install build-essential gcc-riscv64-linux-gnu \
+    g++-riscv64-linux-gnu scons \
     libc6-dev-riscv64-cross opensbi bc bison flex \
     libelf-dev libssl-dev cpio curl xz-utils bzip2
 
@@ -49,6 +51,7 @@ It downloads Linux 6.12, musl 1.2.5 and BusyBox 1.36.1, then writes:
 | --- | --- |
 | `build/jitcpu-linux/vmlinux` | `--kernel` |
 | `build/jitcpu-linux/fw_jump.elf` | the positional Linux image |
+| `build/jitcpu-linux/m5` | installed as `/sbin/m5` in the interactive image |
 | `build/jitcpu-linux/busybox-initramfs.cpio` | `--initrd` for an interactive shell |
 | `build/jitcpu-linux/bin/riscv64-linux-musl-gcc` | `DINING_CC` for the payload Makefile |
 
@@ -71,8 +74,9 @@ Linux sources and intermediate files remain in the persistent,
 case-sensitive `gem5-jitcpu-linux-build` Docker volume. This matters because
 the Linux source tree contains names that collide on the default
 case-insensitive macOS filesystem. The wrapper exports `vmlinux`,
-`fw_jump.elf` and `busybox-initramfs.cpio` as ordinary host files. Docker is
-not used by gem5 and may be stopped after this command. Set
+`fw_jump.elf`, the static `m5` executable and `busybox-initramfs.cpio` as
+ordinary host files. Docker is not used by gem5 and may be stopped after this
+command. Set
 `JITCPU_LINUX_BUILD_VOLUME` to use a different volume. The musl compiler is
 not exported to macOS; build the 16-hart pthread payloads on Linux.
 
@@ -148,9 +152,30 @@ and opens a root BusyBox shell on `ttyS0`:
 ```text
 JITCPU-BUSYBOX READY
 Interactive RISC-V shell on ttyS0; power off with: poweroff -f
+gem5 controls: m5 exit, m5 dumpstats, m5 switchcpu
 / # uname -m
 riscv64
+/ # m5 dumpstats
+/ # m5 exit
 ```
+
+The image installs the statically linked RISC-V utility as `/sbin/m5`.
+`m5 exit` ends the simulation cleanly, while `m5 dumpstats` requests an
+immediate statistics dump. The utility also exposes `m5 checkpoint`, but
+JitCPU checkpoint/restore is currently broken and is not supported by this
+demo.
+
+To request the one-way JitCPU-to-O3 handoff from the shell, add
+`--switch-to-o3` to the gem5 command above. After the shell appears, run:
+
+```sh
+m5 switchcpu
+```
+
+The configuration consumes the guest's `switchcpu` exit, calls
+`m5.switchCpus()`, and validates that `RiscvO3CPU` makes userspace progress.
+The same option still accepts the checked-in non-interactive initramfs's
+historical `m5_exit` handoff marker.
 
 Interactive mode runs gem5 in short slices and synchronously polls the host
 terminal between them. This keeps serial input responsive when Linux and
@@ -166,8 +191,7 @@ gem5 output directory).
 The checked-in `jitcpu-linux-init.cpio` remains intentionally non-interactive:
 its `/init` executes `m5_exit` at the first userspace instruction and then
 runs a memory workload for the O3 validation phase. The generated BusyBox
-image does not execute that handoff marker, so use it for an interactive
-JitCPU session without `--switch-to-o3`.
+image waits for an explicit `m5 exit` or `m5 switchcpu` command instead.
 
 ## 4. 16-hart CHI mesh boot and workload handoff
 

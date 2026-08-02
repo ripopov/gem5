@@ -66,6 +66,7 @@ docker run --rm \
     sh -c 'set -eu
         cp /work/vmlinux /artifacts/vmlinux
         cp /work/fw_jump.elf /artifacts/fw_jump.elf
+        cp /work/m5 /artifacts/m5
         cp /work/busybox-initramfs.cpio /artifacts/busybox-initramfs.cpio'
 
 printf '%s\n' "JitCPU Linux artifacts exported to $build_dir"

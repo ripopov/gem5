@@ -37,6 +37,7 @@ command_tests = (
     'readfile',
     'resetstats',
     'sum',
+    'switchcpu',
     'writefile',
 )
 

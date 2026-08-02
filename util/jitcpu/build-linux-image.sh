@@ -11,6 +11,8 @@
 #   bin/riscv64-linux-musl-gcc
 #                             ISA-pinned musl compiler for the pthread
 #                             dining-philosophers workload; pass as --musl-cc
+#   m5                        static RISC-V gem5 guest-control utility; also
+#                             installed as /sbin/m5 in the BusyBox image
 #   busybox-initramfs.cpio     interactive BusyBox userspace; pass as --initrd
 #
 # ISA notes: JitCPU executes RV64 IMAFDC plus Zicsr, Zifencei, Zba, Zbb and
@@ -45,6 +47,16 @@ log() { printf '[build-linux-image] %s\n' "$*"; }
 if ! command -v "${cross}gcc" >/dev/null 2>&1; then
     printf '%s\n' "RISC-V cross compiler ${cross}gcc not found" >&2
     printf '%s\n' "On Ubuntu: sudo apt install gcc-riscv64-linux-gnu" >&2
+    exit 1
+fi
+if ! command -v "${cross}g++" >/dev/null 2>&1; then
+    printf '%s\n' "RISC-V cross compiler ${cross}g++ not found" >&2
+    printf '%s\n' "On Ubuntu: sudo apt install g++-riscv64-linux-gnu" >&2
+    exit 1
+fi
+if ! command -v scons >/dev/null 2>&1; then
+    printf '%s\n' "SCons not found" >&2
+    printf '%s\n' "On Ubuntu: sudo apt install scons" >&2
     exit 1
 fi
 if [ ! -f "$opensbi" ]; then
@@ -113,6 +125,26 @@ EOF
 chmod +x "$build_dir/bin/riscv64-linux-musl-gcc"
 
 # -------------------------------------------------------------------------
+# Static m5 guest-control utility
+# -------------------------------------------------------------------------
+m5_build="$build_dir/m5-build"
+m5_target="$m5_build/riscv/out/m5"
+m5_binary="$build_dir/m5"
+
+log "Building static RISC-V m5 utility"
+scons -C "$repo_root/util/m5" \
+    BUILD_DIR="$m5_build" \
+    "riscv.CROSS_COMPILE=$cross" \
+    "riscv.CCFLAGS=-march=$march -mabi=$mabi" \
+    "$m5_target" >/dev/null
+cp "$m5_target" "$m5_binary"
+"${cross}strip" "$m5_binary"
+if "${cross}readelf" -l "$m5_binary" | grep -q ' INTERP '; then
+    printf '%s\n' "m5 unexpectedly contains a dynamic interpreter" >&2
+    exit 1
+fi
+
+# -------------------------------------------------------------------------
 # Kernel
 # -------------------------------------------------------------------------
 if [ ! -f "$build_dir/vmlinux" ]; then
@@ -172,6 +204,7 @@ mkdir -p "$busybox_rootfs"
 make -C "$busybox_src" O="$busybox_build" ARCH=riscv \
     CROSS_COMPILE="$cross" CONFIG_PREFIX="$busybox_rootfs" \
     install >/dev/null
+install -m 0755 "$m5_binary" "$busybox_rootfs/sbin/m5"
 mkdir -p "$busybox_rootfs/dev/pts" "$busybox_rootfs/etc" \
     "$busybox_rootfs/proc" "$busybox_rootfs/root" \
     "$busybox_rootfs/sys" "$busybox_rootfs/tmp"
@@ -191,6 +224,7 @@ hostname jitcpu
 echo
 echo "JITCPU-BUSYBOX READY"
 echo "Interactive RISC-V shell on ttyS0; power off with: poweroff -f"
+echo "gem5 controls: m5 exit, m5 dumpstats, m5 switchcpu"
 exec setsid cttyhack /bin/sh
 EOF
 chmod 755 "$busybox_rootfs/init"
@@ -204,5 +238,6 @@ cp "$opensbi" "$build_dir/fw_jump.elf"
 
 log "Artifacts:"
 ls -l "$build_dir/vmlinux" "$build_dir/fw_jump.elf" \
+    "$build_dir/m5" \
     "$build_dir/busybox-initramfs.cpio" \
     "$build_dir/bin/riscv64-linux-musl-gcc"

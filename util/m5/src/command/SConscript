@@ -33,6 +33,7 @@ command_ccs = [
     'exit.cc',
     'fail.cc',
     'sum.cc',
+    'switchcpu.cc',
     'initparam.cc',
     'loadsymbol.cc',
     'readfile.cc',

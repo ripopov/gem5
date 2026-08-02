@@ -338,8 +338,8 @@ A configuration must instantiate one `RiscvJitCPU` per hart, set the same
 
 The full-system and 16-hart runs need a kernel ELF, an OpenSBI bootloader and
 an RV64 musl compiler for the static pthread dining-philosophers payload. An
-interactive run additionally uses a static BusyBox initramfs.
-`util/jitcpu/build-linux-image.sh` produces all four:
+interactive run additionally uses a static BusyBox initramfs and static RV64
+`m5` utility. `util/jitcpu/build-linux-image.sh` produces all five:
 
 ```sh
 util/jitcpu/build-linux-image.sh
@@ -349,6 +349,7 @@ util/jitcpu/build-linux-image.sh
 | --- | --- |
 | `build/jitcpu-linux/vmlinux` | `--kernel` |
 | `build/jitcpu-linux/fw_jump.elf` | the positional Linux image |
+| `build/jitcpu-linux/m5` | installed as `/sbin/m5` in the interactive image |
 | `build/jitcpu-linux/busybox-initramfs.cpio` | `--initrd` for an interactive shell |
 | `build/jitcpu-linux/bin/riscv64-linux-musl-gcc` | `DINING_CC` for the payload Makefile |
 
@@ -361,8 +362,9 @@ otherwise defaults to a much newer profile. `KERNEL_VERSION`, `MUSL_VERSION`,
 `MARCH` and `JOBS` override the defaults. The kernel is the long step;
 rerunning the script reuses it. On macOS,
 `util/jitcpu/build-linux-image-docker.sh` builds on a case-sensitive Docker
-volume and exports the three boot artifacts to `build/jitcpu-linux/`; Docker
-is not needed when gem5 boots those files. The complete interactive command
+volume and exports the boot artifacts and `m5` utility to
+`build/jitcpu-linux/`; Docker is not needed when gem5 boots those files. The
+complete interactive command
 is documented in `tests/gem5/jitcpu/README.md`.
 
 Any equivalent kernel works. The requirements are RV64 with `NR_CPUS` at or
@@ -432,8 +434,8 @@ kernel's timer catch-up and retire no userspace instructions at all. The
 - The backend owns one fixed vCPU set and one physical address space for the
   process lifetime. Multiple independent gem5 systems in one process are not
   supported.
-- Checkpoint restore with a live backend, SMT, and systems larger than 16
-  harts are not qualified.
+- Checkpoint and restore with a live JitCPU backend are currently broken and
+  unsupported; SMT and systems larger than 16 harts are not qualified.
 - Batch execution makes detailed privilege-mode statistics approximate and
   bounds event responsiveness by the chosen batch size. With the pin-driven
   RTC the effective batch is also capped by the next device event.

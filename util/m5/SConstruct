@@ -37,7 +37,9 @@ ext_dir = gem5_root.Dir('ext')
 googletest_dir = ext_dir.Dir('googletest')
 
 src_dir = Dir('src')
-build_dir = Dir('build')
+# Linux-image builds keep generated files outside the source checkout, which
+# may be mounted read-only by a container. The default remains util/m5/build.
+build_dir = Dir(ARGUMENTS.get('BUILD_DIR', 'build'))
 
 main.SConsignFile(build_dir.File("sconsign").abspath)
 
