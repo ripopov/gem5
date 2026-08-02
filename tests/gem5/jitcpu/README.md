@@ -134,7 +134,7 @@ build/RISCV/gem5.opt --listener-mode=on \
     build/jitcpu-linux/fw_jump.elf build/qemu-jit/libgem5-qemu-jit.so \
     --kernel build/jitcpu-linux/vmlinux \
     --initrd build/jitcpu-linux/busybox-initramfs.cpio \
-    --interactive-terminal \
+    --interactive-terminal --switch-to-o3 \
     --max-ticks 100000000000000000
 ```
 
@@ -156,7 +156,6 @@ gem5 controls: m5 exit, m5 dumpstats, m5 switchcpu
 / # uname -m
 riscv64
 / # m5 dumpstats
-/ # m5 exit
 ```
 
 The image installs the statically linked RISC-V utility as `/sbin/m5`.
@@ -165,8 +164,8 @@ immediate statistics dump. The utility also exposes `m5 checkpoint`, but
 JitCPU checkpoint/restore is currently broken and is not supported by this
 demo.
 
-To request the one-way JitCPU-to-O3 handoff from the shell, add
-`--switch-to-o3` to the gem5 command above. After the shell appears, run:
+The command above includes `--switch-to-o3`, which creates the switched-out
+O3 CPU needed for the one-way handoff. After the shell appears, run:
 
 ```sh
 m5 switchcpu
@@ -174,13 +173,18 @@ m5 switchcpu
 
 The configuration consumes the guest's `switchcpu` exit, calls
 `m5.switchCpus()`, and validates that `RiscvO3CPU` makes userspace progress.
-The same option still accepts the checked-in non-interactive initramfs's
-historical `m5_exit` handoff marker.
+The `m5` command then returns to the shell under O3 and the same `gem5term`
+connection remains active. Continue using the shell normally and run
+`m5 exit` when finished. `--o3-ticks` controls only the initial O3 validation
+interval; the interactive session continues until `m5 exit` or
+`--max-ticks`. The same option still accepts the checked-in non-interactive
+initramfs's historical `m5_exit` handoff marker.
 
 Interactive mode runs gem5 in short slices and synchronously polls the host
 terminal between them. This keeps serial input responsive when Linux and
-JitCPU are otherwise idle in WFI; it does not require
-`--classic-rtc-events`.
+JitCPU are otherwise idle in WFI. After switching, O3 uses shorter simulated
+slices so the detailed CPU does not delay terminal polling. Interactive mode
+does not require `--classic-rtc-events`.
 
 The listener is restricted to localhost unless gem5 is given
 `--allow-remote-connections`. Type `~.` to disconnect the terminal client.

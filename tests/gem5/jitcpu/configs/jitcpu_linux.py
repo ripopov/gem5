@@ -226,7 +226,15 @@ parser.add_argument(
         "m5 exit or m5 switchcpu"
     ),
 )
-parser.add_argument("--o3-ticks", type=int, default=10_000_000)
+parser.add_argument(
+    "--o3-ticks",
+    type=int,
+    default=10_000_000,
+    help=(
+        "O3 validation interval after a handoff; an interactive session "
+        "continues running afterward"
+    ),
+)
 parser.add_argument("--ruby-chi", action="store_true")
 parser.add_argument(
     "--ruby-network", choices=("simple", "garnet"), default="simple"
@@ -491,15 +499,15 @@ if args.interactive_terminal:
         ) from error
 
 
-def simulate_with_terminal(ticks):
+def simulate_with_terminal(ticks, terminal_quantum=1_000_000_000):
     if not args.interactive_terminal or ticks <= 0:
         return m5.simulate(ticks)
 
     # A long simulate() can keep the event queue busy while a host terminal
     # poll event waits to migrate onto it, especially while the guest is in
-    # WFI. Return to Python every simulated millisecond and briefly yield the
-    # host thread so serial input is accepted promptly.
-    terminal_quantum = 1_000_000_000
+    # WFI. Return to Python regularly and briefly yield the host thread so
+    # serial input is accepted promptly. JitCPU callers use the default
+    # simulated millisecond; detailed O3 execution uses a shorter quantum.
     remaining = ticks
     while remaining > 0:
         before = m5.curTick()
@@ -607,13 +615,20 @@ def validate_linux_phase(cpus, cpu_model, phase_name):
         )
 
 
+simulation_deadline = m5.curTick() + args.max_ticks
 exit_event = simulate_with_terminal(args.max_ticks)
-print(
-    f"JitCPU Linux stopped @ tick {m5.curTick()}: " f"{exit_event.getCause()}"
-)
+exit_cause = exit_event.getCause()
+print(f"JitCPU Linux stopped @ tick {m5.curTick()}: " f"{exit_cause}")
+
+if (
+    args.interactive_terminal
+    and exit_cause == "m5_exit instruction encountered"
+):
+    print("Interactive JitCPU session stopped by m5 exit")
+    raise SystemExit(0)
 
 if args.switch_to_o3:
-    handoff_cause = exit_event.getCause()
+    handoff_cause = exit_cause
     if handoff_cause not in (
         "m5_exit instruction encountered",
         "switchcpu",
@@ -673,7 +688,11 @@ if args.switch_to_o3:
         f"memory mode {system.getMemoryMode()}"
     )
     m5.stats.reset()
-    exit_event = simulate_with_terminal(args.o3_ticks)
+    o3_terminal_quantum = 10_000_000
+    exit_event = simulate_with_terminal(
+        args.o3_ticks,
+        terminal_quantum=o3_terminal_quantum,
+    )
     print(
         f"O3CPU continued @ tick {m5.curTick()}: " f"{exit_event.getCause()}"
     )
@@ -681,3 +700,29 @@ if args.switch_to_o3:
         raise RuntimeError("O3CPU did not complete its validation interval")
 
     validate_linux_phase(o3_cpus, "o3", "O3 takeover phase")
+
+    if args.interactive_terminal and handoff_cause == "switchcpu":
+        remaining_ticks = max(0, simulation_deadline - m5.curTick())
+        if remaining_ticks == 0:
+            print("O3 interactive session reached --max-ticks")
+            raise SystemExit(0)
+
+        print(
+            "O3 interactive session active; the existing serial connection "
+            "remains attached. Run m5 exit in the guest to stop."
+        )
+        exit_event = simulate_with_terminal(
+            remaining_ticks,
+            terminal_quantum=o3_terminal_quantum,
+        )
+        print(
+            f"O3 interactive session stopped @ tick {m5.curTick()}: "
+            f"{exit_event.getCause()}"
+        )
+        if exit_event.getCause() not in (
+            "m5_exit instruction encountered",
+            "simulate() limit reached",
+        ):
+            raise RuntimeError(
+                "O3 interactive session stopped for an unexpected reason"
+            )
