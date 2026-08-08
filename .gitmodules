@@ -1,3 +1,4 @@
 [submodule "ext/qemu/repo"]
 	path = ext/qemu/repo
-	url = https://gitlab.com/qemu-project/qemu.git
+	url = https://github.com/ripopov/qemu.git
+	branch = gem5-jit

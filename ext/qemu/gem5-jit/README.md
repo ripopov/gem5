@@ -1,8 +1,9 @@
 # gem5 QEMU JIT backend
 
 This directory is owned by the gem5 repository. It contains the narrow C
-adapter, its standalone smoke test, and `qemu.patch`, which provides the
-minimal QEMU build and RISC-V translation hooks required by `RiscvJitCPU`.
+adapter and its standalone smoke test. The pinned `gem5-jit` branch in the
+QEMU submodule provides the minimal build and RISC-V translation hooks required
+by `RiscvJitCPU`.
 
 The adapter supports multiple gem5 JitCPU objects in one process. The first
 adapter initialization fixes the instance count and creates one QEMU RISC-V
@@ -21,17 +22,16 @@ The register API explicitly transfers FFLAGS and FRM even when
 state. Translation invalidation flushes both the vCPU TLB and the shared TCG
 translation-block cache before reverse takeover resumes.
 
-The QEMU source checkout is the clean, pinned submodule at `../repo`. The build
-helper copies it, without Git metadata, to a source snapshot, applies
-`qemu.patch`, and builds against the adapter in this directory. Do not place
-adapter files in the checkout or patch it in place. This keeps submodule status
-meaningful and all gem5-owned changes visible in the parent repository.
+The QEMU source checkout is the pinned fork commit at `../repo`. The build
+helper copies it, without Git metadata, to a source snapshot and builds against
+the adapter in this directory. Adapter changes remain in gem5 while the QEMU
+integration hooks are versioned on the fork's `gem5-jit` branch.
 
 On Ubuntu, the backend's direct build dependencies are:
 
 ```sh
 sudo apt install \
-  build-essential git patch tar meson ninja-build flex bison pkg-config \
+  build-essential git tar meson ninja-build flex bison pkg-config \
   python3-dev libglib2.0-dev libpixman-1-dev libfdt-dev libffi-dev
 ```
 
@@ -55,7 +55,7 @@ different `mhartid` values and checks independent PC/GPR state, execution,
 FFLAGS/FRM transfer while FS is Off, and translation invalidation. The final
 backend path ends in `.so` on Linux and `.dylib` on macOS.
 
-The adapter and integration patch are GPL-2.0-or-later. Dynamic loading is an
-engineering boundary, not a guarantee that distributing gem5 with the
+The adapter and QEMU integration changes are GPL-2.0-or-later. Dynamic loading
+is an engineering boundary, not a guarantee that distributing gem5 with the
 QEMU-derived backend avoids GPL obligations. See `src/cpu/jit/README.md` for
 the complete architecture, validation, limitations, and licensing statement.

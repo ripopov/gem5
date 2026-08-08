@@ -9,7 +9,6 @@ build_dir=${1:-"$repo_root/build/qemu-jit"}
 integration_dir="$repo_root/ext/qemu"
 qemu_repo="$integration_dir/repo"
 adapter_dir="$integration_dir/gem5-jit"
-patch_file="$adapter_dir/qemu.patch"
 
 case "$(uname -s)" in
     Darwin)
@@ -32,7 +31,11 @@ if [ ! -f "$qemu_repo/configure" ]; then
     exit 1
 fi
 
-source_id="$(git -C "$qemu_repo" rev-parse HEAD):$(git hash-object "$patch_file")"
+adapter_id=$(git hash-object \
+    "$adapter_dir/qemu-jit.c" \
+    "$adapter_dir/qemu-jit.h" \
+    "$adapter_dir/qemu-jit-smoke.c" | git hash-object --stdin)
+source_id="$(git -C "$qemu_repo" rev-parse HEAD):$adapter_id"
 
 if [ ! -f "$build_dir/build.ninja" ]; then
     if [ -e "$source_dir" ]; then
@@ -45,10 +48,6 @@ if [ ! -f "$build_dir/build.ninja" ]; then
     mkdir -p "$source_dir"
     tar -C "$qemu_repo" --exclude='.git' --exclude='*/.git' -cf - . | \
         tar -xf - -C "$source_dir"
-    (
-        cd "$source_dir"
-        patch -p1 < "$patch_file"
-    )
 
     cd "$build_dir"
     "$source_dir/configure" \
@@ -66,7 +65,7 @@ if [ ! -f "$build_dir/build.ninja" ]; then
 elif [ ! -f "$source_stamp" ] ||
      [ "$(cat "$source_stamp")" != "$source_id" ]; then
     printf '%s\n' \
-        "The QEMU revision or integration patch changed." \
+        "The QEMU revision or JitCPU adapter changed." \
         "Remove $build_dir and $source_dir, then rerun the build helper." >&2
     exit 1
 fi

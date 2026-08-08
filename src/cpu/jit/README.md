@@ -76,16 +76,16 @@ instance ID.
 gem5 repository
 |
 +-- src/cpu/jit/                  BSD-licensed gem5 CPU, loader, this doc
-+-- ext/qemu/repo/                pinned, unmodified QEMU git submodule
-+-- ext/qemu/gem5-jit/            GPL adapter, smoke test, QEMU patch
++-- ext/qemu/repo/                pinned QEMU fork with JitCPU integration hooks
++-- ext/qemu/gem5-jit/            GPL adapter and smoke test
 +-- util/jitcpu/                  reproducible backend and Linux builds
 +-- tests/gem5/jitcpu/            configurations and run instructions
 +-- tests/test-progs/jitcpu-smoke guest userspace payloads
 ```
 
-The parent repository's gitlink is the authoritative QEMU revision. The build
-helper copies `ext/qemu/repo` to a build snapshot and applies
-`ext/qemu/gem5-jit/qemu.patch`; it never modifies the submodule checkout.
+The parent repository's gitlink is the authoritative QEMU fork revision on the
+`gem5-jit` branch. The build helper copies `ext/qemu/repo` to a build snapshot;
+it never modifies the submodule checkout.
 
 At run time the components interact through a narrow C interface:
 
