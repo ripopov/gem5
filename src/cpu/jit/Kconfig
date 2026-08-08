@@ -29,6 +29,6 @@ config USE_JITCPU
     bool "Enable the RISC-V QEMU/TCG JitCPU model"
     default n
     help
-      Build the RISC-V-only JitCPU loader. The GPL-covered QEMU backend is
-      built separately from the pinned ext/qemu/repo submodule and the
-      adapter sources in ext/qemu/gem5-jit.
+      Build the RISC-V-only JitCPU loader using the public C ABI header in
+      the pinned ext/qemu/repo submodule. The GPL-covered QEMU backend is
+      built separately from that submodule.

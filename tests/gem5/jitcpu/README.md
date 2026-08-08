@@ -19,10 +19,10 @@ git submodule update --init --depth 1 ext/qemu/repo
 util/jitcpu/build-qemu-jit.sh          # -> build/qemu-jit/libgem5-qemu-jit.so
 ```
 
-Rerun `build-qemu-jit.sh` after every change under `ext/qemu/gem5-jit`. The
-configs take the backend as a path and load it with `dlopen`, so a shared
-library left over from an older adapter is used without complaint, and the
-resulting failures look like CPU-model bugs rather than a stale build.
+Rerun `build-qemu-jit.sh` after every QEMU submodule update. The configs take
+the backend as a path and load it with `dlopen`, so a shared library left over
+from an older adapter is used without complaint, and the resulting failures
+look like CPU-model bugs rather than a stale build.
 
 The backend build also compiles and runs `gem5-qemu-jit-smoke`, a two-hart
 adapter unit test covering independent per-hart state, execution, and

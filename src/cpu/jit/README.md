@@ -76,8 +76,8 @@ instance ID.
 gem5 repository
 |
 +-- src/cpu/jit/                  BSD-licensed gem5 CPU, loader, this doc
-+-- ext/qemu/repo/                pinned QEMU fork with JitCPU integration hooks
-+-- ext/qemu/gem5-jit/            GPL adapter and smoke test
++-- ext/qemu/repo/                pinned QEMU fork
+|   +-- contrib/gem5-jit/         public ABI, GPL adapter and smoke test
 +-- util/jitcpu/                  reproducible backend and Linux builds
 +-- tests/gem5/jitcpu/            configurations and run instructions
 +-- tests/test-progs/jitcpu-smoke guest userspace payloads
@@ -112,8 +112,9 @@ At run time the components interact through a narrow C interface:
           fast direct path      MMIO/fallback path
 ```
 
-The gem5 binary has no compile-time QEMU headers or libraries. `USE_JITCPU=y`
-builds only the loader and links `libdl`; `backend_path` selects the shared
+The gem5 binary has no compile-time dependency on QEMU implementation headers
+or libraries. `USE_JITCPU=y` consumes the adapter's dual-licensed public C ABI
+header, builds the loader, and links `libdl`; `backend_path` selects the shared
 backend at run time. `USE_JITCPU=n` removes JitCPU and its QEMU dependency.
 
 ## 4. Execution model
@@ -321,7 +322,8 @@ scons build/RISCV/gem5.opt -j"$(nproc)"
 
 On macOS, replace `$(nproc)` with `$(sysctl -n hw.logicalcpu)`.
 
-The helper builds and runs the two-hart QEMU adapter smoke test, then prints
+The shared library is a default target of the fork's `gem5-jit` branch. The
+helper also builds and runs the two-hart QEMU adapter smoke test, then prints
 the backend path. It uses `.so` on Linux and `.dylib` on macOS:
 
 ```text

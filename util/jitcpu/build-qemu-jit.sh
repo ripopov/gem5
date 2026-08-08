@@ -6,9 +6,7 @@ set -eu
 
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 build_dir=${1:-"$repo_root/build/qemu-jit"}
-integration_dir="$repo_root/ext/qemu"
-qemu_repo="$integration_dir/repo"
-adapter_dir="$integration_dir/gem5-jit"
+qemu_repo="$repo_root/ext/qemu/repo"
 
 case "$(uname -s)" in
     Darwin)
@@ -31,11 +29,7 @@ if [ ! -f "$qemu_repo/configure" ]; then
     exit 1
 fi
 
-adapter_id=$(git hash-object \
-    "$adapter_dir/qemu-jit.c" \
-    "$adapter_dir/qemu-jit.h" \
-    "$adapter_dir/qemu-jit-smoke.c" | git hash-object --stdin)
-source_id="$(git -C "$qemu_repo" rev-parse HEAD):$adapter_id"
+source_id=$(git -C "$qemu_repo" rev-parse HEAD)
 
 if [ ! -f "$build_dir/build.ninja" ]; then
     if [ -e "$source_dir" ]; then
@@ -59,13 +53,12 @@ if [ ! -f "$build_dir/build.ninja" ]; then
         --disable-rust \
         --disable-werror \
         --disable-slirp \
-        -Db_staticpic=true \
-        -Dgem5_jit_dir="$adapter_dir"
+        -Db_staticpic=true
     printf '%s\n' "$source_id" > "$source_stamp"
 elif [ ! -f "$source_stamp" ] ||
      [ "$(cat "$source_stamp")" != "$source_id" ]; then
     printf '%s\n' \
-        "The QEMU revision or JitCPU adapter changed." \
+        "The QEMU revision changed." \
         "Remove $build_dir and $source_dir, then rerun the build helper." >&2
     exit 1
 fi

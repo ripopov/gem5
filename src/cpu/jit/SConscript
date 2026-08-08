@@ -34,6 +34,15 @@ Import('*')
 if not env['CONF']['USE_JITCPU']:
     Return()
 
+qemu_jit_dir = Dir('#ext/qemu/repo/contrib/gem5-jit')
+qemu_jit_header = qemu_jit_dir.File('qemu-jit.h')
+if not qemu_jit_header.exists():
+    raise ValueError(
+        'USE_JITCPU requires the QEMU submodule; run '
+        '`git submodule update --init ext/qemu/repo`'
+    )
+env.Prepend(CPPPATH=[qemu_jit_dir])
+
 env.TagImplies('jitcpu', 'gem5 lib')
 env.TagImplies('jitcpu', 'riscv isa')
 

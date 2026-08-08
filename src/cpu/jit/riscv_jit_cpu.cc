@@ -46,6 +46,7 @@
 #include "mem/packet.hh"
 #include "mem/request.hh"
 #include "params/RiscvISA.hh"
+#include "qemu-jit.h"
 #include "sim/pseudo_inst.hh"
 
 namespace gem5
@@ -53,47 +54,6 @@ namespace gem5
 
 namespace
 {
-
-using MemoryRead = int (*)(void *, uint64_t, uint8_t *, size_t);
-using MemoryWrite = int (*)(void *, uint64_t, const uint8_t *, size_t);
-using MemoryMap = int (*)(void *, size_t, uint64_t *, uint64_t *, uint8_t **,
-                          int *);
-using RunBoundary = void (*)(void *);
-using ReadTime = uint64_t (*)(void *);
-using ShouldStop = int (*)(void *);
-
-struct QemuJitCallbacks
-{
-    uint32_t instance_id;
-    uint32_t instance_count;
-    uint64_t hart_id;
-    MemoryRead memory_read;
-    MemoryWrite memory_write;
-    MemoryMap memory_map;
-    RunBoundary run_begin;
-    RunBoundary run_end;
-    ReadTime read_time;
-    ShouldStop should_stop;
-    void *opaque;
-};
-
-enum class QemuJitExitReason : int
-{
-    Budget = 0,
-    Halted = 1,
-    Interrupt = 2,
-    Exception = 3,
-    Error = 4,
-    M5Op = 5,
-};
-
-struct QemuJitRunResult
-{
-    uint64_t instructions;
-    int qemu_exception;
-    QemuJitExitReason reason;
-    uint32_t m5_function;
-};
 
 struct CsrMapping
 {
@@ -148,19 +108,19 @@ class QemuJitBackend
     void *handle;
     uint32_t instanceId = 0;
 
-    using InitFn = int (*)(const QemuJitCallbacks *);
-    using RunFn = int (*)(uint32_t, uint64_t, QemuJitRunResult *);
-    using GetRegFn = uint64_t (*)(uint32_t, unsigned);
-    using SetRegFn = int (*)(uint32_t, unsigned, uint64_t);
-    using GetPcFn = uint64_t (*)(uint32_t);
-    using SetPcFn = void (*)(uint32_t, uint64_t);
-    using GetPrivFn = unsigned (*)(uint32_t);
-    using SetPrivFn = int (*)(uint32_t, unsigned);
-    using GetCsrFn = int (*)(uint32_t, unsigned, uint64_t *);
-    using SetCsrFn = int (*)(uint32_t, unsigned, uint64_t);
-    using GetMipFn = uint64_t (*)(uint32_t);
-    using SetMipFn = void (*)(uint32_t, uint64_t);
-    using InvalidateFn = void (*)(uint32_t);
+    using InitFn = decltype(&gem5_qemu_jit_init);
+    using RunFn = decltype(&gem5_qemu_jit_run);
+    using GetRegFn = decltype(&gem5_qemu_jit_get_gpr);
+    using SetRegFn = decltype(&gem5_qemu_jit_set_gpr);
+    using GetPcFn = decltype(&gem5_qemu_jit_get_pc);
+    using SetPcFn = decltype(&gem5_qemu_jit_set_pc);
+    using GetPrivFn = decltype(&gem5_qemu_jit_get_priv);
+    using SetPrivFn = decltype(&gem5_qemu_jit_set_priv);
+    using GetCsrFn = decltype(&gem5_qemu_jit_get_csr);
+    using SetCsrFn = decltype(&gem5_qemu_jit_set_csr);
+    using GetMipFn = decltype(&gem5_qemu_jit_get_mip);
+    using SetMipFn = decltype(&gem5_qemu_jit_set_mip);
+    using InvalidateFn = decltype(&gem5_qemu_jit_invalidate_translations);
 
     InitFn initFn;
     RunFn runFn;
@@ -222,7 +182,7 @@ class QemuJitBackend
     }
 
     void
-    init(const QemuJitCallbacks &callbacks)
+    init(const Gem5QemuJitCallbacks &callbacks)
     {
         instanceId = callbacks.instance_id;
         fatal_if(initFn(&callbacks) != 0,
@@ -230,10 +190,10 @@ class QemuJitBackend
                  static_cast<unsigned long long>(callbacks.hart_id));
     }
 
-    QemuJitRunResult
+    Gem5QemuJitRunResult
     run(uint64_t instructions)
     {
-        QemuJitRunResult result{};
+        Gem5QemuJitRunResult result{};
         fatal_if(runFn(instanceId, instructions, &result) != 0,
                  "JitCPU backend execution failed");
         return result;
@@ -346,7 +306,7 @@ RiscvJitCPU::init()
     fatal_if(isa->reportsExtension("Smrnmi"),
              "JitCPU does not support Smrnmi");
 
-    const QemuJitCallbacks callbacks = {
+    const Gem5QemuJitCallbacks callbacks = {
         .instance_id = backendInstance,
         .instance_count = backendInstanceCount,
         .hart_id = static_cast<uint64_t>(tc->contextId()),
@@ -601,7 +561,7 @@ RiscvJitCPU::tick()
     syncToBackend();
 
     const uint64_t budget = executionBudget();
-    QemuJitRunResult result;
+    Gem5QemuJitRunResult result;
     {
         EventQueue::ScopedRelease release(eventQueue());
         result = backend->run(budget);
@@ -611,8 +571,8 @@ RiscvJitCPU::tick()
     accountInstructions(result.instructions);
     serviceInstCountEvents();
 
-    fatal_if(result.reason == QemuJitExitReason::Exception ||
-                 result.reason == QemuJitExitReason::Error,
+    fatal_if(result.reason == GEM5_QEMU_JIT_EXIT_EXCEPTION ||
+                 result.reason == GEM5_QEMU_JIT_EXIT_ERROR,
              "QEMU JitCPU execution stopped unexpectedly: exception=%d, "
              "pc=%#x",
              result.qemu_exception, info.thread->pcState().instAddr());
@@ -622,7 +582,7 @@ RiscvJitCPU::tick()
             result.instructions, info.thread->pcState().instAddr(),
             static_cast<int>(result.reason), result.qemu_exception);
 
-    if (result.reason == QemuJitExitReason::M5Op) {
+    if (result.reason == GEM5_QEMU_JIT_EXIT_M5OP) {
         uint64_t value = 0;
         ThreadContext *tc = threadContexts[0];
         fatal_if(!pseudo_inst::pseudoInst<RiscvISA::RegABI64>(
@@ -640,7 +600,7 @@ RiscvJitCPU::tick()
         return;
     }
 
-    if (result.reason == QemuJitExitReason::Halted) {
+    if (result.reason == GEM5_QEMU_JIT_EXIT_HALTED) {
         if (tryCompleteDrain()) {
             return;
         }
