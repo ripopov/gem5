@@ -75,6 +75,7 @@ instance ID.
 ```text
 gem5 repository
 |
++-- src/cpu/funcbackend/          model shared with SpikeCPU (see below)
 +-- src/cpu/jit/                  BSD-licensed gem5 CPU, loader, this doc
 +-- ext/qemu/repo/                pinned QEMU fork
 |   +-- contrib/gem5-jit/         public ABI, GPL adapter and smoke test
@@ -82,6 +83,12 @@ gem5 repository
 +-- tests/gem5/jitcpu/            configurations and run instructions
 +-- tests/test-progs/jitcpu-smoke guest userspace payloads
 ```
+
+Everything in this document except the QEMU backend itself is implemented by
+`RiscvBackendCPU` in `src/cpu/funcbackend/`, which `RiscvJitCPU` shares with
+`RiscvSpikeCPU`; see `src/cpu/spike/README.md`. `RiscvJitCPU` contributes
+only the QEMU loader and the ABI translation, about 200 lines. The execution
+model, state contract, takeover rules and limitations below apply to both.
 
 The parent repository's gitlink is the authoritative QEMU fork revision on the
 `gem5-jit` branch. The build helper copies `ext/qemu/repo` to a build snapshot;
@@ -97,10 +104,14 @@ At run time the components interact through a narrow C interface:
                                 | sync registers, CSRs,
                                 | privilege, PC, interrupts
              +------------------v-------------------+
-             | RiscvJitCPU (NonCachingSimpleCPU)    |
+             | RiscvBackendCPU (NonCachingSimpleCPU)|
              | scheduling | stats | MMIO | m5ops    |
              +------------------+-------------------+
-                                | dlopen, C interface
+                                | RiscvBackend, C++
+             +------------------v-------------------+
+             | RiscvJitCPU: QEMU ABI + dlopen       |
+             +------------------+-------------------+
+                                | C interface
              +------------------v-------------------+
              | gem5 QEMU adapter + RISC-V TCG       |
              | one vCPU/hart, single TCG executor   |

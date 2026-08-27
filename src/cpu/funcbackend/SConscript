@@ -31,7 +31,8 @@ Import('*')
 # The shared half of the external-backend CPU models. Nothing here is built
 # unless one of them is enabled; each backend's own directory guards its
 # loader and its dependency on that backend's headers.
-if not env['CONF']['USE_JITCPU']:
+conf = env['CONF']
+if not (conf['USE_JITCPU'] or conf['USE_SPIKECPU']):
     Return()
 
 env.TagImplies('funcbackend', 'gem5 lib')

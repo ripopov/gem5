@@ -19,7 +19,6 @@ from m5.objects import (
     MemCtrl,
     PMAChecker,
     RiscvBootloaderKernelWorkload,
-    RiscvJitCPU,
     RiscvLinux,
     RiscvRTC,
     RiscvSystem,
@@ -32,6 +31,22 @@ from m5.objects.RiscvCPU import (
     RiscvNonCachingSimpleCPU,
     RiscvO3CPU,
 )
+
+# The two external functional backends are optional build-time features, so
+# only the models this gem5 was built with are offered.
+BACKEND_CPUS = {}
+try:
+    from m5.objects import RiscvJitCPU
+
+    BACKEND_CPUS["jit"] = RiscvJitCPU
+except ImportError:
+    pass
+try:
+    from m5.objects import RiscvSpikeCPU
+
+    BACKEND_CPUS["spike"] = RiscvSpikeCPU
+except ImportError:
+    pass
 from m5.util import addToPath
 from m5.util.convert import toFrequency
 from m5.util.fdthelper import (
@@ -173,7 +188,13 @@ def validate_dining_guest_phase(phase, cpu_model):
 
 parser = argparse.ArgumentParser()
 parser.add_argument("linux_image")
-parser.add_argument("backend")
+parser.add_argument(
+    "backend",
+    help=(
+        "path to the functional backend shared library; ignored by "
+        "--cpu noncaching"
+    ),
+)
 parser.add_argument(
     "--kernel",
     help=(
@@ -181,7 +202,9 @@ parser.add_argument(
         "then the OpenSBI bootloader"
     ),
 )
-parser.add_argument("--cpu", choices=("jit", "noncaching"), default="jit")
+parser.add_argument(
+    "--cpu", choices=("jit", "spike", "noncaching"), default="jit"
+)
 parser.add_argument("--num-cpus", type=int, default=1)
 parser.add_argument("--num-dirs", type=int, default=1)
 parser.add_argument("--num-l3caches", type=int, default=1)
@@ -337,9 +360,10 @@ system.cpu_clk_domain = SrcClockDomain(
     clock="1GHz", voltage_domain=system.cpu_voltage_domain
 )
 
-if args.cpu == "jit":
+if args.cpu in BACKEND_CPUS:
+    backend_cpu = BACKEND_CPUS[args.cpu]
     jit_cpus = [
-        RiscvJitCPU(
+        backend_cpu(
             clk_domain=system.cpu_clk_domain,
             cpu_id=index,
             backend_path=args.backend,
@@ -349,6 +373,11 @@ if args.cpu == "jit":
         )
         for index in range(args.num_cpus)
     ]
+elif args.cpu != "noncaching":
+    parser.error(
+        f"this gem5 was not built with the {args.cpu} CPU model; "
+        f"available: {', '.join(sorted(BACKEND_CPUS)) or 'none'}"
+    )
 else:
     jit_cpus = [
         RiscvNonCachingSimpleCPU(
@@ -362,8 +391,8 @@ system.cpu = jit_cpus[0] if args.num_cpus == 1 else jit_cpus
 
 o3_cpus = []
 if args.switch_to_o3:
-    if args.cpu != "jit":
-        parser.error("--switch-to-o3 requires --cpu jit")
+    if args.cpu == "noncaching":
+        parser.error("--switch-to-o3 requires a functional backend CPU")
     o3_cpus = [
         RiscvO3CPU(
             clk_domain=system.cpu_clk_domain,
@@ -522,7 +551,7 @@ def simulate_with_terminal(ticks, terminal_quantum=1_000_000_000):
 
 
 def check_memory_mode(cpu_model):
-    expected = "atomic_noncaching" if cpu_model == "jit" else "timing"
+    expected = "timing" if cpu_model == "o3" else "atomic_noncaching"
     memory_mode = params.allEnums["MemoryMode"]
     actual = system.getMemoryMode()
     if actual != memory_mode(expected).getValue():
@@ -532,13 +561,13 @@ def check_memory_mode(cpu_model):
 
 
 def validate_linux_phase(cpus, cpu_model, phase_name):
-    if cpu_model == "jit":
-        # JitCPU attributes privilege at batch boundaries, which is
-        # documented as approximate: batches preferentially end at MMIO and
-        # interrupts, so with large batches a core's entire userspace
-        # quantum can be charged to kernel mode. Require per-core execution
-        # progress here; per-worker userspace progress is proven by the
-        # guest-side terminal markers instead.
+    if cpu_model in BACKEND_CPUS:
+        # A functional backend attributes privilege at batch boundaries,
+        # which is documented as approximate: batches preferentially end at
+        # MMIO and interrupts, so with large batches a core's entire
+        # userspace quantum can be charged to kernel mode. Require per-core
+        # execution progress here; per-worker userspace progress is proven
+        # by the guest-side terminal markers instead.
         leaf = "commitStats0.numInsts"
         label = "instructions"
         failure = "no progress"
@@ -572,18 +601,21 @@ def validate_linux_phase(cpus, cpu_model, phase_name):
         + ", ".join(str(value) for value in memory_bytes)
     )
 
-    if cpu_model == "jit":
-        # JitCPU executes uncached. Nothing may reach the timing hierarchy,
-        # on any network, from any requester. The controller-side counts
-        # keep this check meaningful when the network cannot report totals.
+    if cpu_model in BACKEND_CPUS:
+        # A functional backend executes uncached. Nothing may reach the
+        # timing hierarchy, on any network, from any requester. The
+        # controller-side counts keep this check meaningful when the network
+        # cannot report totals.
         if ruby_messages:
-            raise RuntimeError(f"{phase_name}: JitCPU generated CHI traffic")
+            raise RuntimeError(
+                f"{phase_name}: {cpu_model} generated CHI traffic"
+            )
         busy_rnfs = [
             index for index, value in enumerate(cache_accesses) if value != 0
         ]
         if busy_rnfs:
             raise RuntimeError(
-                f"{phase_name}: JitCPU generated CHI cache accesses on "
+                f"{phase_name}: {cpu_model} generated CHI cache accesses on "
                 f"RNF(s) {busy_rnfs}"
             )
         busy_controllers = [
@@ -591,7 +623,7 @@ def validate_linux_phase(cpus, cpu_model, phase_name):
         ]
         if busy_controllers:
             raise RuntimeError(
-                f"{phase_name}: JitCPU generated memory traffic at "
+                f"{phase_name}: {cpu_model} generated memory traffic at "
                 f"controller(s) {busy_controllers}"
             )
         return
@@ -640,10 +672,10 @@ if args.switch_to_o3:
     if handoff_cause == "switchcpu":
         print("Guest requested the JitCPU -> O3CPU handoff with m5 switchcpu")
 
-    validate_linux_phase(jit_cpus, "jit", "Linux boot phase")
+    validate_linux_phase(jit_cpus, args.cpu, "Linux boot phase")
 
     if args.workload_handoff:
-        validate_dining_guest_phase(0, "jit")
+        validate_dining_guest_phase(0, args.cpu)
 
         m5.switchCpus(
             system,

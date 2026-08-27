@@ -1,4 +1,4 @@
-# JitCPU regressions
+# Functional-backend CPU regressions
 
 These are **not** testlib tests. `RiscvJitCPU` needs a `USE_JITCPU=y` gem5
 binary plus the separately built QEMU backend shared library, and the guest
@@ -6,18 +6,37 @@ payloads need a RISC-V cross toolchain, so none of it can run unattended in
 the normal `tests/gem5` suite. Nothing here matches testlib's `test*.py`
 discovery pattern, so `main.py run` ignores this directory.
 
+`jitcpu_linux.py` drives all three functional CPU models on one identical
+system, selected with `--cpu`:
+
+| `--cpu` | Model | Backend argument |
+| --- | --- | --- |
+| `jit` (default) | `RiscvJitCPU`, QEMU TCG | `build/qemu-jit/libgem5-qemu-jit.so` |
+| `spike` | `RiscvSpikeCPU`, the RISC-V reference simulator | `build/spike/libgem5-spike.so` |
+| `noncaching` | `RiscvNonCachingSimpleCPU`, gem5's own atomic model | ignored, but still positional |
+
+`FuncBackendCPU.md` at the repository root reports the measured comparison
+between them. Every run below works with any of the three; the examples use
+JitCPU.
+
 ## 1. Build gem5 and the QEMU backend
 
 `NUMBER_BITS_PER_SET` must cover the 16-hart mesh; the configs refuse to run
 otherwise.
 
 ```sh
-scons build/RISCV/gem5.opt USE_JITCPU=y RUBY_PROTOCOL_CHI=y \
+scons build/RISCV/gem5.opt USE_JITCPU=y USE_SPIKECPU=y RUBY_PROTOCOL_CHI=y \
     NUMBER_BITS_PER_SET=128
 
 git submodule update --init --depth 1 ext/qemu/repo
 util/jitcpu/build-qemu-jit.sh          # -> build/qemu-jit/libgem5-qemu-jit.so
+
+git submodule update --init ext/spike/repo
+util/spikecpu/build-spike.sh           # -> build/spike/libgem5-spike.so
 ```
+
+Either backend may be left out; `USE_JITCPU` and `USE_SPIKECPU` are
+independent, and `jitcpu_linux.py` offers only the models the binary has.
 
 Rerun `build-qemu-jit.sh` after every QEMU submodule update. The configs take
 the backend as a path and load it with `dlopen`, so a shared library left over

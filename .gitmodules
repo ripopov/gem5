@@ -2,3 +2,7 @@
 	path = ext/qemu/repo
 	url = https://github.com/ripopov/qemu.git
 	branch = gem5-jit
+[submodule "ext/spike/repo"]
+	path = ext/spike/repo
+	url = https://github.com/riscv-software-src/riscv-isa-sim.git
+	branch = master
