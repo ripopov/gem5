@@ -1,3 +1,5 @@
+# -*- mode:python -*-
+
 # Copyright (c) 2026 Roman Popov
 # All rights reserved.
 #
@@ -24,19 +26,20 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+Import('*')
 
-import sys
+# The shared half of the external-backend CPU models. Nothing here is built
+# unless one of them is enabled; each backend's own directory guards its
+# loader and its dependency on that backend's headers.
+if not env['CONF']['USE_JITCPU']:
+    Return()
 
-from m5.objects.RiscvBackendCPU import RiscvBackendCPU
+env.TagImplies('funcbackend', 'gem5 lib')
+env.TagImplies('funcbackend', 'riscv isa')
 
+SimObject('RiscvBackendCPU.py', sim_objects=['RiscvBackendCPU'],
+          tags=['funcbackend'])
+Source('riscv_backend_cpu.cc', tags=['funcbackend'])
 
-class RiscvJitCPU(RiscvBackendCPU):
-    type = "RiscvJitCPU"
-    cxx_header = "cpu/jit/riscv_jit_cpu.hh"
-    cxx_class = "gem5::RiscvJitCPU"
-
-    backend_path = (
-        "libgem5-qemu-jit.dylib"
-        if sys.platform == "darwin"
-        else "libgem5-qemu-jit.so"
-    )
+DebugFlag('FuncBackendCPU', 'External functional RISC-V backend execution',
+          tags=['funcbackend'])

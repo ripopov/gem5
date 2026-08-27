@@ -49,8 +49,6 @@ env.TagImplies('jitcpu', 'riscv isa')
 SimObject('RiscvJitCPU.py', sim_objects=['RiscvJitCPU'], tags=['jitcpu'])
 Source('riscv_jit_cpu.cc', tags=['jitcpu'])
 
-DebugFlag('JitCPU', 'RISC-V QEMU/TCG JitCPU execution', tags=['jitcpu'])
-
 # dlopen(3) is part of libc on macOS and on glibc 2.34 and newer, but older
 # glibc keeps it in a separate library which must be requested explicitly.
 if sys.platform != 'darwin':
