@@ -91,6 +91,26 @@ class NonCachingSimpleCPU : public AtomicSimpleCPU
     BackdoorWindow fetchWindow, dataWindow;
 
     /**
+     * The instruction page being executed from, as a host pointer.
+     * While the fetch PC stays inside it and the TLB's translation epoch
+     * is unchanged, a fetch is a copy from this pointer with no request,
+     * translation or backdoor lookup. The bytes are read afresh on every
+     * fetch, so writes to the page need no special handling; only the
+     * translation is cached, and only for pages the TLB promises are
+     * uniformly translated (BaseTLB::stableFetchPage()).
+     */
+    struct FetchPage
+    {
+        Addr vpage = 0;
+        Addr size = 0; // zero: nothing cached
+        uint64_t epoch = 0;
+        const uint8_t *host = nullptr;
+        MemBackdoorPtr backdoor = nullptr;
+    } fetchPage;
+
+    Fault fetchInstruction(Tick &latency) override;
+
+    /**
      * Host address of [addr, addr + size) through a recorded backdoor
      * that permits the access, or nullptr. Refreshes the window when the
      * access is outside it.

@@ -37,8 +37,27 @@ about 5% lower.
 | per-instruction helpers inlined, probe argument guarded | 17.08 | 12.58 |
 | direct plain load/store path | 18.04 | 13.51 |
 | instruction counts folded into statistics at dump time | 21.08 | 15.05 |
+| instruction fetch from a cached host page | 24.38 | 16.83 |
 
 Spike, same host: 746 and 295 MIPS.
+
+The final binary on the full workloads, and with two build-level changes
+that compose with the code changes: Ubuntu's GCC enables the stack
+protector and CET landing pads by default, and every one of the small
+functions on gem5's per-instruction path pays for a canary load, a compare
+and an `endbr64`; link-time optimization inlines across the many
+translation units the path crosses. Neither is turned on by default here
+because they are a distribution and build-system choice, not a change to
+the model, but a build meant for throughput should use both.
+
+| binary | CoreMark, 5000 iterations (1.56 G instructions) | Linux boot + `ls` (160 M instructions) |
+|---|---|---|
+| `build/RISCV/gem5.fast`, default flags | 64.4 s, **24.2 MIPS** | 9.5 s, **16.8 MIPS** |
+| `--with-lto`, `CCFLAGS_EXTRA='-fno-stack-protector -fcf-protection=none'` | 61.9 s, **25.2 MIPS** | 9.1 s, **17.5 MIPS** |
+| Spike (`SpikePerf.md`, same host) | 2.1 s, 746 MIPS | 0.39 s, 295 MIPS |
+
+Whole-process wall clock is within 0.4 s of `hostSeconds` in every case, so
+the MIPS figures are comparable with Spike's, which time from `main()`.
 
 Every step must leave guest behaviour unchanged: CoreMark and the Linux boot
 have to exit at the same tick with the same instruction count as the
@@ -248,3 +267,53 @@ before; `stats.txt` is byte-identical. O3 and Minor keep updating the
 shared statistics directly. The one visible difference: a live read of one
 of these statistics between dumps (the MathExpr power model) sees the
 value as of the last fold.
+
+### Instruction fetch from a cached host page
+
+Every fetch still set up a `Request`, ran it through the MMU's translate
+chain and looked up a backdoor before copying four bytes. `BaseTLB` gains
+two queries for CPU models that want to keep a host pointer per
+instruction page: `translationEpoch()`, a value that changes whenever any
+translation could, and `stableFetchPage()`, which after a successful fetch
+translation says whether every fetch in that page translates identically
+while the epoch holds. The RISC-V TLB answers both from its translation
+cache; the defaults promise nothing. `NonCachingSimpleCPU` overrides the
+new `AtomicSimpleCPU::fetchInstruction()`: while the fetch PC stays inside
+the cached page and the epoch is unchanged, a fetch is an epoch query, two
+compares and a copy from the host pointer. Only the translation is
+cached; the bytes are read from the backing store on every fetch, so
+self-modifying code behaves as before. Fetches served this way do not
+consult the instruction TLB, so its hit/access statistics count only the
+fetches that reach it (4.4 M instead of 198 M on the Linux boot).
+
+## What remains
+
+After these steps the profile is flat. At 24.4 MIPS an instruction costs
+about 41 ns, and the remaining items, in order:
+
+| share | what | why it stays |
+|---|---|---|
+| ~15% | `AtomicSimpleCPU::tick()` | the per-instruction protocol itself: virtual `pcState()`, `fetchInstruction()`, `checkInterrupts()`, decoder calls, drain and idle checks, cycle-counter probes |
+| ~13% | `Decoder::decode()`, `moreBytes()` | the decoder's per-instruction PC and vector-configuration bookkeeping, and on Linux the hash-map fallback when the 8K-entry PC cache misses (a 32K cache measured +2% on Linux for 1 MiB per hart and was not taken) |
+| ~10% | `postExecute()`, `countCommitInst()`, `probeInstCommit()` | what is left of instruction accounting: a dozen integer adds, the property tests, four probe notifies and a virtual `inUserMode()` call |
+| ~9% | `getRegOperand()`/`setRegOperand()` | virtual ExecContext calls with a RegId translation and a counter per operand |
+| ~8% | data loads/stores | request setup and the three-level `translateAtomic()` -> `translate()` -> `translateCached()` chain around a cache hit |
+| ~5% | fetch | the cached-page check and 4-byte copy |
+| ~4% | `advancePC()` | two virtual levels around a PC update |
+| ~3% | `Interrupts::checkInterrupts()` | evaluated per instruction, always finding nothing |
+| ~6% | the `execute()` bodies | the instruction semantics themselves |
+
+The next steps in order of payoff would be: marking `SimpleThread` `final`
+so its register and PC accessors devirtualize; driving the interrupt check
+from state changes instead of polling it; guarding the commit probes with
+`hasListeners()`; and folding the data-side translate chain into one call.
+Together they are plausibly another 1.3x. Beyond that the remaining cost
+is the StaticInst/ExecContext calling convention itself: every operand read
+and write is a virtual call with a RegId translation, and every instruction
+an indirect `execute()` call with the fault-return protocol around it.
+Getting toward Spike's 1.3 ns per instruction means threaded dispatch and
+handlers that touch the register file directly, which is a new CPU model
+rather than a change to this one. Where that line sits is the useful
+result: about 30x from Spike on CoreMark and 17x on the Linux boot, with
+6.5x and 7.3x recovered from the starting point by changes that stay
+inside the existing model.

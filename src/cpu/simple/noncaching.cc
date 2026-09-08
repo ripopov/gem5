@@ -42,6 +42,8 @@
 #include <cstring>
 
 #include "arch/generic/decoder.hh"
+#include "arch/generic/mmu.hh"
+#include "arch/generic/tlb.hh"
 #include "cpu/utils.hh"
 #include "sim/system.hh"
 
@@ -286,6 +288,8 @@ NonCachingSimpleCPU::sendPacket(RequestPort &port, const PacketPtr &pkt)
         auto callback = [this](const MemBackdoor &backdoor) {
                 if (fetchWindow.backdoor == &backdoor)
                     fetchWindow.forget();
+                if (fetchPage.backdoor == &backdoor)
+                    fetchPage = FetchPage();
                 if (dataWindow.backdoor == &backdoor)
                     dataWindow.forget();
                 for (auto it = memBackdoors.begin();
@@ -300,6 +304,48 @@ NonCachingSimpleCPU::sendPacket(RequestPort &port, const PacketPtr &pkt)
         bd->addInvalidationCallback(callback);
     }
     return latency;
+}
+
+Fault
+NonCachingSimpleCPU::fetchInstruction(Tick &latency)
+{
+    SimpleExecContext &t_info = *threadInfo[curThread];
+    SimpleThread *thread = t_info.thread;
+    auto &decoder = thread->decoder;
+    const Addr fetch_pc =
+        (thread->pcState().instAddr() & decoder->pcMask()) +
+        t_info.fetchOffset;
+    const unsigned size = decoder->moreBytesSize();
+    BaseTLB *itb = thread->mmu->itb;
+
+    if (fetch_pc >= fetchPage.vpage &&
+        fetch_pc + size <= fetchPage.vpage + fetchPage.size &&
+        itb->translationEpoch(thread->getTC()) == fetchPage.epoch) {
+        copyBytes(decoder->moreBytesPtr(),
+                  fetchPage.host + (fetch_pc - fetchPage.vpage), size);
+        latency = 0;
+        return NoFault;
+    }
+
+    Fault fault = AtomicSimpleCPU::fetchInstruction(latency);
+    if (fault != NoFault)
+        return fault;
+
+    // Cache the page this fetch came from if the TLB promises it is
+    // uniformly translated and one backdoor covers it.
+    Addr vpage, ppage, page_size;
+    if (itb->stableFetchPage(thread->getTC(), fetch_pc, vpage, ppage,
+                             page_size)) {
+        const uint8_t *host = hostAddr(fetchWindow, ppage, page_size, false);
+        if (host) {
+            fetchPage.vpage = vpage;
+            fetchPage.size = page_size;
+            fetchPage.epoch = itb->translationEpoch(thread->getTC());
+            fetchPage.host = host;
+            fetchPage.backdoor = fetchWindow.backdoor;
+        }
+    }
+    return NoFault;
 }
 
 Tick

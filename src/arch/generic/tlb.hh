@@ -82,6 +82,30 @@ class BaseTLB : public SimObject
     }
 
     /**
+     * Support for CPU models that keep a host pointer per instruction
+     * page instead of translating every fetch.
+     *
+     * translationEpoch() identifies the translation state of the thread:
+     * it changes whenever any translation could change (a relevant CSR
+     * write, a TLB invalidation), and a result obtained under one epoch
+     * is valid for as long as the epoch stays the same.
+     *
+     * stableFetchPage() is asked after a fetch at vaddr has translated
+     * successfully. It reports whether every fetch inside the page
+     * containing vaddr translates to the same physical page with the
+     * same outcome while the epoch is unchanged, and if so the bounds of
+     * that page. The defaults make no such promise, which disables the
+     * caching.
+     */
+    virtual uint64_t translationEpoch(ThreadContext *tc) const { return 0; }
+    virtual bool
+    stableFetchPage(ThreadContext *tc, Addr vaddr, Addr &vpage,
+                    Addr &ppage, Addr &size) const
+    {
+        return false;
+    }
+
+    /**
      * Do post-translation physical address finalization.
      *
      * This method is used by some architectures that need

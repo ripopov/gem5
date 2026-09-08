@@ -107,6 +107,14 @@ class AtomicSimpleCPU : public BaseSimpleCPU
     virtual Tick fetchInstMem();
 
     /**
+     * Bring the instruction at the current fetch PC into the decoder:
+     * set up and translate the fetch request and read the instruction
+     * memory. Returns the translation fault, if any, and the fetch
+     * latency through the reference.
+     */
+    virtual Fault fetchInstruction(Tick &latency);
+
+    /**
      * An AtomicCPUPort overrides the default behaviour of the
      * recvAtomicSnoop and ignores the packet instead of panicking. It
      * also provides an implementation for the purely virtual timing

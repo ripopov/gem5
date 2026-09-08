@@ -670,30 +670,13 @@ AtomicSimpleCPU::tick()
         const PCStateBase &pc = thread->pcState();
 
         bool needToFetch = !isRomMicroPC(pc.microPC()) && !curMacroStaticInst;
-        if (needToFetch) {
-            ifetch_req->taskId(taskId());
-            setupFetchRequest(ifetch_req);
-            fault = thread->mmu->translateAtomic(ifetch_req, thread->getTC(),
-                                                 BaseMMU::Execute);
-        }
+        Tick icache_latency = 0;
+        if (needToFetch)
+            fault = fetchInstruction(icache_latency);
 
         if (fault == NoFault) {
-            Tick icache_latency = 0;
-            bool icache_access = false;
+            const bool icache_access = needToFetch;
             dcache_access = false; // assume no dcache access
-
-            if (needToFetch) {
-                // This is commented out because the decoder would act like
-                // a tiny cache otherwise. It wouldn't be flushed when needed
-                // like the I cache. It should be flushed, and when that works
-                // this code should be uncommented.
-                //Fetch more instruction memory if necessary
-                //if (decoder.needMoreBytes())
-                //{
-                    icache_access = true;
-                    icache_latency = fetchInstMem();
-                //}
-            }
 
             preExecute();
 
@@ -766,6 +749,20 @@ AtomicSimpleCPU::tick()
     reschedule(tickEvent, next, true);
     return;
     }
+}
+
+Fault
+AtomicSimpleCPU::fetchInstruction(Tick &latency)
+{
+    SimpleThread *thread = threadInfo[curThread]->thread;
+
+    ifetch_req->taskId(taskId());
+    setupFetchRequest(ifetch_req);
+    Fault fault = thread->mmu->translateAtomic(ifetch_req, thread->getTC(),
+                                               BaseMMU::Execute);
+    if (fault == NoFault)
+        latency = fetchInstMem();
+    return fault;
 }
 
 Tick

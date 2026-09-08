@@ -134,6 +134,13 @@ class TLB : public BaseTLB
     std::vector<CachedTranslation> xlateCache;
 
     uint64_t translationGeneration(ThreadContext *tc) const;
+    uint64_t
+    translationEpoch(ThreadContext *tc) const override
+    {
+        return translationGeneration(tc);
+    }
+    bool stableFetchPage(ThreadContext *tc, Addr vaddr, Addr &vpage,
+                         Addr &ppage, Addr &size) const override;
     bool translateCached(const RequestPtr &req, BaseMMU::Mode mode,
                          uint64_t generation);
     void cacheTranslation(const RequestPtr &req, BaseMMU::Mode mode,

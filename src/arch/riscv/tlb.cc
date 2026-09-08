@@ -590,6 +590,26 @@ TLB::translateCached(const RequestPtr &req, BaseMMU::Mode mode,
     return true;
 }
 
+bool
+TLB::stableFetchPage(ThreadContext *tc, Addr vaddr, Addr &vpage,
+                     Addr &ppage, Addr &size) const
+{
+    // A cached translation is exactly that promise: it is only filled
+    // for pages that are uniform for every check, and it is tagged with
+    // the generation that translationEpoch() reports.
+    const CachedTranslation &entry =
+        xlateCache[(vaddr >> PageShift) % NumCachedTranslations];
+    if (entry.generation != translationGeneration(tc) ||
+        entry.vpage != (vaddr & ~(PageBytes - 1)) ||
+        !(entry.modes & (1 << BaseMMU::Execute))) {
+        return false;
+    }
+    vpage = entry.vpage;
+    ppage = entry.ppage;
+    size = PageBytes;
+    return true;
+}
+
 void
 TLB::cacheTranslation(const RequestPtr &req, BaseMMU::Mode mode,
                       uint64_t generation, Addr vaddr,
