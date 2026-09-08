@@ -106,8 +106,26 @@ class NonCachingSimpleCPU : public AtomicSimpleCPU
      */
     bool tryBackdoorAccess(const PacketPtr &pkt);
 
+    /** May plain stores skip the port? See tryBackdoorAccess(). */
+    bool storesBypassPort() const;
+
+    /**
+     * Is this a plain load or store the fast path in readMem()/writeMem()
+     * may handle: one cache-line fragment, every byte enabled, no
+     * reservation, atomic, prefetch or cache-maintenance semantics?
+     */
+    bool plainAccess(Addr addr, unsigned size, Request::Flags flags,
+                     const std::vector<bool> &byte_enable) const;
+
     Tick sendPacket(RequestPort &port, const PacketPtr &pkt) override;
     Tick fetchInstMem() override;
+
+    Fault readMem(Addr addr, uint8_t *data, unsigned size,
+                  Request::Flags flags,
+                  const std::vector<bool> &byte_enable) override;
+    Fault writeMem(uint8_t *data, unsigned size, Addr addr,
+                   Request::Flags flags, uint64_t *res,
+                   const std::vector<bool> &byte_enable) override;
 };
 
 } // namespace gem5

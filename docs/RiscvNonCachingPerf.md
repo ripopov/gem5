@@ -35,6 +35,7 @@ about 5% lower.
 | PC-event bitmap filter | 14.49 | 10.95 |
 | PC state advanced in place | 16.15 | 11.90 |
 | per-instruction helpers inlined, probe argument guarded | 17.08 | 12.58 |
+| direct plain load/store path | 18.04 | 13.51 |
 
 Spike, same host: 746 and 295 MIPS.
 
@@ -211,3 +212,16 @@ built the Commit probe's argument, which copies a `StaticInstPtr`, whether
 or not anyone listened. The helpers are inline now, only the rare
 interrupt-taking path stays out of line, `branching()` is evaluated only
 for the branch predictor and the probe argument only for a listener.
+
+### Plain loads and stores
+
+`AtomicSimpleCPU::readMem()`/`writeMem()` build a fragment loop with a
+byte-enable mask, a `Packet` per fragment and a port call for every access.
+For a load or store that stays within one cache line, enables every byte
+and carries no LR/SC, atomic, swap, prefetch, cache-maintenance or HTM
+semantics, none of that changes the outcome. `NonCachingSimpleCPU` now
+overrides both with a path that performs the same steps (trace annotation,
+request setup, translation, NO_ACCESS check, latency bookkeeping) and
+copies the bytes through the backdoor, building a `Packet` only when the
+target has no usable backdoor. Everything else falls back to the generic
+implementation.

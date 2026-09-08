@@ -37,10 +37,12 @@
 
 #include "cpu/simple/noncaching.hh"
 
+#include <algorithm>
 #include <cassert>
 #include <cstring>
 
 #include "arch/generic/decoder.hh"
+#include "cpu/utils.hh"
 #include "sim/system.hh"
 
 namespace gem5
@@ -123,7 +125,7 @@ NonCachingSimpleCPU::tryBackdoorAccess(const PacketPtr &pkt)
         req->isSwap() || pkt->isMaskedWrite()) {
         return false;
     }
-    if (write && system->threads.size() != 1)
+    if (write && !storesBypassPort())
         return false;
 
     const unsigned size = pkt->getSize();
@@ -138,6 +140,134 @@ NonCachingSimpleCPU::tryBackdoorAccess(const PacketPtr &pkt)
     }
     pkt->makeResponse();
     return true;
+}
+
+bool
+NonCachingSimpleCPU::storesBypassPort() const
+{
+    // Another hart's reservations live in the memory's locked-address
+    // list, which only stores on the port maintain.
+    return system->threads.size() == 1;
+}
+
+bool
+NonCachingSimpleCPU::plainAccess(Addr addr, unsigned size,
+                                 Request::Flags flags,
+                                 const std::vector<bool> &byte_enable) const
+{
+    static constexpr Request::FlagsType special =
+        Request::LLSC | Request::LOCKED_RMW | Request::MEM_SWAP |
+        Request::MEM_SWAP_COND | Request::PREFETCH | Request::PF_EXCLUSIVE |
+        Request::ATOMIC_RETURN_OP | Request::ATOMIC_NO_RETURN_OP |
+        Request::STORE_NO_DATA | Request::CACHE_BLOCK_ZERO |
+        Request::NO_ACCESS | Request::CLEAN | Request::INVALIDATE |
+        Request::HTM_CMD;
+    if (flags.isSet(special))
+        return false;
+    if (addrBlockOffset(addr, cacheLineSize()) + size > cacheLineSize())
+        return false;
+    return std::find(byte_enable.begin(), byte_enable.end(), false) ==
+        byte_enable.end();
+}
+
+Fault
+NonCachingSimpleCPU::readMem(Addr addr, uint8_t *data, unsigned size,
+                             Request::Flags flags,
+                             const std::vector<bool> &byte_enable)
+{
+    if (!plainAccess(addr, size, flags, byte_enable))
+        return AtomicSimpleCPU::readMem(addr, data, size, flags, byte_enable);
+
+    // Same steps as AtomicSimpleCPU::readMem() for its single-fragment,
+    // unmasked, plain-load case, minus the fragment loop and the packet:
+    // the value is copied straight out of the backing store.
+    SimpleThread *thread = threadInfo[curThread]->thread;
+    const RequestPtr &req = data_read_req;
+
+    if (traceData)
+        traceData->setMem(addr, size, flags);
+
+    dcache_latency = 0;
+    req->taskId(taskId());
+    req->setVirt(addr, size, flags, dataRequestorId(),
+                 thread->pcState().instAddr());
+    req->setAllBytesEnabled();
+
+    Fault fault = thread->mmu->translateAtomic(req, thread->getTC(),
+                                               BaseMMU::Read);
+    if (fault != NoFault)
+        return fault;
+    if (req->getFlags().isSet(Request::NO_ACCESS))
+        return NoFault;
+
+    const uint8_t *host = req->isLocalAccess() ? nullptr :
+        hostAddr(dataWindow, req->getPaddr(), size, false);
+    if (host) {
+        copyBytes(data, host, size);
+    } else {
+        Packet pkt(req, MemCmd::ReadReq);
+        pkt.dataStatic(data);
+        if (req->isLocalAccess()) {
+            dcache_latency += req->localAccessor(thread->getTC(), &pkt);
+        } else {
+            dcache_latency += sendPacket(dcachePort, &pkt);
+        }
+        panic_if(pkt.isError(), "Data fetch (%s) failed: %s",
+                 pkt.getAddrRange().to_string(), pkt.print());
+    }
+    dcache_access = true;
+    return NoFault;
+}
+
+Fault
+NonCachingSimpleCPU::writeMem(uint8_t *data, unsigned size, Addr addr,
+                              Request::Flags flags, uint64_t *res,
+                              const std::vector<bool> &byte_enable)
+{
+    if (res || !data || !plainAccess(addr, size, flags, byte_enable)) {
+        return AtomicSimpleCPU::writeMem(data, size, addr, flags, res,
+                                         byte_enable);
+    }
+
+    // The plain-store counterpart of readMem() above.
+    SimpleThread *thread = threadInfo[curThread]->thread;
+    const RequestPtr &req = data_write_req;
+
+    if (traceData)
+        traceData->setMem(addr, size, flags);
+
+    dcache_latency = 0;
+    req->taskId(taskId());
+    req->setVirt(addr, size, flags, dataRequestorId(),
+                 thread->pcState().instAddr());
+    req->setAllBytesEnabled();
+
+    Fault fault = thread->mmu->translateAtomic(req, thread->getTC(),
+                                               BaseMMU::Write);
+    if (fault != NoFault)
+        return fault;
+    if (req->getFlags().isSet(Request::NO_ACCESS))
+        return NoFault;
+
+    uint8_t *host = (req->isLocalAccess() || !storesBypassPort()) ? nullptr :
+        hostAddr(dataWindow, req->getPaddr(), size, true);
+    if (host) {
+        copyBytes(host, data, size);
+    } else {
+        Packet pkt(req, MemCmd::WriteReq);
+        pkt.dataStatic(data);
+        if (req->isLocalAccess()) {
+            dcache_latency += req->localAccessor(thread->getTC(), &pkt);
+        } else {
+            dcache_latency += sendPacket(dcachePort, &pkt);
+            // Notify other threads on this CPU of write
+            threadSnoop(&pkt, curThread);
+        }
+        panic_if(pkt.isError(), "Data write (%s) failed: %s",
+                 pkt.getAddrRange().to_string(), pkt.print());
+    }
+    dcache_access = true;
+    return NoFault;
 }
 
 Tick
