@@ -116,6 +116,15 @@ class ISA : public BaseISA
     */
     const bool _wfiResumeOnPending;
 
+    /**
+     * Advanced by every write to a CSR that feeds address translation or
+     * memory permission checks (privilege, status, satp, envcfg, PMP...)
+     * and on checkpoint restore. The TLB tags its cached translations
+     * with it so that they never outlive the state they were derived
+     * from. See TLB::translateCached().
+     */
+    uint64_t _translationGeneration = 1;
+
   public:
     using Params = RiscvISAParams;
 
@@ -202,6 +211,10 @@ class ISA : public BaseISA
     PrivilegeModeSet getPrivilegeModeSet() { return _privilegeModeSet; }
 
     bool resumeOnPending() { return _wfiResumeOnPending; }
+
+    uint64_t translationGeneration() const { return _translationGeneration; }
+    /** Does a write to this CSR change how addresses translate? */
+    static bool affectsTranslation(RegIndex idx);
 
     virtual Addr getFaultHandlerAddr(
         RegIndex idx, uint64_t cause, bool intr) const;

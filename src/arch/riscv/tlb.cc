@@ -96,6 +96,7 @@ TLB::TLB(const Params &p)
 
     walker = p.walker;
     walker->setTLB(this);
+    xlateCache.resize(NumCachedTranslations);
 }
 
 Walker *
@@ -210,6 +211,7 @@ void
 TLB::demapPage(ThreadContext *tc, Addr vaddr, uint64_t asid, bool is_gvma,
                bool is_vvma)
 {
+    ++invalidationEpoch;
     // Note: vaddr is Reg[rs1] and asid is Reg[rs2]
     // The definition of this instruction is
     // if vaddr=x0 and asid=x0, then flush all
@@ -259,6 +261,7 @@ TLB::demapPage(ThreadContext *tc, Addr vaddr, uint64_t asid, bool is_gvma,
 void
 TLB::flushAll()
 {
+    ++invalidationEpoch;
     DPRINTF(TLB, "flushAll()\n");
     for (size_t i = 0; i < size; i++) {
         if (tlb[i].trieHandle)
@@ -536,6 +539,98 @@ TLB::getMemAccessInfo(ThreadContext *tc, BaseMMU::Mode mode,
     return MemAccessInfo(priv, virt, force_virt, hlvx, lr);
 }
 
+uint64_t
+TLB::translationGeneration(ThreadContext *tc) const
+{
+    // Every relevant event advances exactly one of the two counters by
+    // one, so their sum identifies the current translation state.
+    return static_cast<ISA*>(tc->getIsaPtr())->translationGeneration() +
+        invalidationEpoch;
+}
+
+bool
+TLB::translateCached(const RequestPtr &req, BaseMMU::Mode mode,
+                     uint64_t generation)
+{
+    const Addr vaddr = req->getVaddr();
+    const Addr offset = vaddr & (PageBytes - 1);
+    const unsigned size = req->getSize();
+    if (offset + size > PageBytes)
+        return false;
+
+    const CachedTranslation &entry =
+        xlateCache[(vaddr >> PageShift) % NumCachedTranslations];
+    if (entry.generation != generation || entry.vpage != vaddr - offset ||
+        !(entry.modes & (1 << mode))) {
+        return false;
+    }
+
+    const auto arch_flags = req->getArchFlags();
+    if (arch_flags & (XlateFlags::HLVX | XlateFlags::FORCE_VIRT))
+        return false;
+    if (mode != BaseMMU::Execute) {
+        const Addr align = mask(arch_flags & MMU::AlignmentMask) + 1;
+        if ((vaddr & (align - 1)) &&
+            (!entry.misalignedOk || req->isLLSC() || req->isAtomic())) {
+            return false;
+        }
+    }
+
+    req->setPaddr(entry.ppage | offset);
+    req->setFlags(entry.flags);
+    if (entry.paged) {
+        if (mode == BaseMMU::Write) {
+            stats.writeHits++;
+            stats.writeAccesses++;
+        } else {
+            stats.readHits++;
+            stats.readAccesses++;
+        }
+    }
+    return true;
+}
+
+void
+TLB::cacheTranslation(const RequestPtr &req, BaseMMU::Mode mode,
+                      uint64_t generation, Addr vaddr,
+                      Request::FlagsType flags_in, bool paged)
+{
+    // Only ordinary accesses whose address the slow path left alone;
+    // hypervisor loads carry their own privilege, and an access that
+    // resolved to a local accessor (the m5op range) is not a memory access.
+    if (req->getVaddr() != vaddr || req->isLocalAccess() ||
+        (req->getArchFlags() & (XlateFlags::HLVX | XlateFlags::FORCE_VIRT)))
+        return;
+
+    const Addr vpage = vaddr & ~(PageBytes - 1);
+    const Addr ppage = req->getPaddr() & ~(PageBytes - 1);
+    if (req->getPaddr() - ppage != vaddr - vpage)
+        return;
+
+    // The result must hold for every access to the page.
+    bool misaligned_ok = false;
+    if (!pmp->homogeneous(ppage, PageBytes) ||
+        !pma->uniformAttributes(RangeSize(ppage, PageBytes), misaligned_ok))
+        return;
+
+    const Request::FlagsType flags =
+        static_cast<Request::FlagsType>(req->getFlags()) & ~flags_in;
+    CachedTranslation &entry =
+        xlateCache[(vaddr >> PageShift) % NumCachedTranslations];
+    if (entry.generation != generation || entry.vpage != vpage ||
+        entry.ppage != ppage || entry.flags != flags ||
+        entry.paged != paged) {
+        entry.vpage = vpage;
+        entry.ppage = ppage;
+        entry.generation = generation;
+        entry.flags = flags;
+        entry.modes = 0;
+        entry.misalignedOk = misaligned_ok;
+        entry.paged = paged;
+    }
+    entry.modes |= 1 << mode;
+}
+
 Fault
 TLB::translate(const RequestPtr &req, ThreadContext *tc,
                BaseMMU::Translation *translation, BaseMMU::Mode mode,
@@ -544,6 +639,13 @@ TLB::translate(const RequestPtr &req, ThreadContext *tc,
     delayed = false;
 
     if (FullSystem) {
+        const uint64_t generation = translationGeneration(tc);
+        if (translateCached(req, mode, generation))
+            return NoFault;
+        const Addr vaddr_in = req->getVaddr();
+        const Request::FlagsType flags_in = req->getFlags();
+        bool paged = false;
+
         MemAccessInfo memaccess = getMemAccessInfo(
             tc, mode, req->getArchFlags());
         PrivilegeMode pmode = memaccess.priv;
@@ -583,6 +685,7 @@ TLB::translate(const RequestPtr &req, ThreadContext *tc,
                  */
                 req->setPaddr(getValidAddr(req->getVaddr(), tc, mode));
             } else {
+                paged = true;
                 fault = doTranslate(req, tc, translation, mode, delayed);
             }
         }
@@ -614,6 +717,10 @@ TLB::translate(const RequestPtr &req, ThreadContext *tc,
 
         if (!delayed && fault == NoFault) {
             fault = pma->check(req, mode);
+        }
+        if (!delayed && fault == NoFault) {
+            cacheTranslation(req, mode, generation, vaddr_in, flags_in,
+                             paged);
         }
         return fault;
     } else {
@@ -770,6 +877,7 @@ TLB::serialize(CheckpointOut &cp) const
 void
 TLB::unserialize(CheckpointIn &cp)
 {
+    ++invalidationEpoch;
     // Do not allow to restore with a smaller tlb.
     uint32_t _size;
     UNSERIALIZE_SCALAR(_size);

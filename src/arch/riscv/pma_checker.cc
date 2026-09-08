@@ -107,6 +107,21 @@ PMAChecker::isUncacheable(const AddrRange &range)
 }
 
 bool
+PMAChecker::uniformAttributes(const AddrRange &range, bool &misaligned_ok)
+{
+    for (auto const &uncacheable_range: uncacheable) {
+        if (uncacheable_range.intersects(range) &&
+            !range.isSubset(uncacheable_range)) {
+            return false;
+        }
+    }
+    misaligned_ok = misalignedSupport(range);
+    if (!misaligned_ok && misaligned.intersects(range) != misaligned.end())
+        return false;
+    return true;
+}
+
+bool
 PMAChecker::isUncacheable(const Addr &addr, const unsigned size)
 {
     AddrRange range(addr, addr + size);

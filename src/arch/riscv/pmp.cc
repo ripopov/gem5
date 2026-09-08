@@ -135,6 +135,21 @@ PMP::createAddrfault(Addr vaddr, BaseMMU::Mode mode)
     return std::make_shared<AddressFault>(vaddr, code);
 }
 
+bool
+PMP::homogeneous(Addr start, Addr size) const
+{
+    const AddrRange range(start, start + size);
+    for (const auto &entry : pmpTable) {
+        if ((entry.pmpCfg & PMP_A_MASK) == 0)
+            continue;
+        if (entry.pmpAddr.intersects(range) &&
+            !range.isSubset(entry.pmpAddr)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 Fault
 PMP::createDefaultFault(const RequestPtr &req, BaseMMU::Mode mode,
                         PrivilegeMode pmode, Addr vaddr)

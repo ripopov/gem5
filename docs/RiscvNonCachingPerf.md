@@ -28,6 +28,7 @@ about 5% lower.
 | interrupt check decided from local pending bits | 4.38 | 2.60 |
 | no byte-enable allocation per access | 4.72 | 2.71 |
 | backdoor data path with cached bounds | 5.58 | 3.09 |
+| translation cache in front of TLB::translate() | 11.31 | 8.33 |
 
 Spike, same host: 746 and 295 MIPS.
 
@@ -118,3 +119,22 @@ and data paths each remember the last backdoor as plain start/end bounds
 and a host base pointer, so the common case is two compares and an add,
 and the 1/2/4/8-byte copies compile to single loads and stores instead of
 a `memcpy` call.
+
+### Translation cache
+
+The largest single item in the baseline profile. `TLB::translate()` now
+keeps a direct-mapped cache of complete results per page and access mode:
+physical page, the request flags the slow path added (PHYSICAL,
+UNCACHEABLE, STRICT_ORDER) and whether the PMA permits misaligned access
+there. An entry is filled only after the slow path succeeded on an
+ordinary access and only when the page is uniform for every check the
+fast path skips (`PMP::homogeneous()`, `PMAChecker::uniformAttributes()`,
+no local accessor), and it is tagged with a generation that the ISA
+advances whenever a translation-relevant CSR (privilege, status,
+satp/vsatp/hgatp, envcfg, PMP, V, NMIE, misa) changes value and the TLB
+advances on every invalidation, so no cached result outlives the state it
+was derived from.
+
+The first version showed no effect at all: reading `mstatus` normalizes it
+and writes the CSR back on every read, which advanced the generation each
+time. The counter only moves when a value actually changes.

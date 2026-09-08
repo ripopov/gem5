@@ -68,6 +68,18 @@ class BasePMAChecker : public SimObject
     virtual Fault checkVAddrAlignment(
         const RequestPtr &req, BaseMMU::Mode mode) = 0;
     virtual void takeOverFrom(BasePMAChecker *old) = 0;
+
+    /**
+     * Do all accesses inside a range see the same attributes? When they
+     * do, report whether the range supports misaligned accesses. Checkers
+     * that cannot answer return false and the TLB does not cache their
+     * results.
+     */
+    virtual bool
+    uniformAttributes(const AddrRange &range, bool &misaligned_ok)
+    {
+        return false;
+    }
 };
 
 /**
@@ -102,6 +114,8 @@ class PMAChecker : public BasePMAChecker
         const RequestPtr &req, BaseMMU::Mode mode) override;
 
     bool isUncacheable(const AddrRange &range);
+    bool uniformAttributes(const AddrRange &range,
+                           bool &misaligned_ok) override;
     bool isUncacheable(const Addr &addr, const unsigned size);
     bool isUncacheable(PacketPtr pkt);
 

@@ -212,6 +212,15 @@ class PMP : public SimObject
      */
     inline uint8_t pmpGetAField(uint8_t cfg);
 
+  public:
+    /**
+     * Is the PMP check result the same for every access inside a range?
+     * It is when no active rule covers only part of the range.
+     */
+    bool homogeneous(Addr start, Addr size) const;
+
+  private:
+
     /**
      * This function decodes a pmpaddr register value
      * into an address range when A field of pmpcfg

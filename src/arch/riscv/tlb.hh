@@ -96,6 +96,50 @@ class TLB : public BaseTLB
 
     Walker *walker;
 
+    /** Advanced on every invalidation; see translationGeneration(). */
+    uint64_t invalidationEpoch = 0;
+
+    /**
+     * Translation cache.
+     *
+     * translate() re-derives the effective privilege, translation mode
+     * and pointer-masking state from half a dozen CSRs, scans the PMP
+     * table and looks up the PMA ranges on every access, and almost all
+     * of that repeats the previous access's work: the outcome only
+     * changes when a CSR feeding it is written or the TLB is flushed.
+     *
+     * Each entry records the complete result of translate() for one page
+     * and the access modes it has been verified for. An entry is filled
+     * only after the slow path succeeded and only when the page is
+     * uniform for every check the fast path skips (PMP and PMA), and it
+     * is tagged with the generation in force when it was filled, which
+     * the ISA advances on relevant CSR writes and this TLB advances on
+     * every invalidation.
+     */
+    struct CachedTranslation
+    {
+        Addr vpage = 0;
+        Addr ppage = 0;
+        uint64_t generation = 0;
+        /** Request flags the slow path added (PHYSICAL, UNCACHEABLE...). */
+        Request::FlagsType flags = 0;
+        /** Access modes verified for this page, as (1 << BaseMMU::Mode). */
+        uint8_t modes = 0;
+        /** The PMA allows misaligned accesses to this page. */
+        bool misalignedOk = false;
+        /** Came through the TLB rather than a bare (identity) mapping. */
+        bool paged = false;
+    };
+    static constexpr size_t NumCachedTranslations = 4096;
+    std::vector<CachedTranslation> xlateCache;
+
+    uint64_t translationGeneration(ThreadContext *tc) const;
+    bool translateCached(const RequestPtr &req, BaseMMU::Mode mode,
+                         uint64_t generation);
+    void cacheTranslation(const RequestPtr &req, BaseMMU::Mode mode,
+                          uint64_t generation, Addr vaddr,
+                          Request::FlagsType flags_in, bool paged);
+
     struct TlbStats : public statistics::Group
     {
         TlbStats(statistics::Group *parent);

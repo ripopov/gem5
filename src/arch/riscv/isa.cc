@@ -755,7 +755,34 @@ ISA::setMiscRegNoEffect(RegIndex idx, RegVal val)
     panic_if(idx > NUM_PHYS_MISCREGS, "Illegal CSR index %#x\n", idx);
     DPRINTF(RiscvMisc, "Setting MiscReg %s (%d) to %#x.\n",
             MiscRegNames[idx], idx, val);
+    // Rewriting the current value, which reading a CSR that normalizes
+    // itself on the way out does constantly, leaves translation unchanged.
+    if (miscRegFile[idx] != val && affectsTranslation(idx))
+        ++_translationGeneration;
     miscRegFile[idx] = val;
+}
+
+bool
+ISA::affectsTranslation(RegIndex idx)
+{
+    switch (idx) {
+      case MISCREG_PRV:
+      case MISCREG_ISA:
+      case MISCREG_STATUS:
+      case MISCREG_VSSTATUS:
+      case MISCREG_HSTATUS:
+      case MISCREG_SATP:
+      case MISCREG_VSATP:
+      case MISCREG_HGATP:
+      case MISCREG_HENVCFG:
+      case MISCREG_SENVCFG:
+      case MISCREG_VIRT:
+      case MISCREG_NMIE:
+      case MISCREG_PMPCFG0 ... MISCREG_PMPADDR15:
+        return true;
+      default:
+        return false;
+    }
 }
 
 void
@@ -1120,6 +1147,7 @@ ISA::unserialize(CheckpointIn &cp)
 {
     DPRINTF(Checkpoint, "Unserializing Riscv Misc Registers\n");
     UNSERIALIZE_CONTAINER(miscRegFile);
+    ++_translationGeneration;
 }
 
 void
