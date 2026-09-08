@@ -176,6 +176,9 @@ class ISA : public BaseISA
     RiscvType rvType() const { return _rvType; }
 
     bool reportsExtension(std::string_view extension) const;
+    /** Smrnmi state, read without the CSR side-effect path. */
+    bool nmiPending() const { return miscRegFile[MISCREG_NMIP]; }
+    bool nmiEnabled() const { return miscRegFile[MISCREG_NMIE]; }
     bool reportsAllExtensions(
         std::initializer_list<std::string_view> extensions) const;
     bool hasVectorExtension() const;

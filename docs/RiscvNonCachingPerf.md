@@ -25,6 +25,7 @@ about 5% lower.
 | step | CoreMark | Linux boot |
 |---|---|---|
 | baseline: upstream develop plus this commit | 3.76 | 2.29 |
+| interrupt check decided from local pending bits | 4.38 | 2.60 |
 
 Spike, same host: 746 and 295 MIPS.
 
@@ -72,3 +73,16 @@ execution:
   several stat groups, behind a run of data-dependent branches; PC-event
   lookups; out-of-line helpers.
 * **PC state, 8%.** Four copies of a polymorphic `PCState` per instruction.
+
+### Interrupt check
+
+`Interrupts::checkInterrupts()` runs before every instruction. It computed
+`globalMask()` unconditionally, reading the status, misa, mideleg, privilege
+and (with H) hideleg/vsstatus CSRs through `ISA::readMiscReg`'s side-effect
+switch, looked up whether the ISA reports Smrnmi by string comparison,
+fetched the ISA pointer through the thread context and read the NMI bits
+through two more virtual calls, all to find that nothing was pending. Now
+`(ip | hvip) & ie` decides the common case locally; the privilege and
+delegation state is consulted only when something is pending and enabled,
+and the ISA pointer, the Smrnmi flag and the NMI bits are cached or read
+directly.

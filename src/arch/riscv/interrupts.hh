@@ -66,6 +66,10 @@ class Interrupts : public BaseInterrupts
     std::bitset<NumInterruptTypes> hvip;
 
     std::vector<gem5::IntSinkPin<Interrupts>*> localInterruptPins;
+    /** The thread's ISA and whether it reports Smrnmi, cached when the
+     *  thread context is attached. */
+    ISA *isa = nullptr;
+    bool smrnmi = false;
   protected:
     int nmi_cause;
 
@@ -79,7 +83,15 @@ class Interrupts : public BaseInterrupts
     bool
     checkNonMaskableInterrupt() const
     {
-        return tc->readMiscReg(MISCREG_NMIP) & tc->readMiscReg(MISCREG_NMIE);
+        return isa->nmiPending() && isa->nmiEnabled();
+    }
+
+    void
+    setThreadContext(ThreadContext *_tc) override
+    {
+        BaseInterrupts::setThreadContext(_tc);
+        isa = static_cast<ISA *>(tc->getIsaPtr());
+        smrnmi = isa->reportsExtension("Smrnmi");
     }
 
     bool checkInterrupt(int num) const {
@@ -88,13 +100,18 @@ class Interrupts : public BaseInterrupts
 
     bool checkInterrupts() const override
     {
-        ISA* isa = static_cast<ISA*>(tc->getIsaPtr());
-        if (isa->reportsExtension("Smrnmi") &&
-            tc->readMiscReg(MISCREG_NMIE) == 0) {
+        if (smrnmi && !isa->nmiEnabled()) {
             return false;
         }
-        return checkNonMaskableInterrupt() ||
-               ((ip | hvip) & ie & globalMask()).any();
+        if (checkNonMaskableInterrupt()) {
+            return true;
+        }
+        // This is evaluated before every instruction. Nothing pending and
+        // enabled is by far the common case, so decide it from the local
+        // pending/enable bits before consulting the privilege, status and
+        // delegation CSRs that globalMask() reads.
+        const auto candidates = (ip | hvip) & ie;
+        return candidates.any() && (candidates & globalMask()).any();
     }
 
     Fault getInterrupt() override;
