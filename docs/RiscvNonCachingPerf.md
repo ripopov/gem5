@@ -29,6 +29,7 @@ about 5% lower.
 | no byte-enable allocation per access | 4.72 | 2.71 |
 | backdoor data path with cached bounds | 5.58 | 3.09 |
 | translation cache in front of TLB::translate() | 11.31 | 8.33 |
+| PC-indexed decoder cache | 12.58 | 9.27 |
 
 Spike, same host: 746 and 295 MIPS.
 
@@ -138,3 +139,14 @@ was derived from.
 The first version showed no effect at all: reading `mstatus` normalizes it
 and writes the CSR back on every read, which advanced the generation each
 time. The counter only moves when a value actually changes.
+
+### Decoder cache
+
+`Decoder::decode()` looked every instruction up in the
+`ExtMachInst -> StaticInst` `unordered_map`: a hash of the 64-bit extended
+encoding, a bucket walk and a compare. A direct-mapped cache of 8192
+decoded instructions indexed by the halfword address now sits in front of
+it. Decoding is a pure function of the extended machine instruction (which
+carries the vector configuration and XLEN), so a hit requires the encoding
+to match as well as the address and entries never need invalidating;
+self-modifying code simply misses on the changed bits.

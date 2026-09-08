@@ -46,6 +46,7 @@ Decoder::Decoder(const RiscvDecoderParams &p) : InstDecoder(p, &machInst)
     vlen = isa->getVecLenInBits();
     elen = isa->getVecElemLenInBits();
     _hasZcd = isa->reportsExtension("Zcd");
+    decodedInsts.resize(NumDecodedInsts);
     reset();
 }
 
@@ -121,11 +122,20 @@ Decoder::decode(ExtMachInst mach_inst, Addr addr)
     DPRINTF(Decode, "Decoding instruction 0x%08x at address %#x\n",
             mach_inst.instBits, addr);
 
+    // Instructions are at least halfword aligned.
+    DecodedInst &entry = decodedInsts[(addr >> 1) % NumDecodedInsts];
+    if (entry.inst && entry.addr == addr && entry.machInst == mach_inst)
+        return entry.inst;
+
     StaticInstPtr &si = instMap[mach_inst];
     if (!si)
         si = decodeInst(mach_inst);
 
     si->size(compressed(mach_inst) ? 2 : 4);
+
+    entry.addr = addr;
+    entry.machInst = mach_inst;
+    entry.inst = si;
 
     DPRINTF(Decode, "Decode: Decoded %s instruction: %#x\n",
             si->getName(), mach_inst);

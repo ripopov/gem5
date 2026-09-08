@@ -52,6 +52,24 @@ class Decoder : public InstDecoder
 {
   private:
     decode_cache::InstMap<ExtMachInst> instMap;
+
+    /**
+     * Direct-mapped cache of decoded instructions indexed by address,
+     * consulted before the instruction map's hash lookup. Decoding is a
+     * pure function of the extended machine instruction, so an entry
+     * never needs invalidating: a hit requires the fetched bits, with
+     * the vector configuration they carry, to match as well as the
+     * address.
+     */
+    struct DecodedInst
+    {
+        Addr addr = 0;
+        ExtMachInst machInst = 0;
+        StaticInstPtr inst;
+    };
+    static constexpr size_t NumDecodedInsts = 8192;
+    std::vector<DecodedInst> decodedInsts;
+
     bool aligned;
     bool mid;
 
