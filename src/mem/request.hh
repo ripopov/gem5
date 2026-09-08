@@ -656,6 +656,10 @@ class Request : public Extensible<Request>
         req1->_size = split_addr - _vaddr;
         req2->_vaddr = split_addr;
         req2->_size = _size - req1->_size;
+        if (_byteEnable.empty()) {
+            // Unmasked; both halves stay unmasked.
+            return;
+        }
         req1->_byteEnable = std::vector<bool>(
             _byteEnable.begin(),
             _byteEnable.begin() + req1->_size);
@@ -745,6 +749,18 @@ class Request : public Extensible<Request>
     {
         assert(be.size() == _size);
         _byteEnable = be;
+    }
+
+    /**
+     * Enable every byte of the request. An empty mask means "unmasked"
+     * to isMasked() and to every consumer of getByteEnable(), which only
+     * read the mask for masked writes, so this represents the common
+     * unmasked access without allocating a mask.
+     */
+    void
+    setAllBytesEnabled()
+    {
+        _byteEnable.clear();
     }
 
     /**

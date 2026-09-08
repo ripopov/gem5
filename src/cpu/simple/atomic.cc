@@ -41,6 +41,8 @@
 
 #include "cpu/simple/atomic.hh"
 
+#include <algorithm>
+
 #include "arch/generic/decoder.hh"
 #include "base/output.hh"
 #include "cpu/exetrace.hh"
@@ -347,7 +349,15 @@ AtomicSimpleCPU::genMemFragmentRequest(const RequestPtr &req, Addr frag_addr,
     if (isAnyActiveElement(it_start, it_end)) {
         req->setVirt(frag_addr, frag_size, flags, dataRequestorId(),
                      inst_addr);
-        req->setByteEnable(std::vector<bool>(it_start, it_end));
+        // Only build a mask when some byte is disabled; the request is
+        // reused for every access and a fresh std::vector<bool> per
+        // fragment would otherwise be a heap allocation on every load
+        // and store.
+        if (std::find(it_start, it_end, false) == it_end) {
+            req->setAllBytesEnabled();
+        } else {
+            req->setByteEnable(std::vector<bool>(it_start, it_end));
+        }
     } else {
         predicate = false;
     }

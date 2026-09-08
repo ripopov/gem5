@@ -26,6 +26,7 @@ about 5% lower.
 |---|---|---|
 | baseline: upstream develop plus this commit | 3.76 | 2.29 |
 | interrupt check decided from local pending bits | 4.38 | 2.60 |
+| no byte-enable allocation per access | 4.72 | 2.71 |
 
 Spike, same host: 746 and 295 MIPS.
 
@@ -86,3 +87,13 @@ through two more virtual calls, all to find that nothing was pending. Now
 delegation state is consulted only when something is pending and enabled,
 and the ISA pointer, the Smrnmi flag and the NMI bits are cached or read
 directly.
+
+### Byte-enable masks
+
+`AtomicSimpleCPU::genMemFragmentRequest()` built a `std::vector<bool>` of
+byte enables for every fragment and copied it into the reused request, a
+heap allocation and free per load and store although the mask is all-ones
+for every ordinary instruction. `Request` now accepts an empty mask as
+"unmasked", which `isMasked()` and every consumer of `getByteEnable()`
+already treat that way, and the CPU only materializes a mask when some
+byte is actually disabled.
