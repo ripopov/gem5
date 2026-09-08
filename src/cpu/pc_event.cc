@@ -63,8 +63,18 @@ PCEventQueue::remove(PCEvent *event)
             i++;
         }
     }
+    if (removed)
+        rebuildFilter();
 
     return removed > 0;
+}
+
+void
+PCEventQueue::rebuildFilter()
+{
+    filter.reset();
+    for (const PCEvent *event : pcMap)
+        filter.set(filterIndex(event->pc()));
 }
 
 bool
@@ -72,6 +82,7 @@ PCEventQueue::schedule(PCEvent *event)
 {
     pcMap.push_back(event);
     std::sort(pcMap.begin(), pcMap.end(), MapCompare());
+    filter.set(filterIndex(event->pc()));
 
     DPRINTF(PCEvent, "PC based event scheduled for %#x: %s\n",
             event->pc(), event->descr());

@@ -122,13 +122,18 @@ BaseSimpleCPU::BaseSimpleCPU(const BaseSimpleCPUParams &p)
 void
 BaseSimpleCPU::checkPcEventQueue()
 {
-    Addr oldpc, pc = threadInfo[curThread]->thread->pcState().instAddr();
-    do {
-        oldpc = pc;
-        threadInfo[curThread]->thread->pcEventQueue.service(
-                oldpc, threadContexts[curThread]);
-        pc = threadInfo[curThread]->thread->pcState().instAddr();
-    } while (oldpc != pc);
+    SimpleThread &thread = *threadInfo[curThread]->thread;
+    if (thread.pcEventQueue.empty())
+        return;
+
+    // Keep servicing while the events move the PC.
+    Addr pc = thread.pcState().instAddr();
+    while (thread.pcEventQueue.service(pc, threadContexts[curThread])) {
+        const Addr new_pc = thread.pcState().instAddr();
+        if (new_pc == pc)
+            break;
+        pc = new_pc;
+    }
 }
 
 void

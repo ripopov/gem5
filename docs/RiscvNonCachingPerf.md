@@ -32,6 +32,7 @@ about 5% lower.
 | PC-indexed decoder cache | 12.58 | 9.27 |
 | consecutive cycles inside one tick event | 13.76 | 10.33 |
 | decoder: no PCState copy, encoding assembled in registers | 14.42 | 10.65 |
+| PC-event bitmap filter | 14.49 | 10.95 |
 
 Spike, same host: 746 and 295 MIPS.
 
@@ -176,3 +177,12 @@ immediately read the whole 64-bit union; and `decode()` filled five
 bitfields of the union one by one, each a read-modify-write through
 memory before the whole value was read again. The first is a reference
 now; the union is assembled in a register and stored once, 64 bits wide.
+
+### PC-event lookups
+
+Every instruction asks the thread's `PCEventQueue` whether an event is
+registered at the current PC. A full-system Linux run registers a handful
+(kernel panic/oops hooks), which made every instruction pay for a binary
+search over the event vector. The queue now keeps a 4096-bit filter of
+the PCs that have events and rejects almost all lookups against it, and
+`checkPcEventQueue()` returns early when no event is registered at all.

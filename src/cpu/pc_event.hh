@@ -29,6 +29,7 @@
 #ifndef __PC_EVENT_HH__
 #define __PC_EVENT_HH__
 
+#include <bitset>
 #include <vector>
 
 #include "base/logging.hh"
@@ -107,6 +108,18 @@ class PCEventQueue : public PCEventScope
   protected:
     Map pcMap;
 
+    /**
+     * Set for every PC that may have an event, indexed by a hash of the
+     * PC. service() is called for every instruction executed while the
+     * events themselves are rare, so this rejects almost every call
+     * without searching pcMap.
+     */
+    static constexpr size_t FilterBits = 4096;
+    std::bitset<FilterBits> filter;
+
+    static size_t filterIndex(Addr pc) { return (pc >> 1) % FilterBits; }
+    void rebuildFilter();
+
     bool doService(Addr pc, ThreadContext *tc);
 
   public:
@@ -115,9 +128,11 @@ class PCEventQueue : public PCEventScope
 
     bool remove(PCEvent *event) override;
     bool schedule(PCEvent *event) override;
+    bool empty() const { return pcMap.empty(); }
+
     bool service(Addr pc, ThreadContext *tc)
     {
-        if (pcMap.empty())
+        if (!filter[filterIndex(pc)])
             return false;
 
         return doService(pc, tc);
