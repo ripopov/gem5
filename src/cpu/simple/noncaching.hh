@@ -60,6 +60,52 @@ class NonCachingSimpleCPU : public AtomicSimpleCPU
   protected:
     AddrRangeMap<MemBackdoorPtr, 1> memBackdoors;
 
+    /**
+     * The backdoor the last instruction fetch or the last data access
+     * used, as plain bounds and a host pointer. Consecutive accesses
+     * almost always hit the same memory, so this is checked before the
+     * range map and resolves an address with two compares and an add.
+     */
+    struct BackdoorWindow
+    {
+        MemBackdoorPtr backdoor = nullptr;
+        Addr start = 0;
+        Addr end = 0; // exclusive
+        uint8_t *base = nullptr; // host address of start
+        bool readable = false;
+        bool writeable = false;
+
+        void
+        set(MemBackdoorPtr bd)
+        {
+            backdoor = bd;
+            start = bd->range().start();
+            end = bd->range().end();
+            base = bd->ptr();
+            readable = bd->readable();
+            writeable = bd->writeable();
+        }
+
+        void forget() { *this = BackdoorWindow(); }
+    };
+    BackdoorWindow fetchWindow, dataWindow;
+
+    /**
+     * Host address of [addr, addr + size) through a recorded backdoor
+     * that permits the access, or nullptr. Refreshes the window when the
+     * access is outside it.
+     */
+    uint8_t *hostAddr(BackdoorWindow &window, Addr addr, unsigned size,
+                      bool write);
+
+    /**
+     * Perform a plain load or store through a recorded backdoor instead
+     * of the port, if the packet and the target allow it.
+     *
+     * @return true if the packet was completed here.
+     */
+    bool tryBackdoorAccess(const PacketPtr &pkt);
+
     Tick sendPacket(RequestPort &port, const PacketPtr &pkt) override;
     Tick fetchInstMem() override;
 };

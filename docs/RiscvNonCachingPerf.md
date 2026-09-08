@@ -27,6 +27,7 @@ about 5% lower.
 | baseline: upstream develop plus this commit | 3.76 | 2.29 |
 | interrupt check decided from local pending bits | 4.38 | 2.60 |
 | no byte-enable allocation per access | 4.72 | 2.71 |
+| backdoor data path with cached bounds | 5.58 | 3.09 |
 
 Spike, same host: 746 and 295 MIPS.
 
@@ -97,3 +98,23 @@ for every ordinary instruction. `Request` now accepts an empty mask as
 "unmasked", which `isMasked()` and every consumer of `getByteEnable()`
 already treat that way, and the CPU only materializes a mask when some
 byte is actually disabled.
+
+### Backdoor data path
+
+`NonCachingSimpleCPU` already read instructions straight from the memory
+backdoors that `AbstractMemory` hands out, but every load and store still
+went through `Packet` -> port -> `CoherentXBar::recvAtomicBackdoor()` ->
+`findPort()` -> `SimpleMemory` -> `AbstractMemory::access()`, and every
+fetch looked its backdoor up in the `AddrRangeMap`, whose `find()` walks a
+small list through a `std::function` on each call, then resolved the
+offset through `AddrRange::contains()`/`getOffset()`, which branch on
+interleaving.
+
+Plain `ReadReq`/`WriteReq` packets are now completed directly in the
+backing store when a recorded backdoor covers them; LR/SC, atomics, swaps
+and masked writes stay on the port, as do all stores when another hart
+could hold a reservation in the memory's locked-address list. The fetch
+and data paths each remember the last backdoor as plain start/end bounds
+and a host base pointer, so the common case is two compares and an add,
+and the 1/2/4/8-byte copies compile to single loads and stores instead of
+a `memcpy` call.

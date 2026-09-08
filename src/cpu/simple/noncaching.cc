@@ -38,11 +38,34 @@
 #include "cpu/simple/noncaching.hh"
 
 #include <cassert>
+#include <cstring>
 
 #include "arch/generic/decoder.hh"
+#include "sim/system.hh"
 
 namespace gem5
 {
+
+namespace
+{
+
+/**
+ * memcpy with a size only known at run time is a library call; backdoor
+ * accesses are almost always a naturally sized scalar.
+ */
+inline void
+copyBytes(void *dst, const void *src, size_t size)
+{
+    switch (size) {
+      case 1: std::memcpy(dst, src, 1); break;
+      case 2: std::memcpy(dst, src, 2); break;
+      case 4: std::memcpy(dst, src, 4); break;
+      case 8: std::memcpy(dst, src, 8); break;
+      default: std::memcpy(dst, src, size); break;
+    }
+}
+
+} // anonymous namespace
 
 NonCachingSimpleCPU::NonCachingSimpleCPU(
         const BaseNonCachingSimpleCPUParams &p)
@@ -62,9 +85,67 @@ NonCachingSimpleCPU::verifyMemoryMode() const
     }
 }
 
+uint8_t *
+NonCachingSimpleCPU::hostAddr(BackdoorWindow &window, Addr addr,
+                              unsigned size, bool write)
+{
+    if (addr < window.start || addr + size > window.end) {
+        auto bd_it = memBackdoors.contains(RangeSize(addr, size));
+        if (bd_it == memBackdoors.end())
+            return nullptr;
+        MemBackdoorPtr bd = bd_it->second;
+        if (bd->range().interleaved()) {
+            // Offsets are not linear in the address; resolve this one
+            // access through the range and leave the window alone.
+            if (write ? !bd->writeable() : !bd->readable())
+                return nullptr;
+            return bd->ptr() + bd->range().getOffset(addr);
+        }
+        window.set(bd);
+    }
+    if (write ? !window.writeable : !window.readable)
+        return nullptr;
+    return window.base + (addr - window.start);
+}
+
+bool
+NonCachingSimpleCPU::tryBackdoorAccess(const PacketPtr &pkt)
+{
+    const RequestPtr &req = pkt->req;
+    const bool read = pkt->cmd == MemCmd::ReadReq;
+    const bool write = pkt->cmd == MemCmd::WriteReq;
+
+    // Only plain loads and stores. LR/SC, atomics, swaps and masked
+    // writes rely on the memory's own bookkeeping, and stores are kept
+    // on the port when another hart could observe them there: its
+    // reservations live in the memory's locked-address list.
+    if (!(read || write) || req->isLLSC() || req->isAtomic() ||
+        req->isSwap() || pkt->isMaskedWrite()) {
+        return false;
+    }
+    if (write && system->threads.size() != 1)
+        return false;
+
+    const unsigned size = pkt->getSize();
+    uint8_t *host = hostAddr(dataWindow, pkt->getAddr(), size, write);
+    if (!host)
+        return false;
+
+    if (read) {
+        copyBytes(pkt->getPtr<uint8_t>(), host, size);
+    } else {
+        copyBytes(host, pkt->getConstPtr<uint8_t>(), size);
+    }
+    pkt->makeResponse();
+    return true;
+}
+
 Tick
 NonCachingSimpleCPU::sendPacket(RequestPort &port, const PacketPtr &pkt)
 {
+    if (&port == &dcachePort && tryBackdoorAccess(pkt))
+        return 0;
+
     MemBackdoorPtr bd = nullptr;
     Tick latency = port.sendAtomicBackdoor(pkt, bd);
 
@@ -73,6 +154,10 @@ NonCachingSimpleCPU::sendPacket(RequestPort &port, const PacketPtr &pkt)
     if (bd && memBackdoors.insert(bd->range(), bd) != memBackdoors.end()) {
         // Install a callback to erase this backdoor if it goes away.
         auto callback = [this](const MemBackdoor &backdoor) {
+                if (fetchWindow.backdoor == &backdoor)
+                    fetchWindow.forget();
+                if (dataWindow.backdoor == &backdoor)
+                    dataWindow.forget();
                 for (auto it = memBackdoors.begin();
                         it != memBackdoors.end(); it++) {
                     if (it->second == &backdoor) {
@@ -90,15 +175,14 @@ NonCachingSimpleCPU::sendPacket(RequestPort &port, const PacketPtr &pkt)
 Tick
 NonCachingSimpleCPU::fetchInstMem()
 {
-    auto bd_it = memBackdoors.contains(ifetch_req->getPaddr());
-    if (bd_it == memBackdoors.end())
+    const unsigned size = ifetch_req->getSize();
+    const uint8_t *host =
+        hostAddr(fetchWindow, ifetch_req->getPaddr(), size, false);
+    if (!host)
         return AtomicSimpleCPU::fetchInstMem();
 
     auto &decoder = threadInfo[curThread]->thread->decoder;
-
-    auto *bd = bd_it->second;
-    Addr offset = ifetch_req->getPaddr() - bd->range().start();
-    memcpy(decoder->moreBytesPtr(), bd->ptr() + offset, ifetch_req->getSize());
+    copyBytes(decoder->moreBytesPtr(), host, size);
     return 0;
 }
 
