@@ -227,9 +227,23 @@ class HiFive(HiFiveBase):
         self.plic.hart_config = ",".join(["MS" for _ in range(num_cpu)])
         self.clint.num_threads = num_cpu
 
+    def timebaseFrequency(self):
+        """
+        Rate at which the CLINT's mtime advances, in Hz: the frequency of
+        the RTC driving the CLINT's int_pin when the config attached one as
+        ``rtc``, and the historical 10 MHz default when not.
+        """
+        if hasattr(self, "rtc"):
+            return int(self.rtc.frequency.value)
+        return 10000000
+
     def generateDeviceTree(self, state):
         cpus_node = FdtNode("cpus")
-        cpus_node.append(FdtPropertyWords("timebase-frequency", [10000000]))
+        cpus_node.append(
+            FdtPropertyWords(
+                "timebase-frequency", [self.timebaseFrequency()]
+            )
+        )
         yield cpus_node
 
         node = FdtNode("soc")
@@ -248,9 +262,32 @@ class HiFive(HiFiveBase):
     _cpu_count = 0
 
     def annotateCpuDeviceNode(self, cpu, state):
+        cpus = self.system.unproxy(self).cpu
+        cpu_obj = cpus[self._cpu_count]
+
         cpu.append(FdtPropertyStrings("mmu-type", "riscv,sv48"))
         cpu.append(FdtPropertyStrings("status", "okay"))
-        cpu.append(FdtPropertyStrings("riscv,isa", "rv64imafdc"))
+        # Advertise what the CPU's ISA object implements, in both the legacy
+        # string form and the riscv,isa-base/riscv,isa-extensions form from
+        # which Linux enables multi-letter extensions (Zba, V, Sstc, ...).
+        isa = cpu_obj.isa[0]
+        isa_string = isa.get_isa_string().lower()
+        # The reported list names everything beyond the base ISA; Linux
+        # expects the base's own members in it too.
+        extensions = [e.lower() for e in isa.get_reported_extensions()]
+        if "i" not in extensions:
+            extensions.insert(0, "i")
+        cpu.append(FdtPropertyStrings("riscv,isa", isa_string))
+        cpu.append(FdtPropertyStrings("riscv,isa-base", isa_string[:5]))
+        cpu.append(FdtPropertyStrings("riscv,isa-extensions", extensions))
+        block_size = int(self.system.unproxy(self).cache_line_size)
+        for extension, prop in (
+            ("zicbom", "riscv,cbom-block-size"),
+            ("zicbop", "riscv,cbop-block-size"),
+            ("zicboz", "riscv,cboz-block-size"),
+        ):
+            if extension in extensions:
+                cpu.append(FdtPropertyWords(prop, [block_size]))
         cpu.appendCompatible(["riscv"])
 
         int_node = FdtNode("interrupt-controller")
@@ -259,8 +296,7 @@ class HiFive(HiFiveBase):
         int_node.append(FdtProperty("interrupt-controller"))
         int_node.appendCompatible("riscv,cpu-intc")
 
-        cpus = self.system.unproxy(self).cpu
-        phandle = int_state.phandle(cpus[self._cpu_count])
+        phandle = int_state.phandle(cpu_obj)
         self._cpu_count += 1
         int_node.append(FdtPropertyWords("phandle", [phandle]))
 
