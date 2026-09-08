@@ -51,6 +51,7 @@
 #include "debug/ExecFaulting.hh"
 #include "debug/SimpleCPU.hh"
 #include "mem/packet.hh"
+#include "sim/async.hh"
 #include "mem/packet_access.hh"
 #include "mem/physical.hh"
 #include "params/BaseAtomicSimpleCPU.hh"
@@ -638,6 +639,13 @@ AtomicSimpleCPU::tick()
     SimpleExecContext &t_info = *threadInfo[curThread];
     SimpleThread *thread = t_info.thread;
 
+    // Cycles run back to back inside this one event for as long as no
+    // other event is due, advancing the current tick exactly as the event
+    // queue would; a cycle that had to be rescheduled and dispatched would
+    // cost as much as executing its instruction. Anything scheduled in the
+    // meantime (an exit event, a device timer, an instruction-count event)
+    // or an asynchronous request returns control to the event loop.
+    while (true) {
     Tick latency = 0;
 
     for (int i = 0; i < width || locked; ++i) {
@@ -743,8 +751,18 @@ AtomicSimpleCPU::tick()
     if (latency < clockPeriod())
         latency = clockPeriod();
 
-    if (_status != Idle)
-        reschedule(tickEvent, curTick() + latency, true);
+    if (_status == Idle)
+        return;
+
+    const Tick next = curTick() + latency;
+    EventQueue *queue = eventQueue();
+    if (!async_event && !queue->empty() && queue->nextTick() > next) {
+        queue->setCurTick(next);
+        continue;
+    }
+    reschedule(tickEvent, next, true);
+    return;
+    }
 }
 
 Tick

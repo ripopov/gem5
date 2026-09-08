@@ -30,6 +30,7 @@ about 5% lower.
 | backdoor data path with cached bounds | 5.58 | 3.09 |
 | translation cache in front of TLB::translate() | 11.31 | 8.33 |
 | PC-indexed decoder cache | 12.58 | 9.27 |
+| consecutive cycles inside one tick event | 13.76 | 10.33 |
 
 Spike, same host: 746 and 295 MIPS.
 
@@ -150,3 +151,16 @@ it. Decoding is a pure function of the extended machine instruction (which
 carries the vector configuration and XLEN), so a hit requires the encoding
 to match as well as the address and entries never need invalidating;
 self-modifying code simply misses on the changed bits.
+
+### One event per cycle
+
+`AtomicSimpleCPU::tick()` rescheduled itself after every cycle, so each
+instruction paid for an event-queue insertion plus a `serviceOne()`
+dispatch. After finishing a cycle, `tick()` now looks at the event queue:
+if no other event is due at or before the next cycle and no asynchronous
+request is pending, it advances the queue's current tick itself and runs
+the next cycle without leaving the handler. The tick moves exactly as the
+queue would have moved it, so cycle counts, timestamps and ordering with
+every other event are unchanged; any event scheduled in the meantime,
+another CPU's tick, a drain or an idle transition returns control to the
+event loop.
