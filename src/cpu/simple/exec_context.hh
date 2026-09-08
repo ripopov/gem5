@@ -41,13 +41,17 @@
 #ifndef __CPU_SIMPLE_EXEC_CONTEXT_HH__
 #define __CPU_SIMPLE_EXEC_CONTEXT_HH__
 
+#include <array>
+
 #include "base/types.hh"
 #include "cpu/base.hh"
 #include "cpu/exec_context.hh"
 #include "cpu/reg_class.hh"
 #include "cpu/simple/base.hh"
+#include "cpu/static_inst.hh"
 #include "cpu/static_inst_fwd.hh"
 #include "cpu/translation.hh"
+#include "enums/OpClass.hh"
 #include "mem/request.hh"
 
 namespace gem5
@@ -79,6 +83,42 @@ class SimpleExecContext : public ExecContext
     Counter lastIcacheStall;
     // Number of cycles stalled for D-cache responses
     Counter lastDcacheStall;
+
+    /**
+     * Instruction accounting, kept as plain integers on the execution
+     * path. Every fact about a retired instruction is counted once here;
+     * the statistics that report it, often several of them for one fact
+     * (fetch, execute, commit and thread level all count instructions),
+     * are updated from these counts by BaseSimpleCPU::foldInstCounts()
+     * before every dump, after which the counts start again from zero.
+     */
+    struct InstCounts
+    {
+        uint64_t fetchedInsts = 0;
+        uint64_t fetchedOps = 0;
+        uint64_t committedInsts = 0;
+        uint64_t committedOps = 0;
+        uint64_t instsNotNop = 0;
+        uint64_t opsNotNop = 0;
+        uint64_t userInsts = 0;
+        uint64_t userOps = 0;
+        uint64_t memRefs = 0;
+        uint64_t loads = 0;
+        uint64_t stores = 0;
+        uint64_t branches = 0;
+        uint64_t callsReturns = 0;
+        uint64_t calls = 0;
+        uint64_t intInsts = 0;
+        uint64_t fpInsts = 0;
+        uint64_t vecInsts = 0;
+        uint64_t matInsts = 0;
+        std::array<uint64_t, CCRegClass + 1> regReads{};
+        std::array<uint64_t, CCRegClass + 1> regWrites{};
+        std::array<uint64_t, enums::Num_OpClass> opClass{};
+        std::array<uint64_t, StaticInstFlags::Num_Flags> control{};
+
+        void clear() { *this = InstCounts(); }
+    } counts;
 
     struct ExecContextStats : public statistics::Group
     {
@@ -200,7 +240,7 @@ class SimpleExecContext : public ExecContext
         const RegId &reg = si->srcRegIdx(idx);
         if (reg.is(InvalidRegClass))
             return 0;
-        (*execContextStats.numRegReads[reg.classValue()])++;
+        counts.regReads[reg.classValue()]++;
         return thread->getReg(reg);
     }
 
@@ -208,7 +248,7 @@ class SimpleExecContext : public ExecContext
     getRegOperand(const StaticInst *si, int idx, void *val) override
     {
         const RegId &reg = si->srcRegIdx(idx);
-        (*execContextStats.numRegReads[reg.classValue()])++;
+        counts.regReads[reg.classValue()]++;
         thread->getReg(reg, val);
     }
 
@@ -216,7 +256,7 @@ class SimpleExecContext : public ExecContext
     getWritableRegOperand(const StaticInst *si, int idx) override
     {
         const RegId &reg = si->destRegIdx(idx);
-        (*execContextStats.numRegWrites[reg.classValue()])++;
+        counts.regWrites[reg.classValue()]++;
         return thread->getWritableReg(reg);
     }
 
@@ -226,7 +266,7 @@ class SimpleExecContext : public ExecContext
         const RegId &reg = si->destRegIdx(idx);
         if (reg.is(InvalidRegClass))
             return;
-        (*execContextStats.numRegWrites[reg.classValue()])++;
+        counts.regWrites[reg.classValue()]++;
         thread->setReg(reg, val);
     }
 
@@ -234,7 +274,7 @@ class SimpleExecContext : public ExecContext
     setRegOperand(const StaticInst *si, int idx, const void *val) override
     {
         const RegId &reg = si->destRegIdx(idx);
-        (*execContextStats.numRegWrites[reg.classValue()])++;
+        counts.regWrites[reg.classValue()]++;
         thread->setReg(reg, val);
     }
 
@@ -479,12 +519,10 @@ BaseSimpleCPU::countInst()
 inline void
 BaseSimpleCPU::countFetchInst()
 {
-    SimpleExecContext& t_info = *threadInfo[curThread];
-    auto &fetch = *fetchStats[t_info.thread->threadId()];
+    auto &counts = threadInfo[curThread]->counts;
 
-    // increment thread level numInsts and numOps fetched counts
-    fetch.numInsts += countsAsInst(*curStaticInst);
-    fetch.numOps++;
+    counts.fetchedInsts += countsAsInst(*curStaticInst);
+    counts.fetchedOps++;
 }
 
 } // namespace gem5

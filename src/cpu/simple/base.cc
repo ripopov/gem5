@@ -156,33 +156,21 @@ void
 BaseSimpleCPU::countCommitInst()
 {
     SimpleExecContext& t_info = *threadInfo[curThread];
-    bool is_nop = curStaticInst->isNop();
-    const ThreadID tid = t_info.thread->threadId();
+    auto &counts = t_info.counts;
+
+    // Runs once per instruction: evaluate each property once and add it
+    // to the counters instead of branching on it.
+    const bool is_inst = countsAsInst(*curStaticInst);
+    const bool not_nop = !curStaticInst->isNop();
     const bool in_user_mode = t_info.thread->getIsaPtr()->inUserMode();
 
-    if (!curStaticInst->isMicroop() || curStaticInst->isLastMicroop()) {
-        // increment thread level and core level numInsts count
-        commitStats[tid]->numInsts++;
-        baseStats.numInsts++;
-        t_info.thread->threadStats.numInsts++;
-        executeStats[tid]->numInsts++;
-        if (!is_nop) {
-            commitStats[tid]->numInstsNotNOP++;
-        }
-        if (in_user_mode) {
-            commitStats[tid]->numUserInsts++;
-        }
-    }
+    counts.committedInsts += is_inst;
+    counts.instsNotNop += is_inst && not_nop;
+    counts.userInsts += is_inst && in_user_mode;
 
-    // increment thread level numOps count
-    t_info.thread->threadStats.numOps++;
-    if (!is_nop) {
-        commitStats[t_info.thread->threadId()]->numOpsNotNOP++;
-    }
-    commitStats[tid]->numOps++;
-    if (in_user_mode) {
-        commitStats[tid]->numUserOps++;
-    }
+    counts.committedOps++;
+    counts.opsNotNop += not_nop;
+    counts.userOps += in_user_mode;
 }
 
 Counter
@@ -224,6 +212,9 @@ BaseSimpleCPU::resetStats()
 {
     BaseCPU::resetStats();
     for (auto &thread_info : threadInfo) {
+        // Counts that have not reached the statistics belong to the
+        // period being discarded.
+        thread_info->counts.clear();
         thread_info->execContextStats.notIdleFraction = (_status != Idle);
     }
 }
@@ -402,78 +393,43 @@ void
 BaseSimpleCPU::postExecute()
 {
     SimpleExecContext &t_info = *threadInfo[curThread];
+    auto &counts = t_info.counts;
 
     assert(curStaticInst);
+    const StaticInst &inst = *curStaticInst;
 
     Addr instAddr = threadContexts[curThread]->pcState().instAddr();
-    auto op_class = curStaticInst->opClass();
-    t_info.issueStats.issuedInstType[curThread][op_class]++;
 
-    if (curStaticInst->isMemRef()) {
-        executeStats[t_info.thread->threadId()]->numMemRefs++;
-        commitStats[t_info.thread->threadId()]->numMemRefs++;
-        t_info.thread->threadStats.numMemRefs++;
+    // Runs once per instruction: evaluate each property once and add it
+    // to the counters instead of branching on it.
+    const bool is_load = inst.isLoad();
+    const bool is_control = inst.isControl();
+    const bool is_call = inst.isCall();
+    const bool is_return = inst.isReturn();
+
+    counts.opClass[inst.opClass()]++;
+    counts.memRefs += inst.isMemRef();
+    counts.loads += is_load;
+    counts.stores += inst.isStore() || inst.isAtomic();
+    counts.branches += is_control;
+    counts.callsReturns += is_call || is_return;
+    counts.calls += is_call;
+    counts.intInsts += inst.isInteger();
+    counts.fpInsts += inst.isFloating();
+    counts.vecInsts += inst.isVector();
+    counts.matInsts += inst.isMatrix();
+    if (is_control) {
+        using Flags = StaticInstFlags::Flags;
+        counts.control[Flags::IsReturn] += is_return;
+        counts.control[Flags::IsCall] += is_call;
+        counts.control[Flags::IsDirectControl] += inst.isDirectCtrl();
+        counts.control[Flags::IsIndirectControl] += inst.isIndirectCtrl();
+        counts.control[Flags::IsCondControl] += inst.isCondCtrl();
+        counts.control[Flags::IsUncondControl] += inst.isUncondCtrl();
+        counts.control[Flags::IsControl]++;
     }
 
-    if (curStaticInst->isLoad()) {
-        ++t_info.numLoad;
-    }
-
-    if (curStaticInst->isControl()) {
-        ++fetchStats[t_info.thread->threadId()]->numBranches;
-    }
-
-    /* Power model statistics */
-    //integer alu accesses
-    if (curStaticInst->isInteger()){
-        executeStats[t_info.thread->threadId()]->numIntAluAccesses++;
-        commitStats[t_info.thread->threadId()]->numIntInsts++;
-    }
-
-    //float alu accesses
-    if (curStaticInst->isFloating()){
-        executeStats[t_info.thread->threadId()]->numFpAluAccesses++;
-        commitStats[t_info.thread->threadId()]->numFpInsts++;
-    }
-
-    //vector alu accesses
-    if (curStaticInst->isVector()){
-        executeStats[t_info.thread->threadId()]->numVecAluAccesses++;
-        commitStats[t_info.thread->threadId()]->numVecInsts++;
-    }
-
-    //Matrix alu accesses
-    if (curStaticInst->isMatrix()){
-        t_info.execContextStats.numMatAluAccesses++;
-        t_info.execContextStats.numMatInsts++;
-    }
-
-    //number of function calls/returns to get window accesses
-    if (curStaticInst->isCall() || curStaticInst->isReturn()){
-        commitStats[t_info.thread->threadId()]->numCallsReturns++;
-    }
-
-    // same as above, but *just* calls
-    if (curStaticInst->isCall()) {
-        commitStats[t_info.thread->threadId()]->functionCalls++;
-    }
-    if (curStaticInst->isControl()) {
-        executeStats[t_info.thread->threadId()]->numBranches++;
-    }
-
-    //result bus acceses
-    if (curStaticInst->isLoad()){
-        commitStats[t_info.thread->threadId()]->numLoadInsts++;
-        executeStats[t_info.thread->threadId()]->numLoadInsts++;
-    }
-
-    if (curStaticInst->isStore() || curStaticInst->isAtomic()){
-        commitStats[t_info.thread->threadId()]->numStoreInsts++;
-    }
-    /* End power model statistics */
-
-    commitStats[t_info.thread->threadId()]->committedInstType[op_class]++;
-    commitStats[t_info.thread->threadId()]->updateComCtrlStats(curStaticInst);
+    t_info.numLoad += is_load;
 
     /* increment the committed numInsts and numOps stats */
     countCommitInst();
@@ -489,6 +445,73 @@ BaseSimpleCPU::postExecute()
 
     // Call CPU instruction commit probes
     probeInstCommit(curStaticInst, instAddr);
+}
+
+void
+BaseSimpleCPU::foldInstCounts(SimpleExecContext &t_info)
+{
+    auto &counts = t_info.counts;
+    const ThreadID tid = t_info.thread->threadId();
+    auto &fetch = *fetchStats[tid];
+    auto &execute = *executeStats[tid];
+    auto &commit = *commitStats[tid];
+    auto &thread_stats = t_info.thread->threadStats;
+    auto &ec_stats = t_info.execContextStats;
+
+    fetch.numInsts += counts.fetchedInsts;
+    fetch.numOps += counts.fetchedOps;
+    fetch.numBranches += counts.branches;
+
+    execute.numInsts += counts.committedInsts;
+    execute.numMemRefs += counts.memRefs;
+    execute.numBranches += counts.branches;
+    execute.numLoadInsts += counts.loads;
+    execute.numIntAluAccesses += counts.intInsts;
+    execute.numFpAluAccesses += counts.fpInsts;
+    execute.numVecAluAccesses += counts.vecInsts;
+
+    commit.numInsts += counts.committedInsts;
+    commit.numOps += counts.committedOps;
+    commit.numInstsNotNOP += counts.instsNotNop;
+    commit.numOpsNotNOP += counts.opsNotNop;
+    commit.numUserInsts += counts.userInsts;
+    commit.numUserOps += counts.userOps;
+    commit.numMemRefs += counts.memRefs;
+    commit.numLoadInsts += counts.loads;
+    commit.numStoreInsts += counts.stores;
+    commit.numCallsReturns += counts.callsReturns;
+    commit.functionCalls += counts.calls;
+    commit.numIntInsts += counts.intInsts;
+    commit.numFpInsts += counts.fpInsts;
+    commit.numVecInsts += counts.vecInsts;
+    for (size_t i = 0; i < counts.opClass.size(); i++) {
+        commit.committedInstType[i] += counts.opClass[i];
+        t_info.issueStats.issuedInstType[tid][i] += counts.opClass[i];
+    }
+    for (size_t i = 0; i < counts.control.size(); i++)
+        commit.committedControl[i] += counts.control[i];
+
+    baseStats.numInsts += counts.committedInsts;
+    thread_stats.numInsts += counts.committedInsts;
+    thread_stats.numOps += counts.committedOps;
+    thread_stats.numMemRefs += counts.memRefs;
+
+    ec_stats.numMatAluAccesses += counts.matInsts;
+    ec_stats.numMatInsts += counts.matInsts;
+    for (size_t i = 0; i < counts.regReads.size(); i++) {
+        *ec_stats.numRegReads[i] += counts.regReads[i];
+        *ec_stats.numRegWrites[i] += counts.regWrites[i];
+    }
+
+    counts.clear();
+}
+
+void
+BaseSimpleCPU::preDumpStats()
+{
+    for (auto *t_info : threadInfo)
+        foldInstCounts(*t_info);
+    BaseCPU::preDumpStats();
 }
 
 void

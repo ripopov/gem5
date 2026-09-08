@@ -36,6 +36,7 @@ about 5% lower.
 | PC state advanced in place | 16.15 | 11.90 |
 | per-instruction helpers inlined, probe argument guarded | 17.08 | 12.58 |
 | direct plain load/store path | 18.04 | 13.51 |
+| instruction counts folded into statistics at dump time | 21.08 | 15.05 |
 
 Spike, same host: 746 and 295 MIPS.
 
@@ -225,3 +226,25 @@ request setup, translation, NO_ACCESS check, latency bookkeeping) and
 copies the bytes through the backdoor, building a `Packet` only when the
 target has no usable backdoor. Everything else falls back to the generic
 implementation.
+
+### Statistics folded at dump time
+
+The simple CPUs updated about thirty `statistics::Scalar` objects per
+instruction, spread over the fetch, execute, commit, thread and
+exec-context groups, each a load/add/store on a double reached through a
+vector of `unique_ptr`, and many of them recording the same fact several
+times (instructions are counted five times, ops four, memory references
+three). With everything else on the path trimmed this was the largest
+remaining cost.
+
+`SimpleExecContext` now keeps the per-instruction accounting in a compact
+struct of integers: each property of a retired instruction is counted
+once, including the per-op-class and per-control-type histograms and the
+per-register-class read/write counts from the operand accessors.
+`BaseSimpleCPU::preDumpStats()` folds the pending counts into every
+statistic that reports them, and `resetStats()` discards them, so dumps,
+dump-and-reset periods and manual resets see exactly the values they saw
+before; `stats.txt` is byte-identical. O3 and Minor keep updating the
+shared statistics directly. The one visible difference: a live read of one
+of these statistics between dumps (the MathExpr power model) sees the
+value as of the last fold.

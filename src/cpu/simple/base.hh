@@ -151,6 +151,9 @@ class BaseSimpleCPU : public BaseCPU
 
     // statistics
     void resetStats() override;
+    void preDumpStats() override;
+    /** Add a thread's pending instruction counts to its statistics. */
+    void foldInstCounts(SimpleExecContext &t_info);
 
     virtual Fault
     readMem(Addr addr, uint8_t* data, unsigned size, Request::Flags flags,
