@@ -31,6 +31,7 @@ about 5% lower.
 | translation cache in front of TLB::translate() | 11.31 | 8.33 |
 | PC-indexed decoder cache | 12.58 | 9.27 |
 | consecutive cycles inside one tick event | 13.76 | 10.33 |
+| decoder: no PCState copy, encoding assembled in registers | 14.42 | 10.65 |
 
 Spike, same host: 746 and 295 MIPS.
 
@@ -164,3 +165,14 @@ queue would have moved it, so cycle counts, timestamps and ordering with
 every other event are unchanged; any event scheduled in the meantime,
 another CPU's tick, a drain or an idle transition returns control to the
 event loop.
+
+### Decoder store-forwarding stalls
+
+Three costs hidden in `Decoder::moreBytes()` and `decode()`: the PC state
+handed to `moreBytes()` was copied (a polymorphic object with a vtable,
+vector configuration and Zcmt state) just to read two fields; `moreBytes()`
+wrote the 32-bit `instBits` field of the encoding union and `decode()`
+immediately read the whole 64-bit union; and `decode()` filled five
+bitfields of the union one by one, each a read-modify-write through
+memory before the whole value was read again. The first is a reference
+now; the union is assembled in a register and stored once, 64 bits wide.

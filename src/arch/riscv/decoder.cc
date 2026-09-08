@@ -72,7 +72,7 @@ Decoder::moreBytes(const PCStateBase &pc, Addr fetchPC)
     DPRINTF(Decode, "Requesting bytes 0x%08x from address %#x\n", inst,
             fetchPC);
 
-    PCState pc_state = pc.as<PCState>();
+    const PCState &pc_state = pc.as<PCState>();
 
     if (GEM5_UNLIKELY(pc_state.zcmtSecondFetch())) {
         if (mid) {
@@ -93,27 +93,35 @@ Decoder::moreBytes(const PCStateBase &pc, Addr fetchPC)
         return;
     }
 
+    // Assemble the instruction bits in a local and store the whole union
+    // once: a 32-bit field write into emi followed by decode()'s 64-bit
+    // read of the union stalls on store forwarding.
+    ExtMachInst next_emi = emi;
+    uint32_t inst_bits = next_emi.instBits;
     bool aligned = pc.instAddr() % sizeof(machInst) == 0;
     if (aligned) {
-        emi.instBits = inst;
+        inst_bits = inst;
         if (compressed(inst))
-            emi.instBits = bits(inst, mid_bit, 0);
-        outOfBytes = !compressed(emi);
+            inst_bits = bits(inst, mid_bit, 0);
+        outOfBytes = !compressed(inst);
         instDone = true;
     } else {
         if (mid) {
-            assert(bits(emi.instBits, max_bit, mid_bit + 1) == 0);
-            replaceBits(emi.instBits, max_bit, mid_bit + 1, inst);
+            assert(bits(inst_bits, max_bit, mid_bit + 1) == 0);
+            replaceBits(inst_bits, max_bit, mid_bit + 1, inst);
             mid = false;
             outOfBytes = false;
             instDone = true;
         } else {
-            emi.instBits = bits(inst, max_bit, mid_bit + 1);
-            mid = !compressed(emi);
+            inst_bits = bits(inst, max_bit, mid_bit + 1);
+            const bool is_compressed = compressed(inst_bits);
+            mid = !is_compressed;
             outOfBytes = true;
-            instDone = compressed(emi);
+            instDone = is_compressed;
         }
     }
+    next_emi.instBits = inst_bits;
+    emi = next_emi;
 }
 
 StaticInstPtr
@@ -173,13 +181,18 @@ Decoder::decode(PCStateBase &_next_pc)
         next_pc.vtype(vtype);
     }
 
-    emi.vl      = vl;
-    emi.vtype8  = vtype & 0xff;
-    emi.vill    = vtype.vill;
-    emi.rv_type = static_cast<int>(next_pc.rvType());
-    emi.has_zcd = _hasZcd;
+    // Fill the context fields in a register copy; successive bitfield
+    // writes to the member would each read and write the whole union
+    // through memory.
+    ExtMachInst inst = emi;
+    inst.vl      = vl;
+    inst.vtype8  = vtype & 0xff;
+    inst.vill    = vtype.vill;
+    inst.rv_type = static_cast<int>(next_pc.rvType());
+    inst.has_zcd = _hasZcd;
+    emi = inst;
 
-    return decode(emi, next_pc.instAddr());
+    return decode(inst, next_pc.instAddr());
 }
 
 } // namespace RiscvISA
