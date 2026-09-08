@@ -358,9 +358,8 @@ BaseSimpleCPU::preExecute()
     t_info.setPredicate(true);
     t_info.setMemAccPredicate(true);
 
-    // decode the instruction
-    set(preExecuteTempPC, thread->pcState());
-    auto &pc_state = *preExecuteTempPC;
+    // decode the instruction, advancing the thread's PC state in place
+    PCStateBase &pc_state = thread->pcStateMutable();
 
     auto &decoder = thread->decoder;
 
@@ -384,7 +383,6 @@ BaseSimpleCPU::preExecute()
         instPtr = decoder->decode(pc_state);
         if (instPtr) {
             t_info.stayAtPC = false;
-            thread->pcState(pc_state);
         } else {
             t_info.stayAtPC = true;
             t_info.fetchOffset += decoder->moreBytesSize();
@@ -544,7 +542,10 @@ BaseSimpleCPU::advancePC(const Fault &fault)
         if (curStaticInst) {
             if (curStaticInst->isLastMicroop())
                 curMacroStaticInst = nullStaticInstPtr;
-            curStaticInst->advancePC(thread);
+            // Every ISA's ThreadContext overload of advancePC copies the
+            // PC state out, advances it and copies it back; advance the
+            // thread's copy directly.
+            curStaticInst->advancePC(thread->pcStateMutable());
         }
     }
 

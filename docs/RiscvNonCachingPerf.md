@@ -33,6 +33,7 @@ about 5% lower.
 | consecutive cycles inside one tick event | 13.76 | 10.33 |
 | decoder: no PCState copy, encoding assembled in registers | 14.42 | 10.65 |
 | PC-event bitmap filter | 14.49 | 10.95 |
+| PC state advanced in place | 16.15 | 11.90 |
 
 Spike, same host: 746 and 295 MIPS.
 
@@ -186,3 +187,14 @@ registered at the current PC. A full-system Linux run registers a handful
 search over the event vector. The queue now keeps a 4096-bit filter of
 the PCs that have events and rejects almost all lookups against it, and
 `checkPcEventQueue()` returns early when no event is registered at all.
+
+### PC state copies
+
+`BaseSimpleCPU` copied the PC state four times per instruction: `preExecute()`
+copied it into a temporary for the decoder and copied the result back, and
+`advancePC()` went through `StaticInst::advancePC(ThreadContext *)`, which in
+every ISA copies the state out, advances it and copies it back. Each copy
+is a virtual `update()` of a polymorphic object. `SimpleThread` now offers
+its owning CPU in-place access to the PC state; the decoder works on the
+thread's copy directly and `advancePC()` uses the `PCStateBase` overload on
+it. The `ThreadContext` interface is unchanged.

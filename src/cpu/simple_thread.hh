@@ -256,6 +256,14 @@ class SimpleThread : public ThreadState, public ThreadContext
     const PCStateBase &pcState() const override { return *_pcState; }
     void pcState(const PCStateBase &val) override { set(_pcState, val); }
 
+    /**
+     * In-place access to the PC state for the CPU model that owns this
+     * thread. The ThreadContext interface only replaces it by copy,
+     * which the simple CPUs would otherwise do several times per
+     * instruction.
+     */
+    PCStateBase &pcStateMutable() { return *_pcState; }
+
     void
     pcStateNoRecord(const PCStateBase &val) override
     {
