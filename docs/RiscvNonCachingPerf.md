@@ -20,6 +20,11 @@ runs), Linux is OpenSBI 1.8 plus a Linux 6.12 boot to userspace and `ls`
 (one run). The whole-process figure, comparable to Spike's `--stats`, is
 about 5% lower.
 
+`RiscvNonCachingPerf.html` in this directory is an interactive companion:
+one page per patch with the problem, the mechanism, why guest behaviour is
+unchanged and the measured effect, tied to a chart of the series and a
+diagram of the per-instruction loop. Open it in a browser.
+
 ## Results
 
 | step | CoreMark | Linux boot |

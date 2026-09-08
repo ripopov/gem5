@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NonCachingSimpleCPU Speedup Series</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root {
+  color-scheme: light dark;
+  --ground: #eef1f4;
+  --surface: #ffffff;
+  --surface-2: #e3e8ee;
+  --line: #c9d1da;
+  --ink: #16202a;
+  --ink-2: #46535f;
+  --muted: #74808c;
+  --guest: #1f7a8c;
+  --guest-soft: #d4e9ee;
+  --host: #c8791a;
+  --host-soft: #f6e4c8;
+  --ok: #3b8a5a;
+  --focus: #1f7a8c;
+  --shadow: 0 1px 2px rgba(22, 32, 42, 0.08), 0 8px 24px rgba(22, 32, 42, 0.06);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground: #10161d;
+    --surface: #182029;
+    --surface-2: #202a35;
+    --line: #2f3b48;
+    --ink: #e3e8ee;
+    --ink-2: #b4bec8;
+    --muted: #7f8b97;
+    --guest: #4fb3c6;
+    --guest-soft: #173540;
+    --host: #e39a3b;
+    --host-soft: #3d2c12;
+    --ok: #5cb57e;
+    --focus: #4fb3c6;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.35);
+  }
+}
+:root[data-theme="dark"] {
+  --ground: #10161d;
+  --surface: #182029;
+  --surface-2: #202a35;
+  --line: #2f3b48;
+  --ink: #e3e8ee;
+  --ink-2: #b4bec8;
+  --muted: #7f8b97;
+  --guest: #4fb3c6;
+  --guest-soft: #173540;
+  --host: #e39a3b;
+  --host-soft: #3d2c12;
+  --ok: #5cb57e;
+  --focus: #4fb3c6;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+* { box-sizing: border-box; }
+html { font-size: 16px; }
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  line-height: 1.55;
+}
+code, .mono, .num {
+  font-family: "IBM Plex Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+}
+.num { font-variant-numeric: tabular-nums; }
+h1, h2, h3 {
+  font-family: "IBM Plex Sans Condensed", "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  text-wrap: balance;
+  margin: 0;
+  line-height: 1.15;
+}
+a { color: var(--guest); }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+.page {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 4rem;
+}
+
+/* ---- header ---- */
+.masthead {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 420px);
+  gap: 2rem;
+  align-items: end;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--line);
+}
+.eyebrow {
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 600;
+}
+.masthead h1 { font-size: clamp(2rem, 4vw, 3rem); font-weight: 700; margin-top: 0.35rem; }
+.masthead .lede {
+  max-width: 62ch;
+  color: var(--ink-2);
+  margin-top: 0.9rem;
+  font-size: 1.05rem;
+}
+.headline-figures {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+}
+.headline-figures div {
+  background: var(--surface);
+  padding: 0.85rem 0.9rem;
+}
+.headline-figures .label { font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.headline-figures .value { font-size: 1.6rem; font-weight: 600; line-height: 1.1; margin-top: 0.2rem; }
+.headline-figures .value small { font-size: 0.8rem; color: var(--muted); font-weight: 500; margin-left: 0.2rem; }
+
+/* ---- chart + loop ---- */
+.overview {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: 1.5rem;
+  margin-top: 1.5rem;
+}
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  padding: 1rem 1.1rem 1.1rem;
+}
+.panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.panel h2 { font-size: 1.05rem; font-weight: 600; }
+.panel .hint { font-size: 0.8rem; color: var(--muted); }
+.toggle {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+.toggle button {
+  font: inherit;
+  font-size: 0.8rem;
+  padding: 0.25rem 0.7rem;
+  border: 0;
+  background: var(--surface);
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.toggle button[aria-pressed="true"] { background: var(--guest); color: #fff; }
+.toggle button + button { border-left: 1px solid var(--line); }
+svg { display: block; max-width: 100%; height: auto; }
+.chart-wrap { overflow-x: auto; margin-top: 0.6rem; }
+.bar { cursor: pointer; }
+.bar rect.value { fill: var(--guest-soft); stroke: var(--guest); stroke-width: 1; }
+.bar.selected rect.value { fill: var(--guest); }
+.bar.reached rect.value { fill: var(--guest-soft); }
+.bar text { font-family: "IBM Plex Mono", monospace; font-size: 10px; fill: var(--ink-2); }
+.bar.selected text { fill: var(--ink); font-weight: 500; }
+.axis text { font-family: "IBM Plex Mono", monospace; font-size: 10px; fill: var(--muted); }
+.axis line { stroke: var(--line); }
+.spike-line { stroke: var(--host); stroke-dasharray: 4 3; }
+.spike-label { font-family: "IBM Plex Mono", monospace; font-size: 10px; fill: var(--host); }
+
+.loop { margin-top: 0.6rem; }
+.loop .stage rect { fill: var(--surface-2); stroke: var(--line); }
+.loop .stage text { font-family: "IBM Plex Sans", sans-serif; font-size: 11px; fill: var(--ink-2); }
+.loop .stage.hot rect { fill: var(--host-soft); stroke: var(--host); stroke-width: 1.5; }
+.loop .stage.hot text { fill: var(--ink); font-weight: 600; }
+.loop .arrow { stroke: var(--muted); fill: none; }
+.loop .arrowhead { fill: var(--muted); }
+.loop .note { font-family: "IBM Plex Mono", monospace; font-size: 10px; fill: var(--muted); }
+
+/* ---- stepper ---- */
+.series {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  gap: 1.5rem;
+  margin-top: 1.5rem;
+  align-items: start;
+}
+.rail {
+  position: sticky;
+  top: 1rem;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.rail h2 { font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 600; padding: 0.8rem 0.9rem 0.4rem; }
+.rail ol { list-style: none; margin: 0; padding: 0 0 0.4rem; }
+.rail li { border-top: 1px solid var(--line); }
+.rail button {
+  font: inherit;
+  width: 100%;
+  text-align: left;
+  display: grid;
+  grid-template-columns: 1.6rem minmax(0, 1fr) auto;
+  gap: 0.5rem;
+  align-items: baseline;
+  padding: 0.5rem 0.9rem;
+  border: 0;
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.rail button:hover { background: var(--surface-2); }
+.rail li.current button { background: var(--guest-soft); color: var(--ink); }
+.rail .idx { font-family: "IBM Plex Mono", monospace; font-size: 0.75rem; color: var(--muted); }
+.rail li.current .idx { color: var(--guest); font-weight: 500; }
+.rail .name { font-size: 0.88rem; line-height: 1.3; }
+.rail .mips { font-family: "IBM Plex Mono", monospace; font-size: 0.78rem; font-variant-numeric: tabular-nums; color: var(--muted); }
+.rail li.current .mips { color: var(--ink); }
+
+.detail {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  padding: 1.5rem 1.75rem 1.75rem;
+  box-shadow: var(--shadow);
+}
+.detail-head { display: flex; justify-content: space-between; gap: 1rem; align-items: start; flex-wrap: wrap; }
+.detail .kicker { display: flex; gap: 0.75rem; align-items: baseline; }
+.detail .kicker .idx { font-family: "IBM Plex Mono", monospace; color: var(--guest); font-weight: 500; }
+.detail .kicker .area { font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.detail h2 { font-size: clamp(1.4rem, 2.4vw, 1.9rem); font-weight: 600; margin-top: 0.4rem; max-width: 28ch; }
+.nav { display: flex; gap: 0.4rem; }
+.nav button {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.4rem 0.8rem;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+}
+.nav button:disabled { color: var(--muted); cursor: default; }
+.nav button:not(:disabled):hover { border-color: var(--guest); }
+
+.effect {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  margin-top: 1.1rem;
+}
+.effect div { background: var(--surface-2); padding: 0.65rem 0.8rem; }
+.effect .label { font-size: 0.7rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.effect .value { font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; font-size: 1.05rem; margin-top: 0.15rem; }
+.effect .value .delta { color: var(--ok); font-size: 0.85rem; margin-left: 0.4rem; }
+.effect .value .delta.flat { color: var(--muted); }
+
+.prose { max-width: 68ch; }
+.prose h3 {
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--host);
+  font-weight: 600;
+  margin-top: 1.5rem;
+}
+.prose h3.guest { color: var(--guest); }
+.prose p { margin: 0.5rem 0 0; color: var(--ink-2); }
+.prose p strong { color: var(--ink); font-weight: 600; }
+.prose ul { margin: 0.5rem 0 0; padding-left: 1.2rem; color: var(--ink-2); }
+.prose li + li { margin-top: 0.3rem; }
+.prose code { font-size: 0.88em; background: var(--surface-2); padding: 0.05em 0.3em; }
+
+.before-after {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  margin-top: 0.75rem;
+}
+.before-after > div { background: var(--surface); padding: 0.75rem 0.9rem; }
+.before-after .tag { font-size: 0.7rem; letter-spacing: 0.06em; text-transform: uppercase; font-weight: 600; }
+.before-after .before .tag { color: var(--host); }
+.before-after .after .tag { color: var(--guest); }
+.before-after ol { margin: 0.4rem 0 0; padding-left: 1.2rem; font-family: "IBM Plex Mono", monospace; font-size: 0.78rem; color: var(--ink-2); line-height: 1.5; }
+.before-after ol li.gone { text-decoration: line-through; color: var(--muted); }
+.before-after ol li.new { color: var(--guest); }
+
+.files { margin-top: 1.5rem; font-size: 0.8rem; color: var(--muted); }
+.files code { background: transparent; padding: 0; color: var(--ink-2); }
+
+footer {
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.85rem;
+  max-width: 70ch;
+}
+kbd {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.75rem;
+  border: 1px solid var(--line);
+  padding: 0 0.3em;
+  background: var(--surface-2);
+}
+
+@media (max-width: 900px) {
+  .masthead, .overview, .series { grid-template-columns: 1fr; }
+  .rail { position: static; }
+  .rail ol { display: grid; grid-template-columns: 1fr 1fr; }
+  .rail li { border-top: 1px solid var(--line); }
+}
+@media (max-width: 560px) {
+  .rail ol, .effect, .before-after { grid-template-columns: 1fr; }
+  .headline-figures { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .bar rect.value, .loop .stage rect { transition: fill 180ms ease, stroke 180ms ease; }
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+<header class="masthead">
+  <div>
+    <div class="eyebrow">gem5 · RISC-V · fourteen commits on upstream develop</div>
+    <h1>NonCachingSimpleCPU Speedup Series</h1>
+    <p class="lede">
+      Spike runs the same RISC-V workloads two orders of magnitude faster than
+      gem5's fastest functional CPU. This page walks through the fourteen
+      patches that recover 6.5× of that gap without changing what the guest
+      sees: for each one, the problem in the per-instruction loop, how the
+      patch removes it, why guest behaviour stays identical, and what it
+      measured.
+    </p>
+  </div>
+  <div class="headline-figures" aria-label="Series result">
+    <div><div class="label">Baseline</div><div class="value num">3.76<small>MIPS</small></div></div>
+    <div><div class="label">After 14 patches</div><div class="value num">24.4<small>MIPS</small></div></div>
+    <div><div class="label">Spike, same host</div><div class="value num">746<small>MIPS</small></div></div>
+  </div>
+</header>
+
+<section class="overview">
+  <div class="panel">
+    <div class="panel-head">
+      <h2>Throughput after each patch</h2>
+      <div class="toggle" role="group" aria-label="Workload">
+        <button type="button" id="wl-coremark" aria-pressed="true">CoreMark</button>
+        <button type="button" id="wl-linux" aria-pressed="false">Linux boot</button>
+      </div>
+    </div>
+    <div class="hint">MIPS on a Core Ultra 7 265K, default <code>gem5.fast</code> flags. Click a bar to open that patch.</div>
+    <div class="chart-wrap"><svg id="chart" viewBox="0 0 640 260" role="img" aria-label="Bar chart of MIPS after each patch"></svg></div>
+  </div>
+  <div class="panel">
+    <div class="panel-head"><h2>The per-instruction loop</h2><span class="hint" id="loop-hint"></span></div>
+    <div class="hint">What <code>AtomicSimpleCPU::tick()</code> does for every instruction. Highlighted: the steps the selected patch changes.</div>
+    <svg id="loop" class="loop" viewBox="0 0 420 300" role="img" aria-label="Diagram of the instruction loop"></svg>
+  </div>
+</section>
+
+<section class="series">
+  <nav class="rail" aria-label="Patches">
+    <h2>Patches, in order</h2>
+    <ol id="rail"></ol>
+  </nav>
+  <article class="detail" id="detail" aria-live="polite"></article>
+</section>
+
+<footer>
+  Measured with <code>util/riscv-bench/bench.sh</code>: CoreMark is the 200-iteration bare-metal
+  image (62.4 M instructions, mean of three runs); Linux is OpenSBI 1.8 plus a Linux 6.12 boot to
+  userspace and <code>ls</code> (160 M instructions). Every patch left <code>simTicks</code> and
+  <code>simInsts</code> identical for both workloads. The full narrative with profiles is in
+  <code>docs/RiscvNonCachingPerf.md</code>. Keyboard: <kbd>←</kbd> <kbd>→</kbd> step through the patches.
+</footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  // Steps of the per-instruction loop, used by the diagram and by each patch's "touches".
+  var STAGES = [
+    { id: "interrupt", label: "check interrupts" },
+    { id: "fetch",     label: "translate + fetch" },
+    { id: "decode",    label: "decode" },
+    { id: "execute",   label: "execute" },
+    { id: "memory",    label: "load / store" },
+    { id: "account",   label: "count + stats" },
+    { id: "advance",   label: "advance PC" },
+    { id: "event",     label: "event queue" }
+  ];
+
+  var BASE = { coremark: 3.76, linux: 2.29 };
+
+  // One entry per commit, in series order. MIPS are the values measured on upstream develop.
+  var PATCHES = [
+    {
+      name: "Advertise the reported ISA; benchmarks and report",
+      short: "ISA in the DTB, harness",
+      area: "dev / configs / util",
+      coremark: 3.76, linux: 2.29,
+      touches: [],
+      problem: "HiFive's device tree told Linux the CPU was a plain <code>rv64imafdc</code> with a fixed 10 MHz timebase, whatever the ISA object actually implemented and however fast the RTC really ran. Linux therefore never enabled Zba/Zbb/Zbs, Zicond, Zicboz or V, and kept time at the wrong rate when a config chose another RTC frequency. There was also no repeatable way to measure the model.",
+      how: "The cpu node now carries <code>riscv,isa</code>, <code>riscv,isa-base</code> and <code>riscv,isa-extensions</code> derived from <code>RiscvISA.get_reported_extensions()</code> (the RVA23S64 profile by default), the Zicbo* block sizes, and a <code>timebase-frequency</code> taken from the attached RTC. A configuration for the simple CPUs and a benchmark harness (bare-metal CoreMark with a UART console and <code>m5_exit</code>; a BusyBox initramfs that boots, lists <code>/</code> and exits) give every later patch two fixed workloads to measure against.",
+      safety: "This commit changes what the guest is told, not how the CPU executes, and it is the baseline the rest of the series is measured against. The two numbers here are the starting point.",
+      before: ["riscv,isa = \"rv64imafdc\"", "timebase-frequency = 10 MHz, always"],
+      after: ["riscv,isa from the ISA object", "riscv,isa-extensions = i, m, a, …, zba, zicond, v, …", "timebase-frequency = RTC frequency"],
+      files: "src/dev/riscv/HiFive.py, configs/example/riscv/noncaching_fs.py, util/riscv-bench/"
+    },
+    {
+      name: "Decide the common no-interrupt case without CSR reads",
+      short: "Interrupt check",
+      area: "arch-riscv",
+      coremark: 4.38, linux: 2.60,
+      touches: ["interrupt"],
+      problem: "Before every instruction the CPU asks the interrupt controller whether anything is pending. The answer is almost always no, but finding that out meant computing the full priority mask: reading mstatus, misa, mideleg, the privilege level and (with the hypervisor extension) hideleg and vsstatus, each through <code>ISA::readMiscReg</code>'s side-effect switch, plus a string comparison to learn whether Smrnmi is reported and two more virtual calls for the NMI bits. Roughly a tenth of all host time went into confirming nothing was pending.",
+      how: "The controller already holds the pending and enable bits locally. It now checks <code>(ip | hvip) &amp; ie</code> first and only consults the privilege and delegation CSRs when that is non-zero. The ISA pointer and the Smrnmi flag are cached when the thread context is attached, and the two NMI bits are read through inline accessors on the ISA.",
+      safety: "The mask can only remove candidates, never add them, so an empty candidate set gives the same answer the full computation would. When something is pending the original path runs unchanged.",
+      before: ["reportsExtension(\"Smrnmi\") — string compare", "readMiscReg ×5 → globalMask()", "(ip|hvip) & ie & mask"],
+      after: ["candidates = (ip|hvip) & ie", "candidates.any() ? … & globalMask() : false", "NMI bits from cached ISA"],
+      files: "src/arch/riscv/interrupts.hh, src/arch/riscv/isa.hh"
+    },
+    {
+      name: "Do not allocate a byte-enable mask for unmasked accesses",
+      short: "Byte-enable masks",
+      area: "cpu-simple / mem",
+      coremark: 4.72, linux: 2.71,
+      touches: ["memory"],
+      problem: "Every load and store went through <code>genMemFragmentRequest()</code>, which built a <code>std::vector&lt;bool&gt;</code> of byte enables for the fragment and copied it into the reused request: a heap allocation and a free per memory access, for a mask that is all ones for every ordinary instruction.",
+      how: "<code>Request</code> gains <code>setAllBytesEnabled()</code>, which leaves the mask empty. An empty mask already means \"unmasked\" to <code>isMasked()</code>, and every consumer of <code>getByteEnable()</code> reads the mask only for masked writes. The CPU now only materializes a mask when some byte is actually disabled.",
+      safety: "The masked path is untouched; only the representation of the all-enabled case changes, and every reader of the mask was audited to treat empty and all-true alike. <code>splitOnVaddr()</code> keeps both halves unmasked in that case.",
+      before: ["setVirt(...)", "setByteEnable(std::vector<bool>(it, end))  — alloc + free"],
+      after: ["setVirt(...)", "all enabled ? setAllBytesEnabled() : setByteEnable(...)"],
+      files: "src/mem/request.hh, src/cpu/simple/atomic.cc"
+    },
+    {
+      name: "Use memory backdoors for NonCachingSimpleCPU data accesses",
+      short: "Backdoor data path",
+      area: "cpu-simple",
+      coremark: 5.58, linux: 3.09,
+      touches: ["fetch", "memory"],
+      problem: "NonCachingSimpleCPU already fetched instructions straight from the host memory that <code>AbstractMemory</code> exposes through a backdoor, but every load and store still built a <code>Packet</code>, crossed the crossbar (<code>findPort()</code> is an address-range lookup), and landed in <code>AbstractMemory::access()</code>. Even the fetch path paid for an <code>AddrRangeMap</code> lookup through a <code>std::function</code> and for <code>AddrRange::contains()</code>/<code>getOffset()</code>, which branch on interleaving, on every instruction.",
+      how: "Plain <code>ReadReq</code>/<code>WriteReq</code> packets are now completed directly in the backing store when a recorded backdoor covers them. The fetch and data paths each remember the last backdoor as plain start/end bounds and a host base pointer, so the common case is two compares and an add; the 1/2/4/8-byte copies are dispatched on size so they compile to a single load and store rather than a <code>memcpy</code> call.",
+      safety: "Only accesses whose outcome does not depend on the memory's own bookkeeping take the shortcut: LR/SC, atomics, swaps and masked writes stay on the port, and so do all stores when another hart exists, because its reservations live in the memory's locked-address list. Interleaved address ranges, where the offset is not linear, are resolved through the range and never cached. The one observable difference is that backdoor accesses no longer count in the memory's read/write statistics, which was already true for fetch.",
+      before: ["Packet pkt(req, cmd)", "xbar.recvAtomicBackdoor → findPort()", "AbstractMemory::access(): memcpy", "AddrRangeMap::find via std::function"],
+      after: ["window: start ≤ addr, addr+size ≤ end ?", "copyBytes(host + (addr − start))", "else: generic path"],
+      files: "src/cpu/simple/noncaching.cc, src/cpu/simple/noncaching.hh"
+    },
+    {
+      name: "Cache complete translations in front of TLB::translate()",
+      short: "Translation cache",
+      area: "arch-riscv",
+      coremark: 11.31, linux: 8.33,
+      touches: ["fetch", "memory"],
+      problem: "The largest single item in the baseline profile, about a quarter of all host time, even in M-mode with paging off. For every fetch, load and store, <code>TLB::translate()</code> re-derived the effective privilege, virtualization state and translation mode from several CSRs, scanned the PMP table and searched the PMA range lists. Nearly all of that repeated the previous access's work: the outcome only changes when one of those CSRs is written or the TLB is flushed.",
+      how: "The TLB keeps a direct-mapped cache of complete <code>translate()</code> results per page and access mode: the physical page, the request flags the slow path added (PHYSICAL, UNCACHEABLE, STRICT_ORDER) and whether the PMA allows misaligned access there. Every entry is tagged with a generation number. The ISA advances the generation whenever a translation-relevant CSR (privilege, status, satp/vsatp/hgatp, envcfg, the PMP registers, V, NMIE, misa) <em>changes value</em>, and the TLB advances it on every invalidation, so an entry from an older generation is simply a miss.",
+      safety: "An entry is filled only after the slow path succeeded on an ordinary access, and only when the page is uniform for every check the fast path skips: <code>PMP::homogeneous()</code> rejects pages an active rule covers partially, <code>PMAChecker::uniformAttributes()</code> rejects pages an uncacheable or misaligned-support range covers partially, and a page that resolved to a local accessor (the m5op range) is never cached. Misaligned accesses to pages without misaligned support, and misaligned LR/SC and AMOs, still take the slow path and fault as before. The first version showed no effect at all: reading mstatus normalizes and rewrites the CSR on every read, which advanced the generation each time; the counter now only moves when a value actually changes.",
+      before: ["getMemAccessInfo(): readMiscReg ×4", "SATP, STATUS, VSSTATUS reads", "PMP table scan", "PMA range lookups"],
+      after: ["gen == entry.gen && vpage == entry.vpage", "&& mode allowed && alignment ok", "paddr = entry.ppage | offset; flags"],
+      files: "src/arch/riscv/tlb.cc, tlb.hh, isa.cc, isa.hh, pmp.cc, pma_checker.cc"
+    },
+    {
+      name: "Add a PC-indexed cache in front of the decoder's hash map",
+      short: "Decoder cache",
+      area: "arch-riscv",
+      coremark: 12.58, linux: 9.27,
+      touches: ["decode"],
+      problem: "<code>Decoder::decode()</code> looked every instruction up in an <code>unordered_map</code> keyed by the 64-bit extended encoding: a hash, a bucket walk and a compare per decode, about 8% of host time.",
+      how: "A direct-mapped cache of 8192 decoded instructions, indexed by the halfword address, sits in front of the map. A hit requires the full extended encoding to match as well as the address, so the map is consulted only on a genuine miss.",
+      safety: "Decoding is a pure function of the extended machine instruction, which carries the vector configuration and XLEN along with the bits, so an entry never needs invalidating: self-modifying code changes the bits and simply misses. The <code>StaticInst</code> objects are the same ones the map hands out.",
+      before: ["instMap[emi]  — hash + bucket walk"],
+      after: ["e = cache[(pc >> 1) & 8191]", "e.addr == pc && e.emi == emi ? e.inst", "else instMap[emi], refill"],
+      files: "src/arch/riscv/decoder.cc, src/arch/riscv/decoder.hh"
+    },
+    {
+      name: "Run consecutive atomic CPU cycles inside one tick event",
+      short: "Cycles inside one event",
+      area: "cpu-simple",
+      coremark: 13.76, linux: 10.33,
+      touches: ["event"],
+      problem: "<code>tick()</code> rescheduled itself after every cycle, so each instruction paid for an event-queue insertion and a <code>serviceOne()</code> dispatch, about a tenth of host time once the other costs had come down.",
+      how: "After finishing a cycle, <code>tick()</code> looks at the event queue. If no other event is due at or before the next cycle and no asynchronous request is pending, it advances the queue's current tick to the next cycle itself and executes that cycle without leaving the handler. Otherwise it reschedules exactly as before.",
+      safety: "The current tick moves exactly as the event queue would have moved it, so cycle counts, timestamps and the ordering with respect to every other event are unchanged. Anything scheduled in the meantime (device timers, exit and instruction-count events, stats dumps), another CPU's tick, a drain or an idle transition returns control to the event loop. Both workloads finish at the same tick as before.",
+      before: ["execute cycle", "reschedule(tickEvent, now + 1 cycle)", "EventQueue::serviceOne() → tick()"],
+      after: ["execute cycle", "queue.nextTick() > now + 1 cycle ?", "  setCurTick(now + 1 cycle); continue", "else reschedule as before"],
+      files: "src/cpu/simple/atomic.cc"
+    },
+    {
+      name: "Assemble the extended machine instruction in registers",
+      short: "Decoder store-forwarding",
+      area: "arch-riscv",
+      coremark: 14.42, linux: 10.65,
+      touches: ["decode"],
+      problem: "Three costs hidden in the decoder. <code>moreBytes()</code> copied the polymorphic PC state it was handed just to read two fields. It then wrote the 32-bit <code>instBits</code> field of the encoding union, which <code>decode()</code> immediately re-read as the whole 64-bit union. And <code>decode()</code> filled five bitfields of that union one by one, each a read-modify-write through memory before the whole value was read again. A 32-bit store followed by a 64-bit load of the same location cannot be forwarded and stalls the pipeline for every instruction.",
+      how: "The PC state is taken by reference. The union is assembled in a local variable, which the compiler keeps in a register, and stored once, 64 bits wide.",
+      safety: "Pure data-flow rearrangement inside two functions; the values that reach the lookup are bit-identical.",
+      before: ["PCState copy", "emi.instBits = x   (32-bit store)", "compressed(emi)   (64-bit load → stall)", "emi.vl = …; emi.vtype8 = …; … (5× RMW)"],
+      after: ["const PCState &", "local = emi; local.instBits = x; … ; emi = local", "one 64-bit store"],
+      files: "src/arch/riscv/decoder.cc"
+    },
+    {
+      name: "Filter PC-event lookups with a bitmap before the sorted search",
+      short: "PC-event filter",
+      area: "cpu",
+      coremark: 14.49, linux: 10.95,
+      touches: ["account"],
+      problem: "Every instruction asks the thread's <code>PCEventQueue</code> whether an event is registered at the current PC. A full-system Linux run registers a handful (the kernel panic and oops hooks), which made every instruction pay for a binary search over the event vector. CoreMark registers none, so this patch is Linux-only.",
+      how: "The queue keeps a 4096-bit filter of the PCs that have events, maintained on schedule and remove, and <code>service()</code> rejects almost every call against it before searching. <code>checkPcEventQueue()</code> returns early when no event is registered at all and reads the PC once per iteration instead of twice.",
+      safety: "The filter can only say \"maybe\"; a set bit still leads to the exact search, and a clear bit is only possible when no event hashes there. Events still fire at exactly the same PCs.",
+      before: ["equal_range(pc) over the event vector"],
+      after: ["filter[(pc >> 1) % 4096] ? equal_range(pc) : nothing"],
+      files: "src/cpu/pc_event.hh, src/cpu/pc_event.cc, src/cpu/simple/base.cc"
+    },
+    {
+      name: "Advance the thread's PC state in place",
+      short: "PC state in place",
+      area: "cpu-simple",
+      coremark: 16.15, linux: 11.90,
+      touches: ["decode", "advance"],
+      problem: "The PC state is a polymorphic object carrying the next PC, micro-PC and, for RISC-V, the vector configuration. <code>BaseSimpleCPU</code> copied it four times per instruction: <code>preExecute()</code> copied it into a temporary for the decoder and copied the result back, and <code>advancePC()</code> went through <code>StaticInst::advancePC(ThreadContext *)</code>, which in every ISA copies the state out, advances it and copies it back. Each copy is a virtual <code>update()</code>.",
+      how: "<code>SimpleThread</code> offers its owning CPU in-place access to the PC state. The decoder works on the thread's copy directly, and <code>advancePC()</code> uses the <code>PCStateBase</code> overload on that same object.",
+      safety: "The decoder leaves the state untouched when it needs more bytes, exactly as before, so nothing is written back that would not have been. Every ISA's <code>ThreadContext</code> overload of <code>advancePC</code> is the copy-out/advance/copy-in pattern, so advancing in place is equivalent. The <code>ThreadContext</code> interface itself is unchanged.",
+      before: ["tmp = thread.pcState()   (copy)", "decode(tmp); thread.pcState(tmp)   (copy)", "pc = tc.pcState(); pc.advance(); tc.pcState(pc)   (2 copies)"],
+      after: ["decode(thread.pcStateMutable())", "inst.advancePC(thread.pcStateMutable())"],
+      files: "src/cpu/simple_thread.hh, src/cpu/simple/base.cc, src/cpu/simple/base.hh"
+    },
+    {
+      name: "Inline the per-instruction helpers of BaseSimpleCPU",
+      short: "Inline helpers",
+      area: "cpu-simple",
+      coremark: 17.08, linux: 12.58,
+      touches: ["interrupt", "account", "advance"],
+      problem: "<code>checkForInterrupts()</code>, <code>serviceInstCountEvents()</code>, <code>countInst()</code> and <code>countFetchInst()</code> are each a few instructions long but were out-of-line functions called once per instruction. <code>advancePC()</code> asked the PC state whether the instruction branched, a virtual call that also fetches the instruction size, even without a branch predictor to tell. And <code>tick()</code> built the Commit probe's argument, which copies a <code>StaticInstPtr</code> and touches its reference count twice, whether or not a listener was attached.",
+      how: "The small helpers are defined inline where the complete <code>SimpleExecContext</code> type is available; only the rare interrupt-taking path stays out of line. <code>branching()</code> is evaluated only for the branch predictor, and the probe argument only when the probe has listeners.",
+      safety: "Nothing changes for a branch predictor or a probe listener when they exist; without them the skipped work had no consumer.",
+      before: ["call countFetchInst()", "call serviceInstCountEvents()", "branching = pcState().branching()   (virtual)", "notify(make_pair(thread, inst))   (refcount ±)"],
+      after: ["inlined", "branchPred ? branching() : false", "hasListeners() ? notify(...) : nothing"],
+      files: "src/cpu/simple/base.cc, base.hh, exec_context.hh, atomic.cc"
+    },
+    {
+      name: "Give NonCachingSimpleCPU a direct path for plain loads and stores",
+      short: "Plain load/store path",
+      area: "cpu-simple",
+      coremark: 18.04, linux: 13.51,
+      touches: ["memory"],
+      problem: "Even with the backdoor shortcut, <code>AtomicSimpleCPU::readMem()</code> and <code>writeMem()</code> still built a fragment loop with a byte-enable mask, a <code>Packet</code> per fragment and a virtual port call for every access. For a load or store that stays within one cache line, enables every byte and carries no LR/SC, atomic, swap, prefetch, cache-maintenance or HTM semantics, none of that changes the outcome.",
+      how: "NonCachingSimpleCPU overrides both with a path that performs the same steps (trace annotation, request setup, translation, the NO_ACCESS check, latency bookkeeping) and then copies the bytes through the backdoor, building a <code>Packet</code> only when the target has no usable backdoor: a device, a local accessor, or a store while another hart exists.",
+      safety: "Every access that does not meet the plain-access test falls back to the generic implementation unchanged. The plain path is a specialization of the generic one for the case where the fragment loop has one iteration and the packet would have been completed by the backdoor anyway.",
+      before: ["genMemFragmentRequest() loop", "Packet pkt; sendPacket(port, &pkt)   (virtual)", "tryBackdoorAccess() inside"],
+      after: ["plainAccess()? setVirt; translate", "host ? copyBytes : Packet path", "else AtomicSimpleCPU::readMem()"],
+      files: "src/cpu/simple/noncaching.cc, src/cpu/simple/noncaching.hh"
+    },
+    {
+      name: "Count instructions in plain integers, fold into stats at dump time",
+      short: "Statistics folding",
+      area: "cpu-simple",
+      coremark: 21.08, linux: 15.05,
+      touches: ["account", "execute"],
+      problem: "The simple CPUs updated about thirty <code>statistics::Scalar</code> objects per instruction across the fetch, execute, commit, thread and exec-context groups: each a load/add/store on a double reached through a vector of <code>unique_ptr</code>, and many recording the same fact several times (instructions counted five times, ops four, memory references three). With everything else trimmed this was the largest remaining cost, about a fifth of host time.",
+      how: "<code>SimpleExecContext</code> keeps the per-instruction accounting in one compact struct of integers, <code>InstCounts</code>: each property of a retired instruction is counted once, including the per-op-class and per-control-type histograms and the per-register-class read and write counts from the operand accessors. <code>BaseSimpleCPU::preDumpStats()</code> folds the pending counts into every statistic that reports them and clears them; <code>resetStats()</code> discards them.",
+      safety: "Dumps, dump-and-reset periods and manual resets see exactly the values they saw before: the stats files are byte-identical, and a run with periodic dump-and-reset produces per-period sums equal to the single-dump values for all 233 CPU counters. The statistics keep their type, name, order, unit and description, and O3 and Minor keep updating them directly. The one visible difference is that a live read of one of these statistics between dumps (the MathExpr power model) sees the value as of the last fold.",
+      before: ["commit.numInsts += 1;  base.numInsts += 1;", "thread.numInsts += 1;  execute.numInsts += 1;", "…  ~30 double RMWs through pointers"],
+      after: ["counts.committedInsts++;  counts.loads += isLoad; …", "preDumpStats(): stat += count for each; counts.clear()"],
+      files: "src/cpu/simple/exec_context.hh, src/cpu/simple/base.cc, src/cpu/simple/base.hh"
+    },
+    {
+      name: "Fetch NonCachingSimpleCPU instructions from a cached host page",
+      short: "Fetch-page cache",
+      area: "cpu-simple / arch",
+      coremark: 24.38, linux: 16.83,
+      touches: ["fetch"],
+      problem: "Every instruction fetch still set up a <code>Request</code>, ran it through the MMU's translate chain (three call levels around a translation-cache hit) and looked up a backdoor before copying four bytes, about a fifth of host time.",
+      how: "<code>BaseTLB</code> gains two queries: <code>translationEpoch()</code>, a value that changes whenever any translation could, and <code>stableFetchPage()</code>, which after a successful fetch translation says whether every fetch in that page translates identically while the epoch holds. The RISC-V TLB answers both from its translation cache and generation counter; the defaults promise nothing, which leaves other ISAs on the existing path. <code>AtomicSimpleCPU::tick()</code> delegates the fetch to a virtual <code>fetchInstruction()</code>, and NonCachingSimpleCPU overrides it: while the fetch PC stays inside the cached page and the epoch is unchanged, a fetch is an epoch query, two compares and a copy from the host pointer.",
+      safety: "Only the translation is cached. The bytes are read from the backing store on every fetch, so self-modifying code behaves exactly as before and no <code>fence.i</code> tracking is needed; the decoder's own encoding check stays in place. Fetches served this way do not consult the instruction TLB, so its hit and access statistics count only the fetches that reach it (4.4 M instead of 195 M on the Linux boot); every other statistic is unchanged.",
+      before: ["setupFetchRequest(req)", "mmu.translateAtomic(req)   (3 levels)", "fetchInstMem(): window lookup, copy"],
+      after: ["vpage match && epoch match ?", "copyBytes(page.host + offset)", "else generic path, then cache the page"],
+      files: "src/arch/generic/tlb.hh, src/arch/riscv/tlb.cc, tlb.hh, src/cpu/simple/atomic.cc, atomic.hh, noncaching.cc, noncaching.hh"
+    }
+  ];
+
+  var workload = "coremark";
+  var current = 0;
+  var SPIKE = { coremark: 746, linux: 295 };
+
+  var chart = document.getElementById("chart");
+  var loop = document.getElementById("loop");
+  var rail = document.getElementById("rail");
+  var detail = document.getElementById("detail");
+
+  function fmt(n) { return n.toFixed(2); }
+  function esc(s) { return s; } // content is authored, not user-supplied
+
+  function drawChart() {
+    var W = 640, H = 260, left = 44, right = 12, top = 22, bottom = 40;
+    var n = PATCHES.length;
+    var max = 26;
+    var plotW = W - left - right, plotH = H - top - bottom;
+    var band = plotW / n, barW = band * 0.62;
+    var y = function (v) { return top + plotH - (v / max) * plotH; };
+    var s = "";
+    // grid + axis
+    s += '<g class="axis">';
+    [0, 5, 10, 15, 20, 25].forEach(function (t) {
+      s += '<line x1="' + left + '" x2="' + (W - right) + '" y1="' + y(t) + '" y2="' + y(t) + '"/>';
+      s += '<text x="' + (left - 6) + '" y="' + (y(t) + 3) + '" text-anchor="end">' + t + '</text>';
+    });
+    s += '<text x="' + left + '" y="12" text-anchor="start">MIPS · ' + (workload === "coremark" ? "CoreMark, 200 iterations" : "Linux 6.12 boot + ls") + '</text>';
+    s += '</g>';
+    PATCHES.forEach(function (p, i) {
+      var v = p[workload];
+      var x = left + i * band + (band - barW) / 2;
+      var cls = "bar" + (i === current ? " selected" : (i < current ? " reached" : ""));
+      s += '<g class="' + cls + '" data-i="' + i + '" tabindex="0" role="button" aria-label="Patch ' + (i + 1) + ': ' + p.short + ', ' + fmt(v) + ' MIPS">';
+      s += '<rect x="' + (left + i * band) + '" y="' + top + '" width="' + band + '" height="' + plotH + '" fill="transparent"/>';
+      s += '<rect class="value" x="' + x + '" y="' + y(v) + '" width="' + barW + '" height="' + (y(0) - y(v)) + '"/>';
+      s += '<text x="' + (x + barW / 2) + '" y="' + (y(v) - 4) + '" text-anchor="middle">' + fmt(v) + '</text>';
+      s += '<text x="' + (x + barW / 2) + '" y="' + (H - bottom + 14) + '" text-anchor="middle">' + (i + 1) + '</text>';
+      s += '</g>';
+    });
+    s += '<text class="axis" x="' + (left + plotW / 2) + '" y="' + (H - 8) + '" text-anchor="middle" style="font-family:IBM Plex Mono,monospace;font-size:10px;fill:var(--muted)">patch (1 = baseline)</text>';
+    s += '<text class="spike-label" x="' + (W - right) + '" y="' + (top + 10) + '" text-anchor="end">Spike: ' + SPIKE[workload] + ' MIPS, off the chart</text>';
+    chart.innerHTML = s;
+    chart.querySelectorAll(".bar").forEach(function (g) {
+      g.addEventListener("click", function () { select(+g.dataset.i); });
+      g.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); select(+g.dataset.i); } });
+    });
+  }
+
+  function drawLoop() {
+    var hot = PATCHES[current].touches;
+    var W = 420, H = 300, cx = 210, cy = 150, r = 105, bw = 118, bh = 30;
+    var s = "";
+    var pts = STAGES.map(function (st, i) {
+      var a = -Math.PI / 2 + (i / STAGES.length) * 2 * Math.PI;
+      return { x: cx + r * Math.cos(a), y: cy + r * Math.sin(a), st: st };
+    });
+    s += '<defs><marker id="ah" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path class="arrowhead" d="M0,0 L8,4 L0,8 z"/></marker></defs>';
+    pts.forEach(function (p, i) {
+      var q = pts[(i + 1) % pts.length];
+      var dx = q.x - p.x, dy = q.y - p.y, len = Math.hypot(dx, dy);
+      var ux = dx / len, uy = dy / len;
+      // trim the arrow so it starts and ends at the box edges
+      var trim = function (pt, ux, uy) {
+        var tx = Math.abs(ux) > 1e-6 ? (bw / 2) / Math.abs(ux) : 1e9;
+        var ty = Math.abs(uy) > 1e-6 ? (bh / 2) / Math.abs(uy) : 1e9;
+        var t = Math.min(tx, ty) + 3;
+        return { x: pt.x + ux * t, y: pt.y + uy * t };
+      };
+      var a = trim(p, ux, uy), b = trim(q, -ux, -uy);
+      s += '<line class="arrow" x1="' + a.x + '" y1="' + a.y + '" x2="' + b.x + '" y2="' + b.y + '" marker-end="url(#ah)"/>';
+    });
+    pts.forEach(function (p) {
+      var isHot = hot.indexOf(p.st.id) >= 0;
+      s += '<g class="stage' + (isHot ? " hot" : "") + '">';
+      s += '<rect x="' + (p.x - bw / 2) + '" y="' + (p.y - bh / 2) + '" width="' + bw + '" height="' + bh + '" rx="2"/>';
+      s += '<text x="' + p.x + '" y="' + (p.y + 4) + '" text-anchor="middle">' + p.st.label + '</text>';
+      s += '</g>';
+    });
+    var ns = Math.round(1000 / PATCHES[current][workload]);
+    s += '<text class="note" x="' + cx + '" y="' + (cy - 6) + '" text-anchor="middle">one instruction ≈</text>';
+    s += '<text class="note" x="' + cx + '" y="' + (cy + 12) + '" text-anchor="middle" style="font-size:16px;fill:var(--ink)">' + ns + ' ns</text>';
+    s += '<text class="note" x="' + cx + '" y="' + (cy + 28) + '" text-anchor="middle">of host time after patch ' + (current + 1) + '</text>';
+    loop.innerHTML = s;
+    document.getElementById("loop-hint").textContent = hot.length ? "" : "measurement only";
+  }
+
+  function drawRail() {
+    var s = "";
+    PATCHES.forEach(function (p, i) {
+      s += '<li' + (i === current ? ' class="current"' : '') + '><button type="button" data-i="' + i + '" aria-current="' + (i === current ? 'true' : 'false') + '">';
+      s += '<span class="idx">' + String(i + 1).padStart(2, "0") + '</span>';
+      s += '<span class="name">' + p.short + '</span>';
+      s += '<span class="mips">' + fmt(p[workload]) + '</span>';
+      s += '</button></li>';
+    });
+    rail.innerHTML = s;
+    rail.querySelectorAll("button").forEach(function (b) {
+      b.addEventListener("click", function () { select(+b.dataset.i); });
+    });
+  }
+
+  function delta(now, prev) {
+    if (prev === null) return "";
+    var d = (now / prev - 1) * 100;
+    var cls = Math.abs(d) < 1 ? " flat" : "";
+    return '<span class="delta' + cls + '">' + (d >= 0 ? "+" : "") + d.toFixed(0) + '%</span>';
+  }
+
+  function drawDetail() {
+    var p = PATCHES[current];
+    var prev = current > 0 ? PATCHES[current - 1] : null;
+    var s = "";
+    s += '<div class="detail-head"><div>';
+    s += '<div class="kicker"><span class="idx">' + String(current + 1).padStart(2, "0") + ' / ' + PATCHES.length + '</span><span class="area">' + p.area + '</span></div>';
+    s += '<h2>' + p.name + '</h2></div>';
+    s += '<div class="nav"><button type="button" id="prev"' + (current === 0 ? " disabled" : "") + '>← Previous</button><button type="button" id="next"' + (current === PATCHES.length - 1 ? " disabled" : "") + '>Next →</button></div></div>';
+    s += '<div class="effect">';
+    s += '<div><div class="label">CoreMark</div><div class="value">' + fmt(p.coremark) + ' MIPS' + delta(p.coremark, prev ? prev.coremark : null) + '</div></div>';
+    s += '<div><div class="label">Linux boot</div><div class="value">' + fmt(p.linux) + ' MIPS' + delta(p.linux, prev ? prev.linux : null) + '</div></div>';
+    s += '<div><div class="label">Since baseline</div><div class="value">' + (p.coremark / BASE.coremark).toFixed(2) + '× · ' + (p.linux / BASE.linux).toFixed(2) + '×</div></div>';
+    s += '</div>';
+    s += '<div class="prose">';
+    s += '<h3>The problem</h3><p>' + p.problem + '</p>';
+    s += '<h3 class="guest">The patch</h3><p>' + p.how + '</p>';
+    s += '<div class="before-after"><div class="before"><div class="tag">Before, per instruction</div><ol>' + p.before.map(function (l) { return '<li>' + l + '</li>'; }).join("") + '</ol></div>';
+    s += '<div class="after"><div class="tag">After</div><ol>' + p.after.map(function (l) { return '<li>' + l + '</li>'; }).join("") + '</ol></div></div>';
+    s += '<h3 class="guest">Why the guest cannot tell</h3><p>' + p.safety + '</p>';
+    s += '</div>';
+    s += '<div class="files">Files: <code>' + p.files + '</code></div>';
+    detail.innerHTML = s;
+    document.getElementById("prev").addEventListener("click", function () { select(current - 1); });
+    document.getElementById("next").addEventListener("click", function () { select(current + 1); });
+  }
+
+  function select(i) {
+    if (i < 0 || i >= PATCHES.length) return;
+    current = i;
+    drawChart(); drawLoop(); drawRail(); drawDetail();
+    try { history.replaceState(null, "", "#patch-" + (i + 1)); } catch (e) {}
+  }
+
+  document.getElementById("wl-coremark").addEventListener("click", function () { setWorkload("coremark"); });
+  document.getElementById("wl-linux").addEventListener("click", function () { setWorkload("linux"); });
+  function setWorkload(w) {
+    workload = w;
+    document.getElementById("wl-coremark").setAttribute("aria-pressed", w === "coremark");
+    document.getElementById("wl-linux").setAttribute("aria-pressed", w === "linux");
+    drawChart(); drawLoop(); drawRail();
+  }
+
+  document.addEventListener("keydown", function (e) {
+    if (e.target && /INPUT|TEXTAREA/.test(e.target.tagName)) return;
+    if (e.key === "ArrowRight") { select(current + 1); }
+    if (e.key === "ArrowLeft") { select(current - 1); }
+  });
+
+  var m = /#patch-(\d+)/.exec(location.hash);
+  if (m) current = Math.min(PATCHES.length - 1, Math.max(0, +m[1] - 1));
+  select(current);
+})();
+</script>
+</body>
+</html>
