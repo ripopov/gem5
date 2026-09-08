@@ -44,6 +44,7 @@ diagram of the per-instruction loop. Open it in a browser.
 | instruction counts folded into statistics at dump time | 21.08 | 15.05 |
 | instruction fetch from a cached host page | 24.38 | 16.83 |
 | SimpleThread final, PC-event check inlined | 25.30 | 17.17 |
+| cached translations answered before translate(), ISA pointer kept | 25.50 | 17.31 |
 
 Spike, same host: 746 and 295 MIPS.
 
@@ -309,6 +310,21 @@ the Linux boot found a non-empty queue and then went out of line to test
 the filter, is split so the empty-queue test is inline and only the
 servicing loop is a call.
 
+### Translation hits answered at the top of the chain
+
+A data access that hits the translation cache still went through
+`BaseMMU::translateAtomic()`, `TLB::translateAtomic()` and into
+`TLB::translate()`, whose frame is sized for the slow path, before
+reaching `translateCached()`, and every one of these lookups, as well as
+every fetch-page epoch check, asked the thread context for its ISA
+pointer through a virtual call to add its generation to the TLB's
+invalidation epoch. `translateAtomic()` now tests the cache itself before
+calling `translate()`, and the TLB keeps the ISA pointer of the thread
+it last translated for, so the generation is two loads and an add. This
+is worth about 1% on both workloads; it is kept because the fetch-page
+check and the data path both go through it and it removes the last
+indirect call from a translation hit.
+
 ## What remains
 
 After these steps the profile is flat. At 24.4 MIPS an instruction costs
@@ -327,8 +343,8 @@ about 41 ns, and the remaining items, in order:
 | ~6% | the `execute()` bodies | the instruction semantics themselves |
 
 The next steps in order of payoff would be: driving the interrupt check
-from state changes instead of polling it; guarding the commit probes with
-`hasListeners()`; and folding the data-side translate chain into one call.
+from state changes instead of polling it; and guarding the commit probes with
+`hasListeners()`.
 Together they are plausibly another 1.3x. Beyond that the remaining cost
 is the StaticInst/ExecContext calling convention itself: every operand read
 and write is a virtual call with a RegId translation, and every instruction

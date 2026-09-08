@@ -539,15 +539,6 @@ TLB::getMemAccessInfo(ThreadContext *tc, BaseMMU::Mode mode,
     return MemAccessInfo(priv, virt, force_virt, hlvx, lr);
 }
 
-uint64_t
-TLB::translationGeneration(ThreadContext *tc) const
-{
-    // Every relevant event advances exactly one of the two counters by
-    // one, so their sum identifies the current translation state.
-    return static_cast<ISA*>(tc->getIsaPtr())->translationGeneration() +
-        invalidationEpoch;
-}
-
 bool
 TLB::translateCached(const RequestPtr &req, BaseMMU::Mode mode,
                      uint64_t generation)
@@ -777,6 +768,10 @@ Fault
 TLB::translateAtomic(const RequestPtr &req, ThreadContext *tc,
                      BaseMMU::Mode mode)
 {
+    // Answer a cached translation here, before translate() sets up its
+    // frame for the slow path.
+    if (FullSystem && translateCached(req, mode, translationGeneration(tc)))
+        return NoFault;
     bool delayed;
     return translate(req, tc, nullptr, mode, delayed);
 }

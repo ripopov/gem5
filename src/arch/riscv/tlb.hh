@@ -40,6 +40,7 @@
 #include "arch/riscv/pma_checker.hh"
 #include "arch/riscv/regs/misc.hh"
 #include "arch/riscv/utility.hh"
+#include "base/compiler.hh"
 #include "base/statistics.hh"
 #include "mem/request.hh"
 #include "params/RiscvTLB.hh"
@@ -133,7 +134,25 @@ class TLB : public BaseTLB
     static constexpr size_t NumCachedTranslations = 4096;
     std::vector<CachedTranslation> xlateCache;
 
-    uint64_t translationGeneration(ThreadContext *tc) const;
+    /**
+     * The ISA whose generation translationGeneration() last combined
+     * with invalidationEpoch, so that the per-access lookups do not go
+     * through ThreadContext::getIsaPtr() for the same thread every time.
+     */
+    mutable ThreadContext *generationTc = nullptr;
+    mutable const ISA *generationIsa = nullptr;
+
+    uint64_t
+    translationGeneration(ThreadContext *tc) const
+    {
+        if (GEM5_UNLIKELY(tc != generationTc)) {
+            generationTc = tc;
+            generationIsa = static_cast<const ISA *>(tc->getIsaPtr());
+        }
+        // Every relevant event advances exactly one of the two counters
+        // by one, so their sum identifies the current translation state.
+        return generationIsa->translationGeneration() + invalidationEpoch;
+    }
     uint64_t
     translationEpoch(ThreadContext *tc) const override
     {
