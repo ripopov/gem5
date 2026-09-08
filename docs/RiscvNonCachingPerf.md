@@ -43,6 +43,7 @@ diagram of the per-instruction loop. Open it in a browser.
 | direct plain load/store path | 18.04 | 13.51 |
 | instruction counts folded into statistics at dump time | 21.08 | 15.05 |
 | instruction fetch from a cached host page | 24.38 | 16.83 |
+| SimpleThread final, PC-event check inlined | 25.30 | 17.17 |
 
 Spike, same host: 746 and 295 MIPS.
 
@@ -291,6 +292,23 @@ self-modifying code behaves as before. Fetches served this way do not
 consult the instruction TLB, so its hit/access statistics count only the
 fetches that reach it (4.4 M instead of 198 M on the Linux boot).
 
+### Thread accessors resolved at compile time
+
+The profile after the previous step showed the per-instruction protocol
+itself as the largest item, and a good part of it was indirect calls into
+`SimpleThread`: `pcState()` from the tick loop, the fetch path and
+`postExecute()`, `getIsaPtr()` from the commit counting, and `getReg()`
+and `setReg()` behind every operand read and write. These methods are
+virtual only because `SimpleThread` implements the `ThreadContext`
+interface; the simple CPUs hold the thread by its own type and nothing
+derives from it. Marking the class `final` lets the compiler resolve
+every call made through a `SimpleThread` pointer, and `postExecute()`
+now reads the PC through that pointer instead of the `ThreadContext`
+array. The PC-event check, which every instruction makes and which on
+the Linux boot found a non-empty queue and then went out of line to test
+the filter, is split so the empty-queue test is inline and only the
+servicing loop is a call.
+
 ## What remains
 
 After these steps the profile is flat. At 24.4 MIPS an instruction costs
@@ -308,8 +326,7 @@ about 41 ns, and the remaining items, in order:
 | ~3% | `Interrupts::checkInterrupts()` | evaluated per instruction, always finding nothing |
 | ~6% | the `execute()` bodies | the instruction semantics themselves |
 
-The next steps in order of payoff would be: marking `SimpleThread` `final`
-so its register and PC accessors devirtualize; driving the interrupt check
+The next steps in order of payoff would be: driving the interrupt check
 from state changes instead of polling it; guarding the commit probes with
 `hasListeners()`; and folding the data-side translate chain into one call.
 Together they are plausibly another 1.3x. Beyond that the remaining cost

@@ -501,6 +501,13 @@ BaseSimpleCPU::checkForInterrupts()
 }
 
 inline void
+BaseSimpleCPU::checkPcEventQueue()
+{
+    if (GEM5_UNLIKELY(!threadInfo[curThread]->thread->pcEventQueue.empty()))
+        servicePcEvents();
+}
+
+inline void
 BaseSimpleCPU::serviceInstCountEvents()
 {
     SimpleExecContext &t_info = *threadInfo[curThread];

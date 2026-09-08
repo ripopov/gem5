@@ -120,15 +120,13 @@ BaseSimpleCPU::BaseSimpleCPU(const BaseSimpleCPUParams &p)
 }
 
 void
-BaseSimpleCPU::checkPcEventQueue()
+BaseSimpleCPU::servicePcEvents()
 {
     SimpleThread &thread = *threadInfo[curThread]->thread;
-    if (thread.pcEventQueue.empty())
-        return;
 
     // Keep servicing while the events move the PC.
     Addr pc = thread.pcState().instAddr();
-    while (thread.pcEventQueue.service(pc, threadContexts[curThread])) {
+    while (thread.pcEventQueue.service(pc, &thread)) {
         const Addr new_pc = thread.pcState().instAddr();
         if (new_pc == pc)
             break;
@@ -398,7 +396,7 @@ BaseSimpleCPU::postExecute()
     assert(curStaticInst);
     const StaticInst &inst = *curStaticInst;
 
-    Addr instAddr = threadContexts[curThread]->pcState().instAddr();
+    Addr instAddr = t_info.thread->pcState().instAddr();
 
     // Runs once per instruction: evaluate each property once and add it
     // to the counters instead of branching on it.

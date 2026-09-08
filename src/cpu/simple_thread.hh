@@ -90,7 +90,14 @@ class CheckerCPU;
  * examples.
  */
 
-class SimpleThread : public ThreadState, public ThreadContext
+/**
+ * The thread state of the simple CPU models. It is final: the CPU
+ * models hold it by its own type on their per-instruction path, and
+ * that lets the compiler resolve its PC and register accessors, which
+ * are virtual only for the sake of the ThreadContext interface, at
+ * compile time.
+ */
+class SimpleThread final : public ThreadState, public ThreadContext
 {
   public:
     typedef ThreadContext::Status Status;

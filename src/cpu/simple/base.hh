@@ -86,6 +86,8 @@ class BaseSimpleCPU : public BaseCPU
     ThreadID curThread;
     branch_prediction::BPredUnit *branchPred;
 
+    /** Service the PC events at the current PC; see checkPcEventQueue(). */
+    void servicePcEvents();
     void checkPcEventQueue();
     void swapActiveThread();
 
