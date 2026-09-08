@@ -132,6 +132,14 @@ class BaseSimpleCPU : public BaseCPU
 
 
   public:
+    /**
+     * Take the interrupt the interrupt controller reports as pending.
+     * checkForInterrupts() decides whether there is one, once per
+     * instruction, and is defined inline in cpu/simple/exec_context.hh
+     * with the other per-instruction helpers that need the complete
+     * SimpleExecContext type.
+     */
+    void takePendingInterrupt();
     void checkForInterrupts();
     void setupFetchRequest(const RequestPtr &req);
     void serviceInstCountEvents();
@@ -180,6 +188,12 @@ class BaseSimpleCPU : public BaseCPU
         panic("initiateMemAMO() is not implemented\n");
     }
 
+    /** Does this op count as an instruction: not a microop, or the last? */
+    static bool
+    countsAsInst(const StaticInst &inst)
+    {
+        return !inst.isMicroop() || inst.isLastMicroop();
+    }
     void countInst();
     void countFetchInst();
     void countCommitInst();

@@ -705,7 +705,10 @@ AtomicSimpleCPU::tick()
                 if (fault == NoFault) {
                     postExecute();
                     countInst();
-                    ppCommit->notify(std::make_pair(thread, curStaticInst));
+                    // The argument copies a StaticInstPtr; skip it when
+                    // nobody is listening.
+                    if (ppCommit->hasListeners())
+                        ppCommit->notify(std::make_pair(thread, curStaticInst));
                 } else if (traceData) {
                     traceFault();
                 }

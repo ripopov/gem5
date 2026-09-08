@@ -34,6 +34,7 @@ about 5% lower.
 | decoder: no PCState copy, encoding assembled in registers | 14.42 | 10.65 |
 | PC-event bitmap filter | 14.49 | 10.95 |
 | PC state advanced in place | 16.15 | 11.90 |
+| per-instruction helpers inlined, probe argument guarded | 17.08 | 12.58 |
 
 Spike, same host: 746 and 295 MIPS.
 
@@ -198,3 +199,15 @@ is a virtual `update()` of a polymorphic object. `SimpleThread` now offers
 its owning CPU in-place access to the PC state; the decoder works on the
 thread's copy directly and `advancePC()` uses the `PCStateBase` overload on
 it. The `ThreadContext` interface is unchanged.
+
+### Out-of-line helpers
+
+`checkForInterrupts()`, `serviceInstCountEvents()`, `countInst()` and
+`countFetchInst()` are each a few instructions but were out-of-line
+functions called once per instruction; `advancePC()` asked the PC state
+whether the instruction branched (a virtual call that also fetches the
+instruction size) even without a branch predictor to tell; and `tick()`
+built the Commit probe's argument, which copies a `StaticInstPtr`, whether
+or not anyone listened. The helpers are inline now, only the rare
+interrupt-taking path stays out of line, `branching()` is evaluated only
+for the branch predictor and the probe argument only for a listener.

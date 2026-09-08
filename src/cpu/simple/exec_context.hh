@@ -450,6 +450,43 @@ class SimpleExecContext : public ExecContext
     }
 };
 
+// Per-instruction helpers of BaseSimpleCPU that need the complete
+// SimpleExecContext, defined here so that the CPU models inline them.
+
+inline void
+BaseSimpleCPU::checkForInterrupts()
+{
+    if (GEM5_UNLIKELY(checkInterrupts(curThread)))
+        takePendingInterrupt();
+}
+
+inline void
+BaseSimpleCPU::serviceInstCountEvents()
+{
+    SimpleExecContext &t_info = *threadInfo[curThread];
+    t_info.thread->comInstEventQueue.serviceEvents(t_info.numInst);
+}
+
+inline void
+BaseSimpleCPU::countInst()
+{
+    SimpleExecContext& t_info = *threadInfo[curThread];
+
+    t_info.numInst += countsAsInst(*curStaticInst);
+    t_info.numOp++;
+}
+
+inline void
+BaseSimpleCPU::countFetchInst()
+{
+    SimpleExecContext& t_info = *threadInfo[curThread];
+    auto &fetch = *fetchStats[t_info.thread->threadId()];
+
+    // increment thread level numInsts and numOps fetched counts
+    fetch.numInsts += countsAsInst(*curStaticInst);
+    fetch.numOps++;
+}
+
 } // namespace gem5
 
 #endif // __CPU_EXEC_CONTEXT_HH__

@@ -153,30 +153,6 @@ BaseSimpleCPU::swapActiveThread()
 }
 
 void
-BaseSimpleCPU::countInst()
-{
-    SimpleExecContext& t_info = *threadInfo[curThread];
-
-    if (!curStaticInst->isMicroop() || curStaticInst->isLastMicroop()) {
-        t_info.numInst++;
-    }
-    t_info.numOp++;
-}
-
-void
-BaseSimpleCPU::countFetchInst()
-{
-    SimpleExecContext& t_info = *threadInfo[curThread];
-
-    if (!curStaticInst->isMicroop() || curStaticInst->isLastMicroop()) {
-        // increment thread level numInsts fetched count
-        fetchStats[t_info.thread->threadId()]->numInsts++;
-    }
-    // increment thread level numOps fetched count
-    fetchStats[t_info.thread->threadId()]->numOps++;
-}
-
-void
 BaseSimpleCPU::countCommitInst()
 {
     SimpleExecContext& t_info = *threadInfo[curThread];
@@ -294,32 +270,30 @@ BaseSimpleCPU::traceFault()
 }
 
 void
-BaseSimpleCPU::checkForInterrupts()
+BaseSimpleCPU::takePendingInterrupt()
 {
     SimpleExecContext&t_info = *threadInfo[curThread];
     SimpleThread* thread = t_info.thread;
     ThreadContext* tc = thread->getTC();
 
-    if (checkInterrupts(curThread)) {
-        Fault interrupt = interrupts[curThread]->getInterrupt();
+    Fault interrupt = interrupts[curThread]->getInterrupt();
 
-        if (interrupt != NoFault) {
-            // hardware transactional memory
-            // Postpone taking interrupts while executing transactions.
-            assert(!std::dynamic_pointer_cast<GenericHtmFailureFault>(
-                interrupt));
-            if (t_info.inHtmTransactionalState()) {
-                DPRINTF(HtmCpu, "Deferring pending interrupt - %s -"
-                    "due to transactional state\n",
-                    interrupt->name());
-                return;
-            }
-
-            t_info.fetchOffset = 0;
-            interrupts[curThread]->updateIntrInfo();
-            interrupt->invoke(tc);
-            thread->decoder->reset();
+    if (interrupt != NoFault) {
+        // hardware transactional memory
+        // Postpone taking interrupts while executing transactions.
+        assert(!std::dynamic_pointer_cast<GenericHtmFailureFault>(
+            interrupt));
+        if (t_info.inHtmTransactionalState()) {
+            DPRINTF(HtmCpu, "Deferring pending interrupt - %s -"
+                "due to transactional state\n",
+                interrupt->name());
+            return;
         }
+
+        t_info.fetchOffset = 0;
+        interrupts[curThread]->updateIntrInfo();
+        interrupt->invoke(tc);
+        thread->decoder->reset();
     }
 }
 
@@ -339,13 +313,6 @@ BaseSimpleCPU::setupFetchRequest(const RequestPtr &req)
 
     req->setVirt(fetchPC, decoder->moreBytesSize(), Request::INST_FETCH,
                  instRequestorId(), instAddr);
-}
-
-void
-BaseSimpleCPU::serviceInstCountEvents()
-{
-    SimpleExecContext &t_info = *threadInfo[curThread];
-    t_info.thread->comInstEventQueue.serviceEvents(t_info.numInst);
 }
 
 void
@@ -530,7 +497,10 @@ BaseSimpleCPU::advancePC(const Fault &fault)
     SimpleExecContext &t_info = *threadInfo[curThread];
     SimpleThread* thread = t_info.thread;
 
-    const bool branching = thread->pcState().branching();
+    // Only the branch predictor needs to know whether the instruction
+    // branched, and it needs to know before the PC moves on.
+    const bool branching =
+        branchPred ? thread->pcState().branching() : false;
 
     //Since we're moving to a new pc, zero out the offset
     t_info.fetchOffset = 0;
