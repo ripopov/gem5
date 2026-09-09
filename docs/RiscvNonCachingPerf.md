@@ -66,6 +66,101 @@ the model, but a build meant for throughput should use both.
 Whole-process wall clock is within 0.4 s of `hostSeconds` in every case, so
 the MIPS figures are comparable with Spike's, which time from `main()`.
 
+## Optional L1/L2/L3 hierarchy and four memory controllers
+
+The results above used the default **cacheless** topology in
+[`noncaching_fs.py`](../configs/example/riscv/noncaching_fs.py): CPU instruction,
+data and page-table-walker ports → `SystemXBar` → one `SimpleMemory` with
+`latency="0ns"`. There were no cache objects between the CPU and memory, so
+backdoor requests could reach the backing store.
+
+The config now optionally instantiates this classic hierarchy:
+
+```text
+CPU instruction port → L1I ─┐
+CPU data port ────────→ L1D ┼→ L2XBar → L2 → L2XBar → L3 → SystemXBar
+CPU page-table walkers ────┘                                  ├→ MemCtrl 0
+                                                             ├→ MemCtrl 1
+                                                             ├→ MemCtrl 2
+                                                             └→ MemCtrl 3
+```
+
+On-chip HiFive devices remain attached to `SystemXBar`; off-chip devices are
+behind its 50 ns bridge and `IOXBar`. The system still has one hart at 1 GHz,
+1 GiB of RAM starting at `0x80000000`, and 64-byte cache lines.
+
+| Cache | Capacity | Associativity | Tag/data/response latency, each | MSHRs |
+|---|---|---|---|---|
+| L1I | 64 KiB | 4-way | 2 cycles | 8 |
+| L1D | 64 KiB | 8-way | 2 cycles | 16 |
+| L2 | 1 MiB | 8-way | 12 cycles | 32 |
+| L3 | 8 MiB | 16-way | 30 cycles | 64 |
+
+These are generic capacities for a modern performance-oriented system, not a
+calibrated model of a particular RISC-V processor. All caches run at the CPU
+clock, with 16 targets per MSHR and 16 write buffers. Override capacities with
+`--l1i-size`, `--l1d-size`, `--l2-size` and `--l3-size`.
+
+`--memory ddr4` creates `MemCtrl` objects with `DDR4_2400_8x8` interfaces.
+`--num-mem-ctrls` accepts 1, 2 or 4, defaulting to 1. Multiple channels are
+interleaved every 64 bytes using `RoRaBaCoCh` mapping; four channels select on
+address bits 7:6. The benchmark retains 1 GiB total RAM (256 MiB per channel),
+so gem5 warns that each assigned range is smaller than the DRAM model's
+nominal 16 GiB device capacity. The modeled device geometry is unchanged.
+`--caches` and `--memory ddr4` are independent; omitting both preserves the
+original topology and defaults.
+
+These benchmarks still use `NonCachingSimpleCPU` and `atomic_noncaching`.
+The caches are present but bypassed, and they do not forward backdoor
+requests. Fetches and data accesses therefore traverse the port hierarchy.
+Interleaved memory ranges also do not expose backdoors in this checkout, so
+the comparison changes both the cache path and memory organization. It is
+**not** an isolated measurement of cache-forwarding overhead, cache hit
+performance or DDR4 timing. Atomic CPU instruction/data stall simulation
+remains disabled. With `--cpu-type atomic` or `--cpu-type timing`, the same
+configured caches are active instead.
+
+Reproduce the 200-iteration CoreMark comparison and Linux boot + `ls`:
+
+```sh
+COREMARK=build/riscv-bench/coremark-200.elf \
+  OUTDIR=build/riscv-bench/recheck-default-coremark \
+  util/riscv-bench/bench.sh coremark 3
+OUTDIR=build/riscv-bench/recheck-default-linux \
+  util/riscv-bench/bench.sh linux 1
+COREMARK=build/riscv-bench/coremark-200.elf \
+  OUTDIR=build/riscv-bench/recheck-hierarchy-coremark \
+  util/riscv-bench/bench.sh coremark 3 --caches --memory ddr4 --num-mem-ctrls 4
+OUTDIR=build/riscv-bench/recheck-hierarchy-linux \
+  util/riscv-bench/bench.sh linux 1 --caches --memory ddr4 --num-mem-ctrls 4
+```
+
+Measurements taken on 2026-09-09 on the same Core Ultra 7 265K, pinned to
+host CPU 2, running the workloads sequentially with the existing
+`build/RISCV/gem5.fast` (compiled 2026-09-08 09:36:56;
+SHA-256 `2a119c211ef7018fc182ca5c75b14de8c22b96d5d6e76394d5fa36a0e517c0bc`).
+The cacheless baseline was remeasured with the same binary and artifacts.
+CoreMark uses 200 iterations and three runs; Linux boot + `ls` uses one run.
+
+| Topology | CoreMark host seconds (mean) | CoreMark MIPS | Linux host seconds | Linux MIPS |
+|---|---|---|---|---|
+| Cacheless, one zero-latency SimpleMemory | 2.547 | 24.50 | 9.500 | 17.01 |
+| L1I/L1D + L2 + L3, four DDR4 MemCtrls | 15.453 | 4.04 | 49.530 | 3.26 |
+
+The full topology takes **6.07×** as much host simulation time for CoreMark
+and **5.21×** for Linux. Whole-process times were 2.748 s versus 15.717 s for
+CoreMark (means), and 9.855 s versus 49.986 s for Linux. These timings measure
+functional execution through the bypassed hierarchy, not a timing CPU run.
+
+Both topologies retired exactly 62,405,796 instructions in 73,783,313,000
+ticks for CoreMark, and 161,563,564 instructions in 207,968,443,000 ticks for
+Linux. CoreMark's three CRCs matched and Linux reached `RISCV-BENCH: done`.
+With the hierarchy, every cache's tag/data access counters remained zero,
+while all four DRAM controllers recorded reads and writes. Thus the slower
+host execution did not alter guest instruction counts or simulated time.
+
+## Correctness requirements
+
 Every step must leave guest behaviour unchanged: CoreMark and the Linux boot
 have to exit at the same tick with the same instruction count as the
 baseline, CoreMark's three data CRCs must match, and `AtomicSimpleCPU` and

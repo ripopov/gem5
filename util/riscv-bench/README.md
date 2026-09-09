@@ -45,6 +45,25 @@ and from the wall clock of the whole process (comparable to Spike's
 configuration, e.g. `--cpu-type atomic` or `--cpu-type timing` to check that
 the other simple CPU models behave the same.
 
+The default remains one cacheless hart connected through `SystemXBar` to
+zero-latency `SimpleMemory`. To keep a full classic cache hierarchy on that
+path and use four interleaved DDR4 controllers:
+
+```sh
+COREMARK=build/riscv-bench/coremark-200.elf util/riscv-bench/bench.sh coremark 3 \
+    --caches --memory ddr4 --num-mem-ctrls 4
+util/riscv-bench/bench.sh linux 1 --caches --memory ddr4 --num-mem-ctrls 4
+```
+
+`--caches` and `--memory ddr4` are independent. DDR4 supports 1, 2 or 4
+controllers (default 1); SimpleMemory supports one. Cache capacities default
+to 64 KiB L1I, 64 KiB L1D, 1 MiB L2 and 8 MiB L3, overridable with
+`--l1i-size`, `--l1d-size`, `--l2-size` and `--l3-size`. These are generic
+parameters, not a calibrated model of a particular commercial core.
+`NonCachingSimpleCPU` bypasses the configured caches but cannot obtain
+backdoors through them; `--cpu-type atomic` or `timing` activates the caches.
+See `docs/RiscvNonCachingPerf.md` for the topology and measured comparison.
+
 ## Verifying a change
 
 A change to the models must not change what the guest does. Besides the

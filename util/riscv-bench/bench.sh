@@ -18,7 +18,7 @@
 # Instructions come from gem5's simInsts and host time from hostSeconds, so
 # the MIPS figure excludes Python start-up and image loading; the wall-clock
 # time of the whole process is printed alongside for comparison with Spike.
-set -eu
+set -euo pipefail
 
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 workload=${1:?usage: bench.sh coremark|linux [N] [gem5 args...]}
