@@ -89,14 +89,31 @@ models expose it:
 `recvMemBackdoorReq`
 ([`coherent_xbar.cc:1002-1009`](../src/mem/coherent_xbar.cc#L1002-L1009)).
 
-**Caches grant nothing.** `grep -rn Backdoor src/mem/cache/` returns zero hits.
+**Classic caches neither grant nor forward backdoors, even in bypass mode.**
+`rg -i backdoor src/mem/cache/` returns zero hits.
 A backdoor request that reaches a cache falls through to
 `ResponsePort::recvAtomicBackdoor`, which DPRINTFs once and degrades to a plain
 `recvAtomic` with no backdoor returned
 ([`src/mem/port.cc:225-233`](../src/mem/port.cc#L225-L233),
 [`port.cc:236-244`](../src/mem/port.cc#L236-L244)).
-This is correct by construction: a raw pointer to DRAM cannot observe a dirty
-line held in a cache. SystemC imposes the same rule.
+The fallback atomic access still reaches memory: in `atomic_noncaching`, the
+cache forwards it with `sendAtomic`, but the request for a backdoor has been
+lost. Bypassing cache lookups therefore does **not** enable backdoor forwarding.
+
+The decisive detail is the request's path, not whether the configuration
+contains caches:
+
+| Request path | Backdoor support |
+|---|---|
+| CPU → crossbar → memory, with caches attached elsewhere | Possible if crossbar backdoors are enabled and memory grants one |
+| CPU → classic cache → memory | No, including in `atomic_noncaching`; ordinary atomic accesses still work |
+| CPU → Ruby → memory | No through Ruby's port interface; see §2.3 |
+
+A raw DRAM pointer cannot observe dirty lines in **active** caches. That does
+not prevent backdoors while the entire hierarchy is bypassed and its contents
+have been written back and invalidated. Forwarding backdoor requests through
+bypassed classic caches is an unimplemented optimization, not a fundamental
+restriction imposed by CPU switching.
 
 **Initiator side — `NonCachingSimpleCPU`.** It requires the mode outright:
 
@@ -156,11 +173,36 @@ if memory_mode == MemoryMode("atomic_noncaching").getValue():
 [`src/python/m5/simulate.py:531-547`](../src/python/m5/simulate.py#L531-L547)
 
 This path is **not** Ruby-gated — it walks the classic hierarchy equally well.
-Note also that `CoherentXBar::recvAtomicBackdoor` forwards backdoor requests
-gated only on `enableBackdoor`, *not* on `bypassCaches()`, so a CPU can obtain a
-pointer straight to DRAM past caches that are merely bypassed. That is sound
-only because of the writeback/invalidate above, plus the fact that the backing
-store never moves.
+`CoherentXBar::recvAtomicBackdoor` forwards backdoor requests gated only on
+`enableBackdoor`, *not* on `bypassCaches()`. This permits obtaining a pointer on
+a path through crossbars to memory, but does **not** make an intervening cache
+forward backdoor requests. Backdoor availability is not itself a guarantee
+that direct access is coherent with active caches.
+
+### 1.5 Fast boot followed by a timing CPU is supported
+
+Booting with `NonCachingSimpleCPU` in `atomic_noncaching` and then switching to
+O3 or another compatible timing CPU does not require JitCPU. `switchCpus()`
+drains execution, switches out the old CPU, changes the memory mode and hands
+over architectural state. Starting from reset in noncaching mode leaves the
+caches empty; the timing CPU subsequently begins filling them.
+
+The limitation is the boot phase's **backdoor acceleration**, not the handoff:
+if the boot CPU's ports lead through classic caches, its accesses bypass cache
+lookups but still use atomic packets. Changing the memory mode does not change
+that port topology or add the missing backdoor handlers.
+
+An implementation could forward backdoor requests through caches only while
+`bypassCaches()` is true. It would also need to ensure that all requesters stop
+using bypass pointers when caches become active, including DMA requesters that
+may retain backdoors across a CPU switch. A reverse switch into noncaching mode
+requires the writeback/invalidate maintenance described above. These are
+implementation requirements, not a reason the one-way fast-boot workflow is
+inherently unsafe.
+
+JitCPU obtains host memory mappings directly from the physical backing store,
+outside the port backdoor mechanism. Its direct mapping therefore does not
+demonstrate backdoor forwarding through classic caches or Ruby.
 
 ---
 
@@ -234,7 +276,7 @@ options.access_backing_store = num_dirs > 1
 |---|---|---|
 | Classic cache | port-level short-circuit to `memSidePort` | one extra virtual call, no lookup |
 | Classic xbar | `snoop_caches = false`, snoop filter skipped | no coherence traffic |
-| Classic memory | `MemBackdoor` granted to CPU / DMA | host `memcpy`, no packet at all |
+| Classic memory | `MemBackdoor` granted to CPU / DMA if the request path supports it; classic caches block it | host `memcpy` for eligible accesses after a grant |
 | Ruby | `recvAtomic` routed direct to the directory controller | one `sendAtomic` to the memory port |
 | Ruby | no backdoor; direct host map of the backing store instead | host access, arranged outside gem5 |
 
