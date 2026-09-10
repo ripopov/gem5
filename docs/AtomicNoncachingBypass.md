@@ -14,6 +14,9 @@ simultaneously, for every requester in the system.
 
 ---
 
+Sections 1–3 describe current behavior. Section 4 records the **desired,
+not yet implemented** direct-backing-store mode for `NonCachingSimpleCPU`.
+
 ## 1. Classic memory system
 
 ### 1.1 Caches become transparent forwarders
@@ -192,13 +195,17 @@ if the boot CPU's ports lead through classic caches, its accesses bypass cache
 lookups but still use atomic packets. Changing the memory mode does not change
 that port topology or add the missing backdoor handlers.
 
-An implementation could forward backdoor requests through caches only while
+An alternative implementation could forward backdoor requests through caches only while
 `bypassCaches()` is true. It would also need to ensure that all requesters stop
 using bypass pointers when caches become active, including DMA requesters that
 may retain backdoors across a CPU switch. A reverse switch into noncaching mode
 requires the writeback/invalidate maintenance described above. These are
 implementation requirements, not a reason the one-way fast-boot workflow is
 inherently unsafe.
+
+The desired design for this repository instead follows KvmCPU's direct
+backing-store mapping approach; see §4. It does not require cache backdoor
+forwarding.
 
 JitCPU obtains host memory mappings directly from the physical backing store,
 outside the port backdoor mechanism. Its direct mapping therefore does not
@@ -261,12 +268,16 @@ CHI configs set `access_backing_store` when there are multiple directories and
 let QEMU map Ruby's functional backing store directly:
 
 ```python
-# Several DRAM controllers expose interleaved backing ranges, which QEMU
-# cannot map as one host-contiguous region. Ruby's canonical functional
-# backing store preserves CHI timing while giving JitCPU a direct map.
 options.access_backing_store = num_dirs > 1
 ```
 [`tests/gem5/jitcpu/configs/jitcpu_common.py:31-34`](../tests/gem5/jitcpu/configs/jitcpu_common.py#L31-L34)
+
+The nearby config comment about interleaving should not be read as a limit
+on physical allocation: `PhysicalMemory` already merges compatible interleaved
+controller ranges into a contiguous host allocation. The per-controller
+backdoor interface does not expose that allocation. Ruby's optional reference
+memory is an additional, separate data image; see §4.5 for the consequence
+when mixing direct accesses with packet-based atomics.
 
 ---
 
@@ -284,6 +295,201 @@ Two invariants hold throughout:
 
 1. **Bypass never flushes.** Cache maintenance is the caller's job, and
    `switchCpus` does it on the way *into* the mode.
-2. **Caches never grant backdoors,** in either memory system. DMI and a
-   coherent cache are mutually exclusive unless the cache implements the full
-   invalidate protocol, and gem5's caches deliberately do not.
+2. **The current cache/Ruby ports do not grant or forward backdoors.** This
+   is an implementation limitation during bypass, not a prohibition on mapping
+   RAM while the hierarchy is inactive.
+
+## 4. Desired design: direct backing-store access like KvmCPU
+
+**Status: design only, researched against this checkout and upstream sources
+on 2026-09-09.** Add an optional C++ mode to `NonCachingSimpleCPU`, exposed by
+the Python config, retaining today's port-backdoor behavior as the default.
+The objective is fast functional boot with the complete classic L1/L2/L3 and
+1/2/4-controller topology already instantiated, followed by timing CPU takeover.
+This section specifies safeguards and validation requirements, not a claim
+that the implementation or all listed configurations are already qualified.
+
+### 4.1 Reuse the allocation and mapping interface
+
+The backing store is the host allocation holding guest bytes. Controllers
+model address ownership and access behavior; their interleaving need not imply
+interleaved host allocations. `PhysicalMemory` merges compatible channel ranges,
+allocates the merged span and points each controller at that same allocation.
+This abstraction explicitly supports changing controller organization without
+changing the physical-memory image.
+Sources: [`physical.hh`](../src/mem/physical.hh),
+[`PhysicalMemory::createBackingStore`](../src/mem/physical.cc).
+
+KvmCPU's `KvmVM::delayedStartup()` enumerates `getBackingStore()`, selects
+`kvmMap` entries and registers their guest base, host pointer and length as KVM
+memory slots. JitCPU's `physicalMemoryMap()` consumes the same interface.
+Neither discovers these mappings by sending requests through caches.
+Sources: [`KvmVM`](../src/cpu/kvm/vm.cc),
+[`RiscvJitCPU`](../src/cpu/jit/riscv_jit_cpu.cc),
+[upstream KvmVM](https://github.com/gem5/gem5/blob/stable/src/cpu/kvm/vm.cc).
+The [kernel memory-slot API](https://docs.kernel.org/virt/kvm/api.html#kvm-set-user-memory-region)
+maps userspace memory into guest physical ranges and separately supports
+read-only and dirty-tracking flags. Reusing gem5's allocation interface does
+not require KVM, a host matching the guest ISA, or those ioctls.
+
+Use this existing allocation, without copying RAM, changing controller
+interleaving, adding a second classic RAM image or rewiring ports. A CPU-local
+mapping cache stores physical bounds and a host base pointer. PhysicalMemory
+remains the owner; cached pointers are never checkpointed or freed by the CPU.
+
+### 4.2 Access selection and initial scope
+
+| Condition | Desired path |
+|---|---|
+| Active noncaching CPU, eligible translated RAM fetch/load | Direct host access |
+| Eligible ordinary RAM store, all store safeguards satisfied | Direct host access |
+| MMIO, local accessor, special request, mapping miss or unsafe direct store | Existing atomic packet/local-access path |
+| Switched-out CPU or system outside `atomic_noncaching` | No use of direct mappings; timing CPU uses its ordinary hierarchy |
+
+MMIO fallback does **not** change the system memory mode. It executes the
+device's atomic access and side effects through the normal ports. Only the
+CPU handoff changes to timing operation. KvmCPU likewise handles MMIO exits
+through gem5; see [`BaseKvmCPU::doMMIOAccess`](../src/cpu/kvm/base.cc).
+
+Initial qualification should cover static classic RAM, serialized gem5
+execution, the existing single-hart benchmark, and compatible CPU takeover.
+Unqualified mappings use packets; an unsupported overall configuration should
+be rejected explicitly when safe mixed access cannot be established. Ruby,
+concurrent host execution and address-transforming interconnects require
+separate qualification, not inference from the existence of a host pointer.
+
+### 4.3 Reservation handling differs from KvmCPU
+
+KVM guest atomics/exclusives execute under the host ISA and virtualization
+machinery. Their ordinary RAM operations do not enter gem5's
+`AbstractMemory::lockedAddrList`. This does **not** establish that arbitrary
+mixed KVM/software-CPU execution or DMA reservation interactions are safe.
+We reuse KVM's storage selection, not its atomic-execution mechanism.
+
+`NonCachingSimpleCPU` instead uses software ISA reservation state and the
+memory packet implementation. In this checkout:
+
+- `AbstractMemory::trackLoadLocked()` records the reservation and invalidates
+  its `MemBackdoor`. `getBackdoor()` withholds grants while locks remain.
+- Ordinary packet stores pass through `writeOK()` / `checkLockedAddrList()`,
+  which remove matching reservations and notify other contexts as appropriate.
+- RISC-V has additional ISA reservation and wait/wakeup state. LR/SC, AMOs,
+  swaps and cache-maintenance operations must retain their established paths.
+
+Sources: [`AbstractMemory`](../src/mem/abstract_mem.cc),
+[`getBackdoor` and `writeOK`](../src/mem/abstract_mem.hh),
+[`RISC-V ISA reservation handlers`](../src/arch/riscv/isa.cc).
+
+**A raw backing pointer does not receive the existing backdoor invalidation.**
+Keeping LR/SC on packets alone is insufficient: LR → ordinary direct store to
+the reserved location → SC could retain a lock that the packet store would
+have removed. This matters even with one hart. Likewise, checking only the
+ISA reservation address misses memory-side and restored reservation state.
+
+The first implementation must retain the current conservative store gate
+(`system->threads.size() == 1` and no physical-memory write observers), **and**
+ensure that no relevant memory-side reservations exist before permitting a
+raw store. For merged allocations this condition covers every constituent
+controller. Use a memory-owned query or correctly maintained eligibility epoch;
+do not poll/copy lock lists or route through the address map on every hot access.
+If that guarantee is unavailable, use packet stores while accelerating fetches
+and loads. Never clear reservations merely to make the fast path eligible.
+
+An eligibility cache must react to new/restored reservations, observer changes
+and takeover. Do not blindly replace the thread-count gate with "one active
+CPU": its conservatism also protects mixed requesters. Multi-hart direct stores
+need separate validation of conflicting writes, atomics, DMA and wakeups.
+Source: [`storesBypassPort()`](../src/cpu/simple/noncaching.cc).
+
+### 4.4 Other correctness requirements
+
+| Pitfall found in the interfaces | Required treatment |
+|---|---|
+| `BackingStoreEntry` has no read/write permissions; `kvmMap` is a mapping-selection flag | Derive eligibility from the underlying memory owners. Do not interpret a non-null pointer or `kvmMap` as write permission. Preserve ROM behavior through fallback. |
+| Global physical mappings can bypass address mappers, device-memory overlays or custom memory side effects | Qualify identity-mapped ordinary RAM and exclude overlays/holes; a broad `system.mem_ranges` match is insufficient. Preserve packet routing for translated/aliased or instrumented memory. |
+| MMU translation can add request attributes | Perform translation, permissions, PMP/PMA and local-access checks before host access. Conservatively fall back for uncacheable/strictly ordered and special requests, including attributes set during translation. |
+| An access can cross a page, allocation, permission or channel boundary | Preserve generic fragmentation and fault behavior. Check the complete access with overflow-safe bounds; only use a linear merged mapping when its entire covered span is eligible. |
+| Raw stores skip write observers, snoops and device monitors | Preserve the current observer store gate; do not silently bypass JitCPU translation invalidation or reservation-wait wakeups. DMA remains on its existing implementation. |
+| A cached host fetch page can outlive translation changes or memory-content changes | Retain translation-epoch and uniform-page checks. Read instruction bytes afresh; preserve decoder/self-modifying-code semantics and `fence.i`, including writes by DMA/debugger/other CPUs. |
+| Multiple host threads can access RAM concurrently | Do not assume `memcpy` implements guest atomicity, ordering or race-free host execution. Initially require serialized access; parallel event queues/external writers need an explicit synchronization design. |
+| Direct accesses skip port latency, tracing and controller statistics | Require instruction/data stall simulation disabled initially. Keep CPU architectural counters/events, and document bypassed memory counters. Use packet mode when port instrumentation is required. |
+
+Evidence: [`BackingStoreEntry`](../src/mem/physical.hh),
+[`AbstractMemory::writeOK`](../src/mem/abstract_mem.hh),
+[`NonCachingSimpleCPU` access/fetch paths](../src/cpu/simple/noncaching.cc),
+[`AtomicSimpleCPU` stall accounting](../src/cpu/simple/atomic.cc),
+[`RubyPort` device-memory precedence](../src/mem/ruby/system/RubyPort.cc).
+These are design requirements inferred from the bypassed interfaces; they are
+not claims that each corresponding feature is broken in today's packet mode.
+
+### 4.5 Ruby needs a single authoritative image for mixed accesses
+
+With `access_backing_store`, `configs/ruby/Ruby.py` creates a separate
+`ruby.phys_mem` and marks the DRAM interfaces `kvm_map=False`. This selects
+the reference image for KVM/JitCPU mappings. Functional accesses and timing
+completion use that reference memory. However, Ruby's atomic request path
+first accesses a directory's memory controller and then accesses the reference
+memory. They are distinct allocations, not aliases.
+
+This creates a concrete hazard for the proposed software CPU: a direct store
+can update the reference image alone, while a later packet AMO/SC passes
+through controller data and reservation state as well. Reference-memory
+selection alone does not prove read-modify-write results, failure status or
+reservation invalidation are correct. KVM's native RAM atomics do not exercise
+that same mixed software packet path.
+
+Do not enable the new mode for Ruby merely because JitCPU maps its reference
+store. Qualify a canonical-data/atomic/reservation path that makes direct and
+fallback operations agree; otherwise reject Ruby for this initial feature.
+This is an identified design risk, not a reproduced Ruby bug. Sources:
+[`Ruby configuration`](../configs/ruby/Ruby.py),
+[`RubyPort::recvAtomic`, `recvFunctional`, `hitCallback`](../src/mem/ruby/system/RubyPort.cc).
+
+### 4.6 Switching, checkpoints and pointer lifetime
+
+On entry, require a drained system and complete cache writeback, a second drain
+for newly posted writebacks, then invalidation before bypass execution. On exit,
+stop the old CPU, clear its direct/fetch windows and transfer state before the
+timing CPU resumes. No memory-image copy is needed. A retained allocation is
+harmless only while no inactive requester dereferences it. Guard actual use by
+CPU activity and memory mode; `System::setMemoryMode()` itself merely checks
+drain state and assigns the mode, without invalidating pointers.
+
+Rebuild mappings and eligibility after restore/takeover. Current
+`PhysicalMemory::unserializeStore()` restores bytes into an existing allocation,
+but raw addresses must never be serialized or assumed valid in a new process.
+Static allocation is the initial contract; remapping/hotplug needs explicit
+invalidation or must be unsupported. Do not cache eligibility before restored
+lock records and image loading have completed.
+
+Reservations are part of handoff qualification too. This fork's Ruby switch
+path reconciles and restores CPU reservations around maintenance; retain those
+hooks. Classic takeover also needs tests with an outstanding LR, including a
+conflicting write before the resumed SC. KVM mapping reuse does not establish
+software reservation-transfer correctness.
+Sources: [`switchCpus`](../src/python/m5/simulate.py),
+[`System::setMemoryMode`](../src/sim/system.cc),
+[`PhysicalMemory::unserialize`](../src/mem/physical.cc),
+[`KvmCPU switch/takeover`](../src/cpu/kvm/base.cc).
+
+### 4.7 Acceptance checks before enabling the feature
+
+- Compare direct and existing packet/backdoor modes for CoreMark and Linux:
+  CRCs, memory results, instruction counts and simulated ticks, with cacheless
+  and L1/L2/L3 topologies and 1/2/4 controllers. Verify the direct-hit counters
+  actually increase; a passing fallback-only run does not validate acceleration.
+- Exercise LR → store → SC, competing-hart/DMA stores, AMOs after direct stores,
+  reservation waits and restored locks. Include different channel selections
+  within one merged allocation and observer registration changes.
+- Exercise MMIO side effects, ROM writes, unmapped/device-overlay addresses,
+  boundary-crossing and misaligned accesses, PMP/page faults, page-table updates,
+  translation changes and self-modifying code.
+- Switch both ways repeatedly with dirty timing caches, outstanding reservation
+  state and timer/DMA activity; checkpoint/restore and rerun. Check that bypass
+  phases leave cache counters untouched and timing phases generate cache traffic.
+- Reject unqualified Ruby/concurrent/mapped configurations explicitly. Ruby
+  qualification must additionally compare mixed direct/packet atomic results
+  against the existing mode, not merely demonstrate successful Linux boot.
+
+These checks are future implementation acceptance criteria. This documentation
+change neither implements the feature nor claims those tests have passed.
