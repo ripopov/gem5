@@ -10,9 +10,12 @@ uses --caches to add L1I/L1D, L2 and L3 caches. --cache-hierarchy ruby builds
 those levels with CHI over SimpleNetwork and requires a CHI build. Both accept
 --memory ddr4 and --num-mem-ctrls for 1, 2 or 4 DRAM controllers. Ruby uses
 atomic_noncaching for noncaching/atomic CPUs and timing for the timing CPU.
-The ISA reports the RVA23S64 profile, misaligned access to main memory is
-supported and the hypervisor extension is enabled, all advertised in the
-generated device tree.
+--direct-memory lets NonCachingSimpleCPU access the controllers' shared RAM
+allocation directly, keeping MMIO and special accesses on the normal ports.
+The CPU uses RV64 MSU privilege modes, with no hypervisor extension. Supported
+extensions are selected from RVA23S64; this is not a complete implementation
+of that profile. Main memory supports misaligned accesses. --switch-to-timing
+hands execution to TimingSimpleCPU at the guest's first m5 workbegin marker.
 
 Bare-metal ELF (M-mode at the ELF entry, exit via m5_exit):
 
@@ -90,6 +93,16 @@ for p in (baremetal, linux):
     )
     p.add_argument("--mem-size", default="1GiB")
     p.add_argument(
+        "--direct-memory",
+        action="store_true",
+        help="access RAM backing storage directly (noncaching CPU only)",
+    )
+    p.add_argument(
+        "--switch-to-timing",
+        action="store_true",
+        help="switch from noncaching to timing at the first m5 workbegin",
+    )
+    p.add_argument(
         "--cache-hierarchy",
         choices=("classic", "ruby"),
         default="classic",
@@ -127,6 +140,10 @@ for p in (baremetal, linux):
         help="dump statistics every this many ticks as well as at the end",
     )
 args = parser.parse_args()
+if args.direct_memory and args.cpu_type != "noncaching":
+    parser.error("--direct-memory requires --cpu-type noncaching")
+if args.switch_to_timing and args.cpu_type != "noncaching":
+    parser.error("--switch-to-timing requires --cpu-type noncaching")
 if args.memory == "simple" and args.num_mem_ctrls != 1:
     parser.error("--num-mem-ctrls greater than 1 requires --memory ddr4")
 if args.cache_hierarchy == "ruby" and buildEnv.get("PROTOCOL") != "CHI":
@@ -215,6 +232,12 @@ cpu_class = {
     "timing": RiscvTimingSimpleCPU,
 }[args.cpu_type]
 system.cpu = cpu_class(clk_domain=system.cpu_clk_domain, cpu_id=0)
+if args.direct_memory:
+    system.cpu.direct_memory = (
+        [system.mem_ctrl]
+        if args.memory == "simple"
+        else [ctrl.dram for ctrl in system.mem_ctrls]
+    )
 system.cpu.createInterruptController()
 system.cpu.createThreads()
 if args.cache_hierarchy == "ruby":
@@ -321,16 +344,17 @@ elif args.caches:
     system.l2.mem_side = system.l3bus.cpu_side_ports
     system.l3.cpu_side = system.l3bus.mem_side_ports
     system.l3.mem_side = system.membus.cpu_side_ports
-    # An exclusive hierarchy can retain lines in every level. Size the
-    # filters for all upstream cache storage, including size overrides.
+    # Track all upstream caches with headroom for in-flight requests.
+    # An exactly full filter can also reject a snoop to an uncached line.
     l1_bytes = toMemorySize(args.l1i_size) + toMemorySize(args.l1d_size)
     l2_bytes = toMemorySize(args.l2_size)
     l3_bytes = toMemorySize(args.l3_size)
-    system.l2bus.snoop_filter.max_capacity = f"{int(l1_bytes)}B"
-    system.l3bus.snoop_filter.max_capacity = f"{int(l1_bytes + l2_bytes)}B"
-    system.membus.snoop_filter.max_capacity = (
-        f"{int(l1_bytes + l2_bytes + l3_bytes)}B"
-    )
+    for bus, capacity in (
+        (system.l2bus, l1_bytes),
+        (system.l3bus, l1_bytes + l2_bytes),
+        (system.membus, l1_bytes + l2_bytes + l3_bytes),
+    ):
+        bus.snoop_filter.max_capacity = f"{max(16 * 1024**2, 2 * capacity)}B"
 else:
     system.cpu.icache_port = system.membus.cpu_side_ports
     system.cpu.dcache_port = system.membus.cpu_side_ports
@@ -338,18 +362,28 @@ else:
         system.membus.cpu_side_ports, system.membus.cpu_side_ports
     )
 
-isa = system.cpu.isa[0]
-isa.riscv_profile = "RVA23S64"
-isa.vlen = args.vlen
-isa.privilege_mode_set = "MHSU"
-system.cpu.mmu.pma_checker = PMAChecker(
-    uncacheable=[
-        *system.platform._on_chip_ranges(),
-        *system.platform._off_chip_ranges(),
-    ],
-    # Zicclsm: main memory supports misaligned loads and stores.
-    misaligned=system.mem_ranges,
-)
+cpus = [system.cpu]
+if args.switch_to_timing:
+    system.exit_on_work_items = True
+    system.timing_cpu = RiscvTimingSimpleCPU(
+        clk_domain=system.cpu_clk_domain, cpu_id=0, switched_out=True
+    )
+    system.timing_cpu.createInterruptController()
+    system.timing_cpu.createThreads()
+    cpus.append(system.timing_cpu)
+
+for cpu in cpus:
+    cpu.isa[0].riscv_profile = "RVA23S64"
+    cpu.isa[0].vlen = args.vlen
+    # H is unnecessary for this workload and unsupported by timing walks.
+    cpu.isa[0].privilege_mode_set = "MSU"
+    cpu.mmu.pma_checker = PMAChecker(
+        uncacheable=[
+            *system.platform._on_chip_ranges(),
+            *system.platform._off_chip_ranges(),
+        ],
+        misaligned=system.mem_ranges,
+    )
 
 # --- Workload ---------------------------------------------------------------
 
@@ -404,10 +438,19 @@ else:
 root = Root(full_system=True, system=system)
 m5.instantiate()
 
-print(f"ISA: {isa.get_isa_string()}")
+print(f"ISA: {system.cpu.isa[0].get_isa_string()}")
 if args.stats_period:
     m5.stats.periodicStatDump(args.stats_period)
 exit_event = m5.simulate(args.max_ticks)
+if args.switch_to_timing:
+    if exit_event.getCause() != "workbegin":
+        print(f"Expected workbegin before switch: {exit_event.getCause()}")
+        exit(1)
+    m5.stats.dump()
+    m5.switchCpus(system, [(system.cpu, system.timing_cpu)])
+    m5.stats.reset()
+    print(f"Switched to timing @ tick {m5.curTick()}")
+    exit_event = m5.simulate(args.max_ticks - m5.curTick())
 cause = exit_event.getCause()
 print(f"Exiting @ tick {m5.curTick()} because {cause}")
 if exit_event.getCode() != 0:

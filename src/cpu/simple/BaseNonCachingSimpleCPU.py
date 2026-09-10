@@ -52,6 +52,12 @@ class BaseNonCachingSimpleCPU(BaseAtomicSimpleCPU):
 
     numThreads = 1
 
+    direct_memory = VectorParam.AbstractMemory(
+        [],
+        "Static RAM owners safe to access directly in atomic_noncaching; "
+        "requires identity address routing, one memory image and no stalls",
+    )
+
     @classmethod
     def memory_mode(cls):
         return "atomic_noncaching"

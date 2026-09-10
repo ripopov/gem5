@@ -40,6 +40,7 @@
 
 #include "base/addr_range_map.hh"
 #include "cpu/simple/atomic.hh"
+#include "mem/abstract_mem.hh"
 #include "mem/backdoor.hh"
 #include "params/BaseNonCachingSimpleCPU.hh"
 
@@ -56,13 +57,28 @@ class NonCachingSimpleCPU : public AtomicSimpleCPU
     NonCachingSimpleCPU(const BaseNonCachingSimpleCPUParams &p);
 
     void verifyMemoryMode() const override;
+    void startup() override;
+    void switchOut() override;
+    void takeOverFrom(BaseCPU *old_cpu) override;
 
   protected:
+    const std::vector<memory::AbstractMemory *> directMemory;
+    struct DirectMapping
+    {
+        Addr start, end;
+        uint8_t *base;
+        std::vector<memory::AbstractMemory *> owners;
+        bool writeable;
+    };
+    std::vector<DirectMapping> directMappings;
+    void rebuildDirectMappings();
+    bool directAccessActive() const;
+
     AddrRangeMap<MemBackdoorPtr, 1> memBackdoors;
 
     /**
-     * The backdoor the last instruction fetch or the last data access
-     * used, as plain bounds and a host pointer. Consecutive accesses
+     * The direct mapping or backdoor used by the last fetch/data access,
+     * as plain bounds and a host pointer. Consecutive accesses
      * almost always hit the same memory, so this is checked before the
      * range map and resolves an address with two compares and an add.
      */
@@ -74,6 +90,7 @@ class NonCachingSimpleCPU : public AtomicSimpleCPU
         uint8_t *base = nullptr; // host address of start
         bool readable = false;
         bool writeable = false;
+        const DirectMapping *direct = nullptr;
 
         void
         set(MemBackdoorPtr bd)
@@ -111,8 +128,8 @@ class NonCachingSimpleCPU : public AtomicSimpleCPU
     Fault fetchInstruction(Tick &latency) override;
 
     /**
-     * Host address of [addr, addr + size) through a recorded backdoor
-     * that permits the access, or nullptr. Refreshes the window when the
+     * Host address of [addr, addr + size) through an eligible direct mapping
+     * or recorded backdoor, or nullptr. Refreshes the window when the
      * access is outside it.
      */
     uint8_t *hostAddr(BackdoorWindow &window, Addr addr, unsigned size,

@@ -48,7 +48,7 @@ linux)
     set -- linux \
         --bootloader "${BOOTLOADER:-$repo_root/build/riscv-bench/linux/fw_jump.elf}" \
         --kernel "${KERNEL:-$repo_root/build/riscv-bench/linux/vmlinux}" \
-        --initrd "${INITRD:-$repo_root/build/riscv-bench/bench-initramfs.cpio}" \
+        --initrd "${INITRD:-$repo_root/build/riscv-bench/linux/initramfs.cpio}" \
         "$@"
     check() {
         grep -q "RISCV-BENCH: done" "$outdir/system.platform.terminal" || {

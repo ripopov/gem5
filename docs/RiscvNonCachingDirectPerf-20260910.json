@@ -1,0 +1,499 @@
+    {
+        "measured_on": "2026-09-10T13:56:11+0300",
+        "host": {
+            "cpu": "Intel Core Ultra 7 265K",
+            "affinity_cpu": 2,
+            "kernel": "7.0.0-31-generic"
+        },
+        "worktree_base_commit": "2f11537004805adba68b13186b4c1dc5561358b3",
+        "build_info":
+            "Build information:\n\ngem5 version DEVELOP-FOR-25.1\ncompiled Sep 10 2026 13:44:06\nbuild options:\n    ARMLMD_LICENSE_COUNT = 0\n    ARMLMD_LICENSE_FILE = \n    BATCH = False\n    BATCH_CMD = \n    BUILD_GPU = False\n    BUILD_ISA = True\n    HAVE_CAPSTONE = False\n    HAVE_DEPRECATED_NAMESPACE = True\n    HAVE_FENV = True\n    HAVE_HDF5 = False\n    HAVE_KVM = True\n    HAVE_PERF_ATTR_EXCLUDE_HOST = 1\n    HAVE_PNG = True\n    HAVE_POSIX_CLOCK = True\n    HAVE_PROTOBUF = False\n    HAVE_SYSTEMC = True\n    HAVE_TUNTAP = True\n    HAVE_VALGRIND = False\n    HAVE_ZSTD = True\n    KVM_ISA = x86\n    M5_BUILD_CACHE = \n    MAXCORE_HOME = \n    NUMBER_BITS_PER_SET = 128\n    PROTOCOL = CHI\n    PVLIB_FLAVOR = \n    PVLIB_HOME = \n    RUBY = True\n    RUBY_PROTOCOL_CHI = True\n    RUBY_PROTOCOL_GPU_VIPER = False\n    RUBY_PROTOCOL_Garnet_standalone = False\n    RUBY_PROTOCOL_MESI_Three_Level = False\n    RUBY_PROTOCOL_MESI_Three_Level_HTM = False\n    RUBY_PROTOCOL_MESI_Two_Level = False\n    RUBY_PROTOCOL_MI_example = True\n    RUBY_PROTOCOL_MOESI_AMD_Base = False\n    RUBY_PROTOCOL_MOESI_CMP_directory = False\n    RUBY_PROTOCOL_MOESI_CMP_token = False\n    RUBY_PROTOCOL_MOESI_hammer = False\n    RUBY_PROTOCOL_MSI = False\n    SIMGEN = \n    SLICC_HTML = False\n    TARGET_GPU_ISA = \n    TLM_PATH = \n    USE_ARM_FASTMODEL = False\n    USE_ARM_ISA = False\n    USE_CAPSTONE = False\n    USE_EFENCE = False\n    USE_KVM = True\n    USE_MIPS_ISA = False\n    USE_MULTIPLE_PROTOCOLS = True\n    USE_POSIX_CLOCK = False\n    USE_POWER_ISA = False\n    USE_RISCV_ISA = True\n    USE_SPARC_ISA = False\n    USE_SYSTEMC = True\n    USE_TEST_OBJECTS = False\n    USE_X86_ISA = False\n    VEGA_GPU_ISA = False\n\n",
+        "isa": {
+            "privilege_modes": "MSU",
+            "h_extension": false,
+            "vlen": 256,
+            "extension_selection":
+                "Supported subset of RVA23S64; no claim of complete profile compliance."
+        },
+        "linux": {
+            "version": "6.12",
+            "opensbi_version": "1.8",
+            "kvm": false,
+            "builder": "util/riscv-bench/build-linux.sh",
+            "m5_call_type": "instruction (--inst)"
+        },
+        "method":
+            "Same rebuilt binary and unmodified example config, sequential runs pinned to CPU 2. CoreMark 200 iterations, 3 runs per topology/access mode; Linux boot and userspace RAM/timer checks plus ls and cpuinfo, 1 run. No CPU switch in throughput measurements. Read simInsts, simTicks, hostSeconds from stats.txt. Time each subprocess with time.perf_counter(). CoreMark MIPS uses mean hostSeconds.",
+        "sha256": {
+            "build/RISCV/gem5.fast":
+                "93fda6c1267053afeb5583202a01f54955a42b1d293089dccee89f2fb497b2b8",
+            "configs/example/riscv/noncaching_fs.py":
+                "41fcc47f5f0e7a0244bd10fd12bcd6c69c7147c86f1ce0331a4c75283e871af6",
+            "build/riscv-bench/coremark-200.elf":
+                "40e467a2819a74e614246fd59884b0a58aa5289d8681feff3f38165edd433a56",
+            "build/riscv-bench/linux/fw_jump.elf":
+                "74caf563f80df6f0c55b379447dd696eafed7f6559af2d222ae642a5769c9b20",
+            "build/riscv-bench/linux/vmlinux":
+                "ab8147c0f55ae753c9086b2c90a963aa11db387461c3cfb37d2ea21ec8ac7902",
+            "build/riscv-bench/linux/initramfs.cpio":
+                "cbadb69645a9f0b0d62186dfdc51d80129125a175711b84649742b28605b0fcb",
+            "configs/ruby/CHI.py":
+                "f74eae5d140b5dce574959ffd97d89e6ea8acd3a4f44460a52e0760849e4926d",
+            "configs/ruby/CHI_config.py":
+                "238cceafd589ce9c0ad31fa62f69727c06df71e4601476d94d66ee8e54337acc",
+            "src/cpu/simple/noncaching.cc":
+                "d01f55603477f9f8ae8cfdf8202f30bbd64fcb4111c3fa98fdcac179d80f0a15",
+            "src/cpu/simple/noncaching.hh":
+                "023811052a6aa8346129ac8a7baf65e87de18f24e5a2a9e17a25fbd5435698df",
+            "src/cpu/simple/BaseNonCachingSimpleCPU.py":
+                "a204089ca6dcb38fe626dac90668d42a6e227b87070217a267b46f0b7120ce64",
+            "src/python/m5/SimObject.py":
+                "c99fbe0e17224b19ad91c0f3d0da775ccf66ed0c241648ebd69ab29c9efa9d2b",
+            "util/riscv-bench/build-linux.sh":
+                "d560c5f217cea29780d44c0154214b00c210a5dd2214db44902979447fcf3c5c",
+            "util/riscv-bench/bench.sh":
+                "5858652e7891c1bc1b825f0902d19be26e23fb698cc579aa4c9622e61734541c",
+            "build/riscv-bench/linux/kernel.config":
+                "b78532ad1b9c3df2617a8347e7fcc97c31ae57f2dcdfe75fa88b01b964160da8"
+        },
+        "validated": {
+            "coremark_crcs": [
+                "0xe714",
+                "0x1fd7",
+                "0x8e3a"
+            ],
+            "linux_completion": [
+                "RISCV-BENCH: memory and timer passed",
+                "RISCV-BENCH: done"
+            ],
+            "equal_instructions_and_ticks_across_all_six_configurations": true,
+            "classic_cache_tag_and_data_accesses": 0,
+            "ruby_cache_demand_accesses": 0,
+            "ruby_network_forwarded_messages": 0,
+            "direct_coremark_memory_reads_and_writes": 0,
+            "direct_cpu_instruction_bytes_at_memory": 0,
+            "ruby_access_backing_store": false,
+            "cpu_instruction_and_data_stall_simulation": false,
+            "smoke_matrix": "32 cases: classic/Ruby x port/direct/atomic/timing x SimpleMemory or 1/2/4 DDR4. Noncaching checks include LR/store/SC failure on four lines, direct store then AMO, misalignment across a page, self-modifying code, CMO and MMIO. Atomic/timing use load/store/AMO/LRSC/MMIO checks.",
+            "checkpoint_restore":
+                "Classic/Ruby, direct off/on: save with memory reservation, restore in a new process, ordinary store clears checkpointed lal_addr list, SC fails.",
+            "attributes":
+                "Classic/Ruby, direct off/on: ROM writes remain ignored and uncacheable RAM uses packets. Stalls and duplicate-owner configurations are rejected.",
+            "memory_discovery":
+                "Empty, populated, aliased and null memory vectors resolve without errors or duplicate memory owners."
+        },
+        "one_way_linux_handoff": {
+            "method":
+                "Separate validation runs of the actual example with --switch-to-timing, four DDR4 controllers and the same guest artifacts. Both CPUs use MSU. Init writes a file before workbegin, verifies it after takeover, writes 256 KiB, sleeps 0.01 s, prints ls/cpuinfo and exits.",
+            "checks":
+                "Boot cache accesses and CHI messages are zero; timing cache accesses and CHI messages are positive; the timing CPU retires more than one million instructions; guest RAM and timer checks pass.",
+            "runs": [
+                {
+                    "topology": "classic",
+                    "direct_memory": false,
+                    "boot_instructions": 160466879,
+                    "timing_instructions": 9716065,
+                    "boot_ticks": 206569228000,
+                    "timing_ticks": 48106691000,
+                    "process_seconds": 53.30447715899936,
+                    "passed": true
+                },
+                {
+                    "topology": "classic",
+                    "direct_memory": true,
+                    "boot_instructions": 160466879,
+                    "timing_instructions": 9716065,
+                    "boot_ticks": 206569228000,
+                    "timing_ticks": 48106691000,
+                    "process_seconds": 13.603786027000751,
+                    "passed": true
+                },
+                {
+                    "topology": "ruby",
+                    "direct_memory": false,
+                    "boot_instructions": 160466879,
+                    "timing_instructions": 9823400,
+                    "boot_ticks": 206569228000,
+                    "timing_ticks": 64972199000,
+                    "process_seconds": 63.64373513899773,
+                    "passed": true
+                },
+                {
+                    "topology": "ruby",
+                    "direct_memory": true,
+                    "boot_instructions": 160466879,
+                    "timing_instructions": 9823400,
+                    "boot_ticks": 206569228000,
+                    "timing_ticks": 64972199000,
+                    "process_seconds": 43.17771433799862,
+                    "passed": true
+                }
+            ]
+        },
+        "scope":
+            "Static identity-mapped RAM, serialized execution and one authoritative memory image. The example supports one-way noncaching-to-timing switching.",
+        "runs": [
+            {
+                "topology": "simple-port",
+                "workload": "coremark",
+                "run": 1,
+                "simTicks": 73783313000,
+                "hostSeconds": 2.5,
+                "simInsts": 62405796,
+                "process_seconds": 2.7206901839999773,
+                "mips": 24.962318399999997,
+                "memory_reads": 1,
+                "memory_writes": 0,
+                "memory_instruction_bytes": 4
+            },
+            {
+                "topology": "simple-port",
+                "workload": "coremark",
+                "run": 2,
+                "simTicks": 73783313000,
+                "hostSeconds": 2.51,
+                "simInsts": 62405796,
+                "process_seconds": 2.7212111770022602,
+                "mips": 24.86286693227092,
+                "memory_reads": 1,
+                "memory_writes": 0,
+                "memory_instruction_bytes": 4
+            },
+            {
+                "topology": "simple-port",
+                "workload": "coremark",
+                "run": 3,
+                "simTicks": 73783313000,
+                "hostSeconds": 2.46,
+                "simInsts": 62405796,
+                "process_seconds": 2.6706642040007864,
+                "mips": 25.368209756097563,
+                "memory_reads": 1,
+                "memory_writes": 0,
+                "memory_instruction_bytes": 4
+            },
+            {
+                "topology": "simple-port",
+                "workload": "linux",
+                "run": 1,
+                "simTicks": 228310447000,
+                "hostSeconds": 10.01,
+                "simInsts": 170063636,
+                "process_seconds": 10.342855385999428,
+                "mips": 16.989374225774224,
+                "memory_reads": 421312,
+                "memory_writes": 104792,
+                "memory_instruction_bytes": 1073740
+            },
+            {
+                "topology": "simple-direct",
+                "workload": "coremark",
+                "run": 1,
+                "simTicks": 73783313000,
+                "hostSeconds": 2.47,
+                "simInsts": 62405796,
+                "process_seconds": 2.6729450909988373,
+                "mips": 25.26550445344129,
+                "memory_reads": 0,
+                "memory_writes": 0,
+                "memory_instruction_bytes": 0
+            },
+            {
+                "topology": "simple-direct",
+                "workload": "coremark",
+                "run": 2,
+                "simTicks": 73783313000,
+                "hostSeconds": 2.5,
+                "simInsts": 62405796,
+                "process_seconds": 2.6724628370029677,
+                "mips": 24.962318399999997,
+                "memory_reads": 0,
+                "memory_writes": 0,
+                "memory_instruction_bytes": 0
+            },
+            {
+                "topology": "simple-direct",
+                "workload": "coremark",
+                "run": 3,
+                "simTicks": 73783313000,
+                "hostSeconds": 2.52,
+                "simInsts": 62405796,
+                "process_seconds": 2.7225194499987992,
+                "mips": 24.76420476190476,
+                "memory_reads": 0,
+                "memory_writes": 0,
+                "memory_instruction_bytes": 0
+            },
+            {
+                "topology": "simple-direct",
+                "workload": "linux",
+                "run": 1,
+                "simTicks": 228310447000,
+                "hostSeconds": 10.09,
+                "simInsts": 170063636,
+                "process_seconds": 10.443049509001867,
+                "mips": 16.854671555996035,
+                "memory_reads": 146492,
+                "memory_writes": 104792,
+                "memory_instruction_bytes": 0
+            },
+            {
+                "topology": "classic-ddr4-port",
+                "workload": "coremark",
+                "run": 1,
+                "simTicks": 73783313000,
+                "hostSeconds": 15.25,
+                "simInsts": 62405796,
+                "process_seconds": 15.516143107000971,
+                "mips": 4.092183344262295,
+                "memory_reads": 84659375,
+                "memory_writes": 2886513,
+                "memory_instruction_bytes": 295133256
+            },
+            {
+                "topology": "classic-ddr4-port",
+                "workload": "coremark",
+                "run": 2,
+                "simTicks": 73783313000,
+                "hostSeconds": 15.26,
+                "simInsts": 62405796,
+                "process_seconds": 15.512632312998903,
+                "mips": 4.089501703800786,
+                "memory_reads": 84659375,
+                "memory_writes": 2886513,
+                "memory_instruction_bytes": 295133256
+            },
+            {
+                "topology": "classic-ddr4-port",
+                "workload": "coremark",
+                "run": 3,
+                "simTicks": 73783313000,
+                "hostSeconds": 15.24,
+                "simInsts": 62405796,
+                "process_seconds": 15.50696373199753,
+                "mips": 4.094868503937008,
+                "memory_reads": 84659375,
+                "memory_writes": 2886513,
+                "memory_instruction_bytes": 295133256
+            },
+            {
+                "topology": "classic-ddr4-port",
+                "workload": "linux",
+                "run": 1,
+                "simTicks": 228310447000,
+                "hostSeconds": 51.68,
+                "simInsts": 170063636,
+                "process_seconds": 52.10435976900044,
+                "mips": 3.2907050309597525,
+                "memory_reads": 250013819,
+                "memory_writes": 29565745,
+                "memory_instruction_bytes": 863284892
+            },
+            {
+                "topology": "classic-ddr4-direct",
+                "workload": "coremark",
+                "run": 1,
+                "simTicks": 73783313000,
+                "hostSeconds": 2.48,
+                "simInsts": 62405796,
+                "process_seconds": 2.72036845799812,
+                "mips": 25.16362741935484,
+                "memory_reads": 0,
+                "memory_writes": 0,
+                "memory_instruction_bytes": 0
+            },
+            {
+                "topology": "classic-ddr4-direct",
+                "workload": "coremark",
+                "run": 2,
+                "simTicks": 73783313000,
+                "hostSeconds": 2.5,
+                "simInsts": 62405796,
+                "process_seconds": 2.773324900001171,
+                "mips": 24.962318399999997,
+                "memory_reads": 0,
+                "memory_writes": 0,
+                "memory_instruction_bytes": 0
+            },
+            {
+                "topology": "classic-ddr4-direct",
+                "workload": "coremark",
+                "run": 3,
+                "simTicks": 73783313000,
+                "hostSeconds": 2.5,
+                "simInsts": 62405796,
+                "process_seconds": 2.771552893998887,
+                "mips": 24.962318399999997,
+                "memory_reads": 0,
+                "memory_writes": 0,
+                "memory_instruction_bytes": 0
+            },
+            {
+                "topology": "classic-ddr4-direct",
+                "workload": "linux",
+                "run": 1,
+                "simTicks": 228310447000,
+                "hostSeconds": 10.54,
+                "simInsts": 170063636,
+                "process_seconds": 10.995924758997717,
+                "mips": 16.13506982922201,
+                "memory_reads": 146492,
+                "memory_writes": 2639347,
+                "memory_instruction_bytes": 0
+            },
+            {
+                "topology": "ruby-ddr4-port",
+                "workload": "coremark",
+                "run": 1,
+                "simTicks": 73783313000,
+                "hostSeconds": 9.23,
+                "simInsts": 62405796,
+                "process_seconds": 9.991919199001131,
+                "mips": 6.761191332611051,
+                "memory_reads": 84659375,
+                "memory_writes": 2886513,
+                "memory_instruction_bytes": 295133256
+            },
+            {
+                "topology": "ruby-ddr4-port",
+                "workload": "coremark",
+                "run": 2,
+                "simTicks": 73783313000,
+                "hostSeconds": 9.1,
+                "simInsts": 62405796,
+                "process_seconds": 9.84239300599802,
+                "mips": 6.85777978021978,
+                "memory_reads": 84659375,
+                "memory_writes": 2886513,
+                "memory_instruction_bytes": 295133256
+            },
+            {
+                "topology": "ruby-ddr4-port",
+                "workload": "coremark",
+                "run": 3,
+                "simTicks": 73783313000,
+                "hostSeconds": 9.28,
+                "simInsts": 62405796,
+                "process_seconds": 10.04012943899943,
+                "mips": 6.7247625,
+                "memory_reads": 84659375,
+                "memory_writes": 2886513,
+                "memory_instruction_bytes": 295133256
+            },
+            {
+                "topology": "ruby-ddr4-port",
+                "workload": "linux",
+                "run": 1,
+                "simTicks": 228310447000,
+                "hostSeconds": 31.58,
+                "simInsts": 170063636,
+                "process_seconds": 32.69745884800068,
+                "mips": 5.385168967701077,
+                "memory_reads": 250013819,
+                "memory_writes": 29565745,
+                "memory_instruction_bytes": 863284892
+            },
+            {
+                "topology": "ruby-ddr4-direct",
+                "workload": "coremark",
+                "run": 1,
+                "simTicks": 73783313000,
+                "hostSeconds": 2.58,
+                "simInsts": 62405796,
+                "process_seconds": 3.3245984759996645,
+                "mips": 24.188293023255813,
+                "memory_reads": 0,
+                "memory_writes": 0,
+                "memory_instruction_bytes": 0
+            },
+            {
+                "topology": "ruby-ddr4-direct",
+                "workload": "coremark",
+                "run": 2,
+                "simTicks": 73783313000,
+                "hostSeconds": 2.61,
+                "simInsts": 62405796,
+                "process_seconds": 3.374918647001323,
+                "mips": 23.91026666666667,
+                "memory_reads": 0,
+                "memory_writes": 0,
+                "memory_instruction_bytes": 0
+            },
+            {
+                "topology": "ruby-ddr4-direct",
+                "workload": "coremark",
+                "run": 3,
+                "simTicks": 73783313000,
+                "hostSeconds": 2.62,
+                "simInsts": 62405796,
+                "process_seconds": 3.37261402799777,
+                "mips": 23.819006106870226,
+                "memory_reads": 0,
+                "memory_writes": 0,
+                "memory_instruction_bytes": 0
+            },
+            {
+                "topology": "ruby-ddr4-direct",
+                "workload": "linux",
+                "run": 1,
+                "simTicks": 228310447000,
+                "hostSeconds": 10.36,
+                "simInsts": 170063636,
+                "process_seconds": 11.450400984002044,
+                "mips": 16.41540888030888,
+                "memory_reads": 146492,
+                "memory_writes": 2639347,
+                "memory_instruction_bytes": 0
+            }
+        ],
+        "summary": {
+            "simple-port": {
+                "coremark_host_mean": 2.4899999999999998,
+                "coremark_mips": 25.062568674698795,
+                "coremark_process_mean": 2.7041885216676746,
+                "linux_host": 10.01,
+                "linux_mips": 16.989374225774224,
+                "linux_process": 10.342855385999428
+            },
+            "simple-direct": {
+                "coremark_host_mean": 2.4966666666666666,
+                "coremark_mips": 24.995645927903873,
+                "coremark_process_mean": 2.6893091260002016,
+                "linux_host": 10.09,
+                "linux_mips": 16.854671555996035,
+                "linux_process": 10.443049509001867
+            },
+            "classic-ddr4-port": {
+                "coremark_host_mean": 15.25,
+                "coremark_mips": 4.092183344262295,
+                "coremark_process_mean": 15.511913050665802,
+                "linux_host": 51.68,
+                "linux_mips": 3.2907050309597525,
+                "linux_process": 52.10435976900044
+            },
+            "classic-ddr4-direct": {
+                "coremark_host_mean": 2.493333333333333,
+                "coremark_mips": 25.02906256684492,
+                "coremark_process_mean": 2.7550820839993926,
+                "linux_host": 10.54,
+                "linux_mips": 16.13506982922201,
+                "linux_process": 10.995924758997717
+            },
+            "ruby-ddr4-port": {
+                "coremark_host_mean": 9.203333333333333,
+                "coremark_mips": 6.780781890619341,
+                "coremark_process_mean": 9.958147214666193,
+                "linux_host": 31.58,
+                "linux_mips": 5.385168967701077,
+                "linux_process": 32.69745884800068
+            },
+            "ruby-ddr4-direct": {
+                "coremark_host_mean": 2.6033333333333335,
+                "coremark_mips": 23.97149654289372,
+                "coremark_process_mean": 3.357377050332919,
+                "linux_host": 10.36,
+                "linux_mips": 16.41540888030888,
+                "linux_process": 11.450400984002044
+            }
+        }
+    }

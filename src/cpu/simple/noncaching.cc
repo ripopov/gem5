@@ -72,12 +72,92 @@ copyBytes(void *dst, const void *src, size_t size)
 } // anonymous namespace
 
 NonCachingSimpleCPU::NonCachingSimpleCPU(
-        const BaseNonCachingSimpleCPUParams &p)
-    : AtomicSimpleCPU(p)
+    const BaseNonCachingSimpleCPUParams &p)
+    : AtomicSimpleCPU(p), directMemory(p.direct_memory)
 {
     assert(p.numThreads == 1);
     fatal_if(!FullSystem && p.workload.size() != 1,
              "only one workload allowed");
+    fatal_if(!directMemory.empty() &&
+                 (!FullSystem || simulate_data_stalls || simulate_inst_stalls),
+             "Direct memory requires full-system execution without stalls");
+}
+
+bool
+NonCachingSimpleCPU::directAccessActive() const
+{
+    return !switchedOut() && system->isAtomicMode() && system->bypassCaches();
+}
+
+void
+NonCachingSimpleCPU::rebuildDirectMappings()
+{
+    fetchPage = FetchPage();
+    fetchWindow.forget();
+    dataWindow.forget();
+    directMappings.clear();
+    if (directMemory.empty()) {
+        return;
+    }
+    for (auto *mem : directMemory) {
+        fatal_if(!mem, "Direct memory owners must not be null");
+        fatal_if(std::count(directMemory.begin(), directMemory.end(), mem) !=
+                     1,
+                 "Duplicate direct memory owner: %s", mem->name());
+        fatal_if(mem->system() != system || mem->eventQueue() != eventQueue(),
+                 "Direct memory must share the CPU's system and event queue");
+    }
+
+    // Use the same allocations as KVM, but require explicit authorization
+    // of every RAM owner. Never map a separate Ruby reference image.
+    for (const auto &store : system->getPhysMem().getBackingStore()) {
+        if (!store.inAddrMap || !store.kvmMap || !store.pmem ||
+            store.range.interleaved() || store.range.isSparse()) {
+            continue;
+        }
+        DirectMapping mapping{
+            store.range.start(), store.range.end(), store.pmem, {}, true};
+        Addr covered = 0;
+        for (auto *mem : directMemory) {
+            const auto range = mem->getAddrRange();
+            if (!mem->isInAddrMap() || !mem->isKvmMap() || mem->isNull() ||
+                range.isSparse() || range.start() < mapping.start ||
+                range.end() > mapping.end) {
+                continue;
+            }
+            mapping.owners.push_back(mem);
+            mapping.writeable &= mem->params().writeable;
+            covered += range.size();
+        }
+        if (covered == store.range.size()) {
+            directMappings.push_back(std::move(mapping));
+        }
+    }
+    fatal_if(directMappings.empty(), "No eligible direct backing store");
+}
+
+void
+NonCachingSimpleCPU::startup()
+{
+    AtomicSimpleCPU::startup();
+    rebuildDirectMappings();
+}
+
+void
+NonCachingSimpleCPU::switchOut()
+{
+    AtomicSimpleCPU::switchOut();
+    fetchPage = FetchPage();
+    fetchWindow.forget();
+    dataWindow.forget();
+    directMappings.clear();
+}
+
+void
+NonCachingSimpleCPU::takeOverFrom(BaseCPU *old_cpu)
+{
+    AtomicSimpleCPU::takeOverFrom(old_cpu);
+    rebuildDirectMappings();
 }
 
 void
@@ -93,7 +173,44 @@ uint8_t *
 NonCachingSimpleCPU::hostAddr(BackdoorWindow &window, Addr addr,
                               unsigned size, bool write)
 {
-    if (addr < window.start || addr + size > window.end) {
+    if (!directMemory.empty()) {
+        if (!directAccessActive()) {
+            return nullptr;
+        }
+        if (!window.direct || addr < window.start || addr >= window.end ||
+            size > window.end - addr) {
+            window.forget();
+            for (const auto &mapping : directMappings) {
+                if (addr >= mapping.start && addr < mapping.end &&
+                    size <= mapping.end - addr) {
+                    window.direct = &mapping;
+                    window.start = mapping.start;
+                    window.end = mapping.end;
+                    window.base = mapping.base;
+                    break;
+                }
+            }
+        }
+        if (!window.direct) {
+            return nullptr;
+        }
+        if (write) {
+            if (!storesBypassPort() || !window.direct->writeable) {
+                return nullptr;
+            }
+            // A constant-time empty check per owner includes restored locks
+            // and every interleaved channel, without caching stale
+            // eligibility.
+            for (auto *mem : window.direct->owners) {
+                if (!mem->getLockedAddrList().empty()) {
+                    return nullptr;
+                }
+            }
+        }
+        return window.base + (addr - window.start);
+    }
+    if (addr < window.start || addr >= window.end ||
+        size > window.end - addr) {
         auto bd_it = memBackdoors.contains(RangeSize(addr, size));
         if (bd_it == memBackdoors.end())
             return nullptr;
@@ -124,7 +241,8 @@ NonCachingSimpleCPU::tryBackdoorAccess(const PacketPtr &pkt)
     // on the port when another hart could observe them there: its
     // reservations live in the memory's locked-address list.
     if (!(read || write) || req->isLLSC() || req->isAtomic() ||
-        req->isSwap() || pkt->isMaskedWrite()) {
+        req->isSwap() || req->isUncacheable() || req->isStrictlyOrdered() ||
+        pkt->isMaskedWrite()) {
         return false;
     }
     if (write && !storesBypassPort())
@@ -202,8 +320,11 @@ NonCachingSimpleCPU::readMem(Addr addr, uint8_t *data, unsigned size,
     if (req->getFlags().isSet(Request::NO_ACCESS))
         return NoFault;
 
-    const uint8_t *host = req->isLocalAccess() ? nullptr :
-        hostAddr(dataWindow, req->getPaddr(), size, false);
+    const uint8_t *host =
+        (req->isLocalAccess() || req->isUncacheable() ||
+         req->isStrictlyOrdered())
+            ? nullptr
+            : hostAddr(dataWindow, req->getPaddr(), size, false);
     if (host) {
         copyBytes(data, host, size);
     } else {
@@ -251,8 +372,10 @@ NonCachingSimpleCPU::writeMem(uint8_t *data, unsigned size, Addr addr,
     if (req->getFlags().isSet(Request::NO_ACCESS))
         return NoFault;
 
-    uint8_t *host = (req->isLocalAccess() || !storesBypassPort()) ? nullptr :
-        hostAddr(dataWindow, req->getPaddr(), size, true);
+    uint8_t *host = (req->isLocalAccess() || req->isUncacheable() ||
+                     req->isStrictlyOrdered() || !storesBypassPort())
+                        ? nullptr
+                        : hostAddr(dataWindow, req->getPaddr(), size, true);
     if (host) {
         copyBytes(host, data, size);
     } else {
@@ -277,6 +400,9 @@ NonCachingSimpleCPU::sendPacket(RequestPort &port, const PacketPtr &pkt)
 {
     if (&port == &dcachePort && tryBackdoorAccess(pkt))
         return 0;
+    if (!directMemory.empty()) {
+        return port.sendAtomic(pkt);
+    }
 
     MemBackdoorPtr bd = nullptr;
     Tick latency = port.sendAtomicBackdoor(pkt, bd);
@@ -318,8 +444,10 @@ NonCachingSimpleCPU::fetchInstruction(Tick &latency)
     const unsigned size = decoder->moreBytesSize();
     BaseTLB *itb = thread->mmu->itb;
 
-    if (fetch_pc >= fetchPage.vpage &&
-        fetch_pc + size <= fetchPage.vpage + fetchPage.size &&
+    if ((directMemory.empty() || directAccessActive()) &&
+        fetch_pc >= fetchPage.vpage &&
+        fetch_pc - fetchPage.vpage < fetchPage.size &&
+        size <= fetchPage.size - (fetch_pc - fetchPage.vpage) &&
         itb->translationEpoch(thread->getTC()) == fetchPage.epoch) {
         copyBytes(decoder->moreBytesPtr(),
                   fetchPage.host + (fetch_pc - fetchPage.vpage), size);
@@ -331,10 +459,11 @@ NonCachingSimpleCPU::fetchInstruction(Tick &latency)
     if (fault != NoFault)
         return fault;
 
-    // Cache the page this fetch came from if the TLB promises it is
-    // uniformly translated and one backdoor covers it.
+    // Cache the page if translation is uniform and one mapping covers it.
     Addr vpage, ppage, page_size;
-    if (itb->stableFetchPage(thread->getTC(), fetch_pc, vpage, ppage,
+    if (!ifetch_req->isUncacheable() && !ifetch_req->isStrictlyOrdered() &&
+        !ifetch_req->isLocalAccess() &&
+        itb->stableFetchPage(thread->getTC(), fetch_pc, vpage, ppage,
                              page_size)) {
         const uint8_t *host = hostAddr(fetchWindow, ppage, page_size, false);
         if (host) {
@@ -351,6 +480,10 @@ NonCachingSimpleCPU::fetchInstruction(Tick &latency)
 Tick
 NonCachingSimpleCPU::fetchInstMem()
 {
+    if (ifetch_req->isUncacheable() || ifetch_req->isStrictlyOrdered() ||
+        ifetch_req->isLocalAccess()) {
+        return AtomicSimpleCPU::fetchInstMem();
+    }
     const unsigned size = ifetch_req->getSize();
     const uint8_t *host =
         hostAddr(fetchWindow, ifetch_req->getPaddr(), size, false);
