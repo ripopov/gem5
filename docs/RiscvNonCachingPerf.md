@@ -69,12 +69,12 @@ the MIPS figures are comparable with Spike's, which time from `main()`.
 ## Optional L1/L2/L3 hierarchy and four memory controllers
 
 The results above used the default **cacheless** topology in
-[`noncaching_fs.py`](../configs/example/riscv/noncaching_fs.py): CPU instruction,
-data and page-table-walker ports → `SystemXBar` → one `SimpleMemory` with
-`latency="0ns"`. There were no cache objects between the CPU and memory, so
+[`noncaching_fs.py`](../configs/example/riscv/noncaching_fs.py): CPU
+instruction, data and page-table-walker ports → `SystemXBar` → `SimpleMemory`
+with `latency="0ns"`. There were no caches between the CPU and memory, so
 backdoor requests could reach the backing store.
 
-The config now optionally instantiates this classic hierarchy:
+`--cache-hierarchy classic --caches` instantiates this classic hierarchy:
 
 ```text
 CPU instruction port → L1I ─┐
@@ -89,7 +89,9 @@ On-chip HiFive devices remain attached to `SystemXBar`; off-chip devices are
 behind its 50 ns bridge and `IOXBar`. The system still has one hart at 1 GHz,
 1 GiB of RAM starting at `0x80000000`, and 64-byte cache lines.
 
-| Cache | Capacity | Associativity | Tag/data/response latency, each | MSHRs |
+Tag, data and response stages each use the latency shown for classic caches.
+
+| Cache | Capacity | Associativity | Latency per stage | MSHRs |
 |---|---|---|---|---|
 | L1I | 64 KiB | 4-way | 2 cycles | 8 |
 | L1D | 64 KiB | 8-way | 2 cycles | 16 |
@@ -107,57 +109,140 @@ interleaved every 64 bytes using `RoRaBaCoCh` mapping; four channels select on
 address bits 7:6. The benchmark retains 1 GiB total RAM (256 MiB per channel),
 so gem5 warns that each assigned range is smaller than the DRAM model's
 nominal 16 GiB device capacity. The modeled device geometry is unchanged.
-`--caches` and `--memory ddr4` are independent; omitting both preserves the
-original topology and defaults.
+`--caches` and `--memory ddr4` are independent in classic mode; omitting both
+preserves the original topology and defaults.
+
+`--cache-hierarchy ruby` instead builds CHI with split L1I/L1D caches, a
+private L2, one HNF containing the L3, and one SNF per memory controller.
+It uses the same capacities and associativities as the table, with CHI's
+controller defaults for latency and buffering. All Ruby controllers and the
+SimpleNetwork run at the CPU clock. The network has a Crossbar topology and
+four virtual networks for requests, snoops, responses and data. Ruby always
+instantiates its caches, without needing `--caches`.
+
+Both on-chip and off-chip HiFive devices connect to `IOXBar` in Ruby mode.
+CPU data and page-table-walker ports connect to the data sequencer; the
+instruction port has a separate sequencer. `RubyPortProxy` handles image
+loading. `access_backing_store=False` keeps a single RAM image in the memory
+controllers, without a separate Ruby reference-memory allocation.
 
 These benchmarks still use `NonCachingSimpleCPU` and `atomic_noncaching`.
-The caches are present but bypassed, and they do not forward backdoor
-requests. Fetches and data accesses therefore traverse the port hierarchy.
-Interleaved memory ranges also do not expose backdoors in this checkout, so
-the comparison changes both the cache path and memory organization. It is
-**not** an isolated measurement of cache-forwarding overhead, cache hit
-performance or DDR4 timing. Atomic CPU instruction/data stall simulation
-remains disabled. With `--cpu-type atomic` or `--cpu-type timing`, the same
-configured caches are active instead.
+Classic caches forward atomic packets without cache lookups, but do not
+forward backdoor requests. Ruby's atomic path goes from `RubyPort` to the
+selected SNF's memory controller, skipping cache controllers and network
+messages. Neither path grants the CPU a backdoor here; interleaved memory
+ranges also lack backdoors. The comparison therefore measures functional
+access overhead with different routing and memory organization. It does not
+measure cache-hit performance, CHI network throughput or DDR4 timing. CPU
+instruction/data stall simulation remains disabled.
 
-Reproduce the 200-iteration CoreMark comparison and Linux boot + `ls`:
+`--cpu-type timing` activates either hierarchy. `--cpu-type atomic` activates
+classic caches, but uses `atomic_noncaching` with Ruby, as required by Ruby's
+atomic request path.
 
-```sh
-COREMARK=build/riscv-bench/coremark-200.elf \
-  OUTDIR=build/riscv-bench/recheck-default-coremark \
-  util/riscv-bench/bench.sh coremark 3
-OUTDIR=build/riscv-bench/recheck-default-linux \
-  util/riscv-bench/bench.sh linux 1
-COREMARK=build/riscv-bench/coremark-200.elf \
-  OUTDIR=build/riscv-bench/recheck-hierarchy-coremark \
-  util/riscv-bench/bench.sh coremark 3 --caches --memory ddr4 --num-mem-ctrls 4
-OUTDIR=build/riscv-bench/recheck-hierarchy-linux \
-  util/riscv-bench/bench.sh linux 1 --caches --memory ddr4 --num-mem-ctrls 4
+Reproduce the comparison from the repository root with the recorded binary.
+That binary predates the config's `riscv_profile` parameter, so the measurement
+used this loader to omit only that assignment. The repository config remains
+unchanged, and every topology uses the same compiled ISA defaults (including
+`enable_stateen=False`), VLEN 256 and `MHSU` privilege modes. These results
+measure the existing binary, not a rebuilt current-source RVA23 implementation.
+
+```bash
+cat > /tmp/noncaching-perf-config.py <<'PYCONFIG'
+from pathlib import Path
+import sys
+
+__file__ = str(Path("configs/example/riscv/noncaching_fs.py").resolve())
+sys.path[0] = str(Path(__file__).parent)
+source = Path(__file__).read_text()
+assignment = 'isa.riscv_profile = "RVA23S64"'
+assert source.count(assignment) == 1
+source = source.replace(assignment, "")
+exec(compile(source, __file__, "exec"), globals())
+PYCONFIG
+
+out=/tmp/noncaching-perf-repeat
+mkdir -p "$out"
+for topology in simple classic ruby; do
+    extra=()
+    if [ "$topology" != simple ]; then
+        extra=(--cache-hierarchy "$topology" --memory ddr4
+               --num-mem-ctrls 4)
+        if [ "$topology" = classic ]; then
+            extra+=(--caches)
+        fi
+    fi
+    for run in 1 2 3; do
+        /usr/bin/time -p taskset -c 2 build/RISCV/gem5.fast \
+            --outdir="$out/$topology-coremark-$run" \
+            /tmp/noncaching-perf-config.py baremetal \
+            build/riscv-bench/coremark-200.elf "${extra[@]}" \
+            > "$out/$topology-coremark-$run.log" 2>&1
+    done
+    /usr/bin/time -p taskset -c 2 build/RISCV/gem5.fast \
+        --outdir="$out/$topology-linux" \
+        /tmp/noncaching-perf-config.py linux \
+        --bootloader build/jitcpu-linux/fw_jump.elf \
+        --kernel build/jitcpu-linux-rva23/vmlinux \
+        --initrd build/riscv-bench/bench-initramfs.cpio "${extra[@]}" \
+        > "$out/$topology-linux.log" 2>&1
+done
 ```
 
-Measurements taken on 2026-09-09 on the same Core Ultra 7 265K, pinned to
-host CPU 2, running the workloads sequentially with the existing
-`build/RISCV/gem5.fast` (compiled 2026-09-08 09:36:56;
-SHA-256 `2a119c211ef7018fc182ca5c75b14de8c22b96d5d6e76394d5fa36a0e517c0bc`).
-The cacheless baseline was remeasured with the same binary and artifacts.
+For a binary supporting `riscv_profile`, use `noncaching_fs.py` directly and
+record a new baseline. The reported metric follows `bench.sh`: divide
+`simInsts` by `hostSeconds` and by one million. For CoreMark, use the mean
+host time of the three runs. The whole-process times below were measured
+with Python's monotonic `time.perf_counter()` around each subprocess; the
+commands above report the corresponding wall time with `/usr/bin/time`.
+
+Measurements taken on **2026-09-10** on the same Core Ultra 7 265K, pinned
+to host CPU 2, with all workloads run sequentially. All three topologies use
+`build/RISCV/gem5.fast`, compiled 2026-09-08 09:36:56, SHA-256:
+
+```text
+2a119c211ef7018fc182ca5c75b14de8c22b96d5d6e76394d5fa36a0e517c0bc
+```
+
+The [measurement record](RiscvNonCachingPerf-20260910.json) contains every
+run's results, artifact/config hashes and verification outcomes. The current
+configuration has an explicit 10 MHz RTC connection and the adapter retains
+the old binary's disabled state-enable setting. These differ from the saved
+2026-09-09 configuration, so all baselines were remeasured; the older Linux
+instruction count is not the reference for this comparison.
+
 CoreMark uses 200 iterations and three runs; Linux boot + `ls` uses one run.
+Times are host simulation seconds; MIPS excludes startup and image loading.
 
-| Topology | CoreMark host seconds (mean) | CoreMark MIPS | Linux host seconds | Linux MIPS |
+| Topology | CoreMark mean s | CoreMark MIPS | Linux s | Linux MIPS |
 |---|---|---|---|---|
-| Cacheless, one zero-latency SimpleMemory | 2.547 | 24.50 | 9.500 | 17.01 |
-| L1I/L1D + L2 + L3, four DDR4 MemCtrls | 15.453 | 4.04 | 49.530 | 3.26 |
+| Cacheless, one zero-latency SimpleMemory | 2.587 | 24.13 | 9.900 | 16.46 |
+| Classic L1/L2/L3, four DDR4 | 15.630 | 3.99 | 49.630 | 3.28 |
+| Ruby CHI L1/L2/L3, four DDR4 | 9.323 | 6.69 | 30.680 | 5.31 |
 
-The full topology takes **6.07×** as much host simulation time for CoreMark
-and **5.21×** for Linux. Whole-process times were 2.748 s versus 15.717 s for
-CoreMark (means), and 9.855 s versus 49.986 s for Linux. These timings measure
-functional execution through the bypassed hierarchy, not a timing CPU run.
+CoreMark's `hostSeconds` values were 2.59/2.59/2.58 for SimpleMemory,
+15.59/15.63/15.67 for classic, and 9.25/9.48/9.24 for Ruby. Ruby was **1.68×**
+as fast as classic on CoreMark and **1.62×** on Linux by host simulation time.
+The cacheless SimpleMemory baseline remained fastest on both workloads.
+Ruby's shorter atomic path avoids the chain of classic cache and crossbar
+forwarders; these measurements do not isolate the cost of each component.
 
-Both topologies retired exactly 62,405,796 instructions in 73,783,313,000
-ticks for CoreMark, and 161,563,564 instructions in 207,968,443,000 ticks for
-Linux. CoreMark's three CRCs matched and Linux reached `RISCV-BENCH: done`.
-With the hierarchy, every cache's tag/data access counters remained zero,
-while all four DRAM controllers recorded reads and writes. Thus the slower
-host execution did not alter guest instruction counts or simulated time.
+| Topology | CoreMark whole-process mean s | Linux whole-process s |
+|---|---|---|
+| Cacheless SimpleMemory | 2.804 | 10.239 |
+| Classic, four DDR4 controllers | 15.906 | 50.099 |
+| Ruby CHI, four DDR4 controllers | 10.140 | 31.847 |
+
+All three topologies retired exactly **62,405,796 instructions** in
+**73,783,313,000 ticks** for CoreMark, and **162,998,103 instructions** in
+**210,036,085,000 ticks** for Linux. Every CoreMark run produced CRCs
+`0xe714`, `0x1fd7` and `0x8e3a`; every Linux run reached `RISCV-BENCH: done`.
+Classic cache tag/data access counters and Ruby cache demand-access counters
+remained zero. Ruby's network forwarded zero messages. All four DRAM
+controllers recorded reads and writes in both full-hierarchy configurations.
+Thus these runs exercised functional memory routing while leaving both cache
+hierarchies bypassed, with identical guest instruction counts and simulated
+time across the three configurations.
 
 ## Correctness requirements
 

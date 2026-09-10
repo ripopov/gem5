@@ -5,9 +5,11 @@
 RISC-V full-system configuration for the functional CPU models.
 
 One hart of NonCachingSimpleCPU (or AtomicSimpleCPU) on the HiFive platform
-with an atomic, cache-less memory system by default. --caches adds classic
-L1I/L1D, L2 and L3 caches; --memory ddr4 selects 1, 2 or 4 DRAM controllers
-with --num-mem-ctrls. These options also work with atomic and timing CPUs.
+with an atomic, cache-less memory system by default. --cache-hierarchy classic
+uses --caches to add L1I/L1D, L2 and L3 caches. --cache-hierarchy ruby builds
+those levels with CHI over SimpleNetwork and requires a CHI build. Both accept
+--memory ddr4 and --num-mem-ctrls for 1, 2 or 4 DRAM controllers. Ruby uses
+atomic_noncaching for noncaching/atomic CPUs and timing for the timing CPU.
 The ISA reports the RVA23S64 profile, misaligned access to main memory is
 supported and the hypervisor extension is enabled, all advertised in the
 generated device tree.
@@ -15,6 +17,11 @@ generated device tree.
 Bare-metal ELF (M-mode at the ELF entry, exit via m5_exit):
 
     gem5.fast configs/example/riscv/noncaching_fs.py baremetal coremark.elf
+
+The same workload with Ruby CHI and four DDR4 channels:
+
+    gem5.fast configs/example/riscv/noncaching_fs.py baremetal coremark.elf \\
+        --cache-hierarchy ruby --memory ddr4 --num-mem-ctrls 4
 
 Linux through OpenSBI fw_jump, with a kernel and an initramfs:
 
@@ -26,6 +33,7 @@ import argparse
 import os
 
 import m5
+from m5.defines import buildEnv
 from m5.objects import (
     AddrRange,
     BadAddr,
@@ -50,7 +58,11 @@ from m5.objects import (
     SystemXBar,
     VoltageDomain,
 )
-from m5.util.convert import toFrequency, toMemorySize
+from m5.util import addToPath
+from m5.util.convert import (
+    toFrequency,
+    toMemorySize,
+)
 from m5.util.fdthelper import (
     Fdt,
     FdtNode,
@@ -74,11 +86,19 @@ for p in (baremetal, linux):
         choices=("noncaching", "atomic", "timing"),
         default="noncaching",
         help="NonCachingSimpleCPU (default), AtomicSimpleCPU or "
-        "TimingSimpleCPU; the memory mode follows the CPU",
+        "TimingSimpleCPU; Ruby uses atomic_noncaching for atomic CPUs",
     )
     p.add_argument("--mem-size", default="1GiB")
     p.add_argument(
-        "--caches", action="store_true", help="add L1I/L1D, L2 and L3"
+        "--cache-hierarchy",
+        choices=("classic", "ruby"),
+        default="classic",
+        help="classic (default) or Ruby CHI with SimpleNetwork",
+    )
+    p.add_argument(
+        "--caches",
+        action="store_true",
+        help="add classic L1I/L1D, L2 and L3; Ruby always builds these levels",
     )
     p.add_argument("--l1i-size", default="64KiB")
     p.add_argument("--l1d-size", default="64KiB")
@@ -109,6 +129,8 @@ for p in (baremetal, linux):
 args = parser.parse_args()
 if args.memory == "simple" and args.num_mem_ctrls != 1:
     parser.error("--num-mem-ctrls greater than 1 requires --memory ddr4")
+if args.cache_hierarchy == "ruby" and buildEnv.get("PROTOCOL") != "CHI":
+    parser.error("--cache-hierarchy ruby requires a gem5 CHI build")
 
 rtc_frequency = int(toFrequency(args.rtc_frequency))
 
@@ -120,6 +142,8 @@ system.mem_mode = {
     "atomic": "atomic",
     "timing": "timing",
 }[args.cpu_type]
+if args.cache_hierarchy == "ruby" and args.cpu_type == "atomic":
+    system.mem_mode = "atomic_noncaching"
 system.mem_ranges = [AddrRange(start=0x80000000, size=args.mem_size)]
 system.cache_line_size = 64
 system.voltage_domain = VoltageDomain(voltage="1V")
@@ -130,29 +154,34 @@ system.cpu_clk_domain = SrcClockDomain(
     clock=args.cpu_clock, voltage_domain=system.voltage_domain
 )
 
-system.membus = SystemXBar()
-system.system_port = system.membus.cpu_side_ports
 system.iobus = IOXBar()
 system.iobus.badaddr_responder = BadAddr()
 system.iobus.default = system.iobus.badaddr_responder.pio
-system.bridge = Bridge(delay="50ns")
-system.bridge.mem_side_port = system.iobus.cpu_side_ports
-system.bridge.cpu_side_port = system.membus.mem_side_ports
+if args.cache_hierarchy == "classic":
+    system.membus = SystemXBar()
+    system.system_port = system.membus.cpu_side_ports
+    system.bridge = Bridge(delay="50ns")
+    system.bridge.mem_side_port = system.iobus.cpu_side_ports
+    system.bridge.cpu_side_port = system.membus.mem_side_ports
 
 system.platform = HiFive()
 system.platform.rtc = RiscvRTC(frequency=args.rtc_frequency)
 system.platform.clint.int_pin = system.platform.rtc.int_pin
 system.platform.pci_host.internal_connect()
 system.platform.pci_host.connect_upper_bus(system.iobus, True)
-system.platform.attachOnChipIO(system.membus)
+system.platform.attachOnChipIO(
+    system.membus if args.cache_hierarchy == "classic" else system.iobus
+)
 system.platform.attachOffChipIO(system.iobus)
 system.platform.attachPlic()
 system.platform.setNumCores(1)
-system.bridge.ranges = system.platform._off_chip_ranges()
+if args.cache_hierarchy == "classic":
+    system.bridge.ranges = system.platform._off_chip_ranges()
 
+memory_ports = []
 if args.memory == "simple":
     system.mem_ctrl = SimpleMemory(range=system.mem_ranges[0], latency="0ns")
-    system.mem_ctrl.port = system.membus.mem_side_ports
+    memory_ports.append((system.mem_ranges[0], system.mem_ctrl.port))
 else:
     channel_bits = args.num_mem_ctrls.bit_length() - 1
     system.mem_ctrls = [MemCtrl() for _ in range(args.num_mem_ctrls)]
@@ -172,7 +201,11 @@ else:
         ctrl.dram = DDR4_2400_8x8(
             range=channel_range, addr_mapping="RoRaBaCoCh"
         )
-        ctrl.port = system.membus.mem_side_ports
+        memory_ports.append((channel_range, ctrl.port))
+
+if args.cache_hierarchy == "classic":
+    for mem_range, port in memory_ports:
+        system.membus.mem_side_ports = port
 
 # --- CPU --------------------------------------------------------------------
 
@@ -182,7 +215,78 @@ cpu_class = {
     "timing": RiscvTimingSimpleCPU,
 }[args.cpu_type]
 system.cpu = cpu_class(clk_domain=system.cpu_clk_domain, cpu_id=0)
-if args.caches:
+system.cpu.createInterruptController()
+system.cpu.createThreads()
+if args.cache_hierarchy == "ruby":
+    # Reuse the CHI node builder to retain this script's HiFive/workload
+    # setup and three cache levels without requiring a stdlib board adapter.
+    # Import Ruby only here so classic mode works in non-CHI builds.
+    addToPath("../../")
+    from ruby import CHI
+
+    from m5.objects import (
+        RubyPortProxy,
+        RubySystem,
+        SimpleExtLink,
+        SimpleIntLink,
+        SimpleNetwork,
+        Switch,
+    )
+
+    chi_options = argparse.Namespace(
+        num_cpus=1,
+        num_dirs=args.num_mem_ctrls,
+        num_l3caches=1,
+        l1i_size=args.l1i_size,
+        l1i_assoc=4,
+        l1d_size=args.l1d_size,
+        l1d_assoc=8,
+        l2_size=args.l2_size,
+        l2_assoc=8,
+        l3_size=args.l3_size,
+        l3_assoc=16,
+        cacheline_size=64,
+        enable_dvm=False,
+        chi_config=None,
+        network="simple",
+        topology="Crossbar",
+        simple_physical_channels=False,
+        link_latency=1,
+        router_latency=1,
+    )
+    system.ruby = RubySystem(
+        clk_domain=system.cpu_clk_domain,
+        block_size_bytes=64,
+        memory_size_bits=48,
+        # All accesses use the controllers' RAM, including atomic fallback.
+        access_backing_store=False,
+    )
+    system.ruby.network = SimpleNetwork(
+        ruby_system=system.ruby, topology="Crossbar", netifs=[]
+    )
+    sequencers, directories, topology = CHI.create_system(
+        chi_options, True, system, [], None, system.ruby, [system.cpu]
+    )
+    topology.makeTopology(
+        chi_options,
+        system.ruby.network,
+        SimpleIntLink,
+        SimpleExtLink,
+        Switch,
+    )
+    system.ruby.network.setup_buffers()
+    # The CHI CPU wrapper contains two sequencers; the IO node adds one.
+    system.ruby.num_of_sequencers = 3
+    for directory, (mem_range, port) in zip(directories, memory_ports):
+        directory.addr_ranges = [mem_range]
+        directory.memory_out_port = port
+    sequencers[0].connectCpuPorts(system.cpu)
+    sequencers[0].connectIOPorts(system.iobus)
+    system.iobus.mem_side_ports = system.ruby._io_port.in_ports
+    system.sys_port_proxy = RubyPortProxy(ruby_system=system.ruby)
+    system.sys_port_proxy.pio_request_port = system.iobus.cpu_side_ports
+    system.system_port = system.sys_port_proxy.in_ports
+elif args.caches:
     # Generic performance-oriented capacities, not a calibrated commercial
     # core. Latencies are cycles; all caches use the CPU clock domain.
     def make_cache(size, assoc, latency, mshrs):
@@ -233,8 +337,6 @@ else:
     system.cpu.mmu.connectWalkerPorts(
         system.membus.cpu_side_ports, system.membus.cpu_side_ports
     )
-system.cpu.createInterruptController()
-system.cpu.createThreads()
 
 isa = system.cpu.isa[0]
 isa.riscv_profile = "RVA23S64"
