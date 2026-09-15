@@ -408,9 +408,11 @@ clears cached pointers. No raw host pointer is serialized, and store eligibility
 always consults current memory-side reservations. Direct CPU takeover also
 revalidates the stores and clears its caches.
 
-Returning from dirty timing caches requires separate writeback/invalidation
-support and is outside this example's one-way workflow. The new CPU mapping
-does not change that requirement. Sources:
+Returning from dirty timing caches requires writeback and invalidation before
+direct access resumes. `m5.switchCpus()` performs that maintenance when entering
+`atomic_noncaching`. The example remains a one-way workflow; the multicore
+regressions in §4.8 also validate classic Direct → Timing → Direct switching.
+Sources:
 [`switchCpus`](../src/python/m5/simulate.py),
 [`CPU lifecycle`](../src/cpu/simple/direct_memory.cc),
 [`Linux builder`](../util/riscv-bench/build-linux.sh).
@@ -445,3 +447,59 @@ See the measurements and validation record in
 [RiscvNonCachingPerf.md](RiscvNonCachingPerf.md).
 Scope extensions, especially concurrent host execution, address transformation
 or Ruby reference memory, need separate correctness tests before being enabled.
+
+### 4.8 Multicore bugs and fixes
+
+Bare-metal tests with concurrently executing harts exposed four bugs in the
+shared `AtomicSimpleCPU` and `AbstractMemory` paths used by the direct CPU.
+Keeping multicore stores on packets was necessary, but those packet handlers
+also needed the following fixes. The `NonCachingSimpleCPU` source remains
+unchanged and benefits from the same shared fixes.
+
+1. **Stale context IDs after CPU takeover.** Reused fetch, read, write and AMO
+   requests retained their pre-takeover context IDs. Replacement CPUs could
+   all issue requests as context zero. In a forced sequence of hart 0's LR,
+   hart 1's store and new LR, then hart 0's SC, hart 0 could incorrectly use
+   hart 1's reservation. `AtomicSimpleCPU::takeOverFrom()` now refreshes all
+   four request IDs from the inherited thread context.
+2. **AMOs did not invalidate reservations.** `AbstractMemory::access()` handled
+   AMOs separately from ordinary stores and skipped `writeOK()`. An observed
+   AMO from another hart could therefore leave SC eligible to succeed, losing
+   updates in a counter mixing AMO and LR/SC increments. AMOs and successful
+   swaps now pass through the memory's write checks and reservation handling.
+   A failed conditional swap does not invalidate reservations.
+3. **Wide writes invalidated only their first reservation granule.** The
+   memory's lock list tracks 16-byte granules, but invalidation compared only
+   the start address. Vector stores, `cbo.zero` and misaligned stores could
+   overwrite a reserved word later in the packet without invalidating its
+   reservation. Invalidation now covers all granules overlapped by the write.
+4. **AMOs and swaps bypassed write protection.** The same missing `writeOK()`
+   calls allowed these operations to modify read-only backing memory. They
+   now preserve its contents; the read-only AMO regression checks both the
+   returned value and the unchanged memory value. The test marks ROM
+   uncacheable so the memory owner also enforces protection in timing mode.
+
+Sources: [`AtomicSimpleCPU::takeOverFrom`](../src/cpu/simple/atomic.cc),
+[`AbstractMemory`](../src/mem/abstract_mem.cc). The required failure of SC after
+an observed conflicting write from another hart follows the
+[RISC-V atomic extension](https://docs.riscv.org/reference/isa/unpriv/a-st-ext.html).
+
+The [multicore regression suite](../util/riscv-bench/multicore/README.md)
+contains 12 scenarios with explicit handshakes, per-hart stacks, trap reporting
+and time limits. Besides the failure reproducers, it tests competing SCs,
+contended counters, producer-consumer messages and publication of executable
+instructions followed by `fence.i`. Reservation targets span four cache lines
+to exercise every channel of a four-owner backing allocation.
+
+The pre-fix binary at `0c0917c3f0` fails the AMO, vector, zeroing, misaligned,
+mixed-counter and read-only reproducers with two harts and one memory owner.
+It also fails the reservation-reuse reproducer after CPU switching.
+
+After the fixes, **132 multicore runs passed** across 2/4/8 harts, 1/4 memory
+owners, SimpleMemory and DDR4, classic and Ruby CHI, and mixed direct/noncaching
+CPUs. Switching tests execute each scenario before, between and after two
+switches, including classic Direct → Timing → Direct and repeated Ruby
+Direct → Direct. The RISC-V build, repository checks, single-core CoreMark and
+Linux smoke tests also passed. These results cover the listed configurations;
+they do not establish support for arbitrary protocols or parallel host event
+queues.

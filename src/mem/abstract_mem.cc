@@ -317,6 +317,8 @@ AbstractMemory::checkLockedAddrList(PacketPtr pkt)
 {
     const RequestPtr &req = pkt->req;
     Addr paddr = LockedAddr::mask(req->getPaddr());
+    const Addr last_paddr =
+        LockedAddr::mask(pkt->getAddr() + pkt->getSize() - 1);
     bool isLLSC = pkt->isLLSC();
 
     // Initialize return value.  Non-conditional stores always
@@ -350,12 +352,11 @@ AbstractMemory::checkLockedAddrList(PacketPtr pkt)
     }
     // LLSCs that succeeded AND non-LLSC stores both fall into here:
     if (allowStore) {
-        // We write address paddr.  However, there may be several entries with a
-        // reservation on this address (for other contextIds) and they must all
-        // be removed.
+        // A wide or misaligned store can overlap several reservation
+        // granules. Invalidate all of them, including other contexts' locks.
         i = lockedAddrList.begin();
         while (i != lockedAddrList.end()) {
-            if (i->addr == paddr) {
+            if (i->addr >= paddr && i->addr <= last_paddr) {
                 DPRINTF(LLSC, "Erasing lock record: context %d addr %#x\n",
                         i->contextId, paddr);
                 ContextID owner_cid = i->contextId;
@@ -424,7 +425,9 @@ AbstractMemory::access(PacketPtr pkt)
             if (accessBackingMemory) {
                 uint8_t *host_addr = toHostAddr(pkt->getAddr());
                 pkt->setData(host_addr);
-                (*(pkt->getAtomicOp()))(host_addr);
+                if (writeOK(pkt)) {
+                    (*(pkt->getAtomicOp()))(host_addr);
+                }
             }
         } else {
             std::vector<uint8_t> overwrite_val(pkt->getSize());
@@ -456,8 +459,9 @@ AbstractMemory::access(PacketPtr pkt)
                     panic("Invalid size for conditional read/write\n");
             }
 
-            if (overwrite_mem)
+            if (overwrite_mem && writeOK(pkt)) {
                 std::memcpy(host_addr, &overwrite_val[0], pkt->getSize());
+            }
 
             assert(!pkt->req->isInstFetch());
             TRACE_PACKET("Read/Write");

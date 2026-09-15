@@ -207,6 +207,15 @@ AtomicSimpleCPU::takeOverFrom(BaseCPU *old_cpu)
 {
     BaseSimpleCPU::takeOverFrom(old_cpu);
 
+    // Switched-out CPUs have not registered their thread contexts during
+    // init(). Refresh the reused requests after inheriting the real ID;
+    // memory-side LR/SC tracking must distinguish all harts after a switch.
+    const ContextID cid = threadContexts[curThread]->contextId();
+    ifetch_req->setContext(cid);
+    data_read_req->setContext(cid);
+    data_write_req->setContext(cid);
+    data_amo_req->setContext(cid);
+
     // The tick event should have been descheduled by drain()
     assert(!tickEvent.scheduled());
 }

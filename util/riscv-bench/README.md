@@ -136,3 +136,9 @@ pprof --text build/RISCV/gem5.fast /tmp/cm.prof | head -50
 
 Do not wrap the profiled run in `taskset`: the profiler's timer is inherited
 across the exec and kills gem5 before it installs its own handler.
+
+## Multicore correctness tests
+
+The [bare-metal multicore suite](multicore/README.md) exercises reservations,
+AMO/LR-SC contention, producer-consumer handoffs and instruction publication
+with 2/4/8 harts. It also covers interleaved memory and repeated CPU switches.
