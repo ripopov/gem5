@@ -125,17 +125,10 @@ DirectMemorySimpleCPU::startup()
 }
 
 void
-DirectMemorySimpleCPU::switchOut()
-{
-    AtomicSimpleCPU::switchOut();
-    fetchPage = FetchPage();
-    fetchStore = dataStore = nullptr;
-}
-
-void
 DirectMemorySimpleCPU::takeOverFrom(BaseCPU *old_cpu)
 {
     AtomicSimpleCPU::takeOverFrom(old_cpu);
+    // Discard cached translations before this CPU resumes execution.
     initDirectAccess();
 }
 
@@ -152,7 +145,7 @@ uint8_t *
 DirectMemorySimpleCPU::hostAddr(const memory::BackingStoreEntry *&store,
                                 Addr addr, unsigned size, bool write)
 {
-    if (!directAccessActive()) {
+    if (!directAccessActive() || (write && !storesBypassPort())) {
         return nullptr;
     }
     const auto contains = [addr, size](const auto &entry) {
@@ -168,8 +161,7 @@ DirectMemorySimpleCPU::hostAddr(const memory::BackingStoreEntry *&store,
             }
         }
     }
-    if (!store ||
-        (write && (!storesBypassPort() || !store->canDirectWrite()))) {
+    if (!store || (write && !store->canDirectWrite())) {
         return nullptr;
     }
     return store->pmem + (addr - store->range.start());
@@ -191,10 +183,6 @@ DirectMemorySimpleCPU::tryDirectAccess(const PacketPtr &pkt)
         pkt->isMaskedWrite()) {
         return false;
     }
-    if (write && !storesBypassPort()) {
-        return false;
-    }
-
     const unsigned size = pkt->getSize();
     uint8_t *host = hostAddr(dataStore, pkt->getAddr(), size, write);
     if (!host) {
@@ -287,7 +275,8 @@ DirectMemorySimpleCPU::readMem(Addr addr, uint8_t *data, unsigned size,
         if (req->isLocalAccess()) {
             dcache_latency += req->localAccessor(thread->getTC(), &pkt);
         } else {
-            dcache_latency += sendPacket(dcachePort, &pkt);
+            // The direct lookup already failed; do not retry it.
+            dcache_latency += dcachePort.sendAtomic(&pkt);
         }
         panic_if(pkt.isError(), "Data fetch (%s) failed: %s",
                  pkt.getAddrRange().to_string(), pkt.print());
@@ -330,7 +319,7 @@ DirectMemorySimpleCPU::writeMem(uint8_t *data, unsigned size, Addr addr,
     }
 
     uint8_t *host = (req->isLocalAccess() || req->isUncacheable() ||
-                     req->isStrictlyOrdered() || !storesBypassPort())
+                     req->isStrictlyOrdered())
                         ? nullptr
                         : hostAddr(dataStore, req->getPaddr(), size, true);
     if (host) {
@@ -341,9 +330,9 @@ DirectMemorySimpleCPU::writeMem(uint8_t *data, unsigned size, Addr addr,
         if (req->isLocalAccess()) {
             dcache_latency += req->localAccessor(thread->getTC(), &pkt);
         } else {
-            dcache_latency += sendPacket(dcachePort, &pkt);
-            // Notify other threads on this CPU of write
-            threadSnoop(&pkt, curThread);
+            // Port writes maintain other harts' reservations. This CPU
+            // has only one thread, so no local thread snoop is needed.
+            dcache_latency += dcachePort.sendAtomic(&pkt);
         }
         panic_if(pkt.isError(), "Data write (%s) failed: %s",
                  pkt.getAddrRange().to_string(), pkt.print());

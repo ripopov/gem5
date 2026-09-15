@@ -397,9 +397,10 @@ example's `--switch-to-timing` option performs this handoff at the first guest
 that marker after userspace starts. No RAM copy or cache writeback is needed
 on this one-way transition: backing memory already contains the boot state.
 
-Switch-out clears the old CPU's cached backing-store and fetch-page pointers
-before timing execution resumes. The existing `m5.switchCpus()` drains execution,
-changes the memory mode, and transfers architectural state and ports. Classic
+The direct CPU inherits atomic switch-out handling; its cached pointers are
+unused while switched out and cleared on takeover before it resumes. The
+existing `m5.switchCpus()` drains execution, changes the memory mode, and
+transfers architectural state and ports. Classic
 snoop filters have headroom beyond resident cache capacity to accommodate
 outstanding requests when timing caches become active.
 

@@ -56,7 +56,6 @@ class DirectMemorySimpleCPU : public AtomicSimpleCPU
 
     void verifyMemoryMode() const override;
     void startup() override;
-    void switchOut() override;
     void takeOverFrom(BaseCPU *old_cpu) override;
 
   protected:
