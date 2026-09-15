@@ -132,11 +132,11 @@ In its default port/backdoor mode it caches granted host pointers:
 - accesses that miss the CPU's host mapping use `sendAtomicBackdoor`;
   a granted backdoor is filed in
   an `AddrRangeMap` with an invalidation callback that erases it and clears any
-  window pointing at it
+  cached pointer referencing it
   ([`noncaching.cc`](../src/cpu/simple/noncaching.cc),
   [`noncaching.hh:61`](../src/cpu/simple/noncaching.hh#L61))
-- `hostAddr()` resolves an address against a cached `BackdoorWindow`, falling
-  back to the map on a window miss and handling interleaved ranges per-access
+- `hostAddr()` checks the last fetch/data backdoor pointer, falling back to
+  the map on a miss and handling interleaved ranges per-access
   ([`noncaching.cc`](../src/cpu/simple/noncaching.cc))
 - `readMem()` and `writeMem()` can copy plain loads/stores directly without
   constructing packets. The packet path also tries host access through
@@ -398,7 +398,7 @@ example's `--switch-to-timing` option performs this handoff at the first guest
 that marker after userspace starts. No RAM copy or cache writeback is needed
 on this one-way transition: backing memory already contains the boot state.
 
-Switch-out clears the old CPU's direct mappings and fetch/data windows before
+Switch-out clears the old CPU's direct mappings and cached pointers before
 timing execution resumes. The existing `m5.switchCpus()` drains execution,
 changes the memory mode, and transfers architectural state and ports. Classic
 snoop filters have headroom beyond resident cache capacity to accommodate

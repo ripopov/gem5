@@ -93,8 +93,8 @@ void
 NonCachingSimpleCPU::rebuildDirectMappings()
 {
     fetchPage = FetchPage();
-    fetchWindow.forget();
-    dataWindow.forget();
+    fetchDirectMapping = dataDirectMapping = nullptr;
+    fetchBackdoor = dataBackdoor = nullptr;
     directMappings.clear();
     if (directMemory.empty()) {
         return;
@@ -148,8 +148,8 @@ NonCachingSimpleCPU::switchOut()
 {
     AtomicSimpleCPU::switchOut();
     fetchPage = FetchPage();
-    fetchWindow.forget();
-    dataWindow.forget();
+    fetchDirectMapping = dataDirectMapping = nullptr;
+    fetchBackdoor = dataBackdoor = nullptr;
     directMappings.clear();
 }
 
@@ -170,63 +170,63 @@ NonCachingSimpleCPU::verifyMemoryMode() const
 }
 
 uint8_t *
-NonCachingSimpleCPU::hostAddr(BackdoorWindow &window, Addr addr,
+NonCachingSimpleCPU::hostAddr(const DirectMapping *&direct,
+                              MemBackdoorPtr &backdoor, Addr addr,
                               unsigned size, bool write)
 {
     if (!directMemory.empty()) {
         if (!directAccessActive()) {
             return nullptr;
         }
-        if (!window.direct || addr < window.start || addr >= window.end ||
-            size > window.end - addr) {
-            window.forget();
+        if (!direct || addr < direct->start || addr >= direct->end ||
+            size > direct->end - addr) {
+            direct = nullptr;
             for (const auto &mapping : directMappings) {
                 if (addr >= mapping.start && addr < mapping.end &&
                     size <= mapping.end - addr) {
-                    window.direct = &mapping;
-                    window.start = mapping.start;
-                    window.end = mapping.end;
-                    window.base = mapping.base;
+                    direct = &mapping;
                     break;
                 }
             }
         }
-        if (!window.direct) {
+        if (!direct) {
             return nullptr;
         }
         if (write) {
-            if (!storesBypassPort() || !window.direct->writeable) {
+            if (!storesBypassPort() || !direct->writeable) {
                 return nullptr;
             }
             // A constant-time empty check per owner includes restored locks
             // and every interleaved channel, without caching stale
             // eligibility.
-            for (auto *mem : window.direct->owners) {
+            for (auto *mem : direct->owners) {
                 if (!mem->getLockedAddrList().empty()) {
                     return nullptr;
                 }
             }
         }
-        return window.base + (addr - window.start);
+        return direct->base + (addr - direct->start);
     }
-    if (addr < window.start || addr >= window.end ||
-        size > window.end - addr) {
+    if (!backdoor || addr < backdoor->range().start() ||
+        addr >= backdoor->range().end() ||
+        size > backdoor->range().end() - addr) {
         auto bd_it = memBackdoors.contains(RangeSize(addr, size));
         if (bd_it == memBackdoors.end())
             return nullptr;
         MemBackdoorPtr bd = bd_it->second;
         if (bd->range().interleaved()) {
             // Offsets are not linear in the address; resolve this one
-            // access through the range and leave the window alone.
+            // access through the range and leave the cached pointer alone.
             if (write ? !bd->writeable() : !bd->readable())
                 return nullptr;
             return bd->ptr() + bd->range().getOffset(addr);
         }
-        window.set(bd);
+        backdoor = bd;
     }
-    if (write ? !window.writeable : !window.readable)
+    if (write ? !backdoor->writeable() : !backdoor->readable()) {
         return nullptr;
-    return window.base + (addr - window.start);
+    }
+    return backdoor->ptr() + (addr - backdoor->range().start());
 }
 
 bool
@@ -249,7 +249,8 @@ NonCachingSimpleCPU::tryBackdoorAccess(const PacketPtr &pkt)
         return false;
 
     const unsigned size = pkt->getSize();
-    uint8_t *host = hostAddr(dataWindow, pkt->getAddr(), size, write);
+    uint8_t *host =
+        hostAddr(dataDirectMapping, dataBackdoor, pkt->getAddr(), size, write);
     if (!host)
         return false;
 
@@ -320,11 +321,11 @@ NonCachingSimpleCPU::readMem(Addr addr, uint8_t *data, unsigned size,
     if (req->getFlags().isSet(Request::NO_ACCESS))
         return NoFault;
 
-    const uint8_t *host =
-        (req->isLocalAccess() || req->isUncacheable() ||
-         req->isStrictlyOrdered())
-            ? nullptr
-            : hostAddr(dataWindow, req->getPaddr(), size, false);
+    const uint8_t *host = (req->isLocalAccess() || req->isUncacheable() ||
+                           req->isStrictlyOrdered())
+                              ? nullptr
+                              : hostAddr(dataDirectMapping, dataBackdoor,
+                                         req->getPaddr(), size, false);
     if (host) {
         copyBytes(data, host, size);
     } else {
@@ -375,7 +376,8 @@ NonCachingSimpleCPU::writeMem(uint8_t *data, unsigned size, Addr addr,
     uint8_t *host = (req->isLocalAccess() || req->isUncacheable() ||
                      req->isStrictlyOrdered() || !storesBypassPort())
                         ? nullptr
-                        : hostAddr(dataWindow, req->getPaddr(), size, true);
+                        : hostAddr(dataDirectMapping, dataBackdoor,
+                                   req->getPaddr(), size, true);
     if (host) {
         copyBytes(host, data, size);
     } else {
@@ -412,21 +414,24 @@ NonCachingSimpleCPU::sendPacket(RequestPort &port, const PacketPtr &pkt)
     if (bd && memBackdoors.insert(bd->range(), bd) != memBackdoors.end()) {
         // Install a callback to erase this backdoor if it goes away.
         auto callback = [this](const MemBackdoor &backdoor) {
-                if (fetchWindow.backdoor == &backdoor)
-                    fetchWindow.forget();
-                if (fetchPage.backdoor == &backdoor)
-                    fetchPage = FetchPage();
-                if (dataWindow.backdoor == &backdoor)
-                    dataWindow.forget();
-                for (auto it = memBackdoors.begin();
-                        it != memBackdoors.end(); it++) {
-                    if (it->second == &backdoor) {
-                        memBackdoors.erase(it);
-                        return;
-                    }
+            if (fetchBackdoor == &backdoor) {
+                fetchBackdoor = nullptr;
+            }
+            if (fetchPage.backdoor == &backdoor) {
+                fetchPage = FetchPage();
+            }
+            if (dataBackdoor == &backdoor) {
+                dataBackdoor = nullptr;
+            }
+            for (auto it = memBackdoors.begin(); it != memBackdoors.end();
+                 it++) {
+                if (it->second == &backdoor) {
+                    memBackdoors.erase(it);
+                    return;
                 }
-                panic("Got invalidation for unknown memory backdoor.");
-            };
+            }
+            panic("Got invalidation for unknown memory backdoor.");
+        };
         bd->addInvalidationCallback(callback);
     }
     return latency;
@@ -465,13 +470,14 @@ NonCachingSimpleCPU::fetchInstruction(Tick &latency)
         !ifetch_req->isLocalAccess() &&
         itb->stableFetchPage(thread->getTC(), fetch_pc, vpage, ppage,
                              page_size)) {
-        const uint8_t *host = hostAddr(fetchWindow, ppage, page_size, false);
+        const uint8_t *host = hostAddr(fetchDirectMapping, fetchBackdoor,
+                                       ppage, page_size, false);
         if (host) {
             fetchPage.vpage = vpage;
             fetchPage.size = page_size;
             fetchPage.epoch = itb->translationEpoch(thread->getTC());
             fetchPage.host = host;
-            fetchPage.backdoor = fetchWindow.backdoor;
+            fetchPage.backdoor = fetchBackdoor;
         }
     }
     return NoFault;
@@ -485,8 +491,8 @@ NonCachingSimpleCPU::fetchInstMem()
         return AtomicSimpleCPU::fetchInstMem();
     }
     const unsigned size = ifetch_req->getSize();
-    const uint8_t *host =
-        hostAddr(fetchWindow, ifetch_req->getPaddr(), size, false);
+    const uint8_t *host = hostAddr(fetchDirectMapping, fetchBackdoor,
+                                   ifetch_req->getPaddr(), size, false);
     if (!host)
         return AtomicSimpleCPU::fetchInstMem();
 

@@ -76,36 +76,11 @@ class NonCachingSimpleCPU : public AtomicSimpleCPU
 
     AddrRangeMap<MemBackdoorPtr, 1> memBackdoors;
 
-    /**
-     * The direct mapping or backdoor used by the last fetch/data access,
-     * as plain bounds and a host pointer. Consecutive accesses
-     * almost always hit the same memory, so this is checked before the
-     * range map and resolves an address with two compares and an add.
-     */
-    struct BackdoorWindow
-    {
-        MemBackdoorPtr backdoor = nullptr;
-        Addr start = 0;
-        Addr end = 0; // exclusive
-        uint8_t *base = nullptr; // host address of start
-        bool readable = false;
-        bool writeable = false;
-        const DirectMapping *direct = nullptr;
-
-        void
-        set(MemBackdoorPtr bd)
-        {
-            backdoor = bd;
-            start = bd->range().start();
-            end = bd->range().end();
-            base = bd->ptr();
-            readable = bd->readable();
-            writeable = bd->writeable();
-        }
-
-        void forget() { *this = BackdoorWindow(); }
-    };
-    BackdoorWindow fetchWindow, dataWindow;
+    /** Last fetch/data mappings, checked before searching the collections. */
+    const DirectMapping *fetchDirectMapping = nullptr;
+    const DirectMapping *dataDirectMapping = nullptr;
+    MemBackdoorPtr fetchBackdoor = nullptr;
+    MemBackdoorPtr dataBackdoor = nullptr;
 
     /**
      * The instruction page being executed from, as a host pointer.
@@ -129,11 +104,11 @@ class NonCachingSimpleCPU : public AtomicSimpleCPU
 
     /**
      * Host address of [addr, addr + size) through an eligible direct mapping
-     * or recorded backdoor, or nullptr. Refreshes the window when the
-     * access is outside it.
+     * or recorded backdoor, or nullptr. Refreshes the cached pointer when
+     * the access is outside its mapping.
      */
-    uint8_t *hostAddr(BackdoorWindow &window, Addr addr, unsigned size,
-                      bool write);
+    uint8_t *hostAddr(const DirectMapping *&direct, MemBackdoorPtr &backdoor,
+                      Addr addr, unsigned size, bool write);
 
     /**
      * Perform a plain load or store through a recorded backdoor instead
