@@ -89,6 +89,15 @@ class ISA : public BaseISA
     const Addr INVALID_RESERVATION_ADDR = (Addr)-1;
     std::unordered_map<int, Addr> load_reservation_addrs;
 
+    Addr &
+    loadReservation(ContextID cid)
+    {
+        // Address zero is valid RAM, not the absence of a reservation.
+        return load_reservation_addrs
+            .try_emplace(cid, INVALID_RESERVATION_ADDR)
+            .first->second;
+    }
+
     /** Length of each vector register in bits.
      *  VLEN in Ch. 2 of RISC-V vector spec
      */
@@ -177,6 +186,8 @@ class ISA : public BaseISA
             Addr cacheBlockMask) override;
 
     void handleLockedSnoop(PacketPtr pkt, Addr cacheBlockMask) override;
+
+    void takeOverFrom(ThreadContext *new_tc, ThreadContext *old_tc) override;
 
     void globalClearExclusive() override;
 

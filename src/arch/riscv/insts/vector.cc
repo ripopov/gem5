@@ -590,15 +590,17 @@ VlFFTrimVlMicroOp::VlFFTrimVlMicroOp(ExtMachInst _machInst, uint32_t _microVl,
 uint32_t
 VlFFTrimVlMicroOp::calcVl() const
 {
-    uint32_t vl = 0;
-    for (uint8_t i=0; i<microIdx; i++) {
-        VleMicroInst& micro = static_cast<VleMicroInst&>(*microops[i]);
-        vl += micro.faultIdx;
-
-        if (micro.trimVl)
-            break;
+    if (microVl == 0) {
+        return 0;
     }
-    return vl;
+    // Masked loads have one microop per element, with several writing the
+    // same vector register. The final trim operation is not a load microop.
+    for (size_t i = 0; i + 1 < microops.size(); ++i) {
+        const auto &micro = static_cast<const VleMicroInst &>(*microops[i]);
+        if (micro.trimVl)
+            return micro.faultElement();
+    }
+    return microVl;
 }
 
 Fault

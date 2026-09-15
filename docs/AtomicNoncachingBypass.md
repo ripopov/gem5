@@ -503,3 +503,89 @@ Direct → Direct. The RISC-V build, repository checks, single-core CoreMark and
 Linux smoke tests also passed. These results cover the listed configurations;
 they do not establish support for arbitrary protocols or parallel host event
 queues.
+
+### 4.9 Deeper bare-metal audit
+
+The follow-up audit used `f48a0bd118` as the pre-fix baseline. It found
+additional bugs in shared RISC-V and simple-CPU paths; the direct CPU's
+backing-store lookup did not need another change. `NonCachingSimpleCPU`'s
+selected upstream source remains unchanged.
+
+| Finding | Reproducer and correction |
+|---|---|
+| Invalid reservations at physical address zero; stale reservations when reusing a CPU | A failed SC consumes the ISA reservation but can leave a memory-side lock. An empty ISA map implicitly contained address zero, and a returning CPU retained its previous LR. `reservation-zero`, `reservation-return`, and `checkpoint-zero` incorrectly succeeded on the baseline. Missing entries now start invalid; clear, takeover and restore discard ISA reservations. |
+| Partial PMP matches skipped the higher-priority entry | `pmp-partial-s` and `pmp-partial-m` cross a four-byte PMP entry into a later allow-all entry. The baseline allowed the access. The first enabled entry matching any byte must cover the entire operation, including in M-mode. |
+| Ordinary misaligned-memory support also enabled misaligned atomics | `misaligned-lr`, `misaligned-sc` and `misaligned-amo` executed instead of trapping. LR/SC and AMOs now retain natural alignment checks. This PMA configuration does not model a misaligned atomicity granule. |
+| Cross-line AMOs crashed the host before the guest could trap | `misaligned-amo-crossline` panicked in both simple-CPU execution modes. Atomic and timing CPUs now allow translation to report the guest fault before rejecting an otherwise unsupported cross-line AMO. |
+| Masked vector memory requests included inaccessible elements | A fully masked unit-stride load to unmapped memory caused a missing-destination fatal error. Masked loads/stores crossing an eight-byte PMP region also faulted on inactive elements. Masked unit-stride operations now use one request per element and preserve the destination between load microops. Ordinary unmasked operations retain register-sized requests. |
+| Fault-only-first loads lost accessible prefixes or retained old fault state | An unmasked load whose first element was accessible incorrectly trapped when later elements failed PMP. These loads now access elements separately, reset fault state on execution, and trim VL using the first suppressed fault's absolute element index. Tests repeat the same instruction with a different mask and also cover VL zero. |
+| Timing execution did not honor disabled requests or fault suppression | TimingSimpleCPU now completes all-disabled accesses without translating them. For an unsplit read translation fault it replays instruction initiation with the completed fault, following MinorCPU's approach, so fault-only-first instructions can suppress it before completion. |
+
+Sources: [RISC-V reservation handling](../src/arch/riscv/isa.cc),
+[PMP](../src/arch/riscv/pmp.cc), [PMA](../src/arch/riscv/pma_checker.cc),
+[vector memory templates](../src/arch/riscv/isa/templates/vector_mem.isa),
+[vector-length trimming](../src/arch/riscv/insts/vector.cc),
+[AtomicSimpleCPU](../src/cpu/simple/atomic.cc), and
+[TimingSimpleCPU](../src/cpu/simple/timing.cc).
+The architectural requirements are in the
+[atomic extension](https://docs.riscv.org/reference/isa/v20240411/unpriv/a-st-ext.html),
+[PMP specification](https://docs.riscv.org/reference/isa/_attachments/riscv-privileged.pdf),
+and [vector extension](https://docs.riscv.org/reference/isa/unpriv/v-st-ext).
+Reservations may be discarded across a CPU switch or restore; the tests require
+failure after a consumed or conflicting reservation, not unconditional SC
+success across those transitions.
+
+#### Coverage and reproduction
+
+[`audit.py`](../util/riscv-bench/multicore/audit.py) adds 31 directed scenarios
+and optional rejection checks. It records exact compiler/simulator commands,
+per-case logs and `results.json`. Each simulator invocation has a 60-second
+host timeout and a bounded simulated duration. Checkpoint cases run separate
+save and restore processes. For direct/noncaching CPUs the reservation test
+also checks the checkpoint's `lal_cid` list for every hart: the four-hart and
+eight-hart snapshots retained four and eight memory-side reservations.
+Timing caches can discard reservations during drain, which is permitted.
+
+The audit also passed checks for Sv39 data/fetch remapping after `sfence.vma`,
+PMP data/execute permission revocation after warming the fast paths, software
+and timer interrupts, WFI with global interrupts disabled, post-takeover
+interrupts, contended AMO.W/LR.W/SC.W counters, spinlocks, masked conflicting
+stores, and discontiguous/excluded memory. The existing suite supplies message
+publication, instruction publication with `fence.i`, read-only AMOs and
+repeated switching tests.
+
+After the fixes, the following matrix passed **300 checks** (checkpoint save
+and restore count separately):
+
+| Configuration | Passed |
+|---|---:|
+| New audit: direct, four harts/four channels | 33 |
+| New audit: direct, eight harts/four channels, width four, staggered clocks | 33 |
+| New audit: noncaching, two harts/one channel | 33 |
+| New audit: timing with classic caches, four harts/four channels | 33 |
+| New audit: direct with Ruby CHI, four harts/four channels, width two; three invalid configurations | 36 |
+| Nine vector cases each on Direct, Timing, Minor and O3, two harts/one channel with classic caches | 36 |
+| Existing suite: direct, 2/4/8 harts, 1/4 channels, width four and staggered clocks | 72 |
+| Existing suite: four-channel DDR4, classic Direct → Timing → Direct | 12 |
+| Existing suite: four-channel DDR4, Ruby Direct → Direct → Direct | 12 |
+
+Commands and case names are in the
+[multicore README](../util/riscv-bench/multicore/README.md#deeper-audit).
+The invalid configurations explicitly reject no eligible RAM, a foreign event
+queue and simulated data stalls. This does not enable concurrent host event
+queues.
+
+The RISC-V fast build and source/style checks passed. CoreMark's three CRCs,
+62,405,796 instructions and 73,783,313,000 ticks match `f48a0bd118`. Linux
+completed its memory/timer checks and userspace marker. Linux's vector
+microop count and timing change with the corrected element requests:
+170,369,391 operations and 228,353,061,000 ticks, versus 170,324,769 and
+228,310,447,000 before the fixes. Guest instruction counts were 170,054,284
+and 170,063,636 respectively; these runs are not instruction-count identical.
+
+This is directed coverage, not a complete ISA or coherence proof. Vector
+checks cover naturally aligned unit-stride accesses at EEW 8/64 and LMUL 1/8;
+segmented/indexed accesses, nonzero `vstart`, split timing fault suppression
+and arbitrary speculative fault-only-first overlap need separate coverage.
+Hardware reset, DMA interference, RV32, hypervisor translation, KVM hardware
+execution and other coherence protocols were not exercised in this pass.

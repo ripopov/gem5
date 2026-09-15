@@ -39,18 +39,20 @@ def declareVMemTemplate(class_name):
     template class {class_name}<uint64_t>;
     '''
 
-def getFaultCode():
+def getFaultCode(element_offset=False):
+    offset = "(element >= 0 ? element : 0) + " if element_offset else ""
     return '''
     Addr fault_addr;
     if (fault != NoFault && getFaultVAddr(fault, fault_addr)) {
         assert(fault_addr >= EA);
-        faultIdx = (fault_addr - EA) / (width_EEW(machInst.width) / 8);
+        faultIdx = %(offset)s(fault_addr - EA) /
+            (width_EEW(machInst.width) / 8);
         if (microIdx != 0 || faultIdx != 0) {
             fault = NoFault;
             trimVl = true;
         }
     }
-    '''
+    ''' % {"offset": offset}
 
 def getTailMaskPolicyCode():
     return '''
@@ -104,7 +106,8 @@ def VMemBase(name, Name, ea_code, memacc_code, mem_flags,
          'postacc_code': postacc_code,
          'set_vlenb': setVlenb(),
          'declare_vmem_template': declareVMemTemplate(Name + 'Micro'),
-         'fault_code': getFaultCode() if fault_only_first else '',
+         'fault_code': getFaultCode(microop_template_base == 'Vle')
+                       if fault_only_first else '',
          'tail_mask_policy_code': getTailMaskPolicyCode()},
         inst_flags)
 

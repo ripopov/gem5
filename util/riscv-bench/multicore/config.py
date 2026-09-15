@@ -10,12 +10,17 @@ from m5.objects import (
     AddrRange,
     BadAddr,
     Cache,
+    Clint,
     DDR4_2400_8x8,
     MemCtrl,
     PMAChecker,
+    RiscvAtomicSimpleCPU,
     RiscvBareMetal,
     RiscvDirectMemorySimpleCPU,
+    RiscvMinorCPU,
     RiscvNonCachingSimpleCPU,
+    RiscvO3CPU,
+    RiscvRTC,
     RiscvSystem,
     RiscvTimingSimpleCPU,
     Root,
@@ -31,7 +36,17 @@ parser.add_argument("binary")
 parser.add_argument("--cores", type=int, choices=(2, 4, 8), default=2)
 parser.add_argument("--channels", type=int, choices=(1, 2, 4), default=1)
 parser.add_argument(
-    "--cpu", choices=("direct", "noncaching", "mixed"), default="direct"
+    "--cpu",
+    choices=(
+        "direct",
+        "noncaching",
+        "mixed",
+        "atomic",
+        "timing",
+        "minor",
+        "o3",
+    ),
+    default="direct",
 )
 parser.add_argument(
     "--topology", choices=("flat", "classic", "ruby"), default="flat"
@@ -41,10 +56,32 @@ parser.add_argument("--switches", type=int, default=0)
 parser.add_argument(
     "--switch-to", choices=("direct", "noncaching", "timing"), default="direct"
 )
+parser.add_argument("--width", type=int, default=1)
+parser.add_argument("--stagger", action="store_true")
+parser.add_argument("--lowmem", action="store_true")
+parser.add_argument(
+    "--secondary", choices=("none", "ram", "excluded"), default="none"
+)
+parser.add_argument("--interrupts", action="store_true")
+parser.add_argument("--checkpoint", type=Path)
+parser.add_argument("--restore", type=Path)
+parser.add_argument("--reject", choices=("no-ram", "eventq", "stalls"))
 args = parser.parse_args()
+if args.lowmem and args.secondary != "none":
+    parser.error("--lowmem and --secondary use the same auxiliary memory")
+if args.checkpoint and args.switches:
+    parser.error("save and switch are separate lifecycle operations")
 
 system = RiscvSystem(
-    mem_mode="atomic_noncaching",
+    mem_mode=(
+        "timing"
+        if args.cpu in ("timing", "minor", "o3")
+        else (
+            "atomic"
+            if args.cpu == "atomic" and args.topology != "ruby"
+            else "atomic_noncaching"
+        )
+    ),
     mem_ranges=[AddrRange(0x80000000, size="32MiB")],
     cache_line_size=64,
 )
@@ -53,9 +90,12 @@ system.clk_domain = SrcClockDomain(
     clock="1GHz", voltage_domain=system.voltage_domain
 )
 classes = {
+    "atomic": RiscvAtomicSimpleCPU,
     "direct": RiscvDirectMemorySimpleCPU,
     "noncaching": RiscvNonCachingSimpleCPU,
     "timing": RiscvTimingSimpleCPU,
+    "minor": RiscvMinorCPU,
+    "o3": RiscvO3CPU,
 }
 
 
@@ -63,6 +103,13 @@ def make_cpu(index, kind, switched_out=False):
     if kind == "mixed":
         kind = "noncaching" if index % 2 else "direct"
     cpu = classes[kind](cpu_id=index, switched_out=switched_out)
+    if kind in ("atomic", "direct", "noncaching"):
+        cpu.width = args.width
+    if args.stagger:
+        cpu.clk_domain = SrcClockDomain(
+            clock=f"{1000 + 137 * index}MHz",
+            voltage_domain=system.voltage_domain,
+        )
     cpu.createInterruptController()
     cpu.createThreads()
     cpu.isa[0].riscv_profile = "RVA23S64"
@@ -70,7 +117,10 @@ def make_cpu(index, kind, switched_out=False):
     # Keep ROM operations at the memory owner, including in timing mode.
     cpu.mmu.pma_checker = PMAChecker(
         misaligned=system.mem_ranges,
-        uncacheable=[AddrRange(0x90000000, size="4KiB")],
+        uncacheable=[
+            AddrRange(0x90000000, size="4KiB"),
+            AddrRange(0x2000000, size="48KiB"),
+        ],
     )
     return cpu
 
@@ -106,6 +156,25 @@ system.mem_ctrls = memories
 system.rom = SimpleMemory(
     range=AddrRange(0x90000000, size="4KiB"), writeable=False
 )
+if args.reject == "no-ram":
+    system.rom.kvm_map = False
+    for mem in memories:
+        owner = mem.dram if args.memory == "ddr4" else mem
+        owner.kvm_map = False
+elif args.reject == "eventq":
+    system.cpu[0].eventq_index = 1
+elif args.reject == "stalls":
+    system.cpu[0].simulate_data_stalls = True
+
+if args.lowmem or args.secondary != "none":
+    system.sram = SimpleMemory(
+        range=AddrRange(0 if args.lowmem else 0x84000000, size="4KiB"),
+        kvm_map=args.secondary != "excluded",
+    )
+if args.interrupts:
+    system.clint = Clint(pio_addr=0x2000000, num_threads=args.cores)
+    system.rtc = RiscvRTC(frequency="10MHz")
+    system.clint.int_pin = system.rtc.int_pin
 
 if args.topology == "ruby":
     # Use the same CHI builder as configs/example/riscv/noncaching_fs.py.
@@ -163,6 +232,8 @@ if args.topology == "ruby":
     system.iobus = IOXBar()
     system.iobus.badaddr = BadAddr()
     system.iobus.default = system.iobus.badaddr.pio
+    if args.interrupts:
+        system.clint.pio = system.iobus.mem_side_ports
     for seq, cpu in zip(seqs, system.cpu):
         seq.connectCpuPorts(cpu)
         seq.connectIOPorts(system.iobus)
@@ -175,6 +246,10 @@ else:
     for _, port in ports:
         system.membus.mem_side_ports = port
     system.membus.mem_side_ports = system.rom.port
+    if args.lowmem or args.secondary != "none":
+        system.membus.mem_side_ports = system.sram.port
+    if args.interrupts:
+        system.clint.pio = system.membus.mem_side_ports
     for cpu in system.cpu:
         if args.topology == "classic":
 
@@ -206,7 +281,17 @@ else:
 
 system.workload = RiscvBareMetal(bootloader=args.binary)
 root = Root(full_system=True, system=system)
-m5.instantiate()
+m5.instantiate(str(args.restore) if args.restore else None)
+if args.checkpoint:
+    event = m5.simulate(10**10)
+    if event.getCause() != "checkpoint":
+        raise RuntimeError(
+            f"Expected checkpoint: {event.getCause()}, "
+            f"code={event.getCode()}"
+        )
+    m5.checkpoint(str(args.checkpoint))
+    print("CHECKPOINT SAVED")
+    raise SystemExit(0)
 current, replacement = system.cpu, getattr(system, "next_cpu", None)
 for _ in range(args.switches):
     event = m5.simulate(10**10)

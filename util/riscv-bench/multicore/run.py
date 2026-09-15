@@ -49,6 +49,8 @@ def main():
     parser.add_argument(
         "--cpu", choices=("direct", "noncaching", "mixed"), default="direct"
     )
+    parser.add_argument("--width", type=int, default=1)
+    parser.add_argument("--stagger", action="store_true")
     parser.add_argument("--switches", type=int, default=0)
     parser.add_argument(
         "--switch-to",
@@ -108,6 +110,9 @@ def main():
                 args.topology,
                 "--memory",
                 args.memory,
+                "--width",
+                str(args.width),
+                *(["--stagger"] if args.stagger else []),
                 "--switches",
                 str(args.switches),
                 "--switch-to",

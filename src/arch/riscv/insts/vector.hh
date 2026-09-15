@@ -396,16 +396,24 @@ class VleMicroInst : public VectorMicroInst
   public:
     mutable bool trimVl;
     mutable uint32_t faultIdx;
+    uint32_t
+    faultElement() const
+    {
+        return microIdx * vlen / width_EEW(machInst.width) + faultIdx;
+    }
 
   protected:
     Request::Flags memAccessFlags;
+    const int element; // -1: unmasked register-sized access
 
-    VleMicroInst(const char *mnem, ExtMachInst _machInst,OpClass __opClass,
+    VleMicroInst(const char *mnem, ExtMachInst _machInst, OpClass __opClass,
                  uint32_t _microVl, uint32_t _microIdx, uint32_t _elen,
-                 uint32_t _vlen)
+                 uint32_t _vlen, int _element)
         : VectorMicroInst(mnem, _machInst, __opClass, _microVl, _microIdx,
-                          _elen, _vlen)
-        , trimVl(false), faultIdx(_microVl)
+                          _elen, _vlen),
+          trimVl(false),
+          faultIdx(_microVl),
+          element(_element)
     {
         this->flags[IsLoad] = true;
     }
@@ -418,12 +426,14 @@ class VseMicroInst : public VectorMicroInst
 {
   protected:
     Request::Flags memAccessFlags;
+    const int element; // -1: unmasked register-sized access
 
     VseMicroInst(const char *mnem, ExtMachInst _machInst, OpClass __opClass,
                  uint32_t _microVl, uint32_t _microIdx, uint32_t _elen,
-                 uint32_t _vlen)
+                 uint32_t _vlen, int _element)
         : VectorMicroInst(mnem, _machInst, __opClass, _microVl, _microIdx,
-                          _elen, _vlen)
+                          _elen, _vlen),
+          element(_element)
     {
         this->flags[IsStore] = true;
     }

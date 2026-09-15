@@ -586,9 +586,6 @@ AtomicSimpleCPU::amoMem(Addr addr, uint8_t* data, unsigned size,
     // accesses that cross cache-line boundaries, the cache needs to be
     // modified to support locking both cache lines to guarantee the
     // atomicity.
-    panic_if(secondAddr > addr,
-        "AMO request should not access across a cache line boundary.");
-
     dcache_latency = 0;
 
     req->taskId(taskId());
@@ -598,6 +595,11 @@ AtomicSimpleCPU::amoMem(Addr addr, uint8_t* data, unsigned size,
     // translate to physical address
     Fault fault = thread->mmu->translateAtomic(
         req, thread->getTC(), BaseMMU::Write);
+
+    // Translation may report a misaligned-access fault. Let the guest
+    // handle it before rejecting an unsupported cross-line atomic access.
+    panic_if(fault == NoFault && secondAddr > addr,
+             "AMO request should not access across a cache line boundary.");
 
     // Now do the access.
     if (fault == NoFault && !req->getFlags().isSet(Request::NO_ACCESS)) {

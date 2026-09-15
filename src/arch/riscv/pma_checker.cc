@@ -78,7 +78,7 @@ PMAChecker::checkVAddrAlignment(
 {
     // We need to translate address before alignment check
     // if there are some memory ranges support misaligned load/store
-    if (hasMisaligned()) {
+    if (hasMisaligned() && !req->isLLSC() && !req->isAtomic()) {
         return NoFault;
     }
 
@@ -158,7 +158,8 @@ PMAChecker::checkPAddrAlignment(
     if (addressAlign(paddr, alignSize)) {
         return NoFault;
     }
-    if (misalignedSupport(RangeSize(paddr, req->getSize()))){
+    if (!req->isLLSC() && !req->isAtomic() &&
+        misalignedSupport(RangeSize(paddr, req->getSize()))) {
         return NoFault;
     }
     return createMisalignFault(

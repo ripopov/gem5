@@ -76,46 +76,26 @@ PMP::pmpCheck(const RequestPtr &req, BaseMMU::Mode mode,
                 req->getPaddr());
     }
 
-    // match_index will be used to identify the pmp entry
-    // which matched for the given address
-    int match_index = -1;
-
-    // all pmp entries need to be looked from the lowest to
-    // the highest number
-    for (int i = 0; i < pmpTable.size(); i++) {
-        AddrRange pmp_range = pmpTable[i].pmpAddr;
-        if (pmp_range.contains(req->getPaddr()) &&
-                pmp_range.contains(req->getPaddr() + req->getSize() - 1)) {
-            // according to specs address is only matched,
-            // when (addr) and (addr + request_size - 1) are both
-            // within the pmp range
-            match_index = i;
+    const AddrRange access_range = RangeSize(req->getPaddr(), req->getSize());
+    for (const auto &entry : pmpTable) {
+        const uint8_t cfg = entry.pmpCfg;
+        if (pmpGetAField(cfg) == PMP_OFF ||
+            !entry.pmpAddr.intersects(access_range)) {
+            continue;
         }
 
-        if ((match_index > -1)
-            && (PMP_OFF != pmpGetAField(pmpTable[match_index].pmpCfg))) {
-            uint8_t this_cfg = pmpTable[match_index].pmpCfg;
-
-            if ((pmode == PrivilegeMode::PRV_M) &&
-                                    (PMP_LOCK & this_cfg) == 0) {
+        // The first entry matching any byte must cover the entire access.
+        // A partial match fails even in M-mode or if a later entry allows it.
+        if (access_range.isSubset(entry.pmpAddr)) {
+            if ((pmode == PrivilegeMode::PRV_M && !(cfg & PMP_LOCK)) ||
+                (mode == BaseMMU::Read && (cfg & PMP_READ)) ||
+                (mode == BaseMMU::Write && (cfg & PMP_WRITE)) ||
+                (mode == BaseMMU::Execute && (cfg & PMP_EXEC))) {
                 return NoFault;
-            } else if ((mode == BaseMMU::Mode::Read) &&
-                                        (PMP_READ & this_cfg)) {
-                return NoFault;
-            } else if ((mode == BaseMMU::Mode::Write) &&
-                                        (PMP_WRITE & this_cfg)) {
-                return NoFault;
-            } else if ((mode == BaseMMU::Mode::Execute) &&
-                                        (PMP_EXEC & this_cfg)) {
-                return NoFault;
-            } else {
-                if (req->hasVaddr()) {
-                    return createAddrfault(req->getVaddr(), mode);
-                } else {
-                    return createAddrfault(vaddr, mode);
-                }
             }
         }
+        return createAddrfault(req->hasVaddr() ? req->getVaddr() : vaddr,
+                               mode);
     }
     return createDefaultFault(req, mode, pmode, vaddr);
 }

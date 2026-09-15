@@ -457,6 +457,15 @@ TimingSimpleCPU::initiateMemRead(Addr addr, unsigned size,
     SimpleExecContext &t_info = *threadInfo[curThread];
     SimpleThread* thread = t_info.thread;
 
+    if (replayFault != NoFault) {
+        return replayFault;
+    }
+    if (std::none_of(byte_enable.begin(), byte_enable.end(),
+                     [](bool enabled) { return enabled; })) {
+        t_info.setMemAccPredicate(false);
+        return curStaticInst->completeAcc(nullptr, &t_info, traceData);
+    }
+
     Fault fault;
     const Addr pc = thread->pcState().instAddr();
     unsigned block_size = cacheLineSize();
@@ -531,6 +540,12 @@ TimingSimpleCPU::writeMem(uint8_t *data, unsigned size,
     SimpleExecContext &t_info = *threadInfo[curThread];
     SimpleThread* thread = t_info.thread;
 
+    if (std::none_of(byte_enable.begin(), byte_enable.end(),
+                     [](bool enabled) { return enabled; })) {
+        t_info.setMemAccPredicate(false);
+        return curStaticInst->completeAcc(nullptr, &t_info, traceData);
+    }
+
     uint8_t *newData = new uint8_t[size];
     const Addr pc = thread->pcState().instAddr();
     unsigned block_size = cacheLineSize();
@@ -597,7 +612,6 @@ TimingSimpleCPU::initiateMemAMO(Addr addr, unsigned size,
 
     Fault fault;
     const Addr pc = thread->pcState().instAddr();
-    unsigned block_size = cacheLineSize();
     BaseMMU::Mode mode = BaseMMU::Write;
 
     if (traceData)
@@ -610,19 +624,6 @@ TimingSimpleCPU::initiateMemAMO(Addr addr, unsigned size,
     assert(req->hasAtomicOpFunctor());
 
     req->taskId(taskId());
-
-    Addr split_addr = roundDown(addr + size - 1, block_size);
-
-    // AMO requests that access across a cache line boundary are not
-    // allowed since the cache does not guarantee AMO ops to be executed
-    // atomically in two cache lines
-    // For ISAs such as x86 that requires AMO operations to work on
-    // accesses that cross cache-line boundaries, the cache needs to be
-    // modified to support locking both cache lines to guarantee the
-    // atomicity.
-    if (split_addr > addr) {
-        panic("AMO requests should not access across a cache line boundary\n");
-    }
 
     _status = DTBWaitResponse;
 
@@ -655,13 +656,32 @@ TimingSimpleCPU::finishTranslation(WholeTranslationState *state)
     _status = BaseSimpleCPU::Running;
 
     if (state->getFault() != NoFault) {
+        Fault fault = state->getFault();
         if (state->isPrefetch()) {
-            state->setNoFault();
+            fault = NoFault;
+        } else if (state->mode == BaseMMU::Read && !state->isSplit) {
+            // Like MinorCPU, replay initiation with the completed fault.
+            // Fault-only-first loads may suppress it and still write back
+            // their undisturbed destination and updated vector length.
+            SimpleExecContext &t_info = *threadInfo[curThread];
+            replayFault = fault;
+            fault = curStaticInst->initiateAcc(&t_info, traceData);
+            replayFault = NoFault;
+            if (fault == NoFault) {
+                t_info.setMemAccPredicate(false);
+                fault =
+                    curStaticInst->completeAcc(nullptr, &t_info, traceData);
+            }
         }
         delete [] state->data;
         state->deleteReqs();
-        translationFault(state->getFault());
+        translationFault(fault);
     } else {
+        const auto &req = state->mainReq;
+        panic_if(req->isAtomic() &&
+                     roundDown(req->getVaddr() + req->getSize() - 1,
+                               cacheLineSize()) > req->getVaddr(),
+                 "AMO requests should not cross a cache line boundary");
         if (!state->isSplit) {
             sendData(state->mainReq, state->data, state->res,
                      state->mode == BaseMMU::Read);

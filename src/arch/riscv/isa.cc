@@ -391,6 +391,7 @@ ISA::copyRegsFrom(ThreadContext *src)
 
 void ISA::clear()
 {
+    load_reservation_addrs.clear();
     std::fill(miscRegFile.begin(), miscRegFile.end(), 0);
 
     miscRegFile[MISCREG_PRV] = PRV_M;
@@ -1147,13 +1148,23 @@ ISA::unserialize(CheckpointIn &cp)
 {
     DPRINTF(Checkpoint, "Unserializing Riscv Misc Registers\n");
     UNSERIALIZE_CONTAINER(miscRegFile);
+    load_reservation_addrs.clear();
     ++_translationGeneration;
+}
+
+void
+ISA::takeOverFrom(ThreadContext *new_tc, ThreadContext *old_tc)
+{
+    BaseISA::takeOverFrom(new_tc, old_tc);
+    // A reused CPU object may retain a reservation from its last activation.
+    // Discarding a reservation at a switch is legal; reviving it is not.
+    load_reservation_addrs.clear();
 }
 
 void
 ISA::handleLockedSnoop(PacketPtr pkt, Addr cacheBlockMask)
 {
-    Addr& load_reservation_addr = load_reservation_addrs[tc->contextId()];
+    Addr &load_reservation_addr = loadReservation(tc->contextId());
 
     if (load_reservation_addr == INVALID_RESERVATION_ADDR)
         return;
@@ -1167,7 +1178,7 @@ ISA::handleLockedSnoop(PacketPtr pkt, Addr cacheBlockMask)
 void
 ISA::handleLockedRead(const RequestPtr &req)
 {
-    Addr& load_reservation_addr = load_reservation_addrs[tc->contextId()];
+    Addr &load_reservation_addr = loadReservation(tc->contextId());
 
     load_reservation_addr = req->getPaddr();
     DPRINTF(LLSC, "[cid:%d]: Reserved address %x.\n",
@@ -1177,7 +1188,7 @@ ISA::handleLockedRead(const RequestPtr &req)
 bool
 ISA::handleLockedWrite(const RequestPtr &req, Addr cacheBlockMask)
 {
-    Addr& load_reservation_addr = load_reservation_addrs[tc->contextId()];
+    Addr &load_reservation_addr = loadReservation(tc->contextId());
     bool lr_addr_empty = (load_reservation_addr == INVALID_RESERVATION_ADDR);
 
     // Normally RISC-V uses zero to indicate success and nonzero to indicate
@@ -1226,7 +1237,7 @@ void
 ISA::globalClearExclusive()
 {
     tc->getCpuPtr()->wakeup(tc->threadId());
-    Addr& load_reservation_addr = load_reservation_addrs[tc->contextId()];
+    Addr &load_reservation_addr = loadReservation(tc->contextId());
     load_reservation_addr = INVALID_RESERVATION_ADDR;
 }
 

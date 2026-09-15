@@ -60,6 +60,9 @@ class TimingSimpleCPU : public BaseSimpleCPU
     void init() override;
 
   private:
+    // Return a completed translation fault when initiateAcc is replayed so
+    // the instruction can apply its fault-suppression rules.
+    Fault replayFault = NoFault;
 
     /*
      * If an access needs to be broken into fragments, currently at most two,
