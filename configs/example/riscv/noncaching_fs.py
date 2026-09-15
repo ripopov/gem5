@@ -4,13 +4,13 @@
 """
 RISC-V full-system configuration for the functional CPU models.
 
-One hart of NonCachingSimpleCPU (or AtomicSimpleCPU) on the HiFive platform
+One hart of NonCachingSimpleCPU on the HiFive platform
 with an atomic, cache-less memory system by default. --cache-hierarchy classic
 uses --caches to add L1I/L1D, L2 and L3 caches. --cache-hierarchy ruby builds
 those levels with CHI over SimpleNetwork and requires a CHI build. Both accept
 --memory ddr4 and --num-mem-ctrls for 1, 2 or 4 DRAM controllers. Ruby uses
-atomic_noncaching for noncaching/atomic CPUs and timing for the timing CPU.
---direct-memory lets NonCachingSimpleCPU access the controllers' shared RAM
+atomic_noncaching for direct/noncaching/atomic CPUs and timing for timing.
+--cpu-type direct selects DirectMemorySimpleCPU to access shared RAM
 allocation directly, keeping MMIO and special accesses on the normal ports.
 The CPU uses RV64 MSU privilege modes, with no hypervisor extension. Supported
 extensions are selected from RVA23S64; this is not a complete implementation
@@ -51,6 +51,7 @@ from m5.objects import (
     RiscvAtomicSimpleCPU,
     RiscvBareMetal,
     RiscvBootloaderKernelWorkload,
+    RiscvDirectMemorySimpleCPU,
     RiscvNonCachingSimpleCPU,
     RiscvRTC,
     RiscvSystem,
@@ -86,21 +87,18 @@ linux.add_argument("--command-line", default="console=ttyS0")
 for p in (baremetal, linux):
     p.add_argument(
         "--cpu-type",
-        choices=("noncaching", "atomic", "timing"),
+        choices=("direct", "noncaching", "atomic", "timing"),
         default="noncaching",
-        help="NonCachingSimpleCPU (default), AtomicSimpleCPU or "
-        "TimingSimpleCPU; Ruby uses atomic_noncaching for atomic CPUs",
+        help="Upstream NonCachingSimpleCPU (default), DirectMemorySimpleCPU, "
+        "AtomicSimpleCPU or TimingSimpleCPU; Ruby uses atomic_noncaching "
+        "for atomic CPUs",
     )
     p.add_argument("--mem-size", default="1GiB")
     p.add_argument(
-        "--direct-memory",
-        action="store_true",
-        help="access RAM backing storage directly (noncaching CPU only)",
-    )
-    p.add_argument(
         "--switch-to-timing",
         action="store_true",
-        help="switch from noncaching to timing at the first m5 workbegin",
+        help="switch from direct/noncaching to timing at the first "
+        "m5 workbegin",
     )
     p.add_argument(
         "--cache-hierarchy",
@@ -140,10 +138,8 @@ for p in (baremetal, linux):
         help="dump statistics every this many ticks as well as at the end",
     )
 args = parser.parse_args()
-if args.direct_memory and args.cpu_type != "noncaching":
-    parser.error("--direct-memory requires --cpu-type noncaching")
-if args.switch_to_timing and args.cpu_type != "noncaching":
-    parser.error("--switch-to-timing requires --cpu-type noncaching")
+if args.switch_to_timing and args.cpu_type not in ("direct", "noncaching"):
+    parser.error("--switch-to-timing requires --cpu-type direct or noncaching")
 if args.memory == "simple" and args.num_mem_ctrls != 1:
     parser.error("--num-mem-ctrls greater than 1 requires --memory ddr4")
 if args.cache_hierarchy == "ruby" and buildEnv.get("PROTOCOL") != "CHI":
@@ -155,6 +151,7 @@ rtc_frequency = int(toFrequency(args.rtc_frequency))
 
 system = RiscvSystem()
 system.mem_mode = {
+    "direct": "atomic_noncaching",
     "noncaching": "atomic_noncaching",
     "atomic": "atomic",
     "timing": "timing",
@@ -227,12 +224,13 @@ if args.cache_hierarchy == "classic":
 # --- CPU --------------------------------------------------------------------
 
 cpu_class = {
+    "direct": RiscvDirectMemorySimpleCPU,
     "noncaching": RiscvNonCachingSimpleCPU,
     "atomic": RiscvAtomicSimpleCPU,
     "timing": RiscvTimingSimpleCPU,
 }[args.cpu_type]
 system.cpu = cpu_class(clk_domain=system.cpu_clk_domain, cpu_id=0)
-if args.direct_memory:
+if args.cpu_type == "direct":
     system.cpu.direct_memory = (
         [system.mem_ctrl]
         if args.memory == "simple"

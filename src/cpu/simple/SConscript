@@ -41,6 +41,10 @@ SimObject('BaseNonCachingSimpleCPU.py',
         sim_objects=['BaseNonCachingSimpleCPU'])
 Source('noncaching.cc')
 
+SimObject('BaseDirectMemorySimpleCPU.py',
+        sim_objects=['BaseDirectMemorySimpleCPU'])
+Source('direct_memory.cc')
+
 SimObject('BaseTimingSimpleCPU.py', sim_objects=['BaseTimingSimpleCPU'])
 Source('timing.cc')
 

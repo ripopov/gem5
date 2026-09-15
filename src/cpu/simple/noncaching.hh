@@ -40,7 +40,6 @@
 
 #include "base/addr_range_map.hh"
 #include "cpu/simple/atomic.hh"
-#include "mem/abstract_mem.hh"
 #include "mem/backdoor.hh"
 #include "params/BaseNonCachingSimpleCPU.hh"
 
@@ -57,87 +56,12 @@ class NonCachingSimpleCPU : public AtomicSimpleCPU
     NonCachingSimpleCPU(const BaseNonCachingSimpleCPUParams &p);
 
     void verifyMemoryMode() const override;
-    void startup() override;
-    void switchOut() override;
-    void takeOverFrom(BaseCPU *old_cpu) override;
 
   protected:
-    const std::vector<memory::AbstractMemory *> directMemory;
-    struct DirectMapping
-    {
-        Addr start, end;
-        uint8_t *base;
-        std::vector<memory::AbstractMemory *> owners;
-        bool writeable;
-    };
-    std::vector<DirectMapping> directMappings;
-    void rebuildDirectMappings();
-    bool directAccessActive() const;
-
     AddrRangeMap<MemBackdoorPtr, 1> memBackdoors;
-
-    /** Last fetch/data mappings, checked before searching the collections. */
-    const DirectMapping *fetchDirectMapping = nullptr;
-    const DirectMapping *dataDirectMapping = nullptr;
-    MemBackdoorPtr fetchBackdoor = nullptr;
-    MemBackdoorPtr dataBackdoor = nullptr;
-
-    /**
-     * The instruction page being executed from, as a host pointer.
-     * While the fetch PC stays inside it and the TLB's translation epoch
-     * is unchanged, a fetch is a copy from this pointer with no request,
-     * translation or backdoor lookup. The bytes are read afresh on every
-     * fetch, so writes to the page need no special handling; only the
-     * translation is cached, and only for pages the TLB promises are
-     * uniformly translated (BaseTLB::stableFetchPage()).
-     */
-    struct FetchPage
-    {
-        Addr vpage = 0;
-        Addr size = 0; // zero: nothing cached
-        uint64_t epoch = 0;
-        const uint8_t *host = nullptr;
-        MemBackdoorPtr backdoor = nullptr;
-    } fetchPage;
-
-    Fault fetchInstruction(Tick &latency) override;
-
-    /**
-     * Host address of [addr, addr + size) through an eligible direct mapping
-     * or recorded backdoor, or nullptr. Refreshes the cached pointer when
-     * the access is outside its mapping.
-     */
-    uint8_t *hostAddr(const DirectMapping *&direct, MemBackdoorPtr &backdoor,
-                      Addr addr, unsigned size, bool write);
-
-    /**
-     * Perform a plain load or store through a recorded backdoor instead
-     * of the port, if the packet and the target allow it.
-     *
-     * @return true if the packet was completed here.
-     */
-    bool tryBackdoorAccess(const PacketPtr &pkt);
-
-    /** May plain stores skip the port? See tryBackdoorAccess(). */
-    bool storesBypassPort() const;
-
-    /**
-     * Is this a plain load or store the fast path in readMem()/writeMem()
-     * may handle: one cache-line fragment, every byte enabled, no
-     * reservation, atomic, prefetch or cache-maintenance semantics?
-     */
-    bool plainAccess(Addr addr, unsigned size, Request::Flags flags,
-                     const std::vector<bool> &byte_enable) const;
 
     Tick sendPacket(RequestPort &port, const PacketPtr &pkt) override;
     Tick fetchInstMem() override;
-
-    Fault readMem(Addr addr, uint8_t *data, unsigned size,
-                  Request::Flags flags,
-                  const std::vector<bool> &byte_enable) override;
-    Fault writeMem(uint8_t *data, unsigned size, Addr addr,
-                   Request::Flags flags, uint64_t *res,
-                   const std::vector<bool> &byte_enable) override;
 };
 
 } // namespace gem5

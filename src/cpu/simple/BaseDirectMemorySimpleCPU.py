@@ -37,20 +37,25 @@ from m5.objects.BaseAtomicSimpleCPU import BaseAtomicSimpleCPU
 from m5.params import *
 
 
-class BaseNonCachingSimpleCPU(BaseAtomicSimpleCPU):
-    """Simple CPU model based on the atomic CPU. Unlike the atomic CPU,
-    this model causes the memory system to bypass caches and is
-    therefore slightly faster in some cases. However, its main purpose
-    is as a substitute for hardware virtualized CPUs when
-    stress-testing the memory system.
+class BaseDirectMemorySimpleCPU(BaseAtomicSimpleCPU):
+    """Atomic CPU with direct access to explicitly authorized RAM owners.
 
+    Ordinary RAM accesses use the shared host backing store. MMIO and
+    accesses requiring memory-system bookkeeping use atomic port requests.
+    Requires full-system atomic_noncaching mode without simulated stalls.
     """
 
-    type = "BaseNonCachingSimpleCPU"
-    cxx_header = "cpu/simple/noncaching.hh"
-    cxx_class = "gem5::NonCachingSimpleCPU"
+    type = "BaseDirectMemorySimpleCPU"
+    cxx_header = "cpu/simple/direct_memory.hh"
+    cxx_class = "gem5::DirectMemorySimpleCPU"
 
     numThreads = 1
+
+    direct_memory = VectorParam.AbstractMemory(
+        [],
+        "Static RAM owners required for direct access in atomic_noncaching; "
+        "requires identity address routing, one memory image and no stalls",
+    )
 
     @classmethod
     def memory_mode(cls):

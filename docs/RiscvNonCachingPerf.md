@@ -1,5 +1,13 @@
 # Making gem5's RISC-V NonCachingSimpleCPU faster
 
+> **CPU split:** The measurements below describe the earlier combined
+> `NonCachingSimpleCPU`. Its CPU-specific optimizations now live in
+> `DirectMemorySimpleCPU` (`--cpu-type direct`), which contains no backdoor
+> machinery. `NonCachingSimpleCPU` has been restored to upstream `develop`;
+> shared CPU and RISC-V improvements remain. Historical port-mode results
+> therefore do not describe the restored CPU. Commands below use the new
+> CPU selection; exact historical reproduction requires the recorded revision.
+
 Spike, the RISC-V reference interpreter, executes the two workloads this
 series uses as its functional-CPU benchmarks at **295 MIPS** (Linux boot) and
 **746 MIPS** (bare-metal CoreMark) on this machine
@@ -133,14 +141,15 @@ instruction port has a separate sequencer. `RubyPortProxy` handles image
 loading. `access_backing_store=False` keeps a single RAM image in the memory
 controllers, without a separate Ruby reference-memory allocation.
 
-These benchmarks use `NonCachingSimpleCPU` and `atomic_noncaching`, with
+These recorded benchmarks used the combined `NonCachingSimpleCPU` and
+`atomic_noncaching`, with
 instruction/data stall simulation disabled. In the default **port/backdoor**
 mode, cacheless SimpleMemory grants backdoors. Classic caches forward packets
 but block backdoor requests; Ruby routes atomic packets straight to the
 selected memory controller, skipping CHI caches and network messages.
 Interleaved controller ranges also lack port backdoors.
 
-With **`--direct-memory`**, eligible CPU fetches, loads and stores access the
+With **`--cpu-type direct`**, eligible CPU fetches, loads and stores access the
 existing `PhysicalMemory` allocation directly, independent of those ports.
 The config explicitly selects the SimpleMemory or DDR4 RAM owners. LR/SC,
 AMOs, MMIO and special requests retain packet handling; ordinary stores also
@@ -151,9 +160,10 @@ needed. See [the implementation contract](AtomicNoncachingBypass.md).
 This measures functional access overhead, not cache-hit performance, network
 throughput or DDR4 timing. `--cpu-type timing` activates either hierarchy;
 `--cpu-type atomic` activates classic caches and uses `atomic_noncaching` with
-Ruby. `--direct-memory` requires `--cpu-type noncaching`.
+Ruby. `--cpu-type direct` selects `DirectMemorySimpleCPU`.
 
-Reproduce from the repository root using a RISCV build with CHI enabled.
+Run the current CPU comparison from the repository root using a RISCV build
+with CHI enabled.
 First build the MSU guest with
 [`build-linux.sh`](../util/riscv-bench/build-linux.sh), as described in the
 [benchmark README](../util/riscv-bench/README.md). It builds Linux with
@@ -176,8 +186,8 @@ for topology in simple classic ruby; do
                --memory ddr4 --num-mem-ctrls 4)
     fi
     for access in port direct; do
-        bypass=()
-        [[ "$access" == direct ]] && bypass=(--direct-memory)
+        bypass=(--cpu-type noncaching)
+        [[ "$access" == direct ]] && bypass=(--cpu-type direct)
         OUTDIR="/tmp/noncaching-$topology-$access-coremark" \
             util/riscv-bench/bench.sh coremark 3 \
             "${extra[@]}" "${bypass[@]}"
@@ -249,7 +259,7 @@ build/RISCV/gem5.fast --outdir=/tmp/linux-handoff \
     --kernel build/riscv-bench/linux/vmlinux \
     --initrd build/riscv-bench/linux/initramfs.cpio \
     --cache-hierarchy ruby --memory ddr4 --num-mem-ctrls 4 \
-    --direct-memory --switch-to-timing
+    --cpu-type direct --switch-to-timing
 ```
 
 For classic, use `--cache-hierarchy classic --caches`. The config switches

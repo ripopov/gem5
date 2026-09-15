@@ -57,8 +57,8 @@ Use a RISC-V gem5 build with CHI enabled for the Ruby cases:
 ```sh
 scons build/RISCV/gem5.fast -j$(nproc)
 COREMARK=build/riscv-bench/coremark-200.elf \
-    util/riscv-bench/bench.sh coremark 3
-util/riscv-bench/bench.sh linux 1
+    util/riscv-bench/bench.sh coremark 3 --cpu-type direct
+util/riscv-bench/bench.sh linux 1 --cpu-type direct
 ```
 
 `bench.sh` reports simulation MIPS and whole-process wall time. `GEM5`,
@@ -71,11 +71,17 @@ controllers are also supported. Cache capacities have individual size options.
 Classic snoop filters have headroom beyond the upstream cache capacities.
 These are generic parameters, not a calibrated commercial core.
 
-Use `--direct-memory` to let NonCachingSimpleCPU access the existing RAM
-allocation without traversing the hierarchy. Without it, the CPU uses the
-existing port/backdoor path. Both modes retain reservation-safe stores,
-packet atomics and MMIO. `--cpu-type timing` starts directly in timing mode;
-`--cpu-type atomic` uses classic caches but bypasses Ruby caches.
+Use `--cpu-type direct` to select `RiscvDirectMemorySimpleCPU`, which
+accesses the existing RAM allocation without traversing the hierarchy.
+The config supplies its required `direct_memory` RAM owners. It has no
+backdoor state. MMIO, reservation-sensitive stores and special accesses
+retain atomic packet handling.
+
+The default `--cpu-type noncaching` uses the upstream `NonCachingSimpleCPU`:
+instruction fetch can use backdoors; data accesses use packets. The two CPU
+classes inherit directly from `AtomicSimpleCPU`. `--cpu-type timing` starts
+in timing mode; `--cpu-type atomic` uses classic caches but bypasses Ruby.
+The former `--direct-memory` flag has been removed.
 
 ## Boot once, then switch to timing
 
@@ -94,19 +100,21 @@ build/RISCV/gem5.fast --outdir=/tmp/linux-handoff \
     --kernel build/riscv-bench/linux/vmlinux \
     --initrd build/riscv-bench/linux/initramfs.cpio \
     --cache-hierarchy ruby --memory ddr4 --num-mem-ctrls 4 \
-    --direct-memory --switch-to-timing
+    --cpu-type direct --switch-to-timing
 ```
 
 For classic, replace `--cache-hierarchy ruby` with
 `--cache-hierarchy classic --caches`. This workflow switches only once, from
-noncaching to timing. It dumps boot statistics and resets them at the handoff,
+direct/noncaching to timing. It dumps boot statistics and resets them at
+the handoff,
 so `stats.txt` contains separate boot and timing sections. Run this command
 directly; `bench.sh` expects one statistics section for throughput comparisons.
 
 ## Verifying a change
 
 Compare CoreMark CRCs, `simTicks` and `simInsts`, and the Linux completion
-markers between direct and port modes using the same binary and artifacts.
+markers between direct and noncaching CPU types using the same binary and
+artifacts.
 Expect cache accesses and CHI messages to remain zero in noncaching mode and
 to increase after timing takeover. Timing changes elapsed simulated time, so
 its ticks and interrupt-driven instruction counts need not match atomic mode.
@@ -120,7 +128,8 @@ See `docs/RiscvNonCachingPerf.md` for results and the validation record.
 ```sh
 LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libprofiler.so CPUPROFILE=/tmp/cm.prof \
   CPUPROFILE_FREQUENCY=2000 build/RISCV/gem5.fast --outdir=/tmp/prof \
-  configs/example/riscv/noncaching_fs.py baremetal build/riscv-bench/coremark-200.elf
+  configs/example/riscv/noncaching_fs.py baremetal \
+  build/riscv-bench/coremark-200.elf --cpu-type direct
 pprof --text build/RISCV/gem5.fast /tmp/cm.prof | head -50
 ```
 

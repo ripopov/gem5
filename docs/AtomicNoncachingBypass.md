@@ -14,8 +14,9 @@ simultaneously, for every requester in the system.
 
 ---
 
-Sections 1–3 describe the port/backdoor paths. Section 4 describes the
-opt-in direct-backing-store mode for `NonCachingSimpleCPU`.
+Sections 1–3 describe the port/backdoor paths. Section 4 describes
+`DirectMemorySimpleCPU`, a sibling of `NonCachingSimpleCPU` under
+`AtomicSimpleCPU`.
 
 ## 1. Classic memory system
 
@@ -127,30 +128,16 @@ if (!(system->isAtomicMode() && system->bypassCaches()))
 ```
 [`noncaching.cc`](../src/cpu/simple/noncaching.cc)
 
-In its default port/backdoor mode it caches granted host pointers:
+`NonCachingSimpleCPU` retains the upstream `develop` implementation:
 
-- accesses that miss the CPU's host mapping use `sendAtomicBackdoor`;
-  a granted backdoor is filed in
-  an `AddrRangeMap` with an invalidation callback that erases it and clears any
-  cached pointer referencing it
-  ([`noncaching.cc`](../src/cpu/simple/noncaching.cc),
-  [`noncaching.hh:61`](../src/cpu/simple/noncaching.hh#L61))
-- `hostAddr()` checks the last fetch/data backdoor pointer, falling back to
-  the map on a miss and handling interleaved ranges per-access
-  ([`noncaching.cc`](../src/cpu/simple/noncaching.cc))
-- `readMem()` and `writeMem()` can copy plain loads/stores directly without
-  constructing packets. The packet path also tries host access through
-  `tryBackdoorAccess()` before sending to a port.
-  These paths refuse LR/SC, atomics, swaps, masked writes and special memory
-  attributes so their existing handlers preserve semantics. Stores use
-  packets when the system has more than one thread or the memory's backdoor
-  is not writeable, including while it holds a reservation.
-- instruction fetch caches a whole translated page when the TLB promises
-  uniform translation and one backdoor covers it, keyed by a translation epoch
-  ([`noncaching.cc`](../src/cpu/simple/noncaching.cc))
+- `sendPacket()` uses `sendAtomicBackdoor()` and records granted backdoors
+  in an `AddrRangeMap`. Invalidation callbacks remove revoked entries.
+- `fetchInstMem()` can copy instruction bytes through a recorded backdoor.
+- Data accesses use the inherited `AtomicSimpleCPU` packet path.
 
-This is the mechanism behind the speedup recorded in
-[RiscvNonCachingPerf.md](RiscvNonCachingPerf.md).
+The optimized plain load/store and translated fetch-page paths live in
+`DirectMemorySimpleCPU` (§4). Shared CPU and RISC-V optimizations remain
+available to both models.
 
 **Initiator side — DMA.** `DmaPort` keeps the same structure: in atomic mode it
 picks `sendAtomicBdReq` over `sendAtomicReq` when `sys->bypassCaches()`
@@ -285,11 +272,17 @@ Two invariants hold throughout:
 
 ## 4. Direct backing-store access like KvmCPU
 
-`NonCachingSimpleCPU.direct_memory` optionally names the static RAM owners
-that the CPU may access directly. The default empty list retains the existing
-port/backdoor behavior. In `configs/example/riscv/noncaching_fs.py`, enable it
-with `--direct-memory`; this works with cacheless, classic L1/L2/L3, and Ruby
-CHI/SimpleNetwork configurations, including 1/2/4 interleaved DDR4 channels.
+`DirectMemorySimpleCPU` derives directly from `AtomicSimpleCPU` and has no
+backdoor cache or backdoor invalidation callbacks. Its `direct_memory`
+parameter must name the static RAM owners that it may access directly;
+an empty list is rejected.
+
+In `configs/example/riscv/noncaching_fs.py`, select it with
+`--cpu-type direct`. The config supplies the SimpleMemory or DDR4 owners.
+This works with cacheless, classic L1/L2/L3, and Ruby CHI/SimpleNetwork
+configurations, including 1/2/4 interleaved DDR4 channels. The default
+`--cpu-type noncaching` selects the upstream backdoor CPU. The former
+`--direct-memory` flag has been removed.
 
 ### 4.1 Reuse the allocation and mapping interface
 
@@ -311,7 +304,7 @@ device overlays within selected RAM, hotplug and concurrent host writers are
 outside this contract. `kvmMap` alone does not establish these properties.
 Sources: [`PhysicalMemory`](../src/mem/physical.cc),
 [`KvmVM`](../src/cpu/kvm/vm.cc),
-[`mapping construction`](../src/cpu/simple/noncaching.cc).
+[`mapping construction`](../src/cpu/simple/direct_memory.cc).
 
 ### 4.2 Access selection
 
@@ -412,10 +405,23 @@ Returning from dirty timing caches requires separate writeback/invalidation
 support and is outside this example's one-way workflow. The new CPU mapping
 does not change that requirement. Sources:
 [`switchCpus`](../src/python/m5/simulate.py),
-[`CPU lifecycle`](../src/cpu/simple/noncaching.cc),
+[`CPU lifecycle`](../src/cpu/simple/direct_memory.cc),
 [`Linux builder`](../util/riscv-bench/build-linux.sh).
 
 ### 4.7 Validation
+
+The CPU split was checked against upstream `develop` at
+`59dc5d8acd40e9c584ee517108e44ae84273c24c`: the NonCachingSimpleCPU C++ and
+Python files match that revision exactly. Shared CPU and RISC-V improvements
+remain in this branch.
+
+The RISC-V `gem5.fast` build passed 26 focused checks: all four CPU choices
+with SimpleMemory, classic/four-channel DDR4 and Ruby/four-channel DDR4;
+default CPU selection; rejection of the removed flag, empty/duplicate RAM
+owners and simulated stalls; two RAM allocations; full CoreMark and Linux
+on the direct CPU in all three topologies; and direct/noncaching-to-timing
+takeover. Direct CoreMark and Linux retained the pre-split instruction counts
+and simulated ticks. Both takeovers passed the guest RAM and timer checks.
 
 See the measurements and validation record in
 [RiscvNonCachingPerf.md](RiscvNonCachingPerf.md).
