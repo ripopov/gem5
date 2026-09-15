@@ -77,6 +77,30 @@ namespace gem5
 namespace memory
 {
 
+bool
+BackingStoreEntry::isDirectAccessible() const
+{
+    return inAddrMap && kvmMap && pmem && !range.interleaved() &&
+           !range.isSparse() && !owners.empty() &&
+           std::all_of(owners.begin(), owners.end(), [](const auto *mem) {
+               return mem && !mem->isNull() && !mem->getAddrRange().isSparse();
+           });
+}
+
+bool
+BackingStoreEntry::canDirectWrite() const
+{
+    // Reject the whole store if any owner has reservations. A finer-grained
+    // check could reject only writes overlapping a reservation. Alternatively,
+    // shared AbstractMemory bookkeeping could invalidate those reservations
+    // before writing directly. Both options must preserve write protection.
+    return !owners.empty() &&
+           std::all_of(owners.begin(), owners.end(), [](const auto *mem) {
+               return mem && mem->params().writeable &&
+                      mem->getLockedAddrList().empty();
+           });
+}
+
 PhysicalMemory::PhysicalMemory(const std::string &_name,
                                const std::vector<AbstractMemory *> &_memories,
                                bool mmap_using_noreserve,
@@ -293,9 +317,8 @@ PhysicalMemory::createBackingStore(
 
     // remember this backing store so we can checkpoint it and unmap
     // it appropriately
-    backingStore.emplace_back(range, pmem,
-                              conf_table_reported, in_addr_map, kvm_map,
-                              shm_fd, map_offset);
+    backingStore.emplace_back(range, pmem, _memories, conf_table_reported,
+                              in_addr_map, kvm_map, shm_fd, map_offset);
 
     // point the memories to their backing store
     for (const auto& m : _memories) {

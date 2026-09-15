@@ -38,7 +38,7 @@ from m5.params import *
 
 
 class BaseDirectMemorySimpleCPU(BaseAtomicSimpleCPU):
-    """Atomic CPU with direct access to explicitly authorized RAM owners.
+    """Atomic CPU with direct access to eligible system RAM backing stores.
 
     Ordinary RAM accesses use the shared host backing store. MMIO and
     accesses requiring memory-system bookkeeping use atomic port requests.
@@ -50,12 +50,6 @@ class BaseDirectMemorySimpleCPU(BaseAtomicSimpleCPU):
     cxx_class = "gem5::DirectMemorySimpleCPU"
 
     numThreads = 1
-
-    direct_memory = VectorParam.AbstractMemory(
-        [],
-        "Static RAM owners required for direct access in atomic_noncaching; "
-        "requires identity address routing, one memory image and no stalls",
-    )
 
     @classmethod
     def memory_mode(cls):

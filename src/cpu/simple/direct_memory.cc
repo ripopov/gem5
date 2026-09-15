@@ -38,13 +38,13 @@
 #include "cpu/simple/direct_memory.hh"
 
 #include <algorithm>
-#include <cassert>
 #include <cstring>
 
 #include "arch/generic/decoder.hh"
 #include "arch/generic/mmu.hh"
 #include "arch/generic/tlb.hh"
 #include "cpu/utils.hh"
+#include "mem/abstract_mem.hh"
 #include "sim/system.hh"
 
 namespace gem5
@@ -83,11 +83,9 @@ copyBytes(void *dst, const void *src, size_t size)
 
 DirectMemorySimpleCPU::DirectMemorySimpleCPU(
     const BaseDirectMemorySimpleCPUParams &p)
-    : AtomicSimpleCPU(p), directMemory(p.direct_memory)
+    : AtomicSimpleCPU(p)
 {
     fatal_if(p.numThreads != 1, "Direct memory requires one thread per CPU");
-    fatal_if(directMemory.empty(),
-             "Direct memory requires explicit RAM owners");
     fatal_if(!FullSystem || simulate_data_stalls || simulate_inst_stalls,
              "Direct memory requires full-system execution without stalls");
 }
@@ -99,53 +97,31 @@ DirectMemorySimpleCPU::directAccessActive() const
 }
 
 void
-DirectMemorySimpleCPU::rebuildDirectMappings()
+DirectMemorySimpleCPU::initDirectAccess()
 {
     fetchPage = FetchPage();
-    fetchDirectMapping = dataDirectMapping = nullptr;
-    directMappings.clear();
-    for (auto *mem : directMemory) {
-        fatal_if(!mem, "Direct memory owners must not be null");
-        fatal_if(std::count(directMemory.begin(), directMemory.end(), mem) !=
-                     1,
-                 "Duplicate direct memory owner: %s", mem->name());
-        fatal_if(mem->system() != system || mem->eventQueue() != eventQueue(),
-                 "Direct memory must share the CPU's system and event queue");
-    }
-
-    // Use the same allocations as KVM, but require explicit authorization
-    // of every RAM owner. Never map a separate Ruby reference image.
+    fetchStore = dataStore = nullptr;
+    bool found = false;
     for (const auto &store : system->getPhysMem().getBackingStore()) {
-        if (!store.inAddrMap || !store.kvmMap || !store.pmem ||
-            store.range.interleaved() || store.range.isSparse()) {
+        if (!store.isDirectAccessible()) {
             continue;
         }
-        DirectMapping mapping{
-            store.range.start(), store.range.end(), store.pmem, {}, true};
-        Addr covered = 0;
-        for (auto *mem : directMemory) {
-            const auto range = mem->getAddrRange();
-            if (!mem->isInAddrMap() || !mem->isKvmMap() || mem->isNull() ||
-                range.isSparse() || range.start() < mapping.start ||
-                range.end() > mapping.end) {
-                continue;
-            }
-            mapping.owners.push_back(mem);
-            mapping.writeable &= mem->params().writeable;
-            covered += range.size();
+        for (const auto *mem : store.owners) {
+            fatal_if(mem->system() != system ||
+                         mem->eventQueue() != eventQueue(),
+                     "Direct memory must share the CPU's system and event "
+                     "queue");
         }
-        if (covered == store.range.size()) {
-            directMappings.push_back(std::move(mapping));
-        }
+        found = true;
     }
-    fatal_if(directMappings.empty(), "No eligible direct backing store");
+    fatal_if(!found, "No eligible direct backing store");
 }
 
 void
 DirectMemorySimpleCPU::startup()
 {
     AtomicSimpleCPU::startup();
-    rebuildDirectMappings();
+    initDirectAccess();
 }
 
 void
@@ -153,15 +129,14 @@ DirectMemorySimpleCPU::switchOut()
 {
     AtomicSimpleCPU::switchOut();
     fetchPage = FetchPage();
-    fetchDirectMapping = dataDirectMapping = nullptr;
-    directMappings.clear();
+    fetchStore = dataStore = nullptr;
 }
 
 void
 DirectMemorySimpleCPU::takeOverFrom(BaseCPU *old_cpu)
 {
     AtomicSimpleCPU::takeOverFrom(old_cpu);
-    rebuildDirectMappings();
+    initDirectAccess();
 }
 
 void
@@ -174,39 +149,30 @@ DirectMemorySimpleCPU::verifyMemoryMode() const
 }
 
 uint8_t *
-DirectMemorySimpleCPU::hostAddr(const DirectMapping *&direct, Addr addr,
-                                unsigned size, bool write)
+DirectMemorySimpleCPU::hostAddr(const memory::BackingStoreEntry *&store,
+                                Addr addr, unsigned size, bool write)
 {
     if (!directAccessActive()) {
         return nullptr;
     }
-    if (!direct || addr < direct->start || addr >= direct->end ||
-        size > direct->end - addr) {
-        direct = nullptr;
-        for (const auto &mapping : directMappings) {
-            if (addr >= mapping.start && addr < mapping.end &&
-                size <= mapping.end - addr) {
-                direct = &mapping;
+    const auto contains = [addr, size](const auto &entry) {
+        return addr >= entry.range.start() && addr < entry.range.end() &&
+               size <= entry.range.end() - addr;
+    };
+    if (!store || !contains(*store)) {
+        store = nullptr;
+        for (const auto &entry : system->getPhysMem().getBackingStore()) {
+            if (contains(entry) && entry.isDirectAccessible()) {
+                store = &entry;
                 break;
             }
         }
     }
-    if (!direct) {
+    if (!store ||
+        (write && (!storesBypassPort() || !store->canDirectWrite()))) {
         return nullptr;
     }
-    if (write) {
-        if (!storesBypassPort() || !direct->writeable) {
-            return nullptr;
-        }
-        // Include restored locks and every interleaved channel without
-        // caching stale eligibility.
-        for (auto *mem : direct->owners) {
-            if (!mem->getLockedAddrList().empty()) {
-                return nullptr;
-            }
-        }
-    }
-    return direct->base + (addr - direct->start);
+    return store->pmem + (addr - store->range.start());
 }
 
 bool
@@ -230,7 +196,7 @@ DirectMemorySimpleCPU::tryDirectAccess(const PacketPtr &pkt)
     }
 
     const unsigned size = pkt->getSize();
-    uint8_t *host = hostAddr(dataDirectMapping, pkt->getAddr(), size, write);
+    uint8_t *host = hostAddr(dataStore, pkt->getAddr(), size, write);
     if (!host) {
         return false;
     }
@@ -312,7 +278,7 @@ DirectMemorySimpleCPU::readMem(Addr addr, uint8_t *data, unsigned size,
         (req->isLocalAccess() || req->isUncacheable() ||
          req->isStrictlyOrdered())
             ? nullptr
-            : hostAddr(dataDirectMapping, req->getPaddr(), size, false);
+            : hostAddr(dataStore, req->getPaddr(), size, false);
     if (host) {
         copyBytes(data, host, size);
     } else {
@@ -363,11 +329,10 @@ DirectMemorySimpleCPU::writeMem(uint8_t *data, unsigned size, Addr addr,
         return NoFault;
     }
 
-    uint8_t *host =
-        (req->isLocalAccess() || req->isUncacheable() ||
-         req->isStrictlyOrdered() || !storesBypassPort())
-            ? nullptr
-            : hostAddr(dataDirectMapping, req->getPaddr(), size, true);
+    uint8_t *host = (req->isLocalAccess() || req->isUncacheable() ||
+                     req->isStrictlyOrdered() || !storesBypassPort())
+                        ? nullptr
+                        : hostAddr(dataStore, req->getPaddr(), size, true);
     if (host) {
         copyBytes(host, data, size);
     } else {
@@ -428,8 +393,7 @@ DirectMemorySimpleCPU::fetchInstruction(Tick &latency)
         !ifetch_req->isLocalAccess() &&
         itb->stableFetchPage(thread->getTC(), fetch_pc, vpage, ppage,
                              page_size)) {
-        const uint8_t *host =
-            hostAddr(fetchDirectMapping, ppage, page_size, false);
+        const uint8_t *host = hostAddr(fetchStore, ppage, page_size, false);
         if (host) {
             fetchPage.vpage = vpage;
             fetchPage.size = page_size;
@@ -449,7 +413,7 @@ DirectMemorySimpleCPU::fetchInstMem()
     }
     const unsigned size = ifetch_req->getSize();
     const uint8_t *host =
-        hostAddr(fetchDirectMapping, ifetch_req->getPaddr(), size, false);
+        hostAddr(fetchStore, ifetch_req->getPaddr(), size, false);
     if (!host) {
         return AtomicSimpleCPU::fetchInstMem();
     }

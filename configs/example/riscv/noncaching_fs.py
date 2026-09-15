@@ -230,12 +230,6 @@ cpu_class = {
     "timing": RiscvTimingSimpleCPU,
 }[args.cpu_type]
 system.cpu = cpu_class(clk_domain=system.cpu_clk_domain, cpu_id=0)
-if args.cpu_type == "direct":
-    system.cpu.direct_memory = (
-        [system.mem_ctrl]
-        if args.memory == "simple"
-        else [ctrl.dram for ctrl in system.mem_ctrls]
-    )
 system.cpu.createInterruptController()
 system.cpu.createThreads()
 if args.cache_hierarchy == "ruby":

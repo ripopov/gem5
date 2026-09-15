@@ -151,7 +151,8 @@ Interleaved controller ranges also lack port backdoors.
 
 With **`--cpu-type direct`**, eligible CPU fetches, loads and stores access the
 existing `PhysicalMemory` allocation directly, independent of those ports.
-The config explicitly selects the SimpleMemory or DDR4 RAM owners. LR/SC,
+The CPU automatically discovers eligible SimpleMemory or DDR4 backing
+stores and their owners. LR/SC,
 AMOs, MMIO and special requests retain packet handling; ordinary stores also
 use packets while any owner has a reservation. Page-table walkers retain
 their port connections. No second RAM image or cache-port forwarding is

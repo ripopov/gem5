@@ -39,14 +39,14 @@
 #define __CPU_SIMPLE_DIRECT_MEMORY_HH__
 
 #include "cpu/simple/atomic.hh"
-#include "mem/abstract_mem.hh"
+#include "mem/physical.hh"
 #include "params/BaseDirectMemorySimpleCPU.hh"
 
 namespace gem5
 {
 
 /**
- * An atomic CPU using explicitly authorized RAM backing stores in
+ * An atomic CPU using eligible system RAM backing stores in
  * 'atomic_noncaching' mode. Special accesses retain atomic port handling.
  */
 class DirectMemorySimpleCPU : public AtomicSimpleCPU
@@ -60,21 +60,12 @@ class DirectMemorySimpleCPU : public AtomicSimpleCPU
     void takeOverFrom(BaseCPU *old_cpu) override;
 
   protected:
-    const std::vector<memory::AbstractMemory *> directMemory;
-    struct DirectMapping
-    {
-        Addr start, end;
-        uint8_t *base;
-        std::vector<memory::AbstractMemory *> owners;
-        bool writeable;
-    };
-    std::vector<DirectMapping> directMappings;
-    void rebuildDirectMappings();
+    void initDirectAccess();
     bool directAccessActive() const;
 
-    /** Last fetch/data mappings, checked before searching the collections. */
-    const DirectMapping *fetchDirectMapping = nullptr;
-    const DirectMapping *dataDirectMapping = nullptr;
+    /** Last entries; PhysicalMemory keeps their addresses stable. */
+    const memory::BackingStoreEntry *fetchStore = nullptr;
+    const memory::BackingStoreEntry *dataStore = nullptr;
 
     /**
      * The instruction page being executed from, as a host pointer.
@@ -100,8 +91,8 @@ class DirectMemorySimpleCPU : public AtomicSimpleCPU
      * or nullptr. Refreshes the cached pointer when
      * the access is outside its mapping.
      */
-    uint8_t *hostAddr(const DirectMapping *&direct, Addr addr, unsigned size,
-                      bool write);
+    uint8_t *hostAddr(const memory::BackingStoreEntry *&store, Addr addr,
+                      unsigned size, bool write);
 
     /**
      * Perform a plain load or store through a direct mapping instead

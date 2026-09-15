@@ -73,15 +73,16 @@ These are generic parameters, not a calibrated commercial core.
 
 Use `--cpu-type direct` to select `RiscvDirectMemorySimpleCPU`, which
 accesses the existing RAM allocation without traversing the hierarchy.
-The config supplies its required `direct_memory` RAM owners. It has no
-backdoor state. MMIO, reservation-sensitive stores and special accesses
-retain atomic packet handling.
+Eligible backing stores and their owners are discovered automatically;
+there is no `direct_memory` parameter or backdoor state. MMIO,
+reservation-sensitive stores and special accesses retain atomic packet handling.
 
 The default `--cpu-type noncaching` uses the upstream `NonCachingSimpleCPU`:
 instruction fetch can use backdoors; data accesses use packets. The two CPU
 classes inherit directly from `AtomicSimpleCPU`. `--cpu-type timing` starts
 in timing mode; `--cpu-type atomic` uses classic caches but bypasses Ruby.
-The former `--direct-memory` flag has been removed.
+The former `--direct-memory` flag has been removed. To exclude a memory
+from direct access, set its `kvm_map` parameter to `False`.
 
 ## Boot once, then switch to timing
 

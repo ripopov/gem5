@@ -69,13 +69,19 @@ class BackingStoreEntry
      * Create a backing store entry. Don't worry about managing the memory
      * pointers, because PhysicalMemory is responsible for that.
      */
-    BackingStoreEntry(AddrRange range, uint8_t* pmem,
+    BackingStoreEntry(AddrRange range, uint8_t *pmem,
+                      const std::vector<AbstractMemory *> &owners,
                       bool conf_table_reported, bool in_addr_map, bool kvm_map,
-                      int shm_fd=-1, off_t shm_offset=0)
-        : range(range), pmem(pmem), confTableReported(conf_table_reported),
-          inAddrMap(in_addr_map), kvmMap(kvm_map), shmFd(shm_fd),
+                      int shm_fd = -1, off_t shm_offset = 0)
+        : range(range),
+          pmem(pmem),
+          owners(owners),
+          confTableReported(conf_table_reported),
+          inAddrMap(in_addr_map),
+          kvmMap(kvm_map),
+          shmFd(shm_fd),
           shmOffset(shm_offset)
-        {}
+    {}
 
     /**
      * The address range covered in the guest.
@@ -87,6 +93,19 @@ class BackingStoreEntry
      * size as the range field.
      */
      uint8_t* pmem;
+
+     /** Exact allocation owners; non-owning, runtime-only pointers. */
+     std::vector<AbstractMemory *> owners;
+
+     /** Contiguous, address-mapped RAM eligible for direct CPU access. */
+     bool isDirectAccessible() const;
+
+     /**
+      * All owners permit writes and have no outstanding reservations.
+      * The caller must separately check access attributes and ensure that
+      * no other execution thread can establish a reservation concurrently.
+      */
+     bool canDirectWrite() const;
 
      /**
       * Whether this memory should be reported to the configuration table
@@ -237,7 +256,7 @@ class PhysicalMemory : public Serializable
      */
     uint64_t totalSize() const { return size; }
 
-     /**
+    /**
      * Get the pointers to the backing store for external host
      * access. Note that memory in the guest should be accessed using
      * access() or functionalAccess(). This interface is primarily
@@ -247,9 +266,15 @@ class PhysicalMemory : public Serializable
      * the OS-visible global address map and thus are allowed to
      * overlap.
      *
-     * @return Pointers to the memory backing store
+     * Entries and their owner lists are populated only during construction
+     * and remain stable until PhysicalMemory is destroyed. Checkpoint
+     * restore fills existing allocations without replacing entries. Host
+     * and owner pointers are runtime metadata and are not serialized.
+     *
+     * @return The backing stores, without copying entries or owner lists.
      */
-    std::vector<BackingStoreEntry> getBackingStore() const
+    const std::vector<BackingStoreEntry> &
+    getBackingStore() const
     { return backingStore; }
 
     /**

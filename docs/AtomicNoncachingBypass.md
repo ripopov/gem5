@@ -273,38 +273,43 @@ Two invariants hold throughout:
 ## 4. Direct backing-store access like KvmCPU
 
 `DirectMemorySimpleCPU` derives directly from `AtomicSimpleCPU` and has no
-backdoor cache or backdoor invalidation callbacks. Its `direct_memory`
-parameter must name the static RAM owners that it may access directly;
-an empty list is rejected.
+backdoor cache or backdoor invalidation callbacks. Select it with
+`--cpu-type direct` in `configs/example/riscv/noncaching_fs.py`. It discovers
+eligible system RAM automatically; no CPU-side memory list is needed.
 
-In `configs/example/riscv/noncaching_fs.py`, select it with
-`--cpu-type direct`. The config supplies the SimpleMemory or DDR4 owners.
 This works with cacheless, classic L1/L2/L3, and Ruby CHI/SimpleNetwork
 configurations, including 1/2/4 interleaved DDR4 channels. The default
 `--cpu-type noncaching` selects the upstream backdoor CPU. The former
-`--direct-memory` flag has been removed.
+`--direct-memory` flag and `direct_memory` CPU parameter have been removed.
 
 ### 4.1 Reuse the allocation and mapping interface
 
 Like `KvmVM::delayedStartup()`, the CPU enumerates
-`system->getPhysMem().getBackingStore()`. Compatible interleaved controllers
-already share one contiguous host allocation. The CPU caches its bounds and
-host pointer, without copying RAM, changing interleaving or rewiring ports.
-PhysicalMemory owns the allocation; CPU pointers are never checkpointed.
+`system->getPhysMem().getBackingStore()`. `PhysicalMemory` records the exact
+memory owners when constructing each `BackingStoreEntry`. Compatible
+interleaved controllers share one contiguous allocation with several owners.
 
-Only contiguous, address-mapped, `kvmMap` allocations whose complete span is
-covered by the explicitly selected memory owners qualify. Null-memory, sparse
-and unselected mappings use packets. Duplicate owners, owners from another
-system or event queue, and configurations with no eligible allocation are
-rejected.
+The accessor returns a const reference. Entries are stable after construction,
+including across checkpoint restore, until `PhysicalMemory` is destroyed.
+The CPU caches only pointers to the last fetch/data entries, without copying
+bounds, RAM or owner lists. There is no separate CPU mapping collection.
+Host and owner pointers are runtime metadata, never checkpoint data.
 
-The config is responsible for selecting static RAM with identity address
-routing and one authoritative data image. Address-transforming interconnects,
+`BackingStoreEntry::isDirectAccessible()` selects contiguous, address-mapped,
+`kvmMap` allocations with non-null, non-sparse memory owners. Reference-memory
+allocations outside the address map, null memory and sparse owners remain on
+the packet path. Setting a memory object's `kvm_map=False` excludes it from
+direct access as well as KVM. A configuration with no eligible allocation is
+rejected. Startup and takeover verify that eligible owners share the CPU's
+system and event queue.
+
+Selecting the direct CPU requires static RAM with identity address routing
+and one authoritative data image. Address-transforming interconnects,
 device overlays within selected RAM, hotplug and concurrent host writers are
-outside this contract. `kvmMap` alone does not establish these properties.
-Sources: [`PhysicalMemory`](../src/mem/physical.cc),
+outside this contract. Automatic discovery and `kvmMap` alone do not establish
+these properties. Sources: [`PhysicalMemory`](../src/mem/physical.cc),
 [`KvmVM`](../src/cpu/kvm/vm.cc),
-[`mapping construction`](../src/cpu/simple/direct_memory.cc).
+[`direct access initialization`](../src/cpu/simple/direct_memory.cc).
 
 ### 4.2 Access selection
 
@@ -340,8 +345,9 @@ does not supply that mechanism to a software CPU.
 
 LR/SC and AMOs retain their packet handlers. Ordinary direct stores are allowed
 only with one system thread and no outstanding reservation in **any** memory
-owner of the mapping. Each store checks the owners' existing lock lists for
-emptiness, a constant-time check per controller with no traversal of reserved
+owner of the mapping. `BackingStoreEntry::canDirectWrite()` checks every
+owner's write permission and checks that its existing lock list is empty,
+a constant-time check per controller with no traversal of reserved
 addresses. This avoids maintaining a second eligibility flag or installing
 invalidation callbacks. Both newly created and restored locks are visible
 immediately. A lock causes packet fallback until the existing memory handlers
@@ -391,15 +397,16 @@ example's `--switch-to-timing` option performs this handoff at the first guest
 that marker after userspace starts. No RAM copy or cache writeback is needed
 on this one-way transition: backing memory already contains the boot state.
 
-Switch-out clears the old CPU's direct mappings and cached pointers before
-timing execution resumes. The existing `m5.switchCpus()` drains execution,
+Switch-out clears the old CPU's cached backing-store and fetch-page pointers
+before timing execution resumes. The existing `m5.switchCpus()` drains execution,
 changes the memory mode, and transfers architectural state and ports. Classic
 snoop filters have headroom beyond resident cache capacity to accommodate
 outstanding requests when timing caches become active.
 
-Startup after image loading or checkpoint restore rebuilds mappings. No raw
-host pointer is serialized, and store eligibility always consults current
-memory-side reservations. Noncaching CPU takeover also rebuilds mappings.
+Startup after image loading or checkpoint restore revalidates the stores and
+clears cached pointers. No raw host pointer is serialized, and store eligibility
+always consults current memory-side reservations. Direct CPU takeover also
+revalidates the stores and clears its caches.
 
 Returning from dirty timing caches requires separate writeback/invalidation
 support and is outside this example's one-way workflow. The new CPU mapping
@@ -415,13 +422,24 @@ The CPU split was checked against upstream `develop` at
 Python files match that revision exactly. Shared CPU and RISC-V improvements
 remain in this branch.
 
-The RISC-V `gem5.fast` build passed 26 focused checks: all four CPU choices
-with SimpleMemory, classic/four-channel DDR4 and Ruby/four-channel DDR4;
-default CPU selection; rejection of the removed flag, empty/duplicate RAM
-owners and simulated stalls; two RAM allocations; full CoreMark and Linux
-on the direct CPU in all three topologies; and direct/noncaching-to-timing
-takeover. Direct CoreMark and Linux retained the pre-split instruction counts
-and simulated ticks. Both takeovers passed the guest RAM and timer checks.
+The automatic-discovery change passed 25 runtime checks with the RISC-V
+`gem5.fast` build:
+
+- SimpleMemory and classic/Ruby DDR4 with 1, 2 and 4 interleaved controllers,
+  including load/store, LR/SC, AMO and reservation invalidation on each channel.
+- Read-only, excluded, null and reference memory, plus an access crossing two
+  adjacent backing allocations.
+- Rejection of an empty eligible set, a foreign event queue and the removed
+  `direct_memory` parameter.
+- Classic/Ruby checkpoint save and restore with outstanding reservations,
+  multiple CPU contexts and direct CPU takeover.
+- Full CoreMark and Linux in SimpleMemory, classic/four-channel DDR4 and
+  Ruby/four-channel DDR4, plus Linux direct-to-timing takeover with RAM and
+  timer checks.
+
+CoreMark and Linux retained the baseline instruction counts and simulated
+ticks. Targeted builds of the KVM VM and shared-memory server sources also
+passed with the const-reference accessor. KVM hardware execution was not tested.
 
 See the measurements and validation record in
 [RiscvNonCachingPerf.md](RiscvNonCachingPerf.md).
