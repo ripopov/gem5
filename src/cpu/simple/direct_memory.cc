@@ -187,11 +187,10 @@ DirectMemorySimpleCPU::tryDirectAccess(const PacketPtr &pkt)
     const bool read = pkt->cmd == MemCmd::ReadReq;
     const bool write = pkt->cmd == MemCmd::WriteReq;
 
-    // Only plain loads and stores. LR/SC, atomics, swaps and masked
-    // writes rely on the memory's own bookkeeping. Ordinary stores use
-    // the port while any backing-store owner has reservations.
-    if (!(read || write) || req->isLLSC() || req->isAtomic() ||
-        req->isSwap() || req->isUncacheable() || req->isStrictlyOrdered() ||
+    // AtomicSimpleCPU encodes LR/SC, atomics and swaps in the command.
+    // Masked writes retain memory-side handling; ordinary stores use the
+    // port while any backing-store owner has reservations.
+    if (!(read || write) || req->isUncacheable() || req->isStrictlyOrdered() ||
         pkt->isMaskedWrite()) {
         return false;
     }
