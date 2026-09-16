@@ -38,6 +38,7 @@
 #include "cpu/simple/direct_memory.hh"
 
 #include <algorithm>
+#include <cassert>
 #include <cstring>
 
 #include "arch/generic/decoder.hh"
@@ -155,9 +156,9 @@ uint8_t *
 DirectMemorySimpleCPU::hostAddr(const memory::BackingStoreEntry *&store,
                                 Addr addr, unsigned size, bool write)
 {
-    if (!directAccessActive()) {
-        return nullptr;
-    }
+    // Execution is scheduled only while active; startup and drainResume
+    // validate the memory mode before any instruction can execute.
+    assert(directAccessActive());
     const auto contains = [addr, size](const auto &entry) {
         return addr >= entry.range.start() && addr < entry.range.end() &&
                size <= entry.range.end() - addr;
@@ -362,7 +363,8 @@ DirectMemorySimpleCPU::fetchInstruction(Tick &latency)
     const unsigned size = decoder->moreBytesSize();
     BaseTLB *itb = thread->mmu->itb;
 
-    if (directAccessActive() && fetch_pc >= fetchPage.vpage &&
+    assert(directAccessActive());
+    if (fetch_pc >= fetchPage.vpage &&
         fetch_pc - fetchPage.vpage < fetchPage.size &&
         size <= fetchPage.size - (fetch_pc - fetchPage.vpage) &&
         itb->translationEpoch(thread->getTC()) == fetchPage.epoch) {
