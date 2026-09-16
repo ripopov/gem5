@@ -45,6 +45,7 @@
 #include <zlib.h>
 
 #include <algorithm>
+#include <cassert>
 #include <cerrno>
 #include <climits>
 #include <cstdio>
@@ -107,16 +108,12 @@ BackingStoreEntry::isDirectAccessible() const
 }
 
 bool
-BackingStoreEntry::canDirectWrite() const
+BackingStoreEntry::hasReservations() const
 {
-    // Reject the whole store if any owner has reservations. A finer-grained
-    // check could reject only writes overlapping a reservation. Alternatively,
-    // shared AbstractMemory bookkeeping could invalidate those reservations
-    // before writing directly. Both options must preserve write protection.
-    return ownersWriteable &&
-           std::all_of(owners.begin(), owners.end(), [](const auto *mem) {
-               return mem->getLockedAddrList().empty();
-           });
+    return std::any_of(owners.begin(), owners.end(), [](const auto *mem) {
+        assert(mem);
+        return !mem->getLockedAddrList().empty();
+    });
 }
 
 PhysicalMemory::PhysicalMemory(const std::string &_name,

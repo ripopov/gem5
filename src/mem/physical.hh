@@ -91,12 +91,30 @@ class BackingStoreEntry
      /** Contiguous, address-mapped RAM eligible for direct CPU access. */
      bool isDirectAccessible() const;
 
+     /** A nonempty set of valid owners, all configured to permit writes. */
+     bool
+     isWriteable() const
+     {
+         return ownersWriteable;
+     }
+
+     /** Any owner has an LR/SC reservation. Requires non-null owners. */
+     bool hasReservations() const;
+
      /**
       * All owners permit writes and have no outstanding reservations.
       * The caller must separately check access attributes and ensure that
       * no other execution thread can establish a reservation concurrently.
       */
-     bool canDirectWrite() const;
+     bool
+     canDirectWrite() const
+     {
+         // Reject the whole store if any owner has reservations. A
+         // finer-grained check could reject only overlapping writes, or
+         // shared AbstractMemory bookkeeping could invalidate reservations
+         // before writing directly. Both must preserve write protection.
+         return isWriteable() && !hasReservations();
+     }
 
      /**
       * Whether this memory should be reported to the configuration table
