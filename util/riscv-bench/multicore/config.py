@@ -63,10 +63,22 @@ parser.add_argument(
     "--secondary", choices=("none", "ram", "excluded"), default="none"
 )
 parser.add_argument("--interrupts", action="store_true")
+parser.add_argument("--cacheable-rom", action="store_true")
 parser.add_argument("--checkpoint", type=Path)
 parser.add_argument("--restore", type=Path)
-parser.add_argument("--reject", choices=("no-ram", "eventq", "stalls"))
+parser.add_argument(
+    "--reject",
+    choices=(
+        "no-ram",
+        "eventq",
+        "peer-eventq",
+        "switch-peer-eventq",
+        "stalls",
+    ),
+)
 args = parser.parse_args()
+if args.reject == "switch-peer-eventq":
+    args.switches = 1
 if args.lowmem and args.secondary != "none":
     parser.error("--lowmem and --secondary use the same auxiliary memory")
 if args.checkpoint and args.switches:
@@ -118,9 +130,9 @@ def make_cpu(index, kind, switched_out=False):
     cpu.mmu.pma_checker = PMAChecker(
         misaligned=system.mem_ranges,
         uncacheable=[
-            AddrRange(0x90000000, size="4KiB"),
             AddrRange(0x2000000, size="48KiB"),
-        ],
+        ]
+        + ([] if args.cacheable_rom else [AddrRange(0x90000000, size="4KiB")]),
     )
     return cpu
 
@@ -163,6 +175,12 @@ if args.reject == "no-ram":
         owner.kvm_map = False
 elif args.reject == "eventq":
     system.cpu[0].eventq_index = 1
+elif args.reject == "peer-eventq":
+    system.cpu[1] = make_cpu(1, "noncaching")
+    system.cpu[1].eventq_index = 1
+elif args.reject == "switch-peer-eventq":
+    system.next_cpu[1] = make_cpu(1, "noncaching", True)
+    system.next_cpu[1].eventq_index = 1
 elif args.reject == "stalls":
     system.cpu[0].simulate_data_stalls = True
 
@@ -281,7 +299,14 @@ else:
 
 system.workload = RiscvBareMetal(bootloader=args.binary)
 root = Root(full_system=True, system=system)
+if args.reject == "switch-peer-eventq":
+    root.sim_quantum = 1000
 m5.instantiate(str(args.restore) if args.restore else None)
+if args.reject == "switch-peer-eventq":
+    m5.simulate(0)
+    m5.switchCpus(system, list(zip(system.cpu, system.next_cpu)))
+    m5.simulate(0)
+    raise RuntimeError("Expected foreign peer event queue rejection")
 if args.checkpoint:
     event = m5.simulate(10**10)
     if event.getCause() != "checkpoint":

@@ -101,9 +101,6 @@ class DirectMemorySimpleCPU : public AtomicSimpleCPU
      */
     bool tryDirectAccess(const PacketPtr &pkt);
 
-    /** May plain stores skip the port? See tryDirectAccess(). */
-    bool storesBypassPort() const;
-
     /**
      * Is this a plain load or store the fast path in readMem()/writeMem()
      * may handle: one cache-line fragment, every byte enabled, no

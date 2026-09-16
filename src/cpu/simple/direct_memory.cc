@@ -122,6 +122,10 @@ DirectMemorySimpleCPU::startup()
 {
     AtomicSimpleCPU::startup();
     initDirectAccess();
+    if (!switchedOut()) {
+        // All thread contexts are registered by startup.
+        verifyMemoryMode();
+    }
 }
 
 void
@@ -139,13 +143,19 @@ DirectMemorySimpleCPU::verifyMemoryMode() const
         fatal("The direct CPU requires the memory system to be in the "
               "'atomic_noncaching' mode.\n");
     }
+    // Also checked by drainResume() after CPU switching. No hart may
+    // establish a reservation between canDirectWrite() and the host write.
+    for (auto *tc : system->threads) {
+        fatal_if(tc->getCpuPtr()->eventQueue() != eventQueue(),
+                 "Direct memory requires all harts to share its event queue");
+    }
 }
 
 uint8_t *
 DirectMemorySimpleCPU::hostAddr(const memory::BackingStoreEntry *&store,
                                 Addr addr, unsigned size, bool write)
 {
-    if (!directAccessActive() || (write && !storesBypassPort())) {
+    if (!directAccessActive()) {
         return nullptr;
     }
     const auto contains = [addr, size](const auto &entry) {
@@ -175,9 +185,8 @@ DirectMemorySimpleCPU::tryDirectAccess(const PacketPtr &pkt)
     const bool write = pkt->cmd == MemCmd::WriteReq;
 
     // Only plain loads and stores. LR/SC, atomics, swaps and masked
-    // writes rely on the memory's own bookkeeping, and stores are kept
-    // on the port when another hart could observe them there: its
-    // reservations live in the memory's locked-address list.
+    // writes rely on the memory's own bookkeeping. Ordinary stores use
+    // the port while any backing-store owner has reservations.
     if (!(read || write) || req->isLLSC() || req->isAtomic() ||
         req->isSwap() || req->isUncacheable() || req->isStrictlyOrdered() ||
         pkt->isMaskedWrite()) {
@@ -196,14 +205,6 @@ DirectMemorySimpleCPU::tryDirectAccess(const PacketPtr &pkt)
     }
     pkt->makeResponse();
     return true;
-}
-
-bool
-DirectMemorySimpleCPU::storesBypassPort() const
-{
-    // Another hart's reservations live in the memory's locked-address
-    // list, which only stores on the port maintain.
-    return system->threads.size() == 1;
 }
 
 bool

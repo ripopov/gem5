@@ -58,6 +58,12 @@ TESTS = {
         False,
     ),
     "checkpoint-reservations": ("memory.c", ["CASE=18"], [], True),
+    "readonly-store": (
+        "memory.c",
+        ["CASE=22"],
+        ["--cacheable-rom"],
+        False,
+    ),
     "software-interrupt": ("interrupt.S", ["CASE=1"], ["--interrupts"], False),
     "timer-interrupt": ("interrupt.S", ["CASE=2"], ["--interrupts"], False),
     "wfi-global-disabled": (
@@ -76,7 +82,11 @@ TESTS = {
 
 REJECTIONS = {
     "no-ram": "No eligible direct backing store",
-    "eventq": "Direct memory must share the CPU's system and event queue",
+    "eventq": "Direct memory requires all harts to share its event queue",
+    "peer-eventq": "Direct memory requires all harts to share its event queue",
+    "switch-peer-eventq": (
+        "Direct memory requires all harts to share its event queue"
+    ),
     "stalls": "Direct memory requires full-system execution without stalls",
 }
 
@@ -115,6 +125,10 @@ def main():
     results = []
     for name in args.cases:
         filename, defines, extra, checkpoint = TESTS[name]
+        # Exercise owner protection without an uncacheable flag on the direct
+        # CPU. Cached reference CPUs retain the platform's ROM PMA marking.
+        if name == "readonly-store" and args.cpu != "direct":
+            extra = []
         elf = out / f"{name}.elf"
         sources = [source / filename]
         if filename.endswith(".c"):

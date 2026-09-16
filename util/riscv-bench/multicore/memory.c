@@ -8,7 +8,7 @@ struct slot
 };
 static struct slot arrived[NHARTS] __attribute__((aligned(256)));
 static struct slot ready, done;
-static struct slot cells[4] __attribute__((aligned(256)));
+static struct slot cells[5] __attribute__((aligned(256)));
 static volatile u64 payload[64] __attribute__((aligned(256)));
 
 static void
@@ -78,7 +78,7 @@ add(volatile u64 *p, u64 v)
     return old;
 }
 static void
-run_test(u64 hart)
+run_test(u64 hart, u64 epoch)
 {
     if (!hart) {
         ready.value = done.value = 0;
@@ -93,9 +93,14 @@ run_test(u64 hart)
         }
     }
     barrier(hart);
-#if CASE <= 4 || CASE == 8 || CASE == 9 || CASE == 13
+#if CASE <= 4 || CASE == 8 || CASE == 9 || CASE == 13 || CASE == 19 ||        \
+    CASE == 20 || CASE == 21
     for (u64 channel = 0; channel < 4; channel++) {
         volatile u64 *p = &cells[channel].value;
+#if CASE == 21
+        /* A split store reaches the next line, potentially another owner. */
+        p = &cells[channel + 1].value;
+#endif
 #if CASE == 3 || CASE == 4 || CASE == 8 || CASE == 13
         /* Reserve a later 16-byte granule in the same cache line. */
         p += CASE == 8 ? 2 : 3;
@@ -118,6 +123,17 @@ run_test(u64 hart)
             wait(&ready.value, channel + 1);
 #if CASE == 1
             *p = 19;
+#elif CASE == 19
+            /* A write invalidates reservations even if bytes do not change. */
+            *p = 17;
+#elif CASE == 20
+            *p = 19;
+            *p = 17;
+#elif CASE == 21
+            volatile unsigned char *start = (volatile unsigned char *)p - 3;
+            u64 value = 0x1122334455667788UL;
+            __asm__ volatile("sd %1, 0(%0)" ::"r"(start), "r"(value)
+                             : "memory");
 #elif CASE == 8
             /* Start in the previous granule, but overwrite reserved bytes. */
             volatile unsigned char *start = (volatile unsigned char *)p - 3;
@@ -151,6 +167,33 @@ run_test(u64 hart)
             done.value = channel + 1;
         }
         barrier(hart);
+    }
+#elif CASE == 23
+    /* Preserve gem5's same-hart store invalidation, including same-value
+     * writes. Other harts wait at the final barrier. */
+    if (!hart) {
+        for (u64 channel = 0; channel < 4; channel++) {
+            volatile u64 *p = &cells[channel].value;
+            *p = 17;
+            if (lr(p) != 17) {
+                fail(1);
+            }
+            *p = 17;
+            u64 status = sc(p, 99);
+#if TIMING_SWITCH
+            /* Cached execution may preserve a same-hart reservation.
+             * Require the memory-side behavior again after switching back. */
+            if (epoch & 1) {
+                if (*p != (status ? 17 : 99)) {
+                    fail(10 + channel);
+                }
+                continue;
+            }
+#endif
+            if (!status || *p != 17) {
+                fail(10 + channel);
+            }
+        }
     }
 #elif CASE == 5 || CASE == 6
     for (u64 j = 0; j < 1000; j++) {
@@ -211,11 +254,19 @@ run_test(u64 hart)
             fail(40 + channel);
         }
     }
-#elif CASE == 11
+#elif CASE == 11 || CASE == 22
     volatile u64 *rom = (volatile u64 *)0x90000000;
+#if CASE == 22
+    *rom = 99;
+    fence();
+    if (*rom != 17) {
+        fail(50);
+    }
+#else
     if (add(rom, 1) != 17 || *rom != 17) {
         fail(50);
     }
+#endif
 #elif CASE == 12
     /* Publish new instruction bytes, then consume them after FENCE.I. */
     for (u64 round = 0; round < 100; round++) {
@@ -332,7 +383,7 @@ void
 test_main(u64 hart)
 {
     for (u64 epoch = 0; epoch <= SWITCHES; epoch++) {
-        run_test(hart);
+        run_test(hart, epoch);
         if (epoch != SWITCHES) {
             if (!hart) {
                 register u64 a0 __asm__("a0") = 0;

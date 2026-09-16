@@ -344,8 +344,8 @@ KVM executes guest atomics through native hardware; reusing its storage mapping
 does not supply that mechanism to a software CPU.
 
 LR/SC and AMOs retain their packet handlers. Ordinary direct stores are allowed
-only with one system thread and no outstanding reservation in **any** memory
-owner of the mapping. `BackingStoreEntry::canDirectWrite()` checks every
+with any number of harts when there is no outstanding reservation in **any**
+memory owner of the mapping. `BackingStoreEntry::canDirectWrite()` checks every
 owner's write permission and checks that its existing lock list is empty,
 a constant-time check per controller with no traversal of reserved
 addresses. This avoids maintaining a second eligibility flag or installing
@@ -357,8 +357,13 @@ This preserves the current packet behavior of LR → same-hart ordinary store
 → SC: the ordinary store removes the matching memory-side reservation, so the
 SC fails. RISC-V does not universally require a same-hart store to invalidate
 a reservation, but this implementation preserves gem5's existing result.
-Multi-context stores remain on packets for reservation notifications and CPU
-address monitors. Sources:
+All registered harts and eligible memory owners must share the direct CPU's
+event queue. Startup and resume after CPU switching verify the hart condition;
+owner checks run at startup and takeover. The reservation check and host write
+are synchronous, so another hart cannot establish a reservation between them.
+Stores encountering a reservation still use packets. This does not introduce
+new snoop/monitor support: the classic crossbar already suppresses snooping in
+`atomic_noncaching` mode. Sources:
 [`AbstractMemory`](../src/mem/abstract_mem.cc),
 [`reservation query`](../src/mem/abstract_mem.hh),
 [`RISC-V reservation handlers`](../src/arch/riscv/isa.cc).
@@ -453,9 +458,9 @@ or Ruby reference memory, need separate correctness tests before being enabled.
 
 Bare-metal tests with concurrently executing harts exposed four bugs in the
 shared `AtomicSimpleCPU` and `AbstractMemory` paths used by the direct CPU.
-Keeping multicore stores on packets was necessary, but those packet handlers
-also needed the following fixes. The `NonCachingSimpleCPU` source remains
-unchanged and benefits from the same shared fixes.
+Stores conflicting with reservations must use memory bookkeeping; those
+packet handlers needed the following fixes. The `NonCachingSimpleCPU` source
+remains unchanged and benefits from the same shared fixes.
 
 1. **Stale context IDs after CPU takeover.** Reused fetch, read, write and AMO
    requests retained their pre-takeover context IDs. Replacement CPUs could
@@ -590,3 +595,70 @@ segmented/indexed accesses, nonzero `vstart`, split timing fault suppression
 and arbitrary speculative fault-only-first overlap need separate coverage.
 Hardware reset, DMA interference, RV32, hypervisor translation, KVM hardware
 execution and other coherence protocols were not exercised in this pass.
+
+### 4.10 Multicore direct stores with empty reservation lists
+
+Removed `storesBypassPort()` and its single-thread restriction. Ordinary
+stores can now use direct host access on multicore systems when
+`canDirectWrite()` succeeds. A reservation in any owner of the allocation
+still forces packet fallback, even if it does not overlap the store. The
+optimization does not copy QEMU's reservation machinery or modify gem5's
+memory-side reservation handling.
+
+The check and write must run without another hart establishing a reservation
+between them. In addition to the existing memory-owner event-queue check,
+`verifyMemoryMode()` now rejects registered harts on other event queues. It
+runs at active CPU startup and through the inherited `drainResume()` after
+CPU switching. Standby CPUs may exist, but an incompatible replacement is
+rejected before execution resumes.
+
+Added deterministic regressions for peer same-value stores, change-and-restore
+(ABA) stores, split writes crossing cache-line/controller boundaries, and
+same-hart store invalidation. The same-hart case preserves memory-side behavior
+in direct phases and accepts either architectural outcome in cached timing
+phases. An ordinary write to cacheable-marked ROM checks owner permissions
+without relying on an uncacheable request flag. New negative tests cover a
+foreign-event-queue noncaching peer at startup and after CPU replacement.
+
+The final fast-build matrix passed **519 checks**:
+
+| Configuration | Checks |
+|---|---:|
+| 15 multicore cases, flat, 2/4/8 harts, 1/2/4 channels, width four, staggered clocks | 135 |
+| 15 cases, classic DDR4, 4/8 harts, 1/4 channels, width two, staggered clocks | 60 |
+| Same DDR4 matrix with Ruby CHI | 60 |
+| Classic Direct → Timing → Direct, four harts/four channels | 15 |
+| Ruby Direct → Direct → Direct, four harts/four channels | 15 |
+| Mixed direct/noncaching, eight harts/four channels, repeated switching | 15 |
+| Noncaching control, two harts/one channel | 15 |
+| Full audit, direct four harts/four channels, including five rejection checks | 39 |
+| Full audit, direct eight harts/four channels, width four, staggered clocks | 34 |
+| Full audit, direct classic and Ruby, four harts/four channels | 68 |
+| Full audit, noncaching control, two harts/one channel | 34 |
+| Added same-hart case, 2/4/8 harts × 1/2/4 channels × flat/classic/Ruby, plus timing and mixed switches | 29 |
+
+The assertion-enabled `gem5.opt` build passed another **103 checks**: all 16
+multicore cases on two/four harts with four channels (32), classic timing
+switches (16), Ruby repeated switches (16), and the full audit plus rejection
+checks (39). Both simulator builds, the targeted CPU object build, Python
+syntax checks and the repository's pre-commit/style checks passed. The four
+upstream NonCachingSimpleCPU source files remain unchanged.
+
+CoreMark and Linux also passed with flat SimpleMemory, classic/four-channel
+DDR4 and Ruby/four-channel DDR4. Against the saved pre-change binary, flat
+CoreMark retained 62,405,796 instructions/operations and 73,783,313,000 ticks;
+flat Linux retained 170,054,284 instructions, 170,369,391 operations and
+228,353,061,000 ticks. CoreMark validation here means matching correctness
+CRCs, not an official benchmark score.
+
+The four-hart/four-channel producer-consumer case demonstrates the intended
+path change: memory-port writes fell from **26,090 to zero**, while
+`simTicks=87991000` and `simInsts=simOps=1363706` remained identical. This is
+path-coverage evidence, not a measured host-speed improvement. Per-run
+commands, logs and results are under `/tmp/direct-multistore/`; reusable
+regressions and focused commands are in the
+[multicore README](../util/riscv-bench/multicore/README.md#multicore-direct-stores).
+
+Coverage remains limited to the supported serialized RISC-V configurations.
+This does not establish correctness for parallel host execution, concurrent
+external writers, mixed JIT/KVM execution, other ISAs or other Ruby protocols.

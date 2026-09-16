@@ -22,6 +22,10 @@ CASES = {
     "reservation-compete": 10,
     "readonly-amo": 11,
     "instruction-publish": 12,
+    "reservation-same-value": 19,
+    "reservation-aba": 20,
+    "reservation-crossline": 21,
+    "reservation-self-store": 23,
 }
 
 
@@ -85,6 +89,7 @@ def main():
             f"-DNHARTS={cores}",
             f"-DCASE={CASES[case]}",
             f"-DSWITCHES={args.switches}",
+            f"-DTIMING_SWITCH={int(args.switch_to == 'timing')}",
             f"-Wl,-T,{source / 'link.ld'}",
             "-Wl,--build-id=none",
             str(source / "start.S"),

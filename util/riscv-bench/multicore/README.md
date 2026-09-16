@@ -8,7 +8,7 @@ They build freestanding ELF files locally; no guest OS or downloads are needed.
 From the repository root:
 
 ```sh
-# All 12 scenarios, with 2/4 harts and 1/4 interleaved memory owners.
+# All 16 scenarios, with 2/4 harts and 1/4 interleaved memory owners.
 python3 util/riscv-bench/multicore/run.py --outdir /tmp/direct-flat
 
 # Classic caches and four interleaved DDR4 controllers.
@@ -48,6 +48,10 @@ fail the run. The runner exits nonzero if any scenario fails.
 
 | Name | Check |
 |---|---|
+| `reservation-same-value` | A peer store of the existing value still invalidates the reservation. |
+| `reservation-aba` | A peer writes another value and restores the original; SC must fail. |
+| `reservation-crossline` | A split store crosses into the reserved cache line, including across interleaved owners. |
+| `reservation-self-store` | Preserve memory-side same-hart store invalidation before/after switching; allow either architectural outcome during cached timing execution. |
 | `reservation-store` | An observed store from another hart makes SC fail. |
 | `reservation-amo` | An observed AMO from another hart makes SC fail. |
 | `reservation-vector` | A vector store invalidates a later reservation granule. |
@@ -93,7 +97,8 @@ It also fails `reservation-reuse` after a CPU switch.
   ID zero, allowing a hart to consume another hart's memory-side reservation.
   The request IDs now follow the inherited thread context.
 
-The seven commands above passed 132 configurations in total after these fixes.
+At the original 12-scenario revision, the seven commands above passed 132
+configurations in total after these fixes.
 This includes classic Direct → Timing → Direct and repeated Ruby Direct →
 Direct switching. These results cover the listed configurations, not arbitrary
 coherence protocols or parallel host event queues.
@@ -139,9 +144,10 @@ python3 util/riscv-bench/multicore/run.py --outdir /tmp/regress-ruby \
     --switches 2 --width 4
 ```
 
-Those commands passed 300 checks after the follow-up fixes. Checkpoint save
-and restore are counted separately. `--check-rejections` adds three expected
-startup failures and verifies their diagnostics; it requires the direct CPU.
+At the original 31-audit/12-regression-scenario revision, those commands passed
+300 checks after the follow-up fixes. Checkpoint save
+and restore are counted separately. `--check-rejections` now adds five expected
+startup/resume failures and verifies their diagnostics; it requires the direct CPU.
 The `--stagger` clocks are 1000, 1137, 1274, ... MHz, all on the same host
 event queue. `--width` controls instructions per tick on atomic-derived CPUs.
 
@@ -155,6 +161,7 @@ event queue. `--width` controls instructions per tick on atomic-derived CPUs.
 | `{masked,unmasked,zero}-fault-first` | Accessible prefixes, suppressed faults, repeated execution with changed masks, and VL zero. |
 | `masked-conflict`, `word-counter`, `spinlock` | Masked writes invalidate reservations; mixed AMO.W/LR.W/SC.W preserves the neighboring word; a contended lock protects a 64-word payload. |
 | `secondary-{ram,excluded}` | Producer-consumer accesses and AMOs to a second allocation separated from main RAM by an address hole. |
+| `readonly-store` | Direct CPU writes to a cacheable-marked ROM still respect the memory owner's write protection; other CPU modes retain the normal ROM PMA marking. |
 | `checkpoint-reservations` | Memory contents survive restore and conflicting peer writes prevent SC success; direct/noncaching snapshots must contain every hart's memory-side reservation. |
 | `software-interrupt`, `timer-interrupt`, `wfi-global-disabled`, `interrupt-after-switch` | WFI wakeup, traps, conflicting peer writes across sleep, and interrupt wiring after takeover. |
 
@@ -183,3 +190,37 @@ python3 util/riscv-bench/multicore/audit.py \
 These cases fail on that baseline. See
 [the audit findings and limitations](../../../docs/AtomicNoncachingBypass.md#49-deeper-bare-metal-audit)
 for causes, fixes, reference-model results and application smoke checks.
+
+## Multicore direct stores
+
+The direct CPU now allows ordinary multicore stores to bypass packets when
+all backing owners are writable and have empty reservation lists. Shared
+memory owners and all registered harts must use the same event queue. The
+hart check also runs on resume after switching CPUs. Direct stores do not
+invalidate reservations themselves; a nonempty list still causes packet
+fallback.
+
+The new cases above cover same-value writes, ABA writes, cross-line writes,
+same-hart invalidation and owner-level ROM protection. Negative tests reject
+a noncaching peer on another event queue, both at startup and after takeover.
+The latter explicitly resumes simulation: `switchCpus()` alone leaves the
+system drained and would not exercise the resume check.
+
+Focused reproduction:
+
+```sh
+python3 util/riscv-bench/multicore/run.py --outdir /tmp/direct-stores \
+    --cores 2 4 8 --channels 1 2 4 --width 4 --stagger \
+    --cases reservation-same-value reservation-aba reservation-crossline \
+    reservation-self-store producer-consumer
+python3 util/riscv-bench/multicore/audit.py --outdir /tmp/direct-store-audit \
+    --cases readonly-store checkpoint-reservations reservation-return \
+    --check-rejections
+```
+
+For a before/after path check, run `producer-consumer` with four harts, four
+channels, width four and staggered clocks using both binaries. Sum the main
+memory owners' `numWrites::total` counters. The pre-change binary produced
+26,090 packet writes; the updated binary produced zero, with identical
+`simTicks=87991000` and `simInsts=simOps=1363706`. This demonstrates bypass
+coverage; it is not a host-speed benchmark.
