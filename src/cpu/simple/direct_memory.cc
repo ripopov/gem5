@@ -94,7 +94,7 @@ DirectMemorySimpleCPU::DirectMemorySimpleCPU(
 bool
 DirectMemorySimpleCPU::directAccessActive() const
 {
-    return !switchedOut() && system->isAtomicMode() && system->bypassCaches();
+    return !switchedOut() && system->bypassCaches();
 }
 
 void
@@ -140,7 +140,7 @@ DirectMemorySimpleCPU::takeOverFrom(BaseCPU *old_cpu)
 void
 DirectMemorySimpleCPU::verifyMemoryMode() const
 {
-    if (!(system->isAtomicMode() && system->bypassCaches())) {
+    if (!system->bypassCaches()) {
         fatal("The direct CPU requires the memory system to be in the "
               "'atomic_noncaching' mode.\n");
     }
