@@ -72,16 +72,7 @@ class BackingStoreEntry
     BackingStoreEntry(AddrRange range, uint8_t *pmem,
                       const std::vector<AbstractMemory *> &owners,
                       bool conf_table_reported, bool in_addr_map, bool kvm_map,
-                      int shm_fd = -1, off_t shm_offset = 0)
-        : range(range),
-          pmem(pmem),
-          owners(owners),
-          confTableReported(conf_table_reported),
-          inAddrMap(in_addr_map),
-          kvmMap(kvm_map),
-          shmFd(shm_fd),
-          shmOffset(shm_offset)
-    {}
+                      int shm_fd = -1, off_t shm_offset = 0);
 
     /**
      * The address range covered in the guest.
@@ -95,7 +86,7 @@ class BackingStoreEntry
      uint8_t* pmem;
 
      /** Exact allocation owners; non-owning, runtime-only pointers. */
-     std::vector<AbstractMemory *> owners;
+     const std::vector<AbstractMemory *> owners;
 
      /** Contiguous, address-mapped RAM eligible for direct CPU access. */
      bool isDirectAccessible() const;
@@ -134,6 +125,10 @@ class BackingStoreEntry
       * of this backing store in the share memory. Otherwise, the value is 0.
       */
      off_t shmOffset;
+
+   private:
+     /** Owners and their write permissions are fixed at construction. */
+     const bool ownersWriteable;
 };
 
 /**

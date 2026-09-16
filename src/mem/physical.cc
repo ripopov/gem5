@@ -77,6 +77,25 @@ namespace gem5
 namespace memory
 {
 
+BackingStoreEntry::BackingStoreEntry(
+    AddrRange range, uint8_t *pmem,
+    const std::vector<AbstractMemory *> &owners, bool conf_table_reported,
+    bool in_addr_map, bool kvm_map, int shm_fd, off_t shm_offset)
+    : range(range),
+      pmem(pmem),
+      owners(owners),
+      confTableReported(conf_table_reported),
+      inAddrMap(in_addr_map),
+      kvmMap(kvm_map),
+      shmFd(shm_fd),
+      shmOffset(shm_offset),
+      ownersWriteable(
+          !owners.empty() &&
+          std::all_of(owners.begin(), owners.end(), [](const auto *mem) {
+              return mem && mem->params().writeable;
+          }))
+{}
+
 bool
 BackingStoreEntry::isDirectAccessible() const
 {
@@ -94,10 +113,9 @@ BackingStoreEntry::canDirectWrite() const
     // check could reject only writes overlapping a reservation. Alternatively,
     // shared AbstractMemory bookkeeping could invalidate those reservations
     // before writing directly. Both options must preserve write protection.
-    return !owners.empty() &&
+    return ownersWriteable &&
            std::all_of(owners.begin(), owners.end(), [](const auto *mem) {
-               return mem && mem->params().writeable &&
-                      mem->getLockedAddrList().empty();
+               return mem->getLockedAddrList().empty();
            });
 }
 
