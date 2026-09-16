@@ -28,6 +28,18 @@ TESTS = {
     "pmp-revoke-fetch": ("pmp.S", ["CASE=6"], [], False),
     "sv39-fetch-remap": ("translation.S", ["CASE=1"], [], False),
     "sv39-data-remap": ("translation.S", ["CASE=2"], [], False),
+    "sv39-high-fetch-remap": (
+        "translation.S",
+        ["CASE=1", "HIGH_VA"],
+        [],
+        False,
+    ),
+    "sv39-high-data-remap": (
+        "translation.S",
+        ["CASE=2", "HIGH_VA"],
+        [],
+        False,
+    ),
     "reservation-return": (
         "reservation-switch.S",
         [],

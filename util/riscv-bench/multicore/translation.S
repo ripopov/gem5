@@ -15,7 +15,11 @@ _start:
     li t0, 0x1f
     csrw pmpcfg0, t0
 
+#ifdef HIGH_VA
+    li s0, 0xffffffffc0000000
+#else
     li s0, 0x40000000
+#endif
     li s1, 0x80200000
     li s2, 0x80400000
     li t0, 0x0000806701100513 # addi a0,zero,17; ret
@@ -30,7 +34,11 @@ _start:
     la t1, middle_table
     srli t2, t1, 2
     ori t2, t2, 1
-    sd t2, 8(t0)
+    srli t3, s0, 30
+    andi t3, t3, 0x1ff
+    slli t3, t3, 3
+    add t3, t0, t3
+    sd t2, 0(t3)
     srli t2, s1, 2
     ori t2, t2, 0xcf
     sd t2, 0(t1)

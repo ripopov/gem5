@@ -156,6 +156,7 @@ event queue. `--width` controls instructions per tick on atomic-derived CPUs.
 | `misaligned-{lr,sc,amo,amo-crossline}` | Correct guest exception and trap address after warming ordinary memory accesses; no host panic. |
 | `pmp-partial-{s,m}`, `pmp-revoke-{data,fetch}` | First-match PMP priority, partial overlap, effective privilege and fast-path permission revocation. |
 | `sv39-{data,fetch}-remap` | A changed leaf PTE followed by `sfence.vma` invalidates cached data/fetch translations. |
+| `sv39-high-{data,fetch}-remap` | Repeat remapping at a negative canonical Sv39 address, including returns from high-address code to low-address code. |
 | `reservation-return`, `reservation-zero`, `checkpoint-zero` | A consumed ISA reservation cannot revive through CPU reuse, an initially empty map or restore at physical address zero. |
 | `masked-{pmp,store-pmp,unmapped,lmul8-load,lmul8-store}` | Inactive unit-stride vector elements cause no access or fault; active elements and undisturbed destination bytes are correct. |
 | `{masked,unmasked,zero}-fault-first` | Accessible prefixes, suppressed faults, repeated execution with changed masks, and VL zero. |

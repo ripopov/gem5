@@ -160,8 +160,10 @@ DirectMemorySimpleCPU::hostAddr(const memory::BackingStoreEntry *&store,
     // validate the memory mode before any instruction can execute.
     assert(directAccessActive());
     const auto contains = [addr, size](const auto &entry) {
-        return addr >= entry.range.start() && addr < entry.range.end() &&
-               size <= entry.range.end() - addr;
+        const Addr offset = addr - entry.range.start();
+        const Addr length = entry.range.end() - entry.range.start();
+        // Below-start addresses wrap to offsets outside the range.
+        return offset < length && size <= length - offset;
     };
     if (!store || !contains(*store)) {
         store = nullptr;
@@ -362,14 +364,12 @@ DirectMemorySimpleCPU::fetchInstruction(Tick &latency)
                           t_info.fetchOffset;
     const unsigned size = decoder->moreBytesSize();
     BaseTLB *itb = thread->mmu->itb;
+    const Addr offset = fetch_pc - fetchPage.vpage;
 
     assert(directAccessActive());
-    if (fetch_pc >= fetchPage.vpage &&
-        fetch_pc - fetchPage.vpage < fetchPage.size &&
-        size <= fetchPage.size - (fetch_pc - fetchPage.vpage) &&
+    if (offset < fetchPage.size && size <= fetchPage.size - offset &&
         itb->translationEpoch(thread->getTC()) == fetchPage.epoch) {
-        copyBytes(decoder->moreBytesPtr(),
-                  fetchPage.host + (fetch_pc - fetchPage.vpage), size);
+        copyBytes(decoder->moreBytesPtr(), fetchPage.host + offset, size);
         latency = 0;
         return NoFault;
     }
