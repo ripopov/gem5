@@ -84,6 +84,23 @@ in timing mode; `--cpu-type atomic` uses classic caches but bypasses Ruby.
 The former `--direct-memory` flag has been removed. To exclude a memory
 from direct access, set its `kvm_map` parameter to `False`.
 
+## Syscall emulation
+
+The same configuration also runs user-space binaries under syscall
+emulation, with the same CPU types, memory options and cache hierarchies:
+
+```sh
+build/RISCV/gem5.fast --outdir=/tmp/se \
+    configs/example/riscv/simple_cpus.py se ./a.out --cpu-type direct
+```
+
+`--options` passes arguments to the guest. `--rtc-frequency` is rejected
+there: syscall emulation has no HiFive platform and no CLINT. The two
+workloads above are full-system only and `bench.sh` does not drive this
+mode; `tests/test-progs/se-memory` is the correctness workload for it,
+covering demand paging, heap and mmap growth and syscalls that write into
+guest memory.
+
 ## Boot once, then switch to timing
 
 The initramfs writes a file, emits `m5 --inst workbegin 0 0` after boot, then

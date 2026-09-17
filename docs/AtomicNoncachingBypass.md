@@ -282,6 +282,8 @@ configurations, including 1/2/4 interleaved DDR4 channels. The default
 `--cpu-type noncaching` selects the upstream backdoor CPU. The former
 `--direct-memory` flag and `direct_memory` CPU parameter have been removed.
 
+It also works under syscall emulation; see §4.11.
+
 ### 4.1 Reuse the allocation and mapping interface
 
 Like `KvmVM::delayedStartup()`, the CPU enumerates
@@ -662,3 +664,102 @@ regressions and focused commands are in the
 Coverage remains limited to the supported serialized RISC-V configurations.
 This does not establish correctness for parallel host execution, concurrent
 external writers, mixed JIT/KVM execution, other ISAs or other Ruby protocols.
+
+### 4.11 Syscall emulation
+
+The CPU was originally gated to full system:
+
+```cpp
+fatal_if(!FullSystem || simulate_data_stalls || simulate_inst_stalls,
+         "Direct memory requires full-system execution without stalls");
+```
+
+Nothing behind that gate was full-system specific. A direct access needs a
+translated physical address and a host pointer into an eligible backing
+store, and syscall emulation supplies both: `SEWorkload` hands out physical
+pages from `PhysicalMemory::getConfAddrRanges()`, so every page a process
+maps lies inside a backing store the CPU already enumerates. The gate now
+only rejects simulated stalls, with the same one-workload check
+`NonCachingSimpleCPU` applies:
+
+```cpp
+fatal_if(!FullSystem && p.workload.size() != 1,
+         "Direct memory requires exactly one syscall-emulation workload");
+fatal_if(simulate_data_stalls || simulate_inst_stalls,
+         "Direct memory requires execution without simulated stalls");
+```
+
+Everything else in the CPU keys off mode-independent state. `mem_mode` is
+still `atomic_noncaching`, `verifyMemoryMode()` and the event-queue checks
+read `system->threads`, and `hostAddr()`, `plainAccess()` and
+`tryDirectAccess()` see only physical addresses, request flags and packet
+commands.
+
+#### What an emulation page table changes
+
+Under syscall emulation the guest's mapping is an `EmulationPageTable` that
+`mmap()`, `brk()`, `munmap()` and demand-paged first touch edit directly.
+No CSR write and no TLB invalidation accompanies those edits, so nothing
+advances a translation epoch. Every access on the direct path translates
+through `BaseMMU::translateAtomic()` immediately before the host copy, so
+this is invisible to loads and stores: a stale mapping cannot outlive the
+translation that produced it.
+
+The one place the CPU caches a translation across accesses is `fetchPage`,
+and it caches it only under `BaseTLB::stableFetchPage()`. That promise is
+the TLB's to make: `BaseTLB` declines it, and `RiscvISA::TLB` answers it out
+of `xlateCache`, which `cacheTranslation()` fills only inside the
+`if (FullSystem)` branch of `TLB::translate()`. A `CachedTranslation` starts
+with `modes == 0`, and `stableFetchPage()` requires the `Execute` bit, so
+under syscall emulation it always returns false and `fetchPage` stays empty.
+
+That was checked, not assumed. A temporary
+`fatal_if(!FullSystem && fetchPage.size != 0, ...)` at the top of
+`fetchInstruction()` survived the whole SE workload below — 44.75 M
+instructions of `mmap`/`brk`/`munmap` churn — without firing, and the same
+check inverted to `FullSystem &&` fired immediately on bare-metal CoreMark,
+so it was live code. The instrumentation was then removed.
+
+The consequence is that instruction fetch under syscall emulation translates
+every time and only then copies from the backing store, through the
+`fetchInstMem()` override. The per-page shortcut above it is a full-system
+fast path that silently does not engage; it is left alone deliberately,
+because reinstating it would require an epoch an emulation page table does
+not have. Fetch still issues **no packets**: over the 44.75 M-instruction SE
+workload the memory controller saw 0 instruction reads and 22 data packets
+in total, against 54.3 M instruction reads for `AtomicSimpleCPU`.
+
+#### Configuration
+
+`configs/example/riscv/noncaching_fs.py` is now
+[`configs/example/riscv/simple_cpus.py`](../configs/example/riscv/simple_cpus.py),
+with `se` beside `baremetal` and `linux`:
+
+```sh
+gem5.fast configs/example/riscv/simple_cpus.py se ./a.out --cpu-type direct
+```
+
+The memory system, CPU selection, ISA settings and `--switch-to-timing`
+handoff are shared with the full-system modes. Syscall emulation drops the
+HiFive platform and the I/O crossbar, because nothing drives them, and with
+them `--rtc-frequency`, which is rejected with an explicit message rather
+than ignored. Every full-system `config.ini` this script generates is
+byte-identical to the one the pre-rename script generated.
+
+#### Validation
+
+[`tests/test-progs/se-memory`](../tests/test-progs/se-memory) is a workload
+written for this: demand-paged first touch of `.bss`, a grown stack and
+fresh anonymous pages; a heap that grows through `brk()`; mappings that grow,
+shrink and are recreated through `mmap()`/`munmap()`; syscalls that write
+into guest memory (`read()` into never-touched pages, `getcwd()`, `uname()`,
+`readlink()`) and a syscall that reads back what ordinary stores wrote; and
+unaligned, mixed-width accesses straddling cache-line and page boundaries.
+It prints only values derived from the data it wrote, so its output must be
+byte-identical across CPU models.
+
+It and `tests/test-progs/hello` produce identical guest output and identical
+`simInsts` on all four CPU types (direct, noncaching, atomic, timing), on
+the cacheless, classic-with-caches, Ruby CHI and four-channel DDR4
+topologies, and across a direct-to-timing switch at an `m5 workbegin`
+marker.
