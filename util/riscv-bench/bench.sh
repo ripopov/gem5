@@ -26,7 +26,7 @@ runs=${2:-3}
 shift $(( $# >= 2 ? 2 : 1 ))
 gem5=${GEM5:-"$repo_root/build/RISCV/gem5.fast"}
 outdir=${OUTDIR:-"$repo_root/build/riscv-bench/m5out-$workload"}
-config="$repo_root/configs/example/riscv/noncaching_fs.py"
+config="$repo_root/configs/example/riscv/simple_cpus.py"
 pin=${TASKSET:-2}
 
 case "$workload" in

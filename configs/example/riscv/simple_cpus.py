@@ -2,10 +2,12 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 """
-RISC-V full-system configuration for the functional CPU models.
+RISC-V configuration for the simple CPU models, in full-system and SE mode.
 
-One hart of NonCachingSimpleCPU on the HiFive platform
-with an atomic, cache-less memory system by default. --cache-hierarchy classic
+One hart running a bare-metal ELF, Linux or a user-space binary under
+syscall emulation, on NonCachingSimpleCPU by default. Full-system modes use
+the HiFive platform; all three use an atomic, cache-less memory system by
+default. --cache-hierarchy classic
 uses --caches to add L1I/L1D, L2 and L3 caches. --cache-hierarchy ruby builds
 those levels with CHI over SimpleNetwork and requires a CHI build. Both accept
 --memory ddr4 and --num-mem-ctrls for 1, 2 or 4 DRAM controllers. Ruby uses
@@ -17,19 +19,28 @@ extensions are selected from RVA23S64; this is not a complete implementation
 of that profile. Main memory supports misaligned accesses. --switch-to-timing
 hands execution to TimingSimpleCPU at the guest's first m5 workbegin marker.
 
+The three workload modes select bare-metal, Linux or syscall emulation. The
+memory system, the CPU selection and the ISA settings are the same in all
+three; syscall emulation drops the HiFive platform, which has nothing to
+drive it, and with it --rtc-frequency.
+
 Bare-metal ELF (M-mode at the ELF entry, exit via m5_exit):
 
-    gem5.fast configs/example/riscv/noncaching_fs.py baremetal coremark.elf
+    gem5.fast configs/example/riscv/simple_cpus.py baremetal coremark.elf
 
 The same workload with Ruby CHI and four DDR4 channels:
 
-    gem5.fast configs/example/riscv/noncaching_fs.py baremetal coremark.elf \\
+    gem5.fast configs/example/riscv/simple_cpus.py baremetal coremark.elf \\
         --cache-hierarchy ruby --memory ddr4 --num-mem-ctrls 4
 
 Linux through OpenSBI fw_jump, with a kernel and an initramfs:
 
-    gem5.fast configs/example/riscv/noncaching_fs.py linux \\
+    gem5.fast configs/example/riscv/simple_cpus.py linux \\
         --bootloader fw_jump.elf --kernel vmlinux --initrd rootfs.cpio
+
+A user-space binary under syscall emulation:
+
+    gem5.fast configs/example/riscv/simple_cpus.py se hello --cpu-type direct
 """
 
 import argparse
@@ -48,6 +59,7 @@ from m5.objects import (
     L2XBar,
     MemCtrl,
     PMAChecker,
+    Process,
     RiscvAtomicSimpleCPU,
     RiscvBareMetal,
     RiscvBootloaderKernelWorkload,
@@ -57,16 +69,15 @@ from m5.objects import (
     RiscvSystem,
     RiscvTimingSimpleCPU,
     Root,
+    SEWorkload,
     SimpleMemory,
     SrcClockDomain,
+    System,
     SystemXBar,
     VoltageDomain,
 )
 from m5.util import addToPath
-from m5.util.convert import (
-    toFrequency,
-    toMemorySize,
-)
+from m5.util.convert import toMemorySize
 from m5.util.fdthelper import (
     Fdt,
     FdtNode,
@@ -84,7 +95,14 @@ linux.add_argument("--bootloader", required=True, help="OpenSBI fw_jump ELF")
 linux.add_argument("--kernel", required=True, help="vmlinux")
 linux.add_argument("--initrd", required=True, help="initramfs cpio")
 linux.add_argument("--command-line", default="console=ttyS0")
-for p in (baremetal, linux):
+se = sub.add_parser(
+    "se", help="run a user-space binary under syscall emulation"
+)
+se.add_argument("binary")
+se.add_argument(
+    "--options", default="", help="arguments passed to the guest binary"
+)
+for p in (baremetal, linux, se):
     p.add_argument(
         "--cpu-type",
         choices=("direct", "noncaching", "atomic", "timing"),
@@ -126,8 +144,9 @@ for p in (baremetal, linux):
     p.add_argument("--cpu-clock", default="1GHz")
     p.add_argument(
         "--rtc-frequency",
-        default="10MHz",
-        help="rate of the CLINT mtime counter, advertised as the timebase",
+        default=None,
+        help="rate of the CLINT mtime counter, advertised as the timebase; "
+        "full-system only, there is no CLINT under syscall emulation",
     )
     p.add_argument("--vlen", type=int, default=256)
     p.add_argument("--max-ticks", type=int, default=m5.MaxTick)
@@ -138,18 +157,24 @@ for p in (baremetal, linux):
         help="dump statistics every this many ticks as well as at the end",
     )
 args = parser.parse_args()
+full_system = args.mode != "se"
 if args.switch_to_timing and args.cpu_type not in ("direct", "noncaching"):
     parser.error("--switch-to-timing requires --cpu-type direct or noncaching")
 if args.memory == "simple" and args.num_mem_ctrls != 1:
     parser.error("--num-mem-ctrls greater than 1 requires --memory ddr4")
 if args.cache_hierarchy == "ruby" and buildEnv.get("PROTOCOL") != "CHI":
     parser.error("--cache-hierarchy ruby requires a gem5 CHI build")
+if not full_system and args.rtc_frequency is not None:
+    parser.error(
+        "--rtc-frequency is meaningless in se mode: syscall emulation has no "
+        "HiFive platform and therefore no CLINT mtime counter"
+    )
 
-rtc_frequency = int(toFrequency(args.rtc_frequency))
+rtc_frequency = args.rtc_frequency or "10MHz"
 
 # --- Platform ---------------------------------------------------------------
 
-system = RiscvSystem()
+system = RiscvSystem() if full_system else System()
 system.mem_mode = {
     "direct": "atomic_noncaching",
     "noncaching": "atomic_noncaching",
@@ -168,29 +193,34 @@ system.cpu_clk_domain = SrcClockDomain(
     clock=args.cpu_clock, voltage_domain=system.voltage_domain
 )
 
-system.iobus = IOXBar()
-system.iobus.badaddr_responder = BadAddr()
-system.iobus.default = system.iobus.badaddr_responder.pio
+# Syscall emulation has no devices, so it needs neither the I/O crossbar nor
+# the platform behind it; everything else below is shared with full system.
+if full_system:
+    system.iobus = IOXBar()
+    system.iobus.badaddr_responder = BadAddr()
+    system.iobus.default = system.iobus.badaddr_responder.pio
 if args.cache_hierarchy == "classic":
     system.membus = SystemXBar()
     system.system_port = system.membus.cpu_side_ports
-    system.bridge = Bridge(delay="50ns")
-    system.bridge.mem_side_port = system.iobus.cpu_side_ports
-    system.bridge.cpu_side_port = system.membus.mem_side_ports
+    if full_system:
+        system.bridge = Bridge(delay="50ns")
+        system.bridge.mem_side_port = system.iobus.cpu_side_ports
+        system.bridge.cpu_side_port = system.membus.mem_side_ports
 
-system.platform = HiFive()
-system.platform.rtc = RiscvRTC(frequency=args.rtc_frequency)
-system.platform.clint.int_pin = system.platform.rtc.int_pin
-system.platform.pci_host.internal_connect()
-system.platform.pci_host.connect_upper_bus(system.iobus, True)
-system.platform.attachOnChipIO(
-    system.membus if args.cache_hierarchy == "classic" else system.iobus
-)
-system.platform.attachOffChipIO(system.iobus)
-system.platform.attachPlic()
-system.platform.setNumCores(1)
-if args.cache_hierarchy == "classic":
-    system.bridge.ranges = system.platform._off_chip_ranges()
+if full_system:
+    system.platform = HiFive()
+    system.platform.rtc = RiscvRTC(frequency=rtc_frequency)
+    system.platform.clint.int_pin = system.platform.rtc.int_pin
+    system.platform.pci_host.internal_connect()
+    system.platform.pci_host.connect_upper_bus(system.iobus, True)
+    system.platform.attachOnChipIO(
+        system.membus if args.cache_hierarchy == "classic" else system.iobus
+    )
+    system.platform.attachOffChipIO(system.iobus)
+    system.platform.attachPlic()
+    system.platform.setNumCores(1)
+    if args.cache_hierarchy == "classic":
+        system.bridge.ranges = system.platform._off_chip_ranges()
 
 memory_ports = []
 if args.memory == "simple":
@@ -280,7 +310,7 @@ if args.cache_hierarchy == "ruby":
         ruby_system=system.ruby, topology="Crossbar", netifs=[]
     )
     sequencers, directories, topology = CHI.create_system(
-        chi_options, True, system, [], None, system.ruby, [system.cpu]
+        chi_options, full_system, system, [], None, system.ruby, [system.cpu]
     )
     topology.makeTopology(
         chi_options,
@@ -290,16 +320,18 @@ if args.cache_hierarchy == "ruby":
         Switch,
     )
     system.ruby.network.setup_buffers()
-    # The CHI CPU wrapper contains two sequencers; the IO node adds one.
-    system.ruby.num_of_sequencers = 3
+    # The CHI CPU wrapper contains two sequencers; the IO node adds one, and
+    # CHI.create_system only builds that node for a full system.
+    system.ruby.num_of_sequencers = 3 if full_system else 2
     for directory, (mem_range, port) in zip(directories, memory_ports):
         directory.addr_ranges = [mem_range]
         directory.memory_out_port = port
     sequencers[0].connectCpuPorts(system.cpu)
-    sequencers[0].connectIOPorts(system.iobus)
-    system.iobus.mem_side_ports = system.ruby._io_port.in_ports
     system.sys_port_proxy = RubyPortProxy(ruby_system=system.ruby)
-    system.sys_port_proxy.pio_request_port = system.iobus.cpu_side_ports
+    if full_system:
+        sequencers[0].connectIOPorts(system.iobus)
+        system.iobus.mem_side_ports = system.ruby._io_port.in_ports
+        system.sys_port_proxy.pio_request_port = system.iobus.cpu_side_ports
     system.system_port = system.sys_port_proxy.in_ports
 elif args.caches:
     # Generic performance-oriented capacities, not a calibrated commercial
@@ -370,10 +402,14 @@ for cpu in cpus:
     # H is unnecessary for this workload and unsupported by timing walks.
     cpu.isa[0].privilege_mode_set = "MSU"
     cpu.mmu.pma_checker = PMAChecker(
-        uncacheable=[
-            *system.platform._on_chip_ranges(),
-            *system.platform._off_chip_ranges(),
-        ],
+        uncacheable=(
+            [
+                *system.platform._on_chip_ranges(),
+                *system.platform._off_chip_ranges(),
+            ]
+            if full_system
+            else []
+        ),
         misaligned=system.mem_ranges,
     )
 
@@ -408,7 +444,14 @@ def generate_dtb(path):
     fdt.writeDtbFile(path)
 
 
-if args.mode == "baremetal":
+if args.mode == "se":
+    system.workload = SEWorkload.init_compatible(args.binary)
+    process = Process()
+    process.executable = args.binary
+    process.cmd = [args.binary] + args.options.split()
+    for cpu in cpus:
+        cpu.workload = process
+elif args.mode == "baremetal":
     system.workload = RiscvBareMetal(bootloader=args.binary)
 else:
     dtb_path = os.path.join(m5.options.outdir, "device.dtb")
@@ -427,7 +470,7 @@ else:
         exit_on_kernel_panic=True,
     )
 
-root = Root(full_system=True, system=system)
+root = Root(full_system=full_system, system=system)
 m5.instantiate()
 
 print(f"ISA: {system.cpu.isa[0].get_isa_string()}")

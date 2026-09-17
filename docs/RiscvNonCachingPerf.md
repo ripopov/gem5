@@ -7,6 +7,14 @@
 > shared CPU and RISC-V improvements remain. Historical port-mode results
 > therefore do not describe the restored CPU. Commands below use the new
 > CPU selection; exact historical reproduction requires the recorded revision.
+>
+> **Config rename:** the example configuration this document was measured
+> with, `configs/example/riscv/noncaching_fs.py`, is now
+> [`configs/example/riscv/simple_cpus.py`](../configs/example/riscv/simple_cpus.py);
+> it gained an `se` workload mode and is no longer full-system only. The
+> commands recorded below are left at the path they were run with, as is the
+> measurement record in `RiscvNonCachingDirectPerf-20260910.json`; substitute
+> the new path to re-run them against the current tree.
 
 Spike, the RISC-V reference interpreter, executes the two workloads this
 series uses as its functional-CPU benchmarks at **295 MIPS** (Linux boot) and

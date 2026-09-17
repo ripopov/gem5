@@ -274,7 +274,7 @@ Two invariants hold throughout:
 
 `DirectMemorySimpleCPU` derives directly from `AtomicSimpleCPU` and has no
 backdoor cache or backdoor invalidation callbacks. Select it with
-`--cpu-type direct` in `configs/example/riscv/noncaching_fs.py`. It discovers
+`--cpu-type direct` in `configs/example/riscv/simple_cpus.py`. It discovers
 eligible system RAM automatically; no CPU-side memory list is needed.
 
 This works with cacheless, classic L1/L2/L3, and Ruby CHI/SimpleNetwork
@@ -390,7 +390,7 @@ execution.
 Ruby's optional separate reference memory is unsupported here. Selecting a
 reference-store pointer alone would not make mixed direct and packet atomics
 safe: the atomic path can touch both controller and reference images.
-Sources: [`example configuration`](../configs/example/riscv/noncaching_fs.py),
+Sources: [`example configuration`](../configs/example/riscv/simple_cpus.py),
 [`RubyPort`](../src/mem/ruby/system/RubyPort.cc).
 
 ### 4.6 One-way timing takeover and checkpoints

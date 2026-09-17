@@ -195,7 +195,7 @@ if args.interrupts:
     system.clint.int_pin = system.rtc.int_pin
 
 if args.topology == "ruby":
-    # Use the same CHI builder as configs/example/riscv/noncaching_fs.py.
+    # Use the same CHI builder as configs/example/riscv/simple_cpus.py.
     addToPath(str(Path(__file__).resolve().parents[3] / "configs"))
     from ruby import CHI
 

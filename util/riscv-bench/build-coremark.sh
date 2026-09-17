@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 #
 # Build CoreMark as a bare-metal RVA23U64 image for gem5's RISC-V full-system
-# platform (configs/example/riscv/noncaching_fs.py baremetal).
+# platform (configs/example/riscv/simple_cpus.py baremetal).
 #
 #   util/riscv-bench/build-coremark.sh [build-dir]
 #

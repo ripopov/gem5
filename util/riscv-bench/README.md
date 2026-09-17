@@ -9,7 +9,7 @@ functional CPU models (`NonCachingSimpleCPU` by default), the way Spike's
 | CoreMark, bare metal | M-mode, no paging, ~15 KB working set: fetch, decode, execute, load/store and nothing else |
 | Linux boot + `ls` | OpenSBI, Linux 6.12 without KVM, BusyBox: Sv39/Sv48 paging, TLB and decoder invalidation, traps, timers |
 
-Both run on `configs/example/riscv/noncaching_fs.py`: one RV64 hart with
+Both run on `configs/example/riscv/simple_cpus.py`: one RV64 hart with
 **MSU** privilege modes (firmware, kernel and applications), VLEN 256 and
 misaligned main-memory accesses. **H and guest KVM are disabled.**
 The ISA selects supported extensions from RVA23S64; that selection does not
@@ -96,7 +96,7 @@ is needed.
 
 ```sh
 build/RISCV/gem5.fast --outdir=/tmp/linux-handoff \
-    configs/example/riscv/noncaching_fs.py linux \
+    configs/example/riscv/simple_cpus.py linux \
     --bootloader build/riscv-bench/linux/fw_jump.elf \
     --kernel build/riscv-bench/linux/vmlinux \
     --initrd build/riscv-bench/linux/initramfs.cpio \
@@ -129,7 +129,7 @@ See `docs/RiscvNonCachingPerf.md` for results and the validation record.
 ```sh
 LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libprofiler.so CPUPROFILE=/tmp/cm.prof \
   CPUPROFILE_FREQUENCY=2000 build/RISCV/gem5.fast --outdir=/tmp/prof \
-  configs/example/riscv/noncaching_fs.py baremetal \
+  configs/example/riscv/simple_cpus.py baremetal \
   build/riscv-bench/coremark-200.elf --cpu-type direct
 pprof --text build/RISCV/gem5.fast /tmp/cm.prof | head -50
 ```
