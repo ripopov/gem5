@@ -99,7 +99,7 @@ REJECTIONS = {
     "switch-peer-eventq": (
         "Direct memory requires all harts to share its event queue"
     ),
-    "stalls": "Direct memory requires full-system execution without stalls",
+    "stalls": "Direct memory requires execution without simulated stalls",
 }
 
 

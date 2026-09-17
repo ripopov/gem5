@@ -42,7 +42,8 @@ class BaseDirectMemorySimpleCPU(BaseAtomicSimpleCPU):
 
     Ordinary RAM accesses use the shared host backing store. MMIO and
     accesses requiring memory-system bookkeeping use atomic port requests.
-    Requires full-system atomic_noncaching mode without simulated stalls.
+    Requires atomic_noncaching memory mode without simulated stalls, in
+    either full-system or syscall-emulation mode.
     """
 
     type = "BaseDirectMemorySimpleCPU"

@@ -48,6 +48,13 @@ namespace gem5
 /**
  * An atomic CPU using eligible system RAM backing stores in
  * 'atomic_noncaching' mode. Special accesses retain atomic port handling.
+ *
+ * Nothing here is full-system specific: every direct access is keyed on a
+ * physical address the MMU has just produced, so syscall-emulation mode --
+ * whose page table the guest changes through mmap(), brk() and demand-paged
+ * first touch -- is supported as well. Only fetchPage below caches a
+ * translation, and it does so strictly under the TLB's stableFetchPage()
+ * promise.
  */
 class DirectMemorySimpleCPU : public AtomicSimpleCPU
 {
@@ -74,6 +81,12 @@ class DirectMemorySimpleCPU : public AtomicSimpleCPU
      * fetch, so writes to the page need no special handling; only the
      * translation is cached, and only for pages the TLB promises are
      * uniformly translated (BaseTLB::stableFetchPage()).
+     *
+     * The promise is the TLB's to make. BaseTLB declines it by default, and
+     * RiscvISA::TLB only makes it from its full-system translation cache, so
+     * in syscall-emulation mode this stays empty and every fetch translates.
+     * That is deliberate: an emulation page table is remapped without any
+     * event a translation epoch could count.
      */
     struct FetchPage
     {

@@ -46,6 +46,7 @@
 #include "arch/generic/tlb.hh"
 #include "cpu/utils.hh"
 #include "mem/abstract_mem.hh"
+#include "sim/full_system.hh"
 #include "sim/system.hh"
 
 namespace gem5
@@ -87,8 +88,10 @@ DirectMemorySimpleCPU::DirectMemorySimpleCPU(
     : AtomicSimpleCPU(p)
 {
     fatal_if(p.numThreads != 1, "Direct memory requires one thread per CPU");
-    fatal_if(!FullSystem || simulate_data_stalls || simulate_inst_stalls,
-             "Direct memory requires full-system execution without stalls");
+    fatal_if(!FullSystem && p.workload.size() != 1,
+             "Direct memory requires exactly one syscall-emulation workload");
+    fatal_if(simulate_data_stalls || simulate_inst_stalls,
+             "Direct memory requires execution without simulated stalls");
 }
 
 bool
