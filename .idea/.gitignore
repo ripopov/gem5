@@ -1,0 +1,16 @@
+# Default ignored files
+/shelf/
+/workspace.xml
+/usage.statistics.xml
+/tasks.xml
+/dictionaries/
+# Local editor settings and generated build logs
+/editor.xml
+/*.log
+# Ignored default folder with query files
+/queries/
+# Datasource local storage ignored files
+/dataSources/
+/dataSources.local.xml
+# Editor-based HTTP Client requests
+/httpRequests/

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="CLionExternalBuildManager">
+    <target id="45488843-bca1-4417-a0a5-00c749b3e300" name="gem5.opt-riscv" defaultType="TOOL">
+      <configuration id="45488843-bca1-4417-a0a5-00c749b3e310" name="Default" toolchainName="Default">
+        <build type="TOOL">
+          <tool actionId="Tool_SCons_build-gem5.opt-riscv" />
+        </build>
+        <clean type="TOOL">
+          <tool actionId="Tool_SCons_clean-gem5.opt-riscv" />
+        </clean>
+      </configuration>
+    </target>
+    <target id="45488843-bca1-4417-a0a5-00c749b3e301" name="gem5.fast-riscv" defaultType="TOOL">
+      <configuration id="45488843-bca1-4417-a0a5-00c749b3e311" name="Default" toolchainName="Default">
+        <build type="TOOL">
+          <tool actionId="Tool_SCons_build-gem5.fast-riscv" />
+        </build>
+        <clean type="TOOL">
+          <tool actionId="Tool_SCons_clean-gem5.fast-riscv" />
+        </clean>
+      </configuration>
+    </target>
+  </component>
+</project>
