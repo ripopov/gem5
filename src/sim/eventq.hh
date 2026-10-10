@@ -40,9 +40,10 @@
 #include <climits>
 #include <functional>
 #include <iosfwd>
-#include <list>
 #include <memory>
 #include <string>
+#include <unordered_map>
+#include <vector>
 
 #include "base/debug.hh"
 #include "base/flags.hh"
@@ -52,6 +53,7 @@
 #include "base/types.hh"
 #include "base/uncontended_mutex.hh"
 #include "debug/Event.hh"
+#include "sim/async_event_batch.hh"
 #include "sim/cur_tick.hh"
 #include "sim/serialize.hh"
 
@@ -593,12 +595,19 @@ operator!=(const Event &l, const Event &r)
  * schedule() method with the 'global' parameter set to true. Unlike
  * the previous queue migration strategy, this strategy is fully
  * deterministic. This causes the event to be inserted in a separate
- * queue of asynchronous events (async_queue), which is merged main
+ * queue of asynchronous events (async_queue), which is merged into the main
  * event queue at the end of each simulation quantum (by calling the
  * handleAsyncInsertions() method). Note that this implies that such
  * events must happen at least one simulation quantum into the future,
  * otherwise they risk being scheduled in the past by
  * handleAsyncInsertions().
+ *
+ * Ordinary cross-queue posts by simulator workers use producer-owned
+ * batches instead. Workers publish before every global barrier; the owning
+ * destination collects published batches in handleAsyncInsertions(). Global
+ * events, completion callbacks and external threads retain the shared inbox
+ * so that global-event ordering and callback visibility do not depend on
+ * which worker arrives last.
  */
 class EventQueue
 {
@@ -613,8 +622,28 @@ class EventQueue
     //! Mutex to protect async queue.
     FairUncontendedMutex async_queue_mutex;
 
-    //! List of events added by other threads to this event queue.
-    std::list<Event*> async_queue;
+    // Preserve posting order and recycle capacity across quantum boundaries.
+    // Global synchronization posts use this inbox on every quantum, so a
+    // node allocation for every post would be on the barrier critical path.
+    std::vector<Event *> async_queue;
+
+    // Channels are created lazily for arbitrary worker/destination pairs.
+    // The inbox mutex protects registration and consumer traversal only;
+    // ordinary posts append to producer-owned storage without that mutex.
+    // IDs prevent a recreated queue at the same address from reusing an old
+    // channel. Shared ownership also permits either endpoint to die first.
+    static std::atomic<uint64_t> nextAsyncId;
+    const uint64_t asyncId;
+    std::vector<std::shared_ptr<AsyncEventBatch>> asyncBatches;
+    std::unordered_map<uint64_t, std::shared_ptr<AsyncEventBatch>>
+        outgoingBatches;
+    std::vector<AsyncEventBatch *> activeBatches;
+
+    // Identifies the simulation worker, independently of ScopedMigration.
+    // External threads and global completion callbacks leave this null.
+    static thread_local EventQueue *asyncProducer;
+
+    void stageAsync(EventQueue *destination, Event *event);
 
     /**
      * Lock protecting event handling.
@@ -646,7 +675,7 @@ class EventQueue
     //! Function for adding events to the async queue. The added events
     //! are added to main event queue later. Threads, other than the
     //! owning thread, should call this function instead of insert().
-    void asyncInsert(Event *event);
+    void asyncInsert(Event *event, bool global);
 
     EventQueue(const EventQueue &);
 
@@ -656,6 +685,35 @@ class EventQueue
 #endif
 
   public:
+    /** Enable batching only on a simulator worker, or suspend it in a
+     * global completion callback. The worker retains its identity across
+     * event-queue migrations; unrelated threads never share its staging.
+     */
+    class ScopedAsyncBatching
+    {
+      private:
+        EventQueue *previous;
+
+      public:
+        explicit ScopedAsyncBatching(EventQueue *producer)
+            : previous(asyncProducer)
+        {
+            asyncProducer = producer;
+        }
+
+        ~ScopedAsyncBatching()
+        {
+            publishAsyncBatches();
+            asyncProducer = previous;
+        }
+
+        ScopedAsyncBatching(const ScopedAsyncBatching &) = delete;
+        ScopedAsyncBatching &operator=(const ScopedAsyncBatching &) = delete;
+    };
+
+    // Publish before ALL global barriers, including early simulation exit.
+    static void publishAsyncBatches();
+
     class ScopedMigration
     {
       public:
@@ -770,7 +828,7 @@ class EventQueue
         //    a total order amongst the global events. See global_event.{cc,hh}
         //    for more explanation.
         if (inParallelMode && (this != curEventQueue() || global)) {
-            asyncInsert(event);
+            asyncInsert(event, global);
         } else {
             insert(event);
         }

@@ -51,6 +51,7 @@ import sys
 import SCons
 
 from gem5_scons import Configure, error, FromValue, ToValue, Transform, warning
+from gem5_scons import VtrTool
 from gem5_scons.sources import *
 
 Export(SourceFilter.factories)
@@ -390,6 +391,10 @@ class StaticLib(TopLevelBase):
 class SharedLib(TopLevelBase):
     '''Base class for creating a shared library from sources.'''
 
+    def __init__(self, target, *srcs_and_filts, include_date=True):
+        super().__init__(target, *srcs_and_filts)
+        self.include_date = include_date
+
     def srcs_to_objs(self, env, sources):
         return list([ s.shared(env) for s in sources ])
 
@@ -404,10 +409,12 @@ class SharedLib(TopLevelBase):
         if libs:
             env.Append(LIBS=list(lib.source for lib in libs))
 
-        date_obj = env.SharedObject(date_source)
-        env.Depends(date_obj, objs)
+        if self.include_date:
+            date_obj = env.SharedObject(date_source)
+            env.Depends(date_obj, objs)
+            objs = [date_obj, objs]
 
-        return env.SharedLibrary(self.target, [date_obj, objs])[0]
+        return env.SharedLibrary(self.target, objs)[0]
 
 class Executable(TopLevelBase):
     '''Base class for creating an executable from sources.'''
@@ -488,6 +495,7 @@ class GTest(Executable):
 Export('GdbXml')
 Export('Source')
 Export('SourceLib')
+Export('SharedLib')
 Export('PySource')
 Export('SimObject')
 Export('ProtoBuf')
@@ -724,6 +732,9 @@ env.Command(
 # Define binaries.  Each different build type (debug, opt, etc.) gets
 # a slightly different build environment.
 #
+
+if sys.platform.startswith('linux') and not GetOption('without_vtr'):
+    VtrTool(env)
 
 env['SHOBJSUFFIX'] = '${OBJSUFFIX}s'
 env.Append(LINKFLAGS='-rdynamic')

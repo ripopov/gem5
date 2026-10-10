@@ -1,0 +1,1275 @@
+{
+    "started_utc": "2026-10-11T21:10:40Z",
+    "commit": "bdf1e544cf1bc99467fa3a31cf443b89c61a0b2e",
+    "binary_provenance": {
+        "base_commit": "2390a8ab58fea58762c05b1f51fab326b78a5040",
+        "sha256": {
+            "src/sim/async_event_batch.hh":
+                "483e38d01a1259a8f12fb3cf97f0e99eb76c9f6c62b9f89f556ce165c9e1dcac",
+            "src/sim/async_event_batch.test.cc":
+                "8efbd4f742b05257d8752c6e0bae257ad3fa44a26a276b9e436ea9bef0e127ba",
+            "src/sim/async_eventq.test.cc":
+                "d9597b5a7b7e503142c7e0e7712142f886ac1b52b517be93361661bf1d06bfdb",
+            "src/sim/eventq.cc":
+                "c9ea7d86622dc917563e2ae378444b04237b6929199490c3fcb5742741cb3a07",
+            "src/sim/eventq.hh":
+                "580bf6c161d31b062c804708605edaf9654c04127313d5f7aad81035ea35f3a4",
+            "src/sim/global_event.cc":
+                "678feb45409ddcc571665ddc53cc60b8ba8b7a590d455e67204aaf9afebe96f5",
+            "src/sim/global_event.hh":
+                "fc8d84cb043c91b231e55af200fa6111580ae674398579262f340fa8d8293db1",
+            "src/sim/simulate.cc":
+                "80f72d7cc0d7b79eb7c18624598c089d66ffbd2eac58e0f92bed2a0a27f2b323",
+            "src/sim/SConscript":
+                "77032d43d716d809cee3d0bcbe913d286a19caba4710aa1086edfd7f401d7f4f",
+            "build/RISCV/gem5.opt":
+                "ff9beccafcce36d22758d86af8504a67d0cc8a9497dd6c54ba13292368591f28",
+            "build/RISCV/librt_accel_opt.so":
+                "6df1c6f87cb0b8a290ea3b89f316c630481c8afdfc2e25edb899540b44daddf9",
+            "configs/example/rt_accel.py":
+                "c4fb3d8bdaded5e96d2125342fbfdd70153eb3bfad6ae6e08e3d2fd3ab110b37",
+            "configs/example/rt_accel_reduction.py":
+                "51c697a29728ba478c1b59684d152e0273f6040d48f12e5c59cbd10b54961c53",
+            "configs/example/rt_accel_system.py":
+                "cc15055760d28991c9ecce518933fd73a89a8bf0e5bc7209b8c9e7a595eb81fd",
+            "util/rt_reference/out/host.elf":
+                "0833efd380ac2d9c18f0dd0db47ceb68fed61c87e699f0db455fa1bc3b31beba",
+            "util/rt_reference/out/accelerator.elf":
+                "dc8d993e1cbb4533758925f66a9e5a052d8025ec5342b4f7f7b0fe5a9d3e0833",
+            "util/rt_reference/out/host-test.elf":
+                "0f09943ac100cd7448d50ef5c568f7d811ec060ccd0aedfaef2a51f7c4d76053",
+            "util/rt_reference/out/accelerator-test.elf":
+                "059f88188bf55f282127f132249a7a8d9671e086a102ef4c65f17f25d93a30cc",
+            "util/rt_reference/out/host-render.elf":
+                "7ecbf6538dd7290f0192e8465738381846e58486cb5e41c55d1d669ce687d0f7",
+            "util/rt_reference/out/host-gem5.elf":
+                "13dc08a18ebb6a7c4c7134ffe2a6607ff9877e3fa5e4b054bedf957f0db76ec9",
+            "util/rt_reference/out/smrnmi-present.elf":
+                "4e2493f32e52b7e4d1cac2a6191f9f398dcdd03f132c2bfce4742244b8a842e0",
+            "util/rt_reference/out/reduction-accelerator.elf":
+                "dd74c08a076bdab38be0d97b04b850d21b0b6e4cef4f4c9fa6ee6a8667c90e2e",
+            "util/rt_reference/out/reduction-host.elf":
+                "a1dc9df51f1612119cba5c2b9239304422047c512198d906077025ae9c583e53",
+            "util/rt_reference/out/smrnmi-absent.elf":
+                "3eb354fe8f1027fcdea9089b3279951dd76a93b6a0d776ed86c2056fb1c89731"
+        },
+        "compiler": "g++ (Ubuntu 15.2.0-16ubuntu1) 15.2.0",
+        "build":
+            "scons build/RISCV/gem5.opt -j 16; retry unchanged with -j 2 after GCC ICE",
+        "archived_binary_sha256":
+            "ff9beccafcce36d22758d86af8504a67d0cc8a9497dd6c54ba13292368591f28"
+    },
+    "note":
+        "Same archived binary as the prior 5/10-cycle samples; commit changed only source formatting after that build.",
+    "machine": {
+        "hostname": "Z890-AORUS",
+        "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.43",
+        "lscpu":
+            "Architecture:                            x86_64\nCPU op-mode(s):                          32-bit, 64-bit\nAddress sizes:                           46 bits physical, 48 bits virtual\nByte Order:                              Little Endian\nCPU(s):                                  20\nOn-line CPU(s) list:                     0-19\nVendor ID:                               GenuineIntel\nModel name:                              Intel(R) Core(TM) Ultra 7 265K\nCPU family:                              6\nModel:                                   198\nThread(s) per core:                      1\nCore(s) per socket:                      20\nSocket(s):                               1\nStepping:                                2\nCPU(s) scaling MHz:                      77%\nCPU max MHz:                             5500.0000\nCPU min MHz:                             800.0000\nBogoMIPS:                                7756.80\nFlags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdt_a rdseed adx smap clflushopt clwb intel_pt sha_ni xsaveopt xsavec xgetbv1 xsaves split_lock_detect user_shstk avx_vnni lam wbnoinvd dtherm ida arat pln pts hwp hwp_notify hwp_act_window hwp_epp hwp_pkg_req hfi vnmi umip pku ospke waitpkg gfni vaes vpclmulqdq rdpid bus_lock_detect movdiri movdir64b fsrm md_clear serialize arch_lbr ibt flush_l1d arch_capabilities\nVirtualization:                          VT-x\nL1d cache:                               704 KiB (18 instances)\nL1i cache:                               1.1 MiB (18 instances)\nL2 cache:                                36 MiB (11 instances)\nL3 cache:                                30 MiB (1 instance)\nNUMA node(s):                            1\nNUMA node0 CPU(s):                       0-19\nVulnerability Gather data sampling:      Not affected\nVulnerability Ghostwrite:                Not affected\nVulnerability Indirect target selection: Not affected\nVulnerability Itlb multihit:             Not affected\nVulnerability L1tf:                      Not affected\nVulnerability Mds:                       Not affected\nVulnerability Meltdown:                  Not affected\nVulnerability Mmio stale data:           Not affected\nVulnerability Old microcode:             Not affected\nVulnerability Reg file data sampling:    Not affected\nVulnerability Retbleed:                  Not affected\nVulnerability Spec rstack overflow:      Not affected\nVulnerability Spec store bypass:         Mitigation; Speculative Store Bypass disabled via prctl\nVulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:                Mitigation; Enhanced / Automatic IBRS; IBPB conditional; PBRSB-eIBRS Not affected; BHI BHI_DIS_S\nVulnerability Srbds:                     Not affected\nVulnerability Tsa:                       Not affected\nVulnerability Tsx async abort:           Not affected\nVulnerability Vmscape:                   Mitigation; IBPB before exit to userspace\n",
+        "cpu_affinity": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19
+        ]
+    },
+    "pid_namespace": "pid:[4026531836]",
+    "quantum_cycles": 50,
+    "transport_delay_each_direction": "50ns",
+    "accelerator_cores": 16,
+    "timing": "One complete process-wall sample per queue mode",
+    "runs": [
+        {
+            "wall_seconds": 57.8895629510007,
+            "command": [
+                "/home/ripopov/work/gem5/main/local-temp/async-batches/final/bin/gem5.opt",
+                "--outdir=/home/ripopov/work/gem5/main/local-temp/async-batches/quantum50/q17-0",
+                "/home/ripopov/work/gem5/main/configs/example/rt_accel.py",
+                "--backend=gem5",
+                "--accelerator-cpu=o3",
+                "--accelerator-cores=16",
+                "--queues=17",
+                "--render-mode=1",
+                "--samples-per-pixel=1",
+                "--max-secondary-depth=0",
+                "--seed=1",
+                "--transport-delay=50ns"
+            ],
+            "idle_machine_checked": true,
+            "process_checks": 58,
+            "simulations_before": [],
+            "simulations_after": [],
+            "quantum_ticks": 50000,
+            "transport_delay": "50ns",
+            "wire": null,
+            "queues": 17,
+            "accelerator_cpu": "o3",
+            "accelerator_caches": "l1",
+            "memory_controllers": 4,
+            "controller_statistics": [
+                {
+                    "path": "system.memory",
+                    "read_bytes": 45344,
+                    "write_bytes": 9280
+                },
+                {
+                    "path": "system.memory1",
+                    "read_bytes": 46432,
+                    "write_bytes": 9280
+                },
+                {
+                    "path": "system.memory2",
+                    "read_bytes": 45984,
+                    "write_bytes": 9280
+                },
+                {
+                    "path": "system.memory3",
+                    "read_bytes": 45344,
+                    "write_bytes": 9280
+                }
+            ],
+            "sha256":
+                "79aaad3486ca49955cda1dd8fd6f36b8102cbbd3c89117f327b0c917c090ccaa",
+            "simTicks": 7643136000.0,
+            "statistics_dumps": 2,
+            "stats_region_start_tick": 283679000.0,
+            "stats_region_end_tick": 7926815000.0,
+            "simulation_final_tick": 9191485000.0,
+            "simulation_clock_periods": 9191485.0,
+            "elapsed_clock_periods": 7643136.0,
+            "clock_cycles": {
+                "system.accelerators0.cpu.numCycles": 4830849.0,
+                "system.accelerators1.cpu.numCycles": 4705000.0,
+                "system.accelerators10.cpu.numCycles": 6498781.0,
+                "system.accelerators11.cpu.numCycles": 6128014.0,
+                "system.accelerators12.cpu.numCycles": 7639754.0,
+                "system.accelerators13.cpu.numCycles": 7258653.0,
+                "system.accelerators14.cpu.numCycles": 5906563.0,
+                "system.accelerators15.cpu.numCycles": 6834190.0,
+                "system.accelerators2.cpu.numCycles": 4714503.0,
+                "system.accelerators3.cpu.numCycles": 4345412.0,
+                "system.accelerators4.cpu.numCycles": 5893902.0,
+                "system.accelerators5.cpu.numCycles": 6781193.0,
+                "system.accelerators6.cpu.numCycles": 6421819.0,
+                "system.accelerators7.cpu.numCycles": 5278974.0,
+                "system.accelerators8.cpu.numCycles": 7445196.0,
+                "system.accelerators9.cpu.numCycles": 7536261.0,
+                "system.cpu.numCycles": 4744.0
+            },
+            "instructions": {
+                "system.accelerators0.cpu.commitStats0.numInsts": 11854473.0,
+                "system.accelerators0.cpu.executeStats0.numInsts": 15215985.0,
+                "system.accelerators0.cpu.fetchStats0.numInsts": 21017676.0,
+                "system.accelerators0.cpu.thread_0.numInsts": 11854473.0,
+                "system.accelerators1.cpu.commitStats0.numInsts": 11572152.0,
+                "system.accelerators1.cpu.executeStats0.numInsts": 14902680.0,
+                "system.accelerators1.cpu.fetchStats0.numInsts": 20637098.0,
+                "system.accelerators1.cpu.thread_0.numInsts": 11572152.0,
+                "system.accelerators10.cpu.commitStats0.numInsts": 15095077.0,
+                "system.accelerators10.cpu.executeStats0.numInsts": 19933677.0,
+                "system.accelerators10.cpu.fetchStats0.numInsts": 28050360.0,
+                "system.accelerators10.cpu.thread_0.numInsts": 15095077.0,
+                "system.accelerators11.cpu.commitStats0.numInsts": 14447230.0,
+                "system.accelerators11.cpu.executeStats0.numInsts": 18819600.0,
+                "system.accelerators11.cpu.fetchStats0.numInsts": 26013244.0,
+                "system.accelerators11.cpu.thread_0.numInsts": 14447230.0,
+                "system.accelerators12.cpu.commitStats0.numInsts": 17174666.0,
+                "system.accelerators12.cpu.executeStats0.numInsts": 23109940.0,
+                "system.accelerators12.cpu.fetchStats0.numInsts": 33395175.0,
+                "system.accelerators12.cpu.thread_0.numInsts": 17174666.0,
+                "system.accelerators13.cpu.commitStats0.numInsts": 16655884.0,
+                "system.accelerators13.cpu.executeStats0.numInsts": 22140598.0,
+                "system.accelerators13.cpu.fetchStats0.numInsts": 31701992.0,
+                "system.accelerators13.cpu.thread_0.numInsts": 16655884.0,
+                "system.accelerators14.cpu.commitStats0.numInsts": 13198299.0,
+                "system.accelerators14.cpu.executeStats0.numInsts": 17915147.0,
+                "system.accelerators14.cpu.fetchStats0.numInsts": 25743323.0,
+                "system.accelerators14.cpu.thread_0.numInsts": 13198299.0,
+                "system.accelerators15.cpu.commitStats0.numInsts": 15462257.0,
+                "system.accelerators15.cpu.executeStats0.numInsts": 20766024.0,
+                "system.accelerators15.cpu.fetchStats0.numInsts": 29324754.0,
+                "system.accelerators15.cpu.thread_0.numInsts": 15462257.0,
+                "system.accelerators2.cpu.commitStats0.numInsts": 11649170.0,
+                "system.accelerators2.cpu.executeStats0.numInsts": 14743839.0,
+                "system.accelerators2.cpu.fetchStats0.numInsts": 19968996.0,
+                "system.accelerators2.cpu.thread_0.numInsts": 11649170.0,
+                "system.accelerators3.cpu.commitStats0.numInsts": 10691410.0,
+                "system.accelerators3.cpu.executeStats0.numInsts": 13495458.0,
+                "system.accelerators3.cpu.fetchStats0.numInsts": 18236131.0,
+                "system.accelerators3.cpu.thread_0.numInsts": 10691410.0,
+                "system.accelerators4.cpu.commitStats0.numInsts": 14421472.0,
+                "system.accelerators4.cpu.executeStats0.numInsts": 18534456.0,
+                "system.accelerators4.cpu.fetchStats0.numInsts": 25297809.0,
+                "system.accelerators4.cpu.thread_0.numInsts": 14421472.0,
+                "system.accelerators5.cpu.commitStats0.numInsts": 16803424.0,
+                "system.accelerators5.cpu.executeStats0.numInsts": 21593920.0,
+                "system.accelerators5.cpu.fetchStats0.numInsts": 29302480.0,
+                "system.accelerators5.cpu.thread_0.numInsts": 16803424.0,
+                "system.accelerators6.cpu.commitStats0.numInsts": 15953977.0,
+                "system.accelerators6.cpu.executeStats0.numInsts": 20016700.0,
+                "system.accelerators6.cpu.fetchStats0.numInsts": 26850238.0,
+                "system.accelerators6.cpu.thread_0.numInsts": 15953977.0,
+                "system.accelerators7.cpu.commitStats0.numInsts": 12824172.0,
+                "system.accelerators7.cpu.executeStats0.numInsts": 16324816.0,
+                "system.accelerators7.cpu.fetchStats0.numInsts": 22137446.0,
+                "system.accelerators7.cpu.thread_0.numInsts": 12824172.0,
+                "system.accelerators8.cpu.commitStats0.numInsts": 17628304.0,
+                "system.accelerators8.cpu.executeStats0.numInsts": 23154646.0,
+                "system.accelerators8.cpu.fetchStats0.numInsts": 32414426.0,
+                "system.accelerators8.cpu.thread_0.numInsts": 17628304.0,
+                "system.accelerators9.cpu.commitStats0.numInsts": 17203956.0,
+                "system.accelerators9.cpu.executeStats0.numInsts": 23164364.0,
+                "system.accelerators9.cpu.fetchStats0.numInsts": 33208894.0,
+                "system.accelerators9.cpu.thread_0.numInsts": 17203956.0,
+                "system.cpu.commitStats0.numInsts": 601.0,
+                "system.cpu.executeStats0.numInsts": 870.0,
+                "system.cpu.fetchStats0.numInsts": 1143.0,
+                "system.cpu.thread_0.numInsts": 601.0
+            },
+            "host_seconds": 52.81,
+            "tcm_layout_bytes": 164160,
+            "code_tcm_layout_bytes": 17744,
+            "data_tcm_layout_bytes": 146416,
+            "analytic_max_byte_error": 1,
+            "tiles": 16,
+            "accelerator_cores": 16,
+            "accelerator_ipc": {
+                "retired_instructions": 232635923,
+                "counted_cycles": 98219064,
+                "cycle_weighted_core_ipc": 2.368541437128743,
+                "combined_cluster_ipc": 30.437234533050308,
+                "per_core": [
+                    {
+                        "core": 0,
+                        "retired_instructions": 11854473,
+                        "counted_cycles": 4830849,
+                        "ipc": 2.45391089640765,
+                        "cache_statistics": {
+                            "icache.overallHits::total": 1671075,
+                            "icache.overallMisses::total": 163,
+                            "icache.overallMshrHits::total": 0,
+                            "icache.overallMshrMisses::total": 163,
+                            "dcache.overallHits::total": 2634754,
+                            "dcache.overallMisses::total": 6214,
+                            "dcache.overallMshrHits::total": 4183,
+                            "dcache.overallMshrMisses::total": 2031
+                        },
+                        "dma": {
+                            "bytesCopied": 13728.0,
+                            "busyTicks": 7546027.0,
+                            "readRequests": 430.0,
+                            "writeRequests": 430.0,
+                            "cleanRequests": 358.0,
+                            "readRetries": 333.0,
+                            "writeRetries": 84.0,
+                            "peakChunks": 19.0
+                        }
+                    },
+                    {
+                        "core": 1,
+                        "retired_instructions": 11572152,
+                        "counted_cycles": 4705000,
+                        "ipc": 2.459543464399575,
+                        "cache_statistics": {
+                            "icache.overallHits::total": 1638788,
+                            "icache.overallMisses::total": 164,
+                            "icache.overallMshrHits::total": 0,
+                            "icache.overallMshrMisses::total": 164,
+                            "dcache.overallHits::total": 2535267,
+                            "dcache.overallMisses::total": 6223,
+                            "dcache.overallMshrHits::total": 4191,
+                            "dcache.overallMshrMisses::total": 2032
+                        },
+                        "dma": {
+                            "bytesCopied": 13728.0,
+                            "busyTicks": 7616027.0,
+                            "readRequests": 430.0,
+                            "writeRequests": 430.0,
+                            "cleanRequests": 358.0,
+                            "readRetries": 331.0,
+                            "writeRetries": 81.0,
+                            "peakChunks": 19.0
+                        }
+                    },
+                    {
+                        "core": 2,
+                        "retired_instructions": 11649170,
+                        "counted_cycles": 4714503,
+                        "ipc": 2.4709221735567883,
+                        "cache_statistics": {
+                            "icache.overallHits::total": 1610206,
+                            "icache.overallMisses::total": 164,
+                            "icache.overallMshrHits::total": 0,
+                            "icache.overallMshrMisses::total": 164,
+                            "dcache.overallHits::total": 2645515,
+                            "dcache.overallMisses::total": 6213,
+                            "dcache.overallMshrHits::total": 4183,
+                            "dcache.overallMshrMisses::total": 2030
+                        },
+                        "dma": {
+                            "bytesCopied": 13728.0,
+                            "busyTicks": 7595027.0,
+                            "readRequests": 430.0,
+                            "writeRequests": 430.0,
+                            "cleanRequests": 358.0,
+                            "readRetries": 330.0,
+                            "writeRetries": 90.0,
+                            "peakChunks": 19.0
+                        }
+                    },
+                    {
+                        "core": 3,
+                        "retired_instructions": 10691410,
+                        "counted_cycles": 4345412,
+                        "ipc": 2.460390407169677,
+                        "cache_statistics": {
+                            "icache.overallHits::total": 1485087,
+                            "icache.overallMisses::total": 163,
+                            "icache.overallMshrHits::total": 0,
+                            "icache.overallMshrMisses::total": 163,
+                            "dcache.overallHits::total": 2458286,
+                            "dcache.overallMisses::total": 6216,
+                            "dcache.overallMshrHits::total": 4186,
+                            "dcache.overallMshrMisses::total": 2030
+                        },
+                        "dma": {
+                            "bytesCopied": 13728.0,
+                            "busyTicks": 7637027.0,
+                            "readRequests": 430.0,
+                            "writeRequests": 430.0,
+                            "cleanRequests": 358.0,
+                            "readRetries": 327.0,
+                            "writeRetries": 90.0,
+                            "peakChunks": 19.0
+                        }
+                    },
+                    {
+                        "core": 4,
+                        "retired_instructions": 14421472,
+                        "counted_cycles": 5893902,
+                        "ipc": 2.446846248885713,
+                        "cache_statistics": {
+                            "icache.overallHits::total": 2014160,
+                            "icache.overallMisses::total": 163,
+                            "icache.overallMshrHits::total": 0,
+                            "icache.overallMshrMisses::total": 163,
+                            "dcache.overallHits::total": 3175166,
+                            "dcache.overallMisses::total": 6218,
+                            "dcache.overallMshrHits::total": 4186,
+                            "dcache.overallMshrMisses::total": 2032
+                        },
+                        "dma": {
+                            "bytesCopied": 13728.0,
+                            "busyTicks": 7606027.0,
+                            "readRequests": 430.0,
+                            "writeRequests": 430.0,
+                            "cleanRequests": 358.0,
+                            "readRetries": 330.0,
+                            "writeRetries": 83.0,
+                            "peakChunks": 19.0
+                        }
+                    },
+                    {
+                        "core": 5,
+                        "retired_instructions": 16803424,
+                        "counted_cycles": 6781193,
+                        "ipc": 2.4779451049394994,
+                        "cache_statistics": {
+                            "icache.overallHits::total": 2339518,
+                            "icache.overallMisses::total": 163,
+                            "icache.overallMshrHits::total": 0,
+                            "icache.overallMshrMisses::total": 163,
+                            "dcache.overallHits::total": 3708047,
+                            "dcache.overallMisses::total": 6226,
+                            "dcache.overallMshrHits::total": 4195,
+                            "dcache.overallMshrMisses::total": 2031
+                        },
+                        "dma": {
+                            "bytesCopied": 13728.0,
+                            "busyTicks": 7647027.0,
+                            "readRequests": 430.0,
+                            "writeRequests": 430.0,
+                            "cleanRequests": 358.0,
+                            "readRetries": 329.0,
+                            "writeRetries": 87.0,
+                            "peakChunks": 19.0
+                        }
+                    },
+                    {
+                        "core": 6,
+                        "retired_instructions": 15953977,
+                        "counted_cycles": 6421819,
+                        "ipc": 2.4843392502965282,
+                        "cache_statistics": {
+                            "icache.overallHits::total": 2165801,
+                            "icache.overallMisses::total": 164,
+                            "icache.overallMshrHits::total": 0,
+                            "icache.overallMshrMisses::total": 164,
+                            "dcache.overallHits::total": 3617783,
+                            "dcache.overallMisses::total": 6217,
+                            "dcache.overallMshrHits::total": 4187,
+                            "dcache.overallMshrMisses::total": 2030
+                        },
+                        "dma": {
+                            "bytesCopied": 13728.0,
+                            "busyTicks": 7613027.0,
+                            "readRequests": 430.0,
+                            "writeRequests": 430.0,
+                            "cleanRequests": 358.0,
+                            "readRetries": 327.0,
+                            "writeRetries": 87.0,
+                            "peakChunks": 19.0
+                        }
+                    },
+                    {
+                        "core": 7,
+                        "retired_instructions": 12824172,
+                        "counted_cycles": 5278974,
+                        "ipc": 2.4292925102491507,
+                        "cache_statistics": {
+                            "icache.overallHits::total": 1789737,
+                            "icache.overallMisses::total": 163,
+                            "icache.overallMshrHits::total": 0,
+                            "icache.overallMshrMisses::total": 163,
+                            "dcache.overallHits::total": 2966415,
+                            "dcache.overallMisses::total": 6215,
+                            "dcache.overallMshrHits::total": 4185,
+                            "dcache.overallMshrMisses::total": 2030
+                        },
+                        "dma": {
+                            "bytesCopied": 13728.0,
+                            "busyTicks": 7631027.0,
+                            "readRequests": 430.0,
+                            "writeRequests": 430.0,
+                            "cleanRequests": 358.0,
+                            "readRetries": 336.0,
+                            "writeRetries": 82.0,
+                            "peakChunks": 19.0
+                        }
+                    },
+                    {
+                        "core": 8,
+                        "retired_instructions": 17628304,
+                        "counted_cycles": 7445196,
+                        "ipc": 2.3677420983947233,
+                        "cache_statistics": {
+                            "icache.overallHits::total": 2595507,
+                            "icache.overallMisses::total": 163,
+                            "icache.overallMshrHits::total": 0,
+                            "icache.overallMshrMisses::total": 163,
+                            "dcache.overallHits::total": 3856078,
+                            "dcache.overallMisses::total": 59132,
+                            "dcache.overallMshrHits::total": 44902,
+                            "dcache.overallMshrMisses::total": 14230
+                        },
+                        "dma": {
+                            "bytesCopied": 13728.0,
+                            "busyTicks": 7627027.0,
+                            "readRequests": 430.0,
+                            "writeRequests": 430.0,
+                            "cleanRequests": 358.0,
+                            "readRetries": 338.0,
+                            "writeRetries": 71.0,
+                            "peakChunks": 19.0
+                        }
+                    },
+                    {
+                        "core": 9,
+                        "retired_instructions": 17203956,
+                        "counted_cycles": 7536261,
+                        "ipc": 2.282823803474959,
+                        "cache_statistics": {
+                            "icache.overallHits::total": 2709356,
+                            "icache.overallMisses::total": 163,
+                            "icache.overallMshrHits::total": 0,
+                            "icache.overallMshrMisses::total": 163,
+                            "dcache.overallHits::total": 4030638,
+                            "dcache.overallMisses::total": 24812,
+                            "dcache.overallMshrHits::total": 18750,
+                            "dcache.overallMshrMisses::total": 6062
+                        },
+                        "dma": {
+                            "bytesCopied": 13728.0,
+                            "busyTicks": 7656027.0,
+                            "readRequests": 430.0,
+                            "writeRequests": 430.0,
+                            "cleanRequests": 358.0,
+                            "readRetries": 339.0,
+                            "writeRetries": 70.0,
+                            "peakChunks": 18.0
+                        }
+                    },
+                    {
+                        "core": 10,
+                        "retired_instructions": 15095077,
+                        "counted_cycles": 6498781,
+                        "ipc": 2.3227551443878474,
+                        "cache_statistics": {
+                            "icache.overallHits::total": 2297909,
+                            "icache.overallMisses::total": 164,
+                            "icache.overallMshrHits::total": 0,
+                            "icache.overallMshrMisses::total": 164,
+                            "dcache.overallHits::total": 3588590,
+                            "dcache.overallMisses::total": 14648,
+                            "dcache.overallMshrHits::total": 10381,
+                            "dcache.overallMshrMisses::total": 4267
+                        },
+                        "dma": {
+                            "bytesCopied": 13728.0,
+                            "busyTicks": 7629027.0,
+                            "readRequests": 430.0,
+                            "writeRequests": 430.0,
+                            "cleanRequests": 358.0,
+                            "readRetries": 339.0,
+                            "writeRetries": 69.0,
+                            "peakChunks": 18.0
+                        }
+                    },
+                    {
+                        "core": 11,
+                        "retired_instructions": 14447230,
+                        "counted_cycles": 6128014,
+                        "ipc": 2.3575713110316,
+                        "cache_statistics": {
+                            "icache.overallHits::total": 2108443,
+                            "icache.overallMisses::total": 163,
+                            "icache.overallMshrHits::total": 0,
+                            "icache.overallMshrMisses::total": 163,
+                            "dcache.overallHits::total": 3348097,
+                            "dcache.overallMisses::total": 8607,
+                            "dcache.overallMshrHits::total": 5673,
+                            "dcache.overallMshrMisses::total": 2934
+                        },
+                        "dma": {
+                            "bytesCopied": 13728.0,
+                            "busyTicks": 7622027.0,
+                            "readRequests": 430.0,
+                            "writeRequests": 430.0,
+                            "cleanRequests": 358.0,
+                            "readRetries": 338.0,
+                            "writeRetries": 66.0,
+                            "peakChunks": 19.0
+                        }
+                    },
+                    {
+                        "core": 12,
+                        "retired_instructions": 17174666,
+                        "counted_cycles": 7639754,
+                        "ipc": 2.2480653172863945,
+                        "cache_statistics": {
+                            "icache.overallHits::total": 2692515,
+                            "icache.overallMisses::total": 163,
+                            "icache.overallMshrHits::total": 0,
+                            "icache.overallMshrMisses::total": 163,
+                            "dcache.overallHits::total": 3830612,
+                            "dcache.overallMisses::total": 80168,
+                            "dcache.overallMshrHits::total": 61487,
+                            "dcache.overallMshrMisses::total": 18681
+                        },
+                        "dma": {
+                            "bytesCopied": 13728.0,
+                            "busyTicks": 7616027.0,
+                            "readRequests": 430.0,
+                            "writeRequests": 430.0,
+                            "cleanRequests": 358.0,
+                            "readRetries": 339.0,
+                            "writeRetries": 64.0,
+                            "peakChunks": 18.0
+                        }
+                    },
+                    {
+                        "core": 13,
+                        "retired_instructions": 16655884,
+                        "counted_cycles": 7258653,
+                        "ipc": 2.294624636278935,
+                        "cache_statistics": {
+                            "icache.overallHits::total": 2558472,
+                            "icache.overallMisses::total": 163,
+                            "icache.overallMshrHits::total": 0,
+                            "icache.overallMshrMisses::total": 163,
+                            "dcache.overallHits::total": 3776288,
+                            "dcache.overallMisses::total": 15438,
+                            "dcache.overallMshrHits::total": 11391,
+                            "dcache.overallMshrMisses::total": 4047
+                        },
+                        "dma": {
+                            "bytesCopied": 13728.0,
+                            "busyTicks": 7621027.0,
+                            "readRequests": 430.0,
+                            "writeRequests": 430.0,
+                            "cleanRequests": 358.0,
+                            "readRetries": 339.0,
+                            "writeRetries": 63.0,
+                            "peakChunks": 18.0
+                        }
+                    },
+                    {
+                        "core": 14,
+                        "retired_instructions": 13198299,
+                        "counted_cycles": 5906563,
+                        "ipc": 2.2345142174899344,
+                        "cache_statistics": {
+                            "icache.overallHits::total": 2113353,
+                            "icache.overallMisses::total": 164,
+                            "icache.overallMshrHits::total": 0,
+                            "icache.overallMshrMisses::total": 164,
+                            "dcache.overallHits::total": 3208885,
+                            "dcache.overallMisses::total": 15024,
+                            "dcache.overallMshrHits::total": 10968,
+                            "dcache.overallMshrMisses::total": 4056
+                        },
+                        "dma": {
+                            "bytesCopied": 13728.0,
+                            "busyTicks": 7615027.0,
+                            "readRequests": 430.0,
+                            "writeRequests": 430.0,
+                            "cleanRequests": 358.0,
+                            "readRetries": 339.0,
+                            "writeRetries": 73.0,
+                            "peakChunks": 18.0
+                        }
+                    },
+                    {
+                        "core": 15,
+                        "retired_instructions": 15462257,
+                        "counted_cycles": 6834190,
+                        "ipc": 2.26248567862468,
+                        "cache_statistics": {
+                            "icache.overallHits::total": 2415823,
+                            "icache.overallMisses::total": 163,
+                            "icache.overallMshrHits::total": 0,
+                            "icache.overallMshrMisses::total": 163,
+                            "dcache.overallHits::total": 3766900,
+                            "dcache.overallMisses::total": 13270,
+                            "dcache.overallMshrHits::total": 9359,
+                            "dcache.overallMshrMisses::total": 3911
+                        },
+                        "dma": {
+                            "bytesCopied": 13728.0,
+                            "busyTicks": 7617027.0,
+                            "readRequests": 430.0,
+                            "writeRequests": 430.0,
+                            "cleanRequests": 358.0,
+                            "readRetries": 339.0,
+                            "writeRetries": 57.0,
+                            "peakChunks": 18.0
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "wall_seconds": 481.73785276099807,
+            "command": [
+                "/home/ripopov/work/gem5/main/local-temp/async-batches/final/bin/gem5.opt",
+                "--outdir=/home/ripopov/work/gem5/main/local-temp/async-batches/quantum50/q1-0",
+                "/home/ripopov/work/gem5/main/configs/example/rt_accel.py",
+                "--backend=gem5",
+                "--accelerator-cpu=o3",
+                "--accelerator-cores=16",
+                "--queues=1",
+                "--render-mode=1",
+                "--samples-per-pixel=1",
+                "--max-secondary-depth=0",
+                "--seed=1",
+                "--transport-delay=50ns"
+            ],
+            "idle_machine_checked": true,
+            "process_checks": 475,
+            "simulations_before": [],
+            "simulations_after": [],
+            "quantum_ticks": 50000,
+            "transport_delay": "50ns",
+            "wire": null,
+            "queues": 1,
+            "accelerator_cpu": "o3",
+            "accelerator_caches": "l1",
+            "memory_controllers": 4,
+            "controller_statistics": [
+                {
+                    "path": "system.memory",
+                    "read_bytes": 45344,
+                    "write_bytes": 9280
+                },
+                {
+                    "path": "system.memory1",
+                    "read_bytes": 46432,
+                    "write_bytes": 9280
+                },
+                {
+                    "path": "system.memory2",
+                    "read_bytes": 45984,
+                    "write_bytes": 9280
+                },
+                {
+                    "path": "system.memory3",
+                    "read_bytes": 45344,
+                    "write_bytes": 9280
+                }
+            ],
+            "sha256":
+                "79aaad3486ca49955cda1dd8fd6f36b8102cbbd3c89117f327b0c917c090ccaa",
+            "simTicks": 7643136000.0,
+            "statistics_dumps": 2,
+            "stats_region_start_tick": 283679000.0,
+            "stats_region_end_tick": 7926815000.0,
+            "simulation_final_tick": 9191485000.0,
+            "simulation_clock_periods": 9191485.0,
+            "elapsed_clock_periods": 7643136.0,
+            "clock_cycles": {
+                "system.accelerators0.cpu.numCycles": 4830849.0,
+                "system.accelerators1.cpu.numCycles": 4705000.0,
+                "system.accelerators10.cpu.numCycles": 6498781.0,
+                "system.accelerators11.cpu.numCycles": 6128014.0,
+                "system.accelerators12.cpu.numCycles": 7639754.0,
+                "system.accelerators13.cpu.numCycles": 7258653.0,
+                "system.accelerators14.cpu.numCycles": 5906563.0,
+                "system.accelerators15.cpu.numCycles": 6834190.0,
+                "system.accelerators2.cpu.numCycles": 4714503.0,
+                "system.accelerators3.cpu.numCycles": 4345412.0,
+                "system.accelerators4.cpu.numCycles": 5893902.0,
+                "system.accelerators5.cpu.numCycles": 6781193.0,
+                "system.accelerators6.cpu.numCycles": 6421819.0,
+                "system.accelerators7.cpu.numCycles": 5278974.0,
+                "system.accelerators8.cpu.numCycles": 7445196.0,
+                "system.accelerators9.cpu.numCycles": 7536261.0,
+                "system.cpu.numCycles": 4744.0
+            },
+            "instructions": {
+                "system.accelerators0.cpu.commitStats0.numInsts": 11854473.0,
+                "system.accelerators0.cpu.executeStats0.numInsts": 15215985.0,
+                "system.accelerators0.cpu.fetchStats0.numInsts": 21017676.0,
+                "system.accelerators0.cpu.thread_0.numInsts": 11854473.0,
+                "system.accelerators1.cpu.commitStats0.numInsts": 11572152.0,
+                "system.accelerators1.cpu.executeStats0.numInsts": 14902680.0,
+                "system.accelerators1.cpu.fetchStats0.numInsts": 20637098.0,
+                "system.accelerators1.cpu.thread_0.numInsts": 11572152.0,
+                "system.accelerators10.cpu.commitStats0.numInsts": 15095077.0,
+                "system.accelerators10.cpu.executeStats0.numInsts": 19933677.0,
+                "system.accelerators10.cpu.fetchStats0.numInsts": 28050360.0,
+                "system.accelerators10.cpu.thread_0.numInsts": 15095077.0,
+                "system.accelerators11.cpu.commitStats0.numInsts": 14447230.0,
+                "system.accelerators11.cpu.executeStats0.numInsts": 18819600.0,
+                "system.accelerators11.cpu.fetchStats0.numInsts": 26013244.0,
+                "system.accelerators11.cpu.thread_0.numInsts": 14447230.0,
+                "system.accelerators12.cpu.commitStats0.numInsts": 17174666.0,
+                "system.accelerators12.cpu.executeStats0.numInsts": 23109940.0,
+                "system.accelerators12.cpu.fetchStats0.numInsts": 33395175.0,
+                "system.accelerators12.cpu.thread_0.numInsts": 17174666.0,
+                "system.accelerators13.cpu.commitStats0.numInsts": 16655884.0,
+                "system.accelerators13.cpu.executeStats0.numInsts": 22140598.0,
+                "system.accelerators13.cpu.fetchStats0.numInsts": 31701992.0,
+                "system.accelerators13.cpu.thread_0.numInsts": 16655884.0,
+                "system.accelerators14.cpu.commitStats0.numInsts": 13198299.0,
+                "system.accelerators14.cpu.executeStats0.numInsts": 17915147.0,
+                "system.accelerators14.cpu.fetchStats0.numInsts": 25743323.0,
+                "system.accelerators14.cpu.thread_0.numInsts": 13198299.0,
+                "system.accelerators15.cpu.commitStats0.numInsts": 15462257.0,
+                "system.accelerators15.cpu.executeStats0.numInsts": 20766024.0,
+                "system.accelerators15.cpu.fetchStats0.numInsts": 29324754.0,
+                "system.accelerators15.cpu.thread_0.numInsts": 15462257.0,
+                "system.accelerators2.cpu.commitStats0.numInsts": 11649170.0,
+                "system.accelerators2.cpu.executeStats0.numInsts": 14743839.0,
+                "system.accelerators2.cpu.fetchStats0.numInsts": 19968996.0,
+                "system.accelerators2.cpu.thread_0.numInsts": 11649170.0,
+                "system.accelerators3.cpu.commitStats0.numInsts": 10691410.0,
+                "system.accelerators3.cpu.executeStats0.numInsts": 13495458.0,
+                "system.accelerators3.cpu.fetchStats0.numInsts": 18236131.0,
+                "system.accelerators3.cpu.thread_0.numInsts": 10691410.0,
+                "system.accelerators4.cpu.commitStats0.numInsts": 14421472.0,
+                "system.accelerators4.cpu.executeStats0.numInsts": 18534456.0,
+                "system.accelerators4.cpu.fetchStats0.numInsts": 25297809.0,
+                "system.accelerators4.cpu.thread_0.numInsts": 14421472.0,
+                "system.accelerators5.cpu.commitStats0.numInsts": 16803424.0,
+                "system.accelerators5.cpu.executeStats0.numInsts": 21593920.0,
+                "system.accelerators5.cpu.fetchStats0.numInsts": 29302480.0,
+                "system.accelerators5.cpu.thread_0.numInsts": 16803424.0,
+                "system.accelerators6.cpu.commitStats0.numInsts": 15953977.0,
+                "system.accelerators6.cpu.executeStats0.numInsts": 20016700.0,
+                "system.accelerators6.cpu.fetchStats0.numInsts": 26850238.0,
+                "system.accelerators6.cpu.thread_0.numInsts": 15953977.0,
+                "system.accelerators7.cpu.commitStats0.numInsts": 12824172.0,
+                "system.accelerators7.cpu.executeStats0.numInsts": 16324816.0,
+                "system.accelerators7.cpu.fetchStats0.numInsts": 22137446.0,
+                "system.accelerators7.cpu.thread_0.numInsts": 12824172.0,
+                "system.accelerators8.cpu.commitStats0.numInsts": 17628304.0,
+                "system.accelerators8.cpu.executeStats0.numInsts": 23154646.0,
+                "system.accelerators8.cpu.fetchStats0.numInsts": 32414426.0,
+                "system.accelerators8.cpu.thread_0.numInsts": 17628304.0,
+                "system.accelerators9.cpu.commitStats0.numInsts": 17203956.0,
+                "system.accelerators9.cpu.executeStats0.numInsts": 23164364.0,
+                "system.accelerators9.cpu.fetchStats0.numInsts": 33208894.0,
+                "system.accelerators9.cpu.thread_0.numInsts": 17203956.0,
+                "system.cpu.commitStats0.numInsts": 601.0,
+                "system.cpu.executeStats0.numInsts": 870.0,
+                "system.cpu.fetchStats0.numInsts": 1143.0,
+                "system.cpu.thread_0.numInsts": 601.0
+            },
+            "host_seconds": 476.21,
+            "tcm_layout_bytes": 164160,
+            "code_tcm_layout_bytes": 17744,
+            "data_tcm_layout_bytes": 146416,
+            "analytic_max_byte_error": 1,
+            "tiles": 16,
+            "accelerator_cores": 16,
+            "accelerator_ipc": {
+                "retired_instructions": 232635923,
+                "counted_cycles": 98219064,
+                "cycle_weighted_core_ipc": 2.368541437128743,
+                "combined_cluster_ipc": 30.437234533050308,
+                "per_core": [
+                    {
+                        "core": 0,
+                        "retired_instructions": 11854473,
+                        "counted_cycles": 4830849,
+                        "ipc": 2.45391089640765,
+                        "cache_statistics": {
+                            "icache.overallHits::total": 1671075,
+                            "icache.overallMisses::total": 163,
+                            "icache.overallMshrHits::total": 0,
+                            "icache.overallMshrMisses::total": 163,
+                            "dcache.overallHits::total": 2634754,
+                            "dcache.overallMisses::total": 6214,
+                            "dcache.overallMshrHits::total": 4183,
+                            "dcache.overallMshrMisses::total": 2031
+                        },
+                        "dma": {
+                            "bytesCopied": 13728.0,
+                            "busyTicks": 7546027.0,
+                            "readRequests": 430.0,
+                            "writeRequests": 430.0,
+                            "cleanRequests": 358.0,
+                            "readRetries": 333.0,
+                            "writeRetries": 84.0,
+                            "peakChunks": 19.0
+                        }
+                    },
+                    {
+                        "core": 1,
+                        "retired_instructions": 11572152,
+                        "counted_cycles": 4705000,
+                        "ipc": 2.459543464399575,
+                        "cache_statistics": {
+                            "icache.overallHits::total": 1638788,
+                            "icache.overallMisses::total": 164,
+                            "icache.overallMshrHits::total": 0,
+                            "icache.overallMshrMisses::total": 164,
+                            "dcache.overallHits::total": 2535267,
+                            "dcache.overallMisses::total": 6223,
+                            "dcache.overallMshrHits::total": 4191,
+                            "dcache.overallMshrMisses::total": 2032
+                        },
+                        "dma": {
+                            "bytesCopied": 13728.0,
+                            "busyTicks": 7616027.0,
+                            "readRequests": 430.0,
+                            "writeRequests": 430.0,
+                            "cleanRequests": 358.0,
+                            "readRetries": 331.0,
+                            "writeRetries": 81.0,
+                            "peakChunks": 19.0
+                        }
+                    },
+                    {
+                        "core": 2,
+                        "retired_instructions": 11649170,
+                        "counted_cycles": 4714503,
+                        "ipc": 2.4709221735567883,
+                        "cache_statistics": {
+                            "icache.overallHits::total": 1610206,
+                            "icache.overallMisses::total": 164,
+                            "icache.overallMshrHits::total": 0,
+                            "icache.overallMshrMisses::total": 164,
+                            "dcache.overallHits::total": 2645515,
+                            "dcache.overallMisses::total": 6213,
+                            "dcache.overallMshrHits::total": 4183,
+                            "dcache.overallMshrMisses::total": 2030
+                        },
+                        "dma": {
+                            "bytesCopied": 13728.0,
+                            "busyTicks": 7595027.0,
+                            "readRequests": 430.0,
+                            "writeRequests": 430.0,
+                            "cleanRequests": 358.0,
+                            "readRetries": 330.0,
+                            "writeRetries": 90.0,
+                            "peakChunks": 19.0
+                        }
+                    },
+                    {
+                        "core": 3,
+                        "retired_instructions": 10691410,
+                        "counted_cycles": 4345412,
+                        "ipc": 2.460390407169677,
+                        "cache_statistics": {
+                            "icache.overallHits::total": 1485087,
+                            "icache.overallMisses::total": 163,
+                            "icache.overallMshrHits::total": 0,
+                            "icache.overallMshrMisses::total": 163,
+                            "dcache.overallHits::total": 2458286,
+                            "dcache.overallMisses::total": 6216,
+                            "dcache.overallMshrHits::total": 4186,
+                            "dcache.overallMshrMisses::total": 2030
+                        },
+                        "dma": {
+                            "bytesCopied": 13728.0,
+                            "busyTicks": 7637027.0,
+                            "readRequests": 430.0,
+                            "writeRequests": 430.0,
+                            "cleanRequests": 358.0,
+                            "readRetries": 327.0,
+                            "writeRetries": 90.0,
+                            "peakChunks": 19.0
+                        }
+                    },
+                    {
+                        "core": 4,
+                        "retired_instructions": 14421472,
+                        "counted_cycles": 5893902,
+                        "ipc": 2.446846248885713,
+                        "cache_statistics": {
+                            "icache.overallHits::total": 2014160,
+                            "icache.overallMisses::total": 163,
+                            "icache.overallMshrHits::total": 0,
+                            "icache.overallMshrMisses::total": 163,
+                            "dcache.overallHits::total": 3175166,
+                            "dcache.overallMisses::total": 6218,
+                            "dcache.overallMshrHits::total": 4186,
+                            "dcache.overallMshrMisses::total": 2032
+                        },
+                        "dma": {
+                            "bytesCopied": 13728.0,
+                            "busyTicks": 7606027.0,
+                            "readRequests": 430.0,
+                            "writeRequests": 430.0,
+                            "cleanRequests": 358.0,
+                            "readRetries": 330.0,
+                            "writeRetries": 83.0,
+                            "peakChunks": 19.0
+                        }
+                    },
+                    {
+                        "core": 5,
+                        "retired_instructions": 16803424,
+                        "counted_cycles": 6781193,
+                        "ipc": 2.4779451049394994,
+                        "cache_statistics": {
+                            "icache.overallHits::total": 2339518,
+                            "icache.overallMisses::total": 163,
+                            "icache.overallMshrHits::total": 0,
+                            "icache.overallMshrMisses::total": 163,
+                            "dcache.overallHits::total": 3708047,
+                            "dcache.overallMisses::total": 6226,
+                            "dcache.overallMshrHits::total": 4195,
+                            "dcache.overallMshrMisses::total": 2031
+                        },
+                        "dma": {
+                            "bytesCopied": 13728.0,
+                            "busyTicks": 7647027.0,
+                            "readRequests": 430.0,
+                            "writeRequests": 430.0,
+                            "cleanRequests": 358.0,
+                            "readRetries": 329.0,
+                            "writeRetries": 87.0,
+                            "peakChunks": 19.0
+                        }
+                    },
+                    {
+                        "core": 6,
+                        "retired_instructions": 15953977,
+                        "counted_cycles": 6421819,
+                        "ipc": 2.4843392502965282,
+                        "cache_statistics": {
+                            "icache.overallHits::total": 2165801,
+                            "icache.overallMisses::total": 164,
+                            "icache.overallMshrHits::total": 0,
+                            "icache.overallMshrMisses::total": 164,
+                            "dcache.overallHits::total": 3617783,
+                            "dcache.overallMisses::total": 6217,
+                            "dcache.overallMshrHits::total": 4187,
+                            "dcache.overallMshrMisses::total": 2030
+                        },
+                        "dma": {
+                            "bytesCopied": 13728.0,
+                            "busyTicks": 7613027.0,
+                            "readRequests": 430.0,
+                            "writeRequests": 430.0,
+                            "cleanRequests": 358.0,
+                            "readRetries": 327.0,
+                            "writeRetries": 87.0,
+                            "peakChunks": 19.0
+                        }
+                    },
+                    {
+                        "core": 7,
+                        "retired_instructions": 12824172,
+                        "counted_cycles": 5278974,
+                        "ipc": 2.4292925102491507,
+                        "cache_statistics": {
+                            "icache.overallHits::total": 1789737,
+                            "icache.overallMisses::total": 163,
+                            "icache.overallMshrHits::total": 0,
+                            "icache.overallMshrMisses::total": 163,
+                            "dcache.overallHits::total": 2966415,
+                            "dcache.overallMisses::total": 6215,
+                            "dcache.overallMshrHits::total": 4185,
+                            "dcache.overallMshrMisses::total": 2030
+                        },
+                        "dma": {
+                            "bytesCopied": 13728.0,
+                            "busyTicks": 7631027.0,
+                            "readRequests": 430.0,
+                            "writeRequests": 430.0,
+                            "cleanRequests": 358.0,
+                            "readRetries": 336.0,
+                            "writeRetries": 82.0,
+                            "peakChunks": 19.0
+                        }
+                    },
+                    {
+                        "core": 8,
+                        "retired_instructions": 17628304,
+                        "counted_cycles": 7445196,
+                        "ipc": 2.3677420983947233,
+                        "cache_statistics": {
+                            "icache.overallHits::total": 2595507,
+                            "icache.overallMisses::total": 163,
+                            "icache.overallMshrHits::total": 0,
+                            "icache.overallMshrMisses::total": 163,
+                            "dcache.overallHits::total": 3856078,
+                            "dcache.overallMisses::total": 59132,
+                            "dcache.overallMshrHits::total": 44902,
+                            "dcache.overallMshrMisses::total": 14230
+                        },
+                        "dma": {
+                            "bytesCopied": 13728.0,
+                            "busyTicks": 7627027.0,
+                            "readRequests": 430.0,
+                            "writeRequests": 430.0,
+                            "cleanRequests": 358.0,
+                            "readRetries": 338.0,
+                            "writeRetries": 71.0,
+                            "peakChunks": 19.0
+                        }
+                    },
+                    {
+                        "core": 9,
+                        "retired_instructions": 17203956,
+                        "counted_cycles": 7536261,
+                        "ipc": 2.282823803474959,
+                        "cache_statistics": {
+                            "icache.overallHits::total": 2709356,
+                            "icache.overallMisses::total": 163,
+                            "icache.overallMshrHits::total": 0,
+                            "icache.overallMshrMisses::total": 163,
+                            "dcache.overallHits::total": 4030638,
+                            "dcache.overallMisses::total": 24812,
+                            "dcache.overallMshrHits::total": 18750,
+                            "dcache.overallMshrMisses::total": 6062
+                        },
+                        "dma": {
+                            "bytesCopied": 13728.0,
+                            "busyTicks": 7656027.0,
+                            "readRequests": 430.0,
+                            "writeRequests": 430.0,
+                            "cleanRequests": 358.0,
+                            "readRetries": 339.0,
+                            "writeRetries": 70.0,
+                            "peakChunks": 18.0
+                        }
+                    },
+                    {
+                        "core": 10,
+                        "retired_instructions": 15095077,
+                        "counted_cycles": 6498781,
+                        "ipc": 2.3227551443878474,
+                        "cache_statistics": {
+                            "icache.overallHits::total": 2297909,
+                            "icache.overallMisses::total": 164,
+                            "icache.overallMshrHits::total": 0,
+                            "icache.overallMshrMisses::total": 164,
+                            "dcache.overallHits::total": 3588590,
+                            "dcache.overallMisses::total": 14648,
+                            "dcache.overallMshrHits::total": 10381,
+                            "dcache.overallMshrMisses::total": 4267
+                        },
+                        "dma": {
+                            "bytesCopied": 13728.0,
+                            "busyTicks": 7629027.0,
+                            "readRequests": 430.0,
+                            "writeRequests": 430.0,
+                            "cleanRequests": 358.0,
+                            "readRetries": 339.0,
+                            "writeRetries": 69.0,
+                            "peakChunks": 18.0
+                        }
+                    },
+                    {
+                        "core": 11,
+                        "retired_instructions": 14447230,
+                        "counted_cycles": 6128014,
+                        "ipc": 2.3575713110316,
+                        "cache_statistics": {
+                            "icache.overallHits::total": 2108443,
+                            "icache.overallMisses::total": 163,
+                            "icache.overallMshrHits::total": 0,
+                            "icache.overallMshrMisses::total": 163,
+                            "dcache.overallHits::total": 3348097,
+                            "dcache.overallMisses::total": 8607,
+                            "dcache.overallMshrHits::total": 5673,
+                            "dcache.overallMshrMisses::total": 2934
+                        },
+                        "dma": {
+                            "bytesCopied": 13728.0,
+                            "busyTicks": 7622027.0,
+                            "readRequests": 430.0,
+                            "writeRequests": 430.0,
+                            "cleanRequests": 358.0,
+                            "readRetries": 338.0,
+                            "writeRetries": 66.0,
+                            "peakChunks": 19.0
+                        }
+                    },
+                    {
+                        "core": 12,
+                        "retired_instructions": 17174666,
+                        "counted_cycles": 7639754,
+                        "ipc": 2.2480653172863945,
+                        "cache_statistics": {
+                            "icache.overallHits::total": 2692515,
+                            "icache.overallMisses::total": 163,
+                            "icache.overallMshrHits::total": 0,
+                            "icache.overallMshrMisses::total": 163,
+                            "dcache.overallHits::total": 3830612,
+                            "dcache.overallMisses::total": 80168,
+                            "dcache.overallMshrHits::total": 61487,
+                            "dcache.overallMshrMisses::total": 18681
+                        },
+                        "dma": {
+                            "bytesCopied": 13728.0,
+                            "busyTicks": 7616027.0,
+                            "readRequests": 430.0,
+                            "writeRequests": 430.0,
+                            "cleanRequests": 358.0,
+                            "readRetries": 339.0,
+                            "writeRetries": 64.0,
+                            "peakChunks": 18.0
+                        }
+                    },
+                    {
+                        "core": 13,
+                        "retired_instructions": 16655884,
+                        "counted_cycles": 7258653,
+                        "ipc": 2.294624636278935,
+                        "cache_statistics": {
+                            "icache.overallHits::total": 2558472,
+                            "icache.overallMisses::total": 163,
+                            "icache.overallMshrHits::total": 0,
+                            "icache.overallMshrMisses::total": 163,
+                            "dcache.overallHits::total": 3776288,
+                            "dcache.overallMisses::total": 15438,
+                            "dcache.overallMshrHits::total": 11391,
+                            "dcache.overallMshrMisses::total": 4047
+                        },
+                        "dma": {
+                            "bytesCopied": 13728.0,
+                            "busyTicks": 7621027.0,
+                            "readRequests": 430.0,
+                            "writeRequests": 430.0,
+                            "cleanRequests": 358.0,
+                            "readRetries": 339.0,
+                            "writeRetries": 63.0,
+                            "peakChunks": 18.0
+                        }
+                    },
+                    {
+                        "core": 14,
+                        "retired_instructions": 13198299,
+                        "counted_cycles": 5906563,
+                        "ipc": 2.2345142174899344,
+                        "cache_statistics": {
+                            "icache.overallHits::total": 2113353,
+                            "icache.overallMisses::total": 164,
+                            "icache.overallMshrHits::total": 0,
+                            "icache.overallMshrMisses::total": 164,
+                            "dcache.overallHits::total": 3208885,
+                            "dcache.overallMisses::total": 15024,
+                            "dcache.overallMshrHits::total": 10968,
+                            "dcache.overallMshrMisses::total": 4056
+                        },
+                        "dma": {
+                            "bytesCopied": 13728.0,
+                            "busyTicks": 7615027.0,
+                            "readRequests": 430.0,
+                            "writeRequests": 430.0,
+                            "cleanRequests": 358.0,
+                            "readRetries": 339.0,
+                            "writeRetries": 73.0,
+                            "peakChunks": 18.0
+                        }
+                    },
+                    {
+                        "core": 15,
+                        "retired_instructions": 15462257,
+                        "counted_cycles": 6834190,
+                        "ipc": 2.26248567862468,
+                        "cache_statistics": {
+                            "icache.overallHits::total": 2415823,
+                            "icache.overallMisses::total": 163,
+                            "icache.overallMshrHits::total": 0,
+                            "icache.overallMshrMisses::total": 163,
+                            "dcache.overallHits::total": 3766900,
+                            "dcache.overallMisses::total": 13270,
+                            "dcache.overallMshrHits::total": 9359,
+                            "dcache.overallMshrMisses::total": 3911
+                        },
+                        "dma": {
+                            "bytesCopied": 13728.0,
+                            "busyTicks": 7617027.0,
+                            "readRequests": 430.0,
+                            "writeRequests": 430.0,
+                            "cleanRequests": 358.0,
+                            "readRetries": 339.0,
+                            "writeRetries": 57.0,
+                            "peakChunks": 18.0
+                        }
+                    }
+                ]
+            }
+        }
+    ],
+    "comparison": {
+        "simulated_counters_compared": 37354,
+        "excluded_host_counters": [
+            "dump0/hostInstRate",
+            "dump0/hostMemory",
+            "dump0/hostOpRate",
+            "dump0/hostSeconds",
+            "dump0/hostTickRate",
+            "dump1/hostInstRate",
+            "dump1/hostMemory",
+            "dump1/hostOpRate",
+            "dump1/hostSeconds",
+            "dump1/hostTickRate"
+        ],
+        "transaction_trace_sha256": {}
+    },
+    "speedup": 8.321670232141052,
+    "finished_utc": "2026-10-11T21:19:40Z"
+}

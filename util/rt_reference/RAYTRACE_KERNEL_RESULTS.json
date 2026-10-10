@@ -1,0 +1,2565 @@
+{
+    "base_commit": "1cb9b680c19f9e5291d4da22355a999cae71f6db",
+    "workload":
+        "96x96 O3 raytrace smoke; 16 accelerators, 17 PDES queues, 1 GHz",
+    "quantum_cycles": 5,
+    "transport_delay_each_direction": "5ns",
+    "machine": {
+        "hostname": "Z890-AORUS",
+        "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.43",
+        "lscpu":
+            "Architecture:                            x86_64\nCPU op-mode(s):                          32-bit, 64-bit\nAddress sizes:                           46 bits physical, 48 bits virtual\nByte Order:                              Little Endian\nCPU(s):                                  20\nOn-line CPU(s) list:                     0-19\nVendor ID:                               GenuineIntel\nModel name:                              Intel(R) Core(TM) Ultra 7 265K\nCPU family:                              6\nModel:                                   198\nThread(s) per core:                      1\nCore(s) per socket:                      20\nSocket(s):                               1\nStepping:                                2\nCPU(s) scaling MHz:                      78%\nCPU max MHz:                             5500.0000\nCPU min MHz:                             800.0000\nBogoMIPS:                                7756.80\nFlags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdt_a rdseed adx smap clflushopt clwb intel_pt sha_ni xsaveopt xsavec xgetbv1 xsaves split_lock_detect user_shstk avx_vnni lam wbnoinvd dtherm ida arat pln pts hwp hwp_notify hwp_act_window hwp_epp hwp_pkg_req hfi vnmi umip pku ospke waitpkg gfni vaes vpclmulqdq rdpid bus_lock_detect movdiri movdir64b fsrm md_clear serialize arch_lbr ibt flush_l1d arch_capabilities\nVirtualization:                          VT-x\nL1d cache:                               704 KiB (18 instances)\nL1i cache:                               1.1 MiB (18 instances)\nL2 cache:                                36 MiB (11 instances)\nL3 cache:                                30 MiB (1 instance)\nNUMA node(s):                            1\nNUMA node0 CPU(s):                       0-19\nVulnerability Gather data sampling:      Not affected\nVulnerability Ghostwrite:                Not affected\nVulnerability Indirect target selection: Not affected\nVulnerability Itlb multihit:             Not affected\nVulnerability L1tf:                      Not affected\nVulnerability Mds:                       Not affected\nVulnerability Meltdown:                  Not affected\nVulnerability Mmio stale data:           Not affected\nVulnerability Old microcode:             Not affected\nVulnerability Reg file data sampling:    Not affected\nVulnerability Retbleed:                  Not affected\nVulnerability Spec rstack overflow:      Not affected\nVulnerability Spec store bypass:         Mitigation; Speculative Store Bypass disabled via prctl\nVulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:                Mitigation; Enhanced / Automatic IBRS; IBPB conditional; PBRSB-eIBRS Not affected; BHI BHI_DIS_S\nVulnerability Srbds:                     Not affected\nVulnerability Tsa:                       Not affected\nVulnerability Tsx async abort:           Not affected\nVulnerability Vmscape:                   Mitigation; IBPB before exit to userspace\n",
+        "cpu_affinity": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19
+        ]
+    },
+    "variants":
+        {
+            "control":
+                {
+                    "runs": [
+                        {
+                            "command": [
+                                "/usr/bin/time",
+                                "-v",
+                                "-o",
+                                "/home/ripopov/work/gem5/main/local-temp/async-batches/kernel-next/control-r0/resources.txt",
+                                "/home/ripopov/work/gem5/main/local-temp/async-batches/final/bin/gem5.opt",
+                                "--outdir=/home/ripopov/work/gem5/main/local-temp/async-batches/kernel-next/control-r0",
+                                "/home/ripopov/work/gem5/main/configs/example/rt_accel.py",
+                                "--backend=gem5",
+                                "--accelerator-cpu=o3",
+                                "--accelerator-cores=16",
+                                "--queues=17",
+                                "--render-mode=1",
+                                "--samples-per-pixel=1",
+                                "--max-secondary-depth=0",
+                                "--seed=1",
+                                "--transport-delay=5ns"
+                            ],
+                            "quantum_cycles": 5,
+                            "queues": 17,
+                            "spins": null,
+                            "profiled": false,
+                            "binary_sha256":
+                                "ff9beccafcce36d22758d86af8504a67d0cc8a9497dd6c54ba13292368591f28",
+                            "started_utc": "2026-10-11T21:40:18Z",
+                            "pid_namespace": "pid:[4026531836]",
+                            "affinity": [
+                                0,
+                                1,
+                                2,
+                                3,
+                                4,
+                                5,
+                                6,
+                                7,
+                                8,
+                                9,
+                                10,
+                                11,
+                                12,
+                                13,
+                                14,
+                                15,
+                                16,
+                                17,
+                                18,
+                                19
+                            ],
+                            "returncode": 0,
+                            "wall_seconds": 68.53320435000205,
+                            "finished_utc": "2026-10-11T21:41:26Z",
+                            "process_checks": 68,
+                            "simulations_after": [],
+                            "directory":
+                                "local-temp/async-batches/kernel-next/control-r0",
+                            "comparison": {
+                                "simulated_counters_compared": 37340,
+                                "excluded_host_counters": [
+                                    "dump0/hostInstRate",
+                                    "dump0/hostMemory",
+                                    "dump0/hostOpRate",
+                                    "dump0/hostSeconds",
+                                    "dump0/hostTickRate",
+                                    "dump1/hostInstRate",
+                                    "dump1/hostMemory",
+                                    "dump1/hostOpRate",
+                                    "dump1/hostSeconds",
+                                    "dump1/hostTickRate"
+                                ],
+                                "transaction_trace_sha256": {}
+                            },
+                            "parameters": {
+                                "backend": "gem5",
+                                "accelerator_cores": 16,
+                                "queues": 17,
+                                "accelerator_cpu": "o3",
+                                "host_firmware": null,
+                                "host_render": false,
+                                "accelerator_caches": "l1",
+                                "accelerator_firmware": null,
+                                "queue_depth": 16,
+                                "dma_outstanding": 256,
+                                "memory_controllers": 4,
+                                "trace": false,
+                                "transport_delay": "5ns",
+                                "render_mode": 1,
+                                "samples_per_pixel": 1,
+                                "max_secondary_depth": 0,
+                                "seed": 1
+                            },
+                            "image_rgba_sha256":
+                                "79aaad3486ca49955cda1dd8fd6f36b8102cbbd3c89117f327b0c917c090ccaa",
+                            "stats_sha256":
+                                "4ce2de1058a5ece81a0e31dcb5e16807f519d72a24560281658fb18c51991e56"
+                        },
+                        {
+                            "command": [
+                                "/usr/bin/time",
+                                "-v",
+                                "-o",
+                                "/home/ripopov/work/gem5/main/local-temp/async-batches/kernel-next/control-r1/resources.txt",
+                                "/home/ripopov/work/gem5/main/local-temp/async-batches/final/bin/gem5.opt",
+                                "--outdir=/home/ripopov/work/gem5/main/local-temp/async-batches/kernel-next/control-r1",
+                                "/home/ripopov/work/gem5/main/configs/example/rt_accel.py",
+                                "--backend=gem5",
+                                "--accelerator-cpu=o3",
+                                "--accelerator-cores=16",
+                                "--queues=17",
+                                "--render-mode=1",
+                                "--samples-per-pixel=1",
+                                "--max-secondary-depth=0",
+                                "--seed=1",
+                                "--transport-delay=5ns"
+                            ],
+                            "quantum_cycles": 5,
+                            "queues": 17,
+                            "spins": null,
+                            "profiled": false,
+                            "binary_sha256":
+                                "ff9beccafcce36d22758d86af8504a67d0cc8a9497dd6c54ba13292368591f28",
+                            "started_utc": "2026-10-11T21:51:30Z",
+                            "pid_namespace": "pid:[4026531836]",
+                            "affinity": [
+                                0,
+                                1,
+                                2,
+                                3,
+                                4,
+                                5,
+                                6,
+                                7,
+                                8,
+                                9,
+                                10,
+                                11,
+                                12,
+                                13,
+                                14,
+                                15,
+                                16,
+                                17,
+                                18,
+                                19
+                            ],
+                            "returncode": 0,
+                            "wall_seconds": 67.75746208599958,
+                            "finished_utc": "2026-10-11T21:52:38Z",
+                            "process_checks": 67,
+                            "simulations_after": [],
+                            "directory":
+                                "local-temp/async-batches/kernel-next/control-r1",
+                            "comparison": {
+                                "simulated_counters_compared": 37340,
+                                "excluded_host_counters": [
+                                    "dump0/hostInstRate",
+                                    "dump0/hostMemory",
+                                    "dump0/hostOpRate",
+                                    "dump0/hostSeconds",
+                                    "dump0/hostTickRate",
+                                    "dump1/hostInstRate",
+                                    "dump1/hostMemory",
+                                    "dump1/hostOpRate",
+                                    "dump1/hostSeconds",
+                                    "dump1/hostTickRate"
+                                ],
+                                "transaction_trace_sha256": {}
+                            },
+                            "parameters": {
+                                "backend": "gem5",
+                                "accelerator_cores": 16,
+                                "queues": 17,
+                                "accelerator_cpu": "o3",
+                                "host_firmware": null,
+                                "host_render": false,
+                                "accelerator_caches": "l1",
+                                "accelerator_firmware": null,
+                                "queue_depth": 16,
+                                "dma_outstanding": 256,
+                                "memory_controllers": 4,
+                                "trace": false,
+                                "transport_delay": "5ns",
+                                "render_mode": 1,
+                                "samples_per_pixel": 1,
+                                "max_secondary_depth": 0,
+                                "seed": 1
+                            },
+                            "image_rgba_sha256":
+                                "79aaad3486ca49955cda1dd8fd6f36b8102cbbd3c89117f327b0c917c090ccaa",
+                            "stats_sha256":
+                                "3ccb34f262ecd1a5f17fa9f59b420437b72631a59aea85859d2d81ae21ae6280"
+                        },
+                        {
+                            "command": [
+                                "/usr/bin/time",
+                                "-v",
+                                "-o",
+                                "/home/ripopov/work/gem5/main/local-temp/async-batches/kernel-next/control-r2/resources.txt",
+                                "/home/ripopov/work/gem5/main/local-temp/async-batches/final/bin/gem5.opt",
+                                "--outdir=/home/ripopov/work/gem5/main/local-temp/async-batches/kernel-next/control-r2",
+                                "/home/ripopov/work/gem5/main/configs/example/rt_accel.py",
+                                "--backend=gem5",
+                                "--accelerator-cpu=o3",
+                                "--accelerator-cores=16",
+                                "--queues=17",
+                                "--render-mode=1",
+                                "--samples-per-pixel=1",
+                                "--max-secondary-depth=0",
+                                "--seed=1",
+                                "--transport-delay=5ns"
+                            ],
+                            "quantum_cycles": 5,
+                            "queues": 17,
+                            "spins": null,
+                            "profiled": false,
+                            "binary_sha256":
+                                "ff9beccafcce36d22758d86af8504a67d0cc8a9497dd6c54ba13292368591f28",
+                            "started_utc": "2026-10-11T21:52:52Z",
+                            "pid_namespace": "pid:[4026531836]",
+                            "affinity": [
+                                0,
+                                1,
+                                2,
+                                3,
+                                4,
+                                5,
+                                6,
+                                7,
+                                8,
+                                9,
+                                10,
+                                11,
+                                12,
+                                13,
+                                14,
+                                15,
+                                16,
+                                17,
+                                18,
+                                19
+                            ],
+                            "returncode": 0,
+                            "wall_seconds": 67.96434774099907,
+                            "finished_utc": "2026-10-11T21:54:00Z",
+                            "process_checks": 67,
+                            "simulations_after": [],
+                            "directory":
+                                "local-temp/async-batches/kernel-next/control-r2",
+                            "comparison": {
+                                "simulated_counters_compared": 37340,
+                                "excluded_host_counters": [
+                                    "dump0/hostInstRate",
+                                    "dump0/hostMemory",
+                                    "dump0/hostOpRate",
+                                    "dump0/hostSeconds",
+                                    "dump0/hostTickRate",
+                                    "dump1/hostInstRate",
+                                    "dump1/hostMemory",
+                                    "dump1/hostOpRate",
+                                    "dump1/hostSeconds",
+                                    "dump1/hostTickRate"
+                                ],
+                                "transaction_trace_sha256": {}
+                            },
+                            "parameters": {
+                                "backend": "gem5",
+                                "accelerator_cores": 16,
+                                "queues": 17,
+                                "accelerator_cpu": "o3",
+                                "host_firmware": null,
+                                "host_render": false,
+                                "accelerator_caches": "l1",
+                                "accelerator_firmware": null,
+                                "queue_depth": 16,
+                                "dma_outstanding": 256,
+                                "memory_controllers": 4,
+                                "trace": false,
+                                "transport_delay": "5ns",
+                                "render_mode": 1,
+                                "samples_per_pixel": 1,
+                                "max_secondary_depth": 0,
+                                "seed": 1
+                            },
+                            "image_rgba_sha256":
+                                "79aaad3486ca49955cda1dd8fd6f36b8102cbbd3c89117f327b0c917c090ccaa",
+                            "stats_sha256":
+                                "cd526e7fd04e6e13ab6ca7c2dd5262abe435dc9f8bd06848220871e6b8aba736"
+                        }
+                    ],
+                    "samples_seconds": [
+                        68.53320435000205,
+                        67.75746208599958,
+                        67.96434774099907
+                    ],
+                    "median_seconds": 67.96434774099907,
+                    "provenance": {
+                        "base_commit":
+                            "2390a8ab58fea58762c05b1f51fab326b78a5040",
+                        "sha256": {
+                            "src/sim/async_event_batch.hh":
+                                "483e38d01a1259a8f12fb3cf97f0e99eb76c9f6c62b9f89f556ce165c9e1dcac",
+                            "src/sim/async_event_batch.test.cc":
+                                "8efbd4f742b05257d8752c6e0bae257ad3fa44a26a276b9e436ea9bef0e127ba",
+                            "src/sim/async_eventq.test.cc":
+                                "d9597b5a7b7e503142c7e0e7712142f886ac1b52b517be93361661bf1d06bfdb",
+                            "src/sim/eventq.cc":
+                                "c9ea7d86622dc917563e2ae378444b04237b6929199490c3fcb5742741cb3a07",
+                            "src/sim/eventq.hh":
+                                "580bf6c161d31b062c804708605edaf9654c04127313d5f7aad81035ea35f3a4",
+                            "src/sim/global_event.cc":
+                                "678feb45409ddcc571665ddc53cc60b8ba8b7a590d455e67204aaf9afebe96f5",
+                            "src/sim/global_event.hh":
+                                "fc8d84cb043c91b231e55af200fa6111580ae674398579262f340fa8d8293db1",
+                            "src/sim/simulate.cc":
+                                "80f72d7cc0d7b79eb7c18624598c089d66ffbd2eac58e0f92bed2a0a27f2b323",
+                            "src/sim/SConscript":
+                                "77032d43d716d809cee3d0bcbe913d286a19caba4710aa1086edfd7f401d7f4f",
+                            "build/RISCV/gem5.opt":
+                                "ff9beccafcce36d22758d86af8504a67d0cc8a9497dd6c54ba13292368591f28",
+                            "build/RISCV/librt_accel_opt.so":
+                                "6df1c6f87cb0b8a290ea3b89f316c630481c8afdfc2e25edb899540b44daddf9",
+                            "configs/example/rt_accel.py":
+                                "c4fb3d8bdaded5e96d2125342fbfdd70153eb3bfad6ae6e08e3d2fd3ab110b37",
+                            "configs/example/rt_accel_reduction.py": "51c697a29728ba478c1b59684d152e0273f6040d48f12e5c59cbd10b54961c53",
+                            "configs/example/rt_accel_system.py":
+                                "cc15055760d28991c9ecce518933fd73a89a8bf0e5bc7209b8c9e7a595eb81fd",
+                            "util/rt_reference/out/host.elf":
+                                "0833efd380ac2d9c18f0dd0db47ceb68fed61c87e699f0db455fa1bc3b31beba",
+                            "util/rt_reference/out/accelerator.elf":
+                                "dc8d993e1cbb4533758925f66a9e5a052d8025ec5342b4f7f7b0fe5a9d3e0833",
+                            "util/rt_reference/out/host-test.elf":
+                                "0f09943ac100cd7448d50ef5c568f7d811ec060ccd0aedfaef2a51f7c4d76053",
+                            "util/rt_reference/out/accelerator-test.elf":
+                                "059f88188bf55f282127f132249a7a8d9671e086a102ef4c65f17f25d93a30cc",
+                            "util/rt_reference/out/host-render.elf":
+                                "7ecbf6538dd7290f0192e8465738381846e58486cb5e41c55d1d669ce687d0f7",
+                            "util/rt_reference/out/host-gem5.elf":
+                                "13dc08a18ebb6a7c4c7134ffe2a6607ff9877e3fa5e4b054bedf957f0db76ec9",
+                            "util/rt_reference/out/smrnmi-present.elf":
+                                "4e2493f32e52b7e4d1cac2a6191f9f398dcdd03f132c2bfce4742244b8a842e0",
+                            "util/rt_reference/out/reduction-accelerator.elf":
+                                "dd74c08a076bdab38be0d97b04b850d21b0b6e4cef4f4c9fa6ee6a8667c90e2e",
+                            "util/rt_reference/out/reduction-host.elf":
+                                "a1dc9df51f1612119cba5c2b9239304422047c512198d906077025ae9c583e53",
+                            "util/rt_reference/out/smrnmi-absent.elf":
+                                "3eb354fe8f1027fcdea9089b3279951dd76a93b6a0d776ed86c2056fb1c89731"
+                        },
+                        "compiler": "g++ (Ubuntu 15.2.0-16ubuntu1) 15.2.0",
+                        "build":
+                            "scons build/RISCV/gem5.opt -j 16; retry unchanged with -j 2 after GCC ICE",
+                        "archived_binary_sha256":
+                            "ff9beccafcce36d22758d86af8504a67d0cc8a9497dd6c54ba13292368591f28"
+                    }
+                },
+            "vector": {
+                "runs": [
+                    {
+                        "command": [
+                            "/usr/bin/time",
+                            "-v",
+                            "-o",
+                            "/home/ripopov/work/gem5/main/local-temp/async-batches/kernel-next/vector-r0/resources.txt",
+                            "/home/ripopov/work/gem5/main/local-temp/async-batches/kernel-next/vector/bin/gem5.opt",
+                            "--outdir=/home/ripopov/work/gem5/main/local-temp/async-batches/kernel-next/vector-r0",
+                            "/home/ripopov/work/gem5/main/configs/example/rt_accel.py",
+                            "--backend=gem5",
+                            "--accelerator-cpu=o3",
+                            "--accelerator-cores=16",
+                            "--queues=17",
+                            "--render-mode=1",
+                            "--samples-per-pixel=1",
+                            "--max-secondary-depth=0",
+                            "--seed=1",
+                            "--transport-delay=5ns"
+                        ],
+                        "quantum_cycles": 5,
+                        "queues": 17,
+                        "spins": null,
+                        "profiled": false,
+                        "binary_sha256":
+                            "1a5badd92cbc4ffb6fac7b9235900899592dfef5bc694cc397d53968bea4c6f9",
+                        "started_utc": "2026-10-11T21:39:11Z",
+                        "pid_namespace": "pid:[4026531836]",
+                        "affinity": [
+                            0,
+                            1,
+                            2,
+                            3,
+                            4,
+                            5,
+                            6,
+                            7,
+                            8,
+                            9,
+                            10,
+                            11,
+                            12,
+                            13,
+                            14,
+                            15,
+                            16,
+                            17,
+                            18,
+                            19
+                        ],
+                        "returncode": 0,
+                        "wall_seconds": 66.60633385099936,
+                        "finished_utc": "2026-10-11T21:40:17Z",
+                        "process_checks": 66,
+                        "simulations_after": [],
+                        "directory":
+                            "local-temp/async-batches/kernel-next/vector-r0",
+                        "comparison": {
+                            "simulated_counters_compared": 37340,
+                            "excluded_host_counters": [
+                                "dump0/hostInstRate",
+                                "dump0/hostMemory",
+                                "dump0/hostOpRate",
+                                "dump0/hostSeconds",
+                                "dump0/hostTickRate",
+                                "dump1/hostInstRate",
+                                "dump1/hostMemory",
+                                "dump1/hostOpRate",
+                                "dump1/hostSeconds",
+                                "dump1/hostTickRate"
+                            ],
+                            "transaction_trace_sha256": {}
+                        },
+                        "parameters": {
+                            "backend": "gem5",
+                            "accelerator_cores": 16,
+                            "queues": 17,
+                            "accelerator_cpu": "o3",
+                            "host_firmware": null,
+                            "host_render": false,
+                            "accelerator_caches": "l1",
+                            "accelerator_firmware": null,
+                            "queue_depth": 16,
+                            "dma_outstanding": 256,
+                            "memory_controllers": 4,
+                            "trace": false,
+                            "transport_delay": "5ns",
+                            "render_mode": 1,
+                            "samples_per_pixel": 1,
+                            "max_secondary_depth": 0,
+                            "seed": 1
+                        },
+                        "image_rgba_sha256":
+                            "79aaad3486ca49955cda1dd8fd6f36b8102cbbd3c89117f327b0c917c090ccaa",
+                        "stats_sha256":
+                            "acaefcfcf2622c92d4491aeca576c6d380943a7fd78e4484ebf744f84b04cf94"
+                    },
+                    {
+                        "command": [
+                            "/usr/bin/time",
+                            "-v",
+                            "-o",
+                            "/home/ripopov/work/gem5/main/local-temp/async-batches/kernel-next/vector-r1/resources.txt",
+                            "/home/ripopov/work/gem5/main/local-temp/async-batches/kernel-next/vector/bin/gem5.opt",
+                            "--outdir=/home/ripopov/work/gem5/main/local-temp/async-batches/kernel-next/vector-r1",
+                            "/home/ripopov/work/gem5/main/configs/example/rt_accel.py",
+                            "--backend=gem5",
+                            "--accelerator-cpu=o3",
+                            "--accelerator-cores=16",
+                            "--queues=17",
+                            "--render-mode=1",
+                            "--samples-per-pixel=1",
+                            "--max-secondary-depth=0",
+                            "--seed=1",
+                            "--transport-delay=5ns"
+                        ],
+                        "quantum_cycles": 5,
+                        "queues": 17,
+                        "spins": null,
+                        "profiled": false,
+                        "binary_sha256":
+                            "1a5badd92cbc4ffb6fac7b9235900899592dfef5bc694cc397d53968bea4c6f9",
+                        "started_utc": "2026-10-11T21:45:49Z",
+                        "pid_namespace": "pid:[4026531836]",
+                        "affinity": [
+                            0,
+                            1,
+                            2,
+                            3,
+                            4,
+                            5,
+                            6,
+                            7,
+                            8,
+                            9,
+                            10,
+                            11,
+                            12,
+                            13,
+                            14,
+                            15,
+                            16,
+                            17,
+                            18,
+                            19
+                        ],
+                        "returncode": 0,
+                        "wall_seconds": 65.6356593950004,
+                        "finished_utc": "2026-10-11T21:46:55Z",
+                        "process_checks": 65,
+                        "simulations_after": [],
+                        "directory":
+                            "local-temp/async-batches/kernel-next/vector-r1",
+                        "comparison": {
+                            "simulated_counters_compared": 37340,
+                            "excluded_host_counters": [
+                                "dump0/hostInstRate",
+                                "dump0/hostMemory",
+                                "dump0/hostOpRate",
+                                "dump0/hostSeconds",
+                                "dump0/hostTickRate",
+                                "dump1/hostInstRate",
+                                "dump1/hostMemory",
+                                "dump1/hostOpRate",
+                                "dump1/hostSeconds",
+                                "dump1/hostTickRate"
+                            ],
+                            "transaction_trace_sha256": {}
+                        },
+                        "parameters": {
+                            "backend": "gem5",
+                            "accelerator_cores": 16,
+                            "queues": 17,
+                            "accelerator_cpu": "o3",
+                            "host_firmware": null,
+                            "host_render": false,
+                            "accelerator_caches": "l1",
+                            "accelerator_firmware": null,
+                            "queue_depth": 16,
+                            "dma_outstanding": 256,
+                            "memory_controllers": 4,
+                            "trace": false,
+                            "transport_delay": "5ns",
+                            "render_mode": 1,
+                            "samples_per_pixel": 1,
+                            "max_secondary_depth": 0,
+                            "seed": 1
+                        },
+                        "image_rgba_sha256":
+                            "79aaad3486ca49955cda1dd8fd6f36b8102cbbd3c89117f327b0c917c090ccaa",
+                        "stats_sha256":
+                            "07849cd5b2407f0da29e31d6d043d37370547b0b33d3e91d0d179d68ea18790f"
+                    },
+                    {
+                        "command": [
+                            "/usr/bin/time",
+                            "-v",
+                            "-o",
+                            "/home/ripopov/work/gem5/main/local-temp/async-batches/kernel-next/vector-r2/resources.txt",
+                            "/home/ripopov/work/gem5/main/local-temp/async-batches/kernel-next/vector/bin/gem5.opt",
+                            "--outdir=/home/ripopov/work/gem5/main/local-temp/async-batches/kernel-next/vector-r2",
+                            "/home/ripopov/work/gem5/main/configs/example/rt_accel.py",
+                            "--backend=gem5",
+                            "--accelerator-cpu=o3",
+                            "--accelerator-cores=16",
+                            "--queues=17",
+                            "--render-mode=1",
+                            "--samples-per-pixel=1",
+                            "--max-secondary-depth=0",
+                            "--seed=1",
+                            "--transport-delay=5ns"
+                        ],
+                        "quantum_cycles": 5,
+                        "queues": 17,
+                        "spins": null,
+                        "profiled": false,
+                        "binary_sha256":
+                            "1a5badd92cbc4ffb6fac7b9235900899592dfef5bc694cc397d53968bea4c6f9",
+                        "started_utc": "2026-10-11T21:55:09Z",
+                        "pid_namespace": "pid:[4026531836]",
+                        "affinity": [
+                            0,
+                            1,
+                            2,
+                            3,
+                            4,
+                            5,
+                            6,
+                            7,
+                            8,
+                            9,
+                            10,
+                            11,
+                            12,
+                            13,
+                            14,
+                            15,
+                            16,
+                            17,
+                            18,
+                            19
+                        ],
+                        "returncode": 0,
+                        "wall_seconds": 65.92407425700003,
+                        "finished_utc": "2026-10-11T21:56:15Z",
+                        "process_checks": 65,
+                        "simulations_after": [],
+                        "directory":
+                            "local-temp/async-batches/kernel-next/vector-r2",
+                        "comparison": {
+                            "simulated_counters_compared": 37340,
+                            "excluded_host_counters": [
+                                "dump0/hostInstRate",
+                                "dump0/hostMemory",
+                                "dump0/hostOpRate",
+                                "dump0/hostSeconds",
+                                "dump0/hostTickRate",
+                                "dump1/hostInstRate",
+                                "dump1/hostMemory",
+                                "dump1/hostOpRate",
+                                "dump1/hostSeconds",
+                                "dump1/hostTickRate"
+                            ],
+                            "transaction_trace_sha256": {}
+                        },
+                        "parameters": {
+                            "backend": "gem5",
+                            "accelerator_cores": 16,
+                            "queues": 17,
+                            "accelerator_cpu": "o3",
+                            "host_firmware": null,
+                            "host_render": false,
+                            "accelerator_caches": "l1",
+                            "accelerator_firmware": null,
+                            "queue_depth": 16,
+                            "dma_outstanding": 256,
+                            "memory_controllers": 4,
+                            "trace": false,
+                            "transport_delay": "5ns",
+                            "render_mode": 1,
+                            "samples_per_pixel": 1,
+                            "max_secondary_depth": 0,
+                            "seed": 1
+                        },
+                        "image_rgba_sha256":
+                            "79aaad3486ca49955cda1dd8fd6f36b8102cbbd3c89117f327b0c917c090ccaa",
+                        "stats_sha256":
+                            "4600e5b31b87045f9d1b04fb636d26038dc645f4a5f23ea445acb0408580f58c"
+                    },
+                    {
+                        "command": [
+                            "/usr/bin/time",
+                            "-v",
+                            "-o",
+                            "/home/ripopov/work/gem5/main/local-temp/async-batches/kernel-next/vector-r3/resources.txt",
+                            "/home/ripopov/work/gem5/main/local-temp/async-batches/kernel-next/vector/bin/gem5.opt",
+                            "--outdir=/home/ripopov/work/gem5/main/local-temp/async-batches/kernel-next/vector-r3",
+                            "/home/ripopov/work/gem5/main/configs/example/rt_accel.py",
+                            "--backend=gem5",
+                            "--accelerator-cpu=o3",
+                            "--accelerator-cores=16",
+                            "--queues=17",
+                            "--render-mode=1",
+                            "--samples-per-pixel=1",
+                            "--max-secondary-depth=0",
+                            "--seed=1",
+                            "--transport-delay=5ns"
+                        ],
+                        "quantum_cycles": 5,
+                        "queues": 17,
+                        "spins": null,
+                        "profiled": false,
+                        "binary_sha256":
+                            "1a5badd92cbc4ffb6fac7b9235900899592dfef5bc694cc397d53968bea4c6f9",
+                        "started_utc": "2026-10-11T22:07:16Z",
+                        "pid_namespace": "pid:[4026531836]",
+                        "affinity": [
+                            0,
+                            1,
+                            2,
+                            3,
+                            4,
+                            5,
+                            6,
+                            7,
+                            8,
+                            9,
+                            10,
+                            11,
+                            12,
+                            13,
+                            14,
+                            15,
+                            16,
+                            17,
+                            18,
+                            19
+                        ],
+                        "returncode": 0,
+                        "wall_seconds": 65.57632137899782,
+                        "finished_utc": "2026-10-11T22:08:21Z",
+                        "process_checks": 65,
+                        "simulations_after": [],
+                        "directory":
+                            "local-temp/async-batches/kernel-next/vector-r3",
+                        "comparison": {
+                            "simulated_counters_compared": 37340,
+                            "excluded_host_counters": [
+                                "dump0/hostInstRate",
+                                "dump0/hostMemory",
+                                "dump0/hostOpRate",
+                                "dump0/hostSeconds",
+                                "dump0/hostTickRate",
+                                "dump1/hostInstRate",
+                                "dump1/hostMemory",
+                                "dump1/hostOpRate",
+                                "dump1/hostSeconds",
+                                "dump1/hostTickRate"
+                            ],
+                            "transaction_trace_sha256": {}
+                        },
+                        "parameters": {
+                            "backend": "gem5",
+                            "accelerator_cores": 16,
+                            "queues": 17,
+                            "accelerator_cpu": "o3",
+                            "host_firmware": null,
+                            "host_render": false,
+                            "accelerator_caches": "l1",
+                            "accelerator_firmware": null,
+                            "queue_depth": 16,
+                            "dma_outstanding": 256,
+                            "memory_controllers": 4,
+                            "trace": false,
+                            "transport_delay": "5ns",
+                            "render_mode": 1,
+                            "samples_per_pixel": 1,
+                            "max_secondary_depth": 0,
+                            "seed": 1
+                        },
+                        "image_rgba_sha256":
+                            "79aaad3486ca49955cda1dd8fd6f36b8102cbbd3c89117f327b0c917c090ccaa",
+                        "stats_sha256":
+                            "1b8fb979844cbe2bc68f1be7e67a0c753fee2c1df54a4e3c6ebdf604a070a62b"
+                    }
+                ],
+                "samples_seconds": [
+                    66.60633385099936,
+                    65.6356593950004,
+                    65.92407425700003,
+                    65.57632137899782
+                ],
+                "median_seconds": 65.77986682600022,
+                "provenance": {
+                    "base_commit": "1cb9b680c19f9e5291d4da22355a999cae71f6db",
+                    "sha256": {
+                        "src/sim/async_event_batch.hh":
+                            "3eca207bd694395273e8d100620dec6ffd612b2980b9a8ca08138b492a24cbcf",
+                        "src/sim/async_event_batch.test.cc":
+                            "9bb4681f269b3f788c765bbe4089e57d7e1c3fd015c643581fd97a934c71e5d9",
+                        "src/sim/async_eventq.test.cc":
+                            "61853e50d5ec9bf4dbbf692e11e17f9e7353ea4cd3ee56b2042f1ebb22fe560c",
+                        "src/sim/eventq.cc":
+                            "e73516427fe411042c1b987fe307e01a2dbb571628af753d12fcaa514d29d52b",
+                        "src/sim/eventq.hh":
+                            "e2daced6d28988e1c9f23efad561fe73ba03f0c2fdafc9f026ec9a098a50a358",
+                        "src/sim/global_event.cc":
+                            "678feb45409ddcc571665ddc53cc60b8ba8b7a590d455e67204aaf9afebe96f5",
+                        "src/sim/global_event.hh":
+                            "fc8d84cb043c91b231e55af200fa6111580ae674398579262f340fa8d8293db1",
+                        "src/sim/simulate.cc":
+                            "80f72d7cc0d7b79eb7c18624598c089d66ffbd2eac58e0f92bed2a0a27f2b323",
+                        "src/sim/SConscript":
+                            "77032d43d716d809cee3d0bcbe913d286a19caba4710aa1086edfd7f401d7f4f",
+                        "src/sim/quantum_barrier.hh":
+                            "11f291cf9d72057278a1df1840a60c02d920037aab7227a06031a4ead0988bcd",
+                        "src/sim/quantum_barrier.test.cc":
+                            "cfb68d59c088bd94e92016c42ba1bd49b04182861cab6aea8cd4e4c91c79fc06",
+                        "src/sim/global_event.test.cc":
+                            "9858ff9c6b5b7e1f40113c0aa317a2bdf2f36d1c2d3f05e992806f68eb43f43c",
+                        "build/RISCV/gem5.opt":
+                            "1a5badd92cbc4ffb6fac7b9235900899592dfef5bc694cc397d53968bea4c6f9",
+                        "build/RISCV/librt_accel_opt.so":
+                            "6df1c6f87cb0b8a290ea3b89f316c630481c8afdfc2e25edb899540b44daddf9",
+                        "configs/example/rt_accel.py":
+                            "c4fb3d8bdaded5e96d2125342fbfdd70153eb3bfad6ae6e08e3d2fd3ab110b37",
+                        "configs/example/rt_accel_reduction.py":
+                            "51c697a29728ba478c1b59684d152e0273f6040d48f12e5c59cbd10b54961c53",
+                        "configs/example/rt_accel_system.py":
+                            "cc15055760d28991c9ecce518933fd73a89a8bf0e5bc7209b8c9e7a595eb81fd",
+                        "util/rt_reference/out/host.elf":
+                            "0833efd380ac2d9c18f0dd0db47ceb68fed61c87e699f0db455fa1bc3b31beba",
+                        "util/rt_reference/out/accelerator.elf":
+                            "dc8d993e1cbb4533758925f66a9e5a052d8025ec5342b4f7f7b0fe5a9d3e0833",
+                        "util/rt_reference/out/host-test.elf":
+                            "0f09943ac100cd7448d50ef5c568f7d811ec060ccd0aedfaef2a51f7c4d76053",
+                        "util/rt_reference/out/accelerator-test.elf":
+                            "059f88188bf55f282127f132249a7a8d9671e086a102ef4c65f17f25d93a30cc",
+                        "util/rt_reference/out/host-render.elf":
+                            "7ecbf6538dd7290f0192e8465738381846e58486cb5e41c55d1d669ce687d0f7",
+                        "util/rt_reference/out/host-gem5.elf":
+                            "13dc08a18ebb6a7c4c7134ffe2a6607ff9877e3fa5e4b054bedf957f0db76ec9",
+                        "util/rt_reference/out/smrnmi-present.elf":
+                            "4e2493f32e52b7e4d1cac2a6191f9f398dcdd03f132c2bfce4742244b8a842e0",
+                        "util/rt_reference/out/reduction-accelerator.elf":
+                            "dd74c08a076bdab38be0d97b04b850d21b0b6e4cef4f4c9fa6ee6a8667c90e2e",
+                        "util/rt_reference/out/reduction-host.elf":
+                            "a1dc9df51f1612119cba5c2b9239304422047c512198d906077025ae9c583e53",
+                        "util/rt_reference/out/smrnmi-absent.elf":
+                            "3eb354fe8f1027fcdea9089b3279951dd76a93b6a0d776ed86c2056fb1c89731"
+                    },
+                    "compiler": "g++ (Ubuntu 15.2.0-16ubuntu1) 15.2.0",
+                    "build": "scons build/RISCV/gem5.opt -j 16",
+                    "archived_binary_sha256":
+                        "1a5badd92cbc4ffb6fac7b9235900899592dfef5bc694cc397d53968bea4c6f9"
+                }
+            },
+            "aligned": {
+                "runs": [
+                    {
+                        "command": [
+                            "/usr/bin/time",
+                            "-v",
+                            "-o",
+                            "/home/ripopov/work/gem5/main/local-temp/async-batches/kernel-next/aligned-r0/resources.txt",
+                            "/home/ripopov/work/gem5/main/local-temp/async-batches/kernel-next/aligned/bin/gem5.opt",
+                            "--outdir=/home/ripopov/work/gem5/main/local-temp/async-batches/kernel-next/aligned-r0",
+                            "/home/ripopov/work/gem5/main/configs/example/rt_accel.py",
+                            "--backend=gem5",
+                            "--accelerator-cpu=o3",
+                            "--accelerator-cores=16",
+                            "--queues=17",
+                            "--render-mode=1",
+                            "--samples-per-pixel=1",
+                            "--max-secondary-depth=0",
+                            "--seed=1",
+                            "--transport-delay=5ns"
+                        ],
+                        "quantum_cycles": 5,
+                        "queues": 17,
+                        "spins": null,
+                        "profiled": false,
+                        "binary_sha256":
+                            "b546466b78e0d3b1a18d72f8a37b5812c526242f7e079bd531a3c76b6e51626b",
+                        "started_utc": "2026-10-11T21:50:23Z",
+                        "pid_namespace": "pid:[4026531836]",
+                        "affinity": [
+                            0,
+                            1,
+                            2,
+                            3,
+                            4,
+                            5,
+                            6,
+                            7,
+                            8,
+                            9,
+                            10,
+                            11,
+                            12,
+                            13,
+                            14,
+                            15,
+                            16,
+                            17,
+                            18,
+                            19
+                        ],
+                        "returncode": 0,
+                        "wall_seconds": 66.99802290699881,
+                        "finished_utc": "2026-10-11T21:51:30Z",
+                        "process_checks": 67,
+                        "simulations_after": [],
+                        "directory":
+                            "local-temp/async-batches/kernel-next/aligned-r0",
+                        "comparison": {
+                            "simulated_counters_compared": 37340,
+                            "excluded_host_counters": [
+                                "dump0/hostInstRate",
+                                "dump0/hostMemory",
+                                "dump0/hostOpRate",
+                                "dump0/hostSeconds",
+                                "dump0/hostTickRate",
+                                "dump1/hostInstRate",
+                                "dump1/hostMemory",
+                                "dump1/hostOpRate",
+                                "dump1/hostSeconds",
+                                "dump1/hostTickRate"
+                            ],
+                            "transaction_trace_sha256": {}
+                        },
+                        "parameters": {
+                            "backend": "gem5",
+                            "accelerator_cores": 16,
+                            "queues": 17,
+                            "accelerator_cpu": "o3",
+                            "host_firmware": null,
+                            "host_render": false,
+                            "accelerator_caches": "l1",
+                            "accelerator_firmware": null,
+                            "queue_depth": 16,
+                            "dma_outstanding": 256,
+                            "memory_controllers": 4,
+                            "trace": false,
+                            "transport_delay": "5ns",
+                            "render_mode": 1,
+                            "samples_per_pixel": 1,
+                            "max_secondary_depth": 0,
+                            "seed": 1
+                        },
+                        "image_rgba_sha256":
+                            "79aaad3486ca49955cda1dd8fd6f36b8102cbbd3c89117f327b0c917c090ccaa",
+                        "stats_sha256":
+                            "39fab1a476d52258aa778f7bf1d7a27ddd3bdd511dce6a2d81e413489d119ad8"
+                    },
+                    {
+                        "command": [
+                            "/usr/bin/time",
+                            "-v",
+                            "-o",
+                            "/home/ripopov/work/gem5/main/local-temp/async-batches/kernel-next/aligned-r1/resources.txt",
+                            "/home/ripopov/work/gem5/main/local-temp/async-batches/kernel-next/aligned/bin/gem5.opt",
+                            "--outdir=/home/ripopov/work/gem5/main/local-temp/async-batches/kernel-next/aligned-r1",
+                            "/home/ripopov/work/gem5/main/configs/example/rt_accel.py",
+                            "--backend=gem5",
+                            "--accelerator-cpu=o3",
+                            "--accelerator-cores=16",
+                            "--queues=17",
+                            "--render-mode=1",
+                            "--samples-per-pixel=1",
+                            "--max-secondary-depth=0",
+                            "--seed=1",
+                            "--transport-delay=5ns"
+                        ],
+                        "quantum_cycles": 5,
+                        "queues": 17,
+                        "spins": null,
+                        "profiled": false,
+                        "binary_sha256":
+                            "b546466b78e0d3b1a18d72f8a37b5812c526242f7e079bd531a3c76b6e51626b",
+                        "started_utc": "2026-10-11T21:54:01Z",
+                        "pid_namespace": "pid:[4026531836]",
+                        "affinity": [
+                            0,
+                            1,
+                            2,
+                            3,
+                            4,
+                            5,
+                            6,
+                            7,
+                            8,
+                            9,
+                            10,
+                            11,
+                            12,
+                            13,
+                            14,
+                            15,
+                            16,
+                            17,
+                            18,
+                            19
+                        ],
+                        "returncode": 0,
+                        "wall_seconds": 66.997720354997,
+                        "finished_utc": "2026-10-11T21:55:08Z",
+                        "process_checks": 67,
+                        "simulations_after": [],
+                        "directory":
+                            "local-temp/async-batches/kernel-next/aligned-r1",
+                        "comparison": {
+                            "simulated_counters_compared": 37340,
+                            "excluded_host_counters": [
+                                "dump0/hostInstRate",
+                                "dump0/hostMemory",
+                                "dump0/hostOpRate",
+                                "dump0/hostSeconds",
+                                "dump0/hostTickRate",
+                                "dump1/hostInstRate",
+                                "dump1/hostMemory",
+                                "dump1/hostOpRate",
+                                "dump1/hostSeconds",
+                                "dump1/hostTickRate"
+                            ],
+                            "transaction_trace_sha256": {}
+                        },
+                        "parameters": {
+                            "backend": "gem5",
+                            "accelerator_cores": 16,
+                            "queues": 17,
+                            "accelerator_cpu": "o3",
+                            "host_firmware": null,
+                            "host_render": false,
+                            "accelerator_caches": "l1",
+                            "accelerator_firmware": null,
+                            "queue_depth": 16,
+                            "dma_outstanding": 256,
+                            "memory_controllers": 4,
+                            "trace": false,
+                            "transport_delay": "5ns",
+                            "render_mode": 1,
+                            "samples_per_pixel": 1,
+                            "max_secondary_depth": 0,
+                            "seed": 1
+                        },
+                        "image_rgba_sha256":
+                            "79aaad3486ca49955cda1dd8fd6f36b8102cbbd3c89117f327b0c917c090ccaa",
+                        "stats_sha256":
+                            "c9eedcbf9ab3dfc477f13e2742d3d45c371fd3c14d7e56572ec4cfeb640f35ab"
+                    },
+                    {
+                        "command": [
+                            "/usr/bin/time",
+                            "-v",
+                            "-o",
+                            "/home/ripopov/work/gem5/main/local-temp/async-batches/kernel-next/aligned-r2/resources.txt",
+                            "/home/ripopov/work/gem5/main/local-temp/async-batches/kernel-next/aligned/bin/gem5.opt",
+                            "--outdir=/home/ripopov/work/gem5/main/local-temp/async-batches/kernel-next/aligned-r2",
+                            "/home/ripopov/work/gem5/main/configs/example/rt_accel.py",
+                            "--backend=gem5",
+                            "--accelerator-cpu=o3",
+                            "--accelerator-cores=16",
+                            "--queues=17",
+                            "--render-mode=1",
+                            "--samples-per-pixel=1",
+                            "--max-secondary-depth=0",
+                            "--seed=1",
+                            "--transport-delay=5ns"
+                        ],
+                        "quantum_cycles": 5,
+                        "queues": 17,
+                        "spins": null,
+                        "profiled": false,
+                        "binary_sha256":
+                            "b546466b78e0d3b1a18d72f8a37b5812c526242f7e079bd531a3c76b6e51626b",
+                        "started_utc": "2026-10-11T21:56:15Z",
+                        "pid_namespace": "pid:[4026531836]",
+                        "affinity": [
+                            0,
+                            1,
+                            2,
+                            3,
+                            4,
+                            5,
+                            6,
+                            7,
+                            8,
+                            9,
+                            10,
+                            11,
+                            12,
+                            13,
+                            14,
+                            15,
+                            16,
+                            17,
+                            18,
+                            19
+                        ],
+                        "returncode": 0,
+                        "wall_seconds": 67.10768726099923,
+                        "finished_utc": "2026-10-11T21:57:23Z",
+                        "process_checks": 67,
+                        "simulations_after": [],
+                        "directory":
+                            "local-temp/async-batches/kernel-next/aligned-r2",
+                        "comparison": {
+                            "simulated_counters_compared": 37340,
+                            "excluded_host_counters": [
+                                "dump0/hostInstRate",
+                                "dump0/hostMemory",
+                                "dump0/hostOpRate",
+                                "dump0/hostSeconds",
+                                "dump0/hostTickRate",
+                                "dump1/hostInstRate",
+                                "dump1/hostMemory",
+                                "dump1/hostOpRate",
+                                "dump1/hostSeconds",
+                                "dump1/hostTickRate"
+                            ],
+                            "transaction_trace_sha256": {}
+                        },
+                        "parameters": {
+                            "backend": "gem5",
+                            "accelerator_cores": 16,
+                            "queues": 17,
+                            "accelerator_cpu": "o3",
+                            "host_firmware": null,
+                            "host_render": false,
+                            "accelerator_caches": "l1",
+                            "accelerator_firmware": null,
+                            "queue_depth": 16,
+                            "dma_outstanding": 256,
+                            "memory_controllers": 4,
+                            "trace": false,
+                            "transport_delay": "5ns",
+                            "render_mode": 1,
+                            "samples_per_pixel": 1,
+                            "max_secondary_depth": 0,
+                            "seed": 1
+                        },
+                        "image_rgba_sha256":
+                            "79aaad3486ca49955cda1dd8fd6f36b8102cbbd3c89117f327b0c917c090ccaa",
+                        "stats_sha256":
+                            "c9094d13909e8affbb878582fa7321a4451612c5c1938d955aca6fce61ea495e"
+                    }
+                ],
+                "samples_seconds": [
+                    66.99802290699881,
+                    66.997720354997,
+                    67.10768726099923
+                ],
+                "median_seconds": 66.99802290699881,
+                "provenance": {
+                    "base_commit": "1cb9b680c19f9e5291d4da22355a999cae71f6db",
+                    "sha256": {
+                        "src/sim/async_event_batch.hh":
+                            "3eca207bd694395273e8d100620dec6ffd612b2980b9a8ca08138b492a24cbcf",
+                        "src/sim/async_event_batch.test.cc":
+                            "9bb4681f269b3f788c765bbe4089e57d7e1c3fd015c643581fd97a934c71e5d9",
+                        "src/sim/async_eventq.test.cc":
+                            "61853e50d5ec9bf4dbbf692e11e17f9e7353ea4cd3ee56b2042f1ebb22fe560c",
+                        "src/sim/eventq.cc":
+                            "e73516427fe411042c1b987fe307e01a2dbb571628af753d12fcaa514d29d52b",
+                        "src/sim/eventq.hh":
+                            "e2daced6d28988e1c9f23efad561fe73ba03f0c2fdafc9f026ec9a098a50a358",
+                        "src/sim/global_event.cc":
+                            "678feb45409ddcc571665ddc53cc60b8ba8b7a590d455e67204aaf9afebe96f5",
+                        "src/sim/global_event.hh":
+                            "892eb2f68499bf8be80726f7371846436491145235f9ef3834188e00a662765a",
+                        "src/sim/simulate.cc":
+                            "80f72d7cc0d7b79eb7c18624598c089d66ffbd2eac58e0f92bed2a0a27f2b323",
+                        "src/sim/SConscript":
+                            "77032d43d716d809cee3d0bcbe913d286a19caba4710aa1086edfd7f401d7f4f",
+                        "src/sim/quantum_barrier.hh":
+                            "11f291cf9d72057278a1df1840a60c02d920037aab7227a06031a4ead0988bcd",
+                        "src/sim/quantum_barrier.test.cc":
+                            "cfb68d59c088bd94e92016c42ba1bd49b04182861cab6aea8cd4e4c91c79fc06",
+                        "src/sim/global_event.test.cc":
+                            "9858ff9c6b5b7e1f40113c0aa317a2bdf2f36d1c2d3f05e992806f68eb43f43c",
+                        "build/RISCV/gem5.opt":
+                            "b546466b78e0d3b1a18d72f8a37b5812c526242f7e079bd531a3c76b6e51626b",
+                        "build/RISCV/librt_accel_opt.so":
+                            "6df1c6f87cb0b8a290ea3b89f316c630481c8afdfc2e25edb899540b44daddf9",
+                        "configs/example/rt_accel.py":
+                            "c4fb3d8bdaded5e96d2125342fbfdd70153eb3bfad6ae6e08e3d2fd3ab110b37",
+                        "configs/example/rt_accel_reduction.py":
+                            "51c697a29728ba478c1b59684d152e0273f6040d48f12e5c59cbd10b54961c53",
+                        "configs/example/rt_accel_system.py":
+                            "cc15055760d28991c9ecce518933fd73a89a8bf0e5bc7209b8c9e7a595eb81fd",
+                        "util/rt_reference/out/host.elf":
+                            "0833efd380ac2d9c18f0dd0db47ceb68fed61c87e699f0db455fa1bc3b31beba",
+                        "util/rt_reference/out/accelerator.elf":
+                            "dc8d993e1cbb4533758925f66a9e5a052d8025ec5342b4f7f7b0fe5a9d3e0833",
+                        "util/rt_reference/out/host-test.elf":
+                            "0f09943ac100cd7448d50ef5c568f7d811ec060ccd0aedfaef2a51f7c4d76053",
+                        "util/rt_reference/out/accelerator-test.elf":
+                            "059f88188bf55f282127f132249a7a8d9671e086a102ef4c65f17f25d93a30cc",
+                        "util/rt_reference/out/host-render.elf": "7ecbf6538dd7290f0192e8465738381846e58486cb5e41c55d1d669ce687d0f7",
+                        "util/rt_reference/out/host-gem5.elf":
+                            "13dc08a18ebb6a7c4c7134ffe2a6607ff9877e3fa5e4b054bedf957f0db76ec9",
+                        "util/rt_reference/out/smrnmi-present.elf":
+                            "4e2493f32e52b7e4d1cac2a6191f9f398dcdd03f132c2bfce4742244b8a842e0",
+                        "util/rt_reference/out/reduction-accelerator.elf":
+                            "dd74c08a076bdab38be0d97b04b850d21b0b6e4cef4f4c9fa6ee6a8667c90e2e",
+                        "util/rt_reference/out/reduction-host.elf":
+                            "a1dc9df51f1612119cba5c2b9239304422047c512198d906077025ae9c583e53",
+                        "util/rt_reference/out/smrnmi-absent.elf":
+                            "3eb354fe8f1027fcdea9089b3279951dd76a93b6a0d776ed86c2056fb1c89731"
+                    },
+                    "compiler": "g++ (Ubuntu 15.2.0-16ubuntu1) 15.2.0",
+                    "build": "scons build/RISCV/gem5.opt -j 16",
+                    "archived_binary_sha256":
+                        "b546466b78e0d3b1a18d72f8a37b5812c526242f7e079bd531a3c76b6e51626b"
+                }
+            },
+            "tree": {
+                "runs": [
+                    {
+                        "command": [
+                            "/usr/bin/time",
+                            "-v",
+                            "-o",
+                            "/home/ripopov/work/gem5/main/local-temp/async-batches/kernel-next/tree-r0/resources.txt",
+                            "/home/ripopov/work/gem5/main/local-temp/async-batches/kernel-next/tree/bin/gem5.opt",
+                            "--outdir=/home/ripopov/work/gem5/main/local-temp/async-batches/kernel-next/tree-r0",
+                            "/home/ripopov/work/gem5/main/configs/example/rt_accel.py",
+                            "--backend=gem5",
+                            "--accelerator-cpu=o3",
+                            "--accelerator-cores=16",
+                            "--queues=17",
+                            "--render-mode=1",
+                            "--samples-per-pixel=1",
+                            "--max-secondary-depth=0",
+                            "--seed=1",
+                            "--transport-delay=5ns"
+                        ],
+                        "quantum_cycles": 5,
+                        "queues": 17,
+                        "spins": null,
+                        "profiled": false,
+                        "binary_sha256":
+                            "55967551e3ee9aa5693fbb1cf766b2356f5c07af00a7979628ec56ad781e1038",
+                        "started_utc": "2026-10-11T21:44:42Z",
+                        "pid_namespace": "pid:[4026531836]",
+                        "affinity": [
+                            0,
+                            1,
+                            2,
+                            3,
+                            4,
+                            5,
+                            6,
+                            7,
+                            8,
+                            9,
+                            10,
+                            11,
+                            12,
+                            13,
+                            14,
+                            15,
+                            16,
+                            17,
+                            18,
+                            19
+                        ],
+                        "returncode": 0,
+                        "wall_seconds": 66.85009744999843,
+                        "finished_utc": "2026-10-11T21:45:49Z",
+                        "process_checks": 66,
+                        "simulations_after": [],
+                        "directory":
+                            "local-temp/async-batches/kernel-next/tree-r0",
+                        "comparison": {
+                            "simulated_counters_compared": 37340,
+                            "excluded_host_counters": [
+                                "dump0/hostInstRate",
+                                "dump0/hostMemory",
+                                "dump0/hostOpRate",
+                                "dump0/hostSeconds",
+                                "dump0/hostTickRate",
+                                "dump1/hostInstRate",
+                                "dump1/hostMemory",
+                                "dump1/hostOpRate",
+                                "dump1/hostSeconds",
+                                "dump1/hostTickRate"
+                            ],
+                            "transaction_trace_sha256": {}
+                        },
+                        "parameters": {
+                            "backend": "gem5",
+                            "accelerator_cores": 16,
+                            "queues": 17,
+                            "accelerator_cpu": "o3",
+                            "host_firmware": null,
+                            "host_render": false,
+                            "accelerator_caches": "l1",
+                            "accelerator_firmware": null,
+                            "queue_depth": 16,
+                            "dma_outstanding": 256,
+                            "memory_controllers": 4,
+                            "trace": false,
+                            "transport_delay": "5ns",
+                            "render_mode": 1,
+                            "samples_per_pixel": 1,
+                            "max_secondary_depth": 0,
+                            "seed": 1
+                        },
+                        "image_rgba_sha256":
+                            "79aaad3486ca49955cda1dd8fd6f36b8102cbbd3c89117f327b0c917c090ccaa",
+                        "stats_sha256":
+                            "c93b6d3011d8ac4cce2c52a49f887824eb26089f370958f126bf81b20df4e372"
+                    }
+                ],
+                "samples_seconds": [
+                    66.85009744999843
+                ],
+                "median_seconds": 66.85009744999843,
+                "provenance": {
+                    "base_commit": "1cb9b680c19f9e5291d4da22355a999cae71f6db",
+                    "sha256": {
+                        "src/sim/async_event_batch.hh":
+                            "3eca207bd694395273e8d100620dec6ffd612b2980b9a8ca08138b492a24cbcf",
+                        "src/sim/async_event_batch.test.cc":
+                            "9bb4681f269b3f788c765bbe4089e57d7e1c3fd015c643581fd97a934c71e5d9",
+                        "src/sim/async_eventq.test.cc":
+                            "61853e50d5ec9bf4dbbf692e11e17f9e7353ea4cd3ee56b2042f1ebb22fe560c",
+                        "src/sim/eventq.cc":
+                            "e73516427fe411042c1b987fe307e01a2dbb571628af753d12fcaa514d29d52b",
+                        "src/sim/eventq.hh":
+                            "e2daced6d28988e1c9f23efad561fe73ba03f0c2fdafc9f026ec9a098a50a358",
+                        "src/sim/global_event.cc":
+                            "ece3e2f190ef233e18684bc5f6267549b1d9e3481139b713a2afd41d205dde18",
+                        "src/sim/global_event.hh":
+                            "0a6db037cb93c89c3714443e2cd07091929faaf422a3c2a6a5ad3bad0bce20bf",
+                        "src/sim/simulate.cc":
+                            "80f72d7cc0d7b79eb7c18624598c089d66ffbd2eac58e0f92bed2a0a27f2b323",
+                        "src/sim/SConscript":
+                            "77032d43d716d809cee3d0bcbe913d286a19caba4710aa1086edfd7f401d7f4f",
+                        "src/sim/quantum_barrier.hh":
+                            "e44197fc4c896c8e5dd4fa05aea0901913ea549d26abc4771ad99844bd2561e9",
+                        "src/sim/quantum_barrier.test.cc":
+                            "4caf2f73bb49048dd5a0635c4381fded14d59ed5a578e4befbaba74f69f41996",
+                        "src/sim/global_event.test.cc":
+                            "9858ff9c6b5b7e1f40113c0aa317a2bdf2f36d1c2d3f05e992806f68eb43f43c",
+                        "build/RISCV/gem5.opt":
+                            "55967551e3ee9aa5693fbb1cf766b2356f5c07af00a7979628ec56ad781e1038",
+                        "build/RISCV/librt_accel_opt.so":
+                            "6df1c6f87cb0b8a290ea3b89f316c630481c8afdfc2e25edb899540b44daddf9",
+                        "configs/example/rt_accel.py":
+                            "c4fb3d8bdaded5e96d2125342fbfdd70153eb3bfad6ae6e08e3d2fd3ab110b37",
+                        "configs/example/rt_accel_reduction.py":
+                            "51c697a29728ba478c1b59684d152e0273f6040d48f12e5c59cbd10b54961c53",
+                        "configs/example/rt_accel_system.py":
+                            "cc15055760d28991c9ecce518933fd73a89a8bf0e5bc7209b8c9e7a595eb81fd",
+                        "util/rt_reference/out/host.elf":
+                            "0833efd380ac2d9c18f0dd0db47ceb68fed61c87e699f0db455fa1bc3b31beba",
+                        "util/rt_reference/out/accelerator.elf":
+                            "dc8d993e1cbb4533758925f66a9e5a052d8025ec5342b4f7f7b0fe5a9d3e0833",
+                        "util/rt_reference/out/host-test.elf":
+                            "0f09943ac100cd7448d50ef5c568f7d811ec060ccd0aedfaef2a51f7c4d76053",
+                        "util/rt_reference/out/accelerator-test.elf":
+                            "059f88188bf55f282127f132249a7a8d9671e086a102ef4c65f17f25d93a30cc",
+                        "util/rt_reference/out/host-render.elf":
+                            "7ecbf6538dd7290f0192e8465738381846e58486cb5e41c55d1d669ce687d0f7",
+                        "util/rt_reference/out/host-gem5.elf":
+                            "13dc08a18ebb6a7c4c7134ffe2a6607ff9877e3fa5e4b054bedf957f0db76ec9",
+                        "util/rt_reference/out/smrnmi-present.elf":
+                            "4e2493f32e52b7e4d1cac2a6191f9f398dcdd03f132c2bfce4742244b8a842e0",
+                        "util/rt_reference/out/reduction-accelerator.elf":
+                            "dd74c08a076bdab38be0d97b04b850d21b0b6e4cef4f4c9fa6ee6a8667c90e2e",
+                        "util/rt_reference/out/reduction-host.elf":
+                            "a1dc9df51f1612119cba5c2b9239304422047c512198d906077025ae9c583e53",
+                        "util/rt_reference/out/smrnmi-absent.elf":
+                            "3eb354fe8f1027fcdea9089b3279951dd76a93b6a0d776ed86c2056fb1c89731"
+                    },
+                    "compiler": "g++ (Ubuntu 15.2.0-16ubuntu1) 15.2.0",
+                    "build": "scons build/RISCV/gem5.opt -j 16",
+                    "archived_binary_sha256":
+                        "55967551e3ee9aa5693fbb1cf766b2356f5c07af00a7979628ec56ad781e1038"
+                }
+            },
+            "isolated": {
+                "runs": [
+                    {
+                        "command": [
+                            "/usr/bin/time",
+                            "-v",
+                            "-o",
+                            "/home/ripopov/work/gem5/main/local-temp/async-batches/kernel-next/isolated-r0/resources.txt",
+                            "/home/ripopov/work/gem5/main/local-temp/async-batches/kernel-next/isolated/bin/gem5.opt",
+                            "--outdir=/home/ripopov/work/gem5/main/local-temp/async-batches/kernel-next/isolated-r0",
+                            "/home/ripopov/work/gem5/main/configs/example/rt_accel.py",
+                            "--backend=gem5",
+                            "--accelerator-cpu=o3",
+                            "--accelerator-cores=16",
+                            "--queues=17",
+                            "--render-mode=1",
+                            "--samples-per-pixel=1",
+                            "--max-secondary-depth=0",
+                            "--seed=1",
+                            "--transport-delay=5ns"
+                        ],
+                        "quantum_cycles": 5,
+                        "queues": 17,
+                        "spins": null,
+                        "profiled": false,
+                        "binary_sha256":
+                            "305f48f9867ff1e36b78036d6ae263314836f670d5890453b8d7b9fe8c20b4e5",
+                        "started_utc": "2026-10-11T22:06:07Z",
+                        "pid_namespace": "pid:[4026531836]",
+                        "affinity": [
+                            0,
+                            1,
+                            2,
+                            3,
+                            4,
+                            5,
+                            6,
+                            7,
+                            8,
+                            9,
+                            10,
+                            11,
+                            12,
+                            13,
+                            14,
+                            15,
+                            16,
+                            17,
+                            18,
+                            19
+                        ],
+                        "returncode": 0,
+                        "wall_seconds": 68.53120778099765,
+                        "finished_utc": "2026-10-11T22:07:15Z",
+                        "process_checks": 68,
+                        "simulations_after": [],
+                        "directory":
+                            "local-temp/async-batches/kernel-next/isolated-r0",
+                        "comparison": {
+                            "simulated_counters_compared": 37340,
+                            "excluded_host_counters": [
+                                "dump0/hostInstRate",
+                                "dump0/hostMemory",
+                                "dump0/hostOpRate",
+                                "dump0/hostSeconds",
+                                "dump0/hostTickRate",
+                                "dump1/hostInstRate",
+                                "dump1/hostMemory",
+                                "dump1/hostOpRate",
+                                "dump1/hostSeconds",
+                                "dump1/hostTickRate"
+                            ],
+                            "transaction_trace_sha256": {}
+                        },
+                        "parameters": {
+                            "backend": "gem5",
+                            "accelerator_cores": 16,
+                            "queues": 17,
+                            "accelerator_cpu": "o3",
+                            "host_firmware": null,
+                            "host_render": false,
+                            "accelerator_caches": "l1",
+                            "accelerator_firmware": null,
+                            "queue_depth": 16,
+                            "dma_outstanding": 256,
+                            "memory_controllers": 4,
+                            "trace": false,
+                            "transport_delay": "5ns",
+                            "render_mode": 1,
+                            "samples_per_pixel": 1,
+                            "max_secondary_depth": 0,
+                            "seed": 1
+                        },
+                        "image_rgba_sha256":
+                            "79aaad3486ca49955cda1dd8fd6f36b8102cbbd3c89117f327b0c917c090ccaa",
+                        "stats_sha256":
+                            "c4733d2fd8526a9939f4e5e6954ff50284ef2e21a44ae47975032d694be745bb"
+                    }
+                ],
+                "samples_seconds": [
+                    68.53120778099765
+                ],
+                "median_seconds": 68.53120778099765,
+                "provenance": {
+                    "base_commit": "1cb9b680c19f9e5291d4da22355a999cae71f6db",
+                    "sha256": {
+                        "src/sim/async_event_batch.hh":
+                            "3eca207bd694395273e8d100620dec6ffd612b2980b9a8ca08138b492a24cbcf",
+                        "src/sim/async_event_batch.test.cc":
+                            "9bb4681f269b3f788c765bbe4089e57d7e1c3fd015c643581fd97a934c71e5d9",
+                        "src/sim/async_eventq.test.cc":
+                            "307616434d767d0e58ed231d88c339040091def4001f98d33e6bea3645b3c051",
+                        "src/sim/eventq.cc":
+                            "e73516427fe411042c1b987fe307e01a2dbb571628af753d12fcaa514d29d52b",
+                        "src/sim/eventq.hh":
+                            "2921698176ceb1b48e57ca08f1372f6262cfeead115adbd82aaf4ed510c0d759",
+                        "src/sim/global_event.cc":
+                            "678feb45409ddcc571665ddc53cc60b8ba8b7a590d455e67204aaf9afebe96f5",
+                        "src/sim/global_event.hh":
+                            "fc8d84cb043c91b231e55af200fa6111580ae674398579262f340fa8d8293db1",
+                        "src/sim/simulate.cc":
+                            "80f72d7cc0d7b79eb7c18624598c089d66ffbd2eac58e0f92bed2a0a27f2b323",
+                        "src/sim/SConscript":
+                            "77032d43d716d809cee3d0bcbe913d286a19caba4710aa1086edfd7f401d7f4f",
+                        "src/sim/quantum_barrier.hh":
+                            "11f291cf9d72057278a1df1840a60c02d920037aab7227a06031a4ead0988bcd",
+                        "src/sim/quantum_barrier.test.cc":
+                            "cfb68d59c088bd94e92016c42ba1bd49b04182861cab6aea8cd4e4c91c79fc06",
+                        "src/sim/global_event.test.cc":
+                            "9858ff9c6b5b7e1f40113c0aa317a2bdf2f36d1c2d3f05e992806f68eb43f43c",
+                        "build/RISCV/gem5.opt":
+                            "305f48f9867ff1e36b78036d6ae263314836f670d5890453b8d7b9fe8c20b4e5",
+                        "build/RISCV/librt_accel_opt.so":
+                            "6df1c6f87cb0b8a290ea3b89f316c630481c8afdfc2e25edb899540b44daddf9",
+                        "configs/example/rt_accel.py":
+                            "c4fb3d8bdaded5e96d2125342fbfdd70153eb3bfad6ae6e08e3d2fd3ab110b37",
+                        "configs/example/rt_accel_reduction.py":
+                            "51c697a29728ba478c1b59684d152e0273f6040d48f12e5c59cbd10b54961c53",
+                        "configs/example/rt_accel_system.py":
+                            "cc15055760d28991c9ecce518933fd73a89a8bf0e5bc7209b8c9e7a595eb81fd",
+                        "util/rt_reference/out/host.elf":
+                            "0833efd380ac2d9c18f0dd0db47ceb68fed61c87e699f0db455fa1bc3b31beba",
+                        "util/rt_reference/out/accelerator.elf":
+                            "dc8d993e1cbb4533758925f66a9e5a052d8025ec5342b4f7f7b0fe5a9d3e0833",
+                        "util/rt_reference/out/host-test.elf":
+                            "0f09943ac100cd7448d50ef5c568f7d811ec060ccd0aedfaef2a51f7c4d76053",
+                        "util/rt_reference/out/accelerator-test.elf":
+                            "059f88188bf55f282127f132249a7a8d9671e086a102ef4c65f17f25d93a30cc",
+                        "util/rt_reference/out/host-render.elf":
+                            "7ecbf6538dd7290f0192e8465738381846e58486cb5e41c55d1d669ce687d0f7",
+                        "util/rt_reference/out/host-gem5.elf":
+                            "13dc08a18ebb6a7c4c7134ffe2a6607ff9877e3fa5e4b054bedf957f0db76ec9",
+                        "util/rt_reference/out/smrnmi-present.elf":
+                            "4e2493f32e52b7e4d1cac2a6191f9f398dcdd03f132c2bfce4742244b8a842e0",
+                        "util/rt_reference/out/reduction-accelerator.elf":
+                            "dd74c08a076bdab38be0d97b04b850d21b0b6e4cef4f4c9fa6ee6a8667c90e2e",
+                        "util/rt_reference/out/reduction-host.elf":
+                            "a1dc9df51f1612119cba5c2b9239304422047c512198d906077025ae9c583e53",
+                        "util/rt_reference/out/smrnmi-absent.elf":
+                            "3eb354fe8f1027fcdea9089b3279951dd76a93b6a0d776ed86c2056fb1c89731"
+                    },
+                    "compiler": "g++ (Ubuntu 15.2.0-16ubuntu1) 15.2.0",
+                    "build": "scons build/RISCV/gem5.opt -j 16",
+                    "archived_binary_sha256":
+                        "305f48f9867ff1e36b78036d6ae263314836f670d5890453b8d7b9fe8c20b4e5"
+                }
+            }
+        },
+    "selected": "vector",
+    "des": {
+        "command": [
+            "/usr/bin/time",
+            "-v",
+            "-o",
+            "/home/ripopov/work/gem5/main/local-temp/async-batches/kernel-next/final-des/resources.txt",
+            "/home/ripopov/work/gem5/main/local-temp/async-batches/kernel-next/vector/bin/gem5.opt",
+            "--outdir=/home/ripopov/work/gem5/main/local-temp/async-batches/kernel-next/final-des",
+            "/home/ripopov/work/gem5/main/configs/example/rt_accel.py",
+            "--backend=gem5",
+            "--accelerator-cpu=o3",
+            "--accelerator-cores=16",
+            "--queues=1",
+            "--render-mode=1",
+            "--samples-per-pixel=1",
+            "--max-secondary-depth=0",
+            "--seed=1",
+            "--transport-delay=5ns"
+        ],
+        "quantum_cycles": 5,
+        "queues": 1,
+        "spins": null,
+        "profiled": false,
+        "binary_sha256":
+            "1a5badd92cbc4ffb6fac7b9235900899592dfef5bc694cc397d53968bea4c6f9",
+        "started_utc": "2026-10-11T22:24:58Z",
+        "pid_namespace": "pid:[4026531836]",
+        "affinity": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19
+        ],
+        "returncode": 0,
+        "wall_seconds": 460.3700623379991,
+        "finished_utc": "2026-10-11T22:32:39Z",
+        "process_checks": 454,
+        "simulations_after": [],
+        "comparison": {
+            "simulated_counters_compared": 37340,
+            "excluded_host_counters": [
+                "dump0/hostInstRate",
+                "dump0/hostMemory",
+                "dump0/hostOpRate",
+                "dump0/hostSeconds",
+                "dump0/hostTickRate",
+                "dump1/hostInstRate",
+                "dump1/hostMemory",
+                "dump1/hostOpRate",
+                "dump1/hostSeconds",
+                "dump1/hostTickRate"
+            ],
+            "transaction_trace_sha256": {}
+        }
+    },
+    "speedup_vs_fresh_des": 6.99864691966863,
+    "saved_des_seconds": 475.92086609800026,
+    "speedup_vs_saved_des": 7.235053657936068,
+    "same_session_speed_ratio": 1.0332089592211733,
+    "profiles": {
+        "baseline-profile": {
+            "run": {
+                "command": [
+                    "perf",
+                    "record",
+                    "-F",
+                    "99",
+                    "-e",
+                    "cpu-clock:u",
+                    "--call-graph",
+                    "dwarf,4096",
+                    "-o",
+                    "/home/ripopov/work/gem5/main/local-temp/async-batches/kernel-next/baseline-profile/perf.data",
+                    "--",
+                    "/usr/bin/time",
+                    "-v",
+                    "-o",
+                    "/home/ripopov/work/gem5/main/local-temp/async-batches/kernel-next/baseline-profile/resources.txt",
+                    "/home/ripopov/work/gem5/main/local-temp/async-batches/final/bin/gem5.opt",
+                    "--outdir=/home/ripopov/work/gem5/main/local-temp/async-batches/kernel-next/baseline-profile",
+                    "/home/ripopov/work/gem5/main/configs/example/rt_accel.py",
+                    "--backend=gem5",
+                    "--accelerator-cpu=o3",
+                    "--accelerator-cores=16",
+                    "--queues=17",
+                    "--render-mode=1",
+                    "--samples-per-pixel=1",
+                    "--max-secondary-depth=0",
+                    "--seed=1",
+                    "--transport-delay=5ns"
+                ],
+                "quantum_cycles": 5,
+                "queues": 17,
+                "spins": null,
+                "profiled": true,
+                "binary_sha256":
+                    "ff9beccafcce36d22758d86af8504a67d0cc8a9497dd6c54ba13292368591f28",
+                "started_utc": "2026-10-11T21:25:57Z",
+                "pid_namespace": "pid:[4026531836]",
+                "affinity": [
+                    0,
+                    1,
+                    2,
+                    3,
+                    4,
+                    5,
+                    6,
+                    7,
+                    8,
+                    9,
+                    10,
+                    11,
+                    12,
+                    13,
+                    14,
+                    15,
+                    16,
+                    17,
+                    18,
+                    19
+                ],
+                "returncode": 0,
+                "wall_seconds": 72.82131025600029,
+                "finished_utc": "2026-10-11T21:27:10Z",
+                "process_checks": 72,
+                "simulations_after": []
+            },
+            "comparison": {
+                "simulated_counters_compared": 37340,
+                "excluded_host_counters": [
+                    "dump0/hostInstRate",
+                    "dump0/hostMemory",
+                    "dump0/hostOpRate",
+                    "dump0/hostSeconds",
+                    "dump0/hostTickRate",
+                    "dump1/hostInstRate",
+                    "dump1/hostMemory",
+                    "dump1/hostOpRate",
+                    "dump1/hostSeconds",
+                    "dump1/hostTickRate"
+                ],
+                "transaction_trace_sha256": {}
+            },
+            "report":
+                "local-temp/async-batches/kernel-next/baseline-profile/self.csv",
+            "lost_samples": 0,
+            "user_cpu_self_percent": [
+                {
+                    "percent": 54.75,
+                    "symbol":
+                        "[.] gem5::GlobalSyncEvent::BarrierEvent::process()"
+                },
+                {
+                    "percent": 3.45,
+                    "symbol": "[.] operator new[](unsigned long)"
+                },
+                {
+                    "percent": 1.33,
+                    "symbol":
+                        "[.] gem5::RefCountingPtr<gem5::o3::DynInst>::del()"
+                },
+                {
+                    "percent": 1.16,
+                    "symbol":
+                        "[.] std::_Sp_counted_base<(__gnu_cxx::_Lock_policy)2>::_M_release()"
+                },
+                {
+                    "percent": 1.13,
+                    "symbol":
+                        "[.] std::__detail::_Map_base<gem5::bitfield_backend::BitUnionOperators<gem5::RiscvISA::BitfieldUnderlyingClassesExtMachInst>, std::pair<gem5::bitfield_backend::BitUnionOperators<gem5::RiscvISA::BitfieldUnderlyingClassesExtMachInst> const, gem5::RefCountingPtr<gem5::StaticInst> >, std::allocator<std::pair<gem5::bitfield_backend::BitUnionOperators<gem5::RiscvISA::BitfieldUnderlyingClassesExtMachInst> const, gem5::RefCountingPtr<gem5::StaticInst> > >, std::__detail::_Select1st, std::equal_to<gem5::bitfield_backend::BitUnionOperators<gem5::RiscvISA::BitfieldUnderlyingClassesExtMachInst> >, std::hash<gem5::bitfield_backend::BitUnionOperators<gem5::RiscvISA::BitfieldUnderlyingClassesExtMachInst> >, std::__detail::_Mod_range_hashing, std::__detail::_Default_ranged_hash, std::__detail::_Prime_rehash_policy, std::__detail::_Hashtable_traits<true, false, true>, true>::operator[](gem5::bitfield_backend::BitUnionOperators<gem5::RiscvISA::BitfieldUnderlyingClassesExtMachInst> const&)"
+                },
+                {
+                    "percent": 0.96,
+                    "symbol": "[.] gem5::o3::Fetch::fetch(bool&)"
+                },
+                {
+                    "percent": 0.94,
+                    "symbol": "[.] operator delete[](void*, unsigned long)"
+                },
+                {
+                    "percent": 0.89,
+                    "symbol": "[.] gem5::o3::CPU::tick()"
+                },
+                {
+                    "percent": 0.72,
+                    "symbol":
+                        "[.] gem5::o3::Rename::renameSrcRegs(gem5::RefCountingPtr<gem5::o3::DynInst> const&, short)"
+                },
+                {
+                    "percent": 0.66,
+                    "symbol": "[.] gem5::EventQueue::insert(gem5::Event*)"
+                },
+                {
+                    "percent": 0.65,
+                    "symbol": "[.] feclearexcept"
+                },
+                {
+                    "percent": 0.64,
+                    "symbol":
+                        "[.] gem5::o3::InstructionQueue::scheduleReadyInsts()"
+                },
+                {
+                    "percent": 0.6,
+                    "symbol":
+                        "[.] gem5::statistics::DistStor::sample(double, int)"
+                },
+                {
+                    "percent": 0.59,
+                    "symbol": "[.] gem5::o3::Rename::renameInsts(short)"
+                },
+                {
+                    "percent": 0.5,
+                    "symbol": "[.] gem5::o3::Commit::commitInsts()"
+                },
+                {
+                    "percent": 0.5,
+                    "symbol": "[.] gem5::EventQueue::serviceOne()"
+                },
+                {
+                    "percent": 0.24,
+                    "symbol": "[.] gem5::EventQueue::handleAsyncInsertions()"
+                },
+                {
+                    "percent": 0.04,
+                    "symbol":
+                        "[.] gem5::EventQueue::asyncInsert(gem5::Event*, bool)"
+                },
+                {
+                    "percent": 0.01,
+                    "symbol": "[.] gem5::ProcessBarrier::operator()() const"
+                },
+                {
+                    "percent": 0.0,
+                    "symbol":
+                        "[.] gem5::BaseGlobalEvent::schedule(unsigned long)"
+                }
+            ]
+        },
+        "final-profile": {
+            "run": {
+                "command": [
+                    "perf",
+                    "record",
+                    "-F",
+                    "99",
+                    "-e",
+                    "cpu-clock:u",
+                    "--call-graph",
+                    "dwarf,4096",
+                    "-o",
+                    "/home/ripopov/work/gem5/main/local-temp/async-batches/kernel-next/final-profile/perf.data",
+                    "--",
+                    "/usr/bin/time",
+                    "-v",
+                    "-o",
+                    "/home/ripopov/work/gem5/main/local-temp/async-batches/kernel-next/final-profile/resources.txt",
+                    "/home/ripopov/work/gem5/main/local-temp/async-batches/kernel-next/diagnostic-binary/bin/gem5.opt",
+                    "--outdir=/home/ripopov/work/gem5/main/local-temp/async-batches/kernel-next/final-profile",
+                    "/home/ripopov/work/gem5/main/configs/example/rt_accel.py",
+                    "--backend=gem5",
+                    "--accelerator-cpu=o3",
+                    "--accelerator-cores=16",
+                    "--queues=17",
+                    "--render-mode=1",
+                    "--samples-per-pixel=1",
+                    "--max-secondary-depth=0",
+                    "--seed=1",
+                    "--transport-delay=5ns"
+                ],
+                "quantum_cycles": 5,
+                "queues": 17,
+                "spins": null,
+                "profiled": true,
+                "binary_sha256":
+                    "f7963d9a936a02f2a0a7ddcc35c7eafeca916507549053711461184e962f22a5",
+                "started_utc": "2026-10-11T22:19:01Z",
+                "pid_namespace": "pid:[4026531836]",
+                "affinity": [
+                    0,
+                    1,
+                    2,
+                    3,
+                    4,
+                    5,
+                    6,
+                    7,
+                    8,
+                    9,
+                    10,
+                    11,
+                    12,
+                    13,
+                    14,
+                    15,
+                    16,
+                    17,
+                    18,
+                    19
+                ],
+                "returncode": 0,
+                "wall_seconds": 68.3793649170002,
+                "finished_utc": "2026-10-11T22:20:10Z",
+                "process_checks": 68,
+                "simulations_after": []
+            },
+            "comparison": {
+                "simulated_counters_compared": 37340,
+                "excluded_host_counters": [
+                    "dump0/hostInstRate",
+                    "dump0/hostMemory",
+                    "dump0/hostOpRate",
+                    "dump0/hostSeconds",
+                    "dump0/hostTickRate",
+                    "dump1/hostInstRate",
+                    "dump1/hostMemory",
+                    "dump1/hostOpRate",
+                    "dump1/hostSeconds",
+                    "dump1/hostTickRate"
+                ],
+                "transaction_trace_sha256": {}
+            },
+            "report":
+                "local-temp/async-batches/kernel-next/final-profile/self.csv",
+            "lost_samples": 0,
+            "user_cpu_self_percent": [
+                {
+                    "percent": 53.4,
+                    "symbol":
+                        "[.] gem5::GlobalSyncEvent::BarrierEvent::process()"
+                },
+                {
+                    "percent": 3.1,
+                    "symbol": "[.] operator new[](unsigned long)"
+                },
+                {
+                    "percent": 1.41,
+                    "symbol":
+                        "[.] gem5::RefCountingPtr<gem5::o3::DynInst>::del()"
+                },
+                {
+                    "percent": 1.22,
+                    "symbol":
+                        "[.] std::_Sp_counted_base<(__gnu_cxx::_Lock_policy)2>::_M_release()"
+                },
+                {
+                    "percent": 1.04,
+                    "symbol": "[.] gem5::o3::Fetch::fetch(bool&)"
+                },
+                {
+                    "percent": 0.99,
+                    "symbol": "[.] gem5::o3::CPU::tick()"
+                },
+                {
+                    "percent": 0.98,
+                    "symbol":
+                        "[.] std::__detail::_Map_base<gem5::bitfield_backend::BitUnionOperators<gem5::RiscvISA::BitfieldUnderlyingClassesExtMachInst>, std::pair<gem5::bitfield_backend::BitUnionOperators<gem5::RiscvISA::BitfieldUnderlyingClassesExtMachInst> const, gem5::RefCountingPtr<gem5::StaticInst> >, std::allocator<std::pair<gem5::bitfield_backend::BitUnionOperators<gem5::RiscvISA::BitfieldUnderlyingClassesExtMachInst> const, gem5::RefCountingPtr<gem5::StaticInst> > >, std::__detail::_Select1st, std::equal_to<gem5::bitfield_backend::BitUnionOperators<gem5::RiscvISA::BitfieldUnderlyingClassesExtMachInst> >, std::hash<gem5::bitfield_backend::BitUnionOperators<gem5::RiscvISA::BitfieldUnderlyingClassesExtMachInst> >, std::__detail::_Mod_range_hashing, std::__detail::_Default_ranged_hash, std::__detail::_Prime_rehash_policy, std::__detail::_Hashtable_traits<true, false, true>, true>::operator[](gem5::bitfield_backend::BitUnionOperators<gem5::RiscvISA::BitfieldUnderlyingClassesExtMachInst> const&)"
+                },
+                {
+                    "percent": 0.93,
+                    "symbol": "[.] operator delete[](void*, unsigned long)"
+                },
+                {
+                    "percent": 0.78,
+                    "symbol":
+                        "[.] gem5::o3::Rename::renameSrcRegs(gem5::RefCountingPtr<gem5::o3::DynInst> const&, short)"
+                },
+                {
+                    "percent": 0.69,
+                    "symbol": "[.] feclearexcept"
+                },
+                {
+                    "percent": 0.69,
+                    "symbol":
+                        "[.] gem5::o3::InstructionQueue::scheduleReadyInsts()"
+                },
+                {
+                    "percent": 0.69,
+                    "symbol": "[.] gem5::o3::Rename::renameInsts(short)"
+                },
+                {
+                    "percent": 0.67,
+                    "symbol": "[.] gem5::EventQueue::insert(gem5::Event*)"
+                },
+                {
+                    "percent": 0.64,
+                    "symbol":
+                        "[.] gem5::statistics::DistStor::sample(double, int)"
+                },
+                {
+                    "percent": 0.51,
+                    "symbol": "[.] gem5::o3::Commit::commitInsts()"
+                },
+                {
+                    "percent": 0.27,
+                    "symbol": "[.] gem5::EventQueue::handleAsyncInsertions()"
+                },
+                {
+                    "percent": 0.04,
+                    "symbol":
+                        "[.] gem5::EventQueue::asyncInsert(gem5::Event*, bool)"
+                },
+                {
+                    "percent": 0.01,
+                    "symbol": "[.] gem5::ProcessBarrier::operator()() const"
+                },
+                {
+                    "percent": 0.0,
+                    "symbol": "[.] gem5::GlobalSyncEvent::process()"
+                },
+                {
+                    "percent": 0.0,
+                    "symbol":
+                        "[.] gem5::BaseGlobalEvent::schedule(unsigned long)"
+                }
+            ]
+        }
+    },
+    "phase_diagnostics": {
+        "directory":
+            "local-temp/async-batches/kernel-next/final-profile/trace",
+        "host_thread": "thread-417618",
+        "phase_groups": 3589,
+        "metrics": {
+            "arrival_spread_ns": {
+                "samples": 3588,
+                "mean": 33695.90133779264,
+                "median": 36959.5,
+                "p95": 48802,
+                "max": 421467
+            },
+            "last_arrival_to_callback_ns": {
+                "samples": 3588,
+                "mean": 80.36399108138238,
+                "median": 83.0,
+                "p95": 117,
+                "max": 241
+            },
+            "completion_ns": {
+                "samples": 3588,
+                "mean": 748.2006688963211,
+                "median": 777.5,
+                "p95": 922,
+                "max": 1831
+            },
+            "callback_to_last_release_ns": {
+                "samples": 3588,
+                "mean": 675.2728539576366,
+                "median": 243.0,
+                "p95": 274,
+                "max": 402093
+            },
+            "last_arrival_to_last_release_ns": {
+                "samples": 3588,
+                "mean": 1503.83751393534,
+                "median": 1108.0,
+                "p95": 1269,
+                "max": 403067
+            },
+            "first_arrival_to_last_release_ns": {
+                "samples": 3588,
+                "mean": 35199.73885172798,
+                "median": 38100.0,
+                "p95": 49946,
+                "max": 815510
+            },
+            "mean_accelerator_work_ns": {
+                "samples": 1794,
+                "mean": 17179.102668617616,
+                "median": 21068.75,
+                "p95": 29320.75,
+                "max": 42079.9375
+            },
+            "maximum_accelerator_work_ns": {
+                "samples": 1794,
+                "mean": 32450.940356744704,
+                "median": 37307.0,
+                "p95": 48915,
+                "max": 77057
+            },
+            "accelerator_maximum_minus_mean_work_ns": {
+                "samples": 1794,
+                "mean": 15271.83768812709,
+                "median": 15749.375,
+                "p95": 29231.8125,
+                "max": 43261.4375
+            },
+            "maximum_work_ns": {
+                "samples": 1794,
+                "mean": 33505.03734671126,
+                "median": 37307.0,
+                "p95": 48915,
+                "max": 77057
+            },
+            "mean_work_ns": {
+                "samples": 1794,
+                "mean": 16239.897435897436,
+                "median": 19834.941176470587,
+                "p95": 27598.470588235294,
+                "max": 39618.76470588235
+            },
+            "maximum_minus_mean_work_ns": {
+                "samples": 1794,
+                "mean": 17265.139910813825,
+                "median": 17275.117647058825,
+                "p95": 30037.529411764706,
+                "max": 43867.05882352941
+            },
+            "round_wall_ns": {
+                "samples": 1794,
+                "mean": 34961.79319955407,
+                "median": 38497.5,
+                "p95": 50179,
+                "max": 414122
+            }
+        },
+        "last_arrival_threads": {
+            "thread-417629": 100,
+            "thread-417633": 211,
+            "thread-417643": 196,
+            "thread-417644": 196,
+            "thread-417618": 597,
+            "thread-417638": 351,
+            "thread-417634": 157,
+            "thread-417642": 236,
+            "thread-417641": 316,
+            "thread-417635": 195,
+            "thread-417631": 97,
+            "thread-417630": 120,
+            "thread-417637": 193,
+            "thread-417636": 145,
+            "thread-417632": 120,
+            "thread-417639": 208,
+            "thread-417640": 150
+        },
+        "last_arrival_cpus": {
+            "9": 191,
+            "15": 198,
+            "10": 432,
+            "17": 296,
+            "3": 75,
+            "0": 95,
+            "1": 107,
+            "12": 191,
+            "16": 307,
+            "14": 244,
+            "7": 90,
+            "19": 155,
+            "13": 175,
+            "5": 213,
+            "4": 26,
+            "11": 214,
+            "8": 327,
+            "2": 41,
+            "6": 46,
+            "18": 165
+        },
+        "note":
+            "Sampled, instrumented diagnostics; excluded from speedup timing. Completion and per-thread clock reads perturb the measured intervals."
+    },
+    "render_phase_diagnostics": {
+        "directory":
+            "local-temp/async-batches/kernel-next/final-profile/trace",
+        "host_thread": "thread-417618",
+        "phase_groups": 2984,
+        "batch_only": true,
+        "render_batch_tick_range": [
+            283634000,
+            7921629000
+        ],
+        "metrics": {
+            "arrival_spread_ns": {
+                "samples": 2984,
+                "mean": 39203.205764075065,
+                "median": 38737.0,
+                "p95": 49277,
+                "max": 421467
+            },
+            "last_arrival_to_callback_ns": {
+                "samples": 2984,
+                "mean": 85.52848525469169,
+                "median": 88.0,
+                "p95": 119,
+                "max": 241
+            },
+            "completion_ns": {
+                "samples": 2984,
+                "mean": 787.1437667560322,
+                "median": 799.0,
+                "p95": 929,
+                "max": 1098
+            },
+            "callback_to_last_release_ns": {
+                "samples": 2984,
+                "mean": 763.379691689008,
+                "median": 244.0,
+                "p95": 276,
+                "max": 402093
+            },
+            "last_arrival_to_last_release_ns": {
+                "samples": 2984,
+                "mean": 1636.051943699732,
+                "median": 1131.0,
+                "p95": 1277,
+                "max": 403067
+            },
+            "first_arrival_to_last_release_ns": {
+                "samples": 2984,
+                "mean": 40839.2577077748,
+                "median": 39833.5,
+                "p95": 50401,
+                "max": 815510
+            },
+            "mean_accelerator_work_ns": {
+                "samples": 1492,
+                "mean": 20575.085078753353,
+                "median": 23503.9375,
+                "p95": 29599.8125,
+                "max": 42079.9375
+            },
+            "maximum_accelerator_work_ns": {
+                "samples": 1492,
+                "mean": 38911.66890080429,
+                "median": 38973.0,
+                "p95": 49455,
+                "max": 77057
+            },
+            "accelerator_maximum_minus_mean_work_ns": {
+                "samples": 1492,
+                "mean": 18336.58382205094,
+                "median": 17700.125,
+                "p95": 30180.75,
+                "max": 43261.4375
+            },
+            "maximum_work_ns": {
+                "samples": 1492,
+                "mean": 38911.66890080429,
+                "median": 38973.0,
+                "p95": 49455,
+                "max": 77057
+            },
+            "mean_work_ns": {
+                "samples": 1492,
+                "mean": 19372.239354991325,
+                "median": 22123.970588235294,
+                "p95": 27861.117647058825,
+                "max": 39618.76470588235
+            },
+            "maximum_minus_mean_work_ns": {
+                "samples": 1492,
+                "mean": 19539.429545812964,
+                "median": 19033.79411764706,
+                "p95": 30880.41176470588,
+                "max": 43867.05882352941
+            },
+            "round_wall_ns": {
+                "samples": 1492,
+                "mean": 40525.42761394102,
+                "median": 40134.0,
+                "p95": 50673,
+                "max": 414122
+            }
+        },
+        "last_arrival_threads": {
+            "thread-417633": 209,
+            "thread-417638": 351,
+            "thread-417629": 98,
+            "thread-417634": 157,
+            "thread-417642": 236,
+            "thread-417641": 316,
+            "thread-417644": 195,
+            "thread-417635": 195,
+            "thread-417631": 97,
+            "thread-417630": 120,
+            "thread-417637": 193,
+            "thread-417636": 145,
+            "thread-417632": 120,
+            "thread-417639": 208,
+            "thread-417640": 149,
+            "thread-417643": 195
+        },
+        "last_arrival_cpus": {
+            "10": 237,
+            "12": 191,
+            "9": 189,
+            "16": 307,
+            "15": 196,
+            "14": 244,
+            "7": 22,
+            "19": 155,
+            "13": 175,
+            "5": 43,
+            "4": 26,
+            "11": 214,
+            "8": 327,
+            "17": 295,
+            "2": 41,
+            "6": 46,
+            "3": 12,
+            "0": 61,
+            "1": 38,
+            "18": 165
+        },
+        "note":
+            "Sampled, instrumented diagnostics; excluded from speedup timing. Completion and per-thread clock reads perturb the measured intervals."
+    },
+    "protocol": {
+        "simulated_counters_compared": 101224,
+        "excluded_host_counters": [
+            "dump0/hostInstRate",
+            "dump0/hostMemory",
+            "dump0/hostOpRate",
+            "dump0/hostSeconds",
+            "dump0/hostTickRate",
+            "dump1/hostInstRate",
+            "dump1/hostMemory",
+            "dump1/hostOpRate",
+            "dump1/hostSeconds",
+            "dump1/hostTickRate",
+            "dump2/hostInstRate",
+            "dump2/hostMemory",
+            "dump2/hostOpRate",
+            "dump2/hostSeconds",
+            "dump2/hostTickRate",
+            "dump3/hostInstRate",
+            "dump3/hostMemory",
+            "dump3/hostOpRate",
+            "dump3/hostSeconds",
+            "dump3/hostTickRate",
+            "dump4/hostInstRate",
+            "dump4/hostMemory",
+            "dump4/hostOpRate",
+            "dump4/hostSeconds",
+            "dump4/hostTickRate"
+        ],
+        "transaction_trace_sha256": {
+            "msi.trace":
+                "99723cd1756b5edd601466a1fe47e035e6899cbb1aa5d6369df92d13bd6d76ef",
+            "host0.trace":
+                "6bf9d60a3156de1baeafedc478bd7b42470d7f48013451b654edaaab5bddc737",
+            "host1.trace":
+                "00c71f5ad4641fdc84f38942921c433352afaef2250bef1a881dc4b6803b2715",
+            "host2.trace":
+                "c7b5fddbda7650b90fa1b899b917bafca0610f71098644a4cfd7bd92de158ec2",
+            "host3.trace":
+                "c0659fb2127134e2ef25a72f0079b0f2f49acdcfde0831a470a038b3b7c56e30",
+            "host4.trace":
+                "1ac437784083d44b22c642d201ee6ddae414279718360310235cdda7c7b779ee",
+            "host5.trace":
+                "a5bd9c23ac0562a2588856992562b10fcdfa43e92b39cedf8d94ee9293b0b388",
+            "host6.trace":
+                "e294ddcbc3454370c00770936a388811e3192d41529410f1f4795873f5acf0ce",
+            "host7.trace":
+                "e419b8fd3aabc239078f65522ef4942a3639e0626d8360d624d4c00839585487",
+            "host8.trace":
+                "ca9cd028c691e439444b4b1509ae2c8c6820bf39d2400184f7019e719f365078",
+            "host9.trace":
+                "e13b1af73b60902a02e54b794c64c1143ab3edbe6fb21eff9db4a7a9190193a8",
+            "host10.trace":
+                "fe7f789c654795b6f2a8116caee5d719dc2620f1df73a9020a03f43c099e8793",
+            "host11.trace":
+                "42544819b8a992c3e941c38bf6a4a4c394a90c3ef104845928c54acd924dd8fd",
+            "host12.trace":
+                "9b66d88b36f9dd9cffd1b8edc70dd2d7c28b2c217e6cc609e345a97e66df82ec",
+            "host13.trace":
+                "c03dc349abba3a574e0a52f0990bd186e8d75019ee31abfb1821e29cd40efe45",
+            "host14.trace":
+                "64314e3cc191a786a04ba8db2fb65e99a896b467b3035af9a4f5f03c565e6b03",
+            "host15.trace":
+                "12bdfcca8f2cd073844b771d384b90aa0a62aca23b5cd716b009e5f3b32fa871",
+            "accel0.trace":
+                "39d43d01f5c5378aa1ed48c8abfaefe2608ed31246e129f1cce4f4ad881b4005",
+            "accel1.trace":
+                "89aa2e29ca4df9cd234e3fa1a30d272088fbe9217f6551a2cb482c8cf0340ad7",
+            "accel2.trace":
+                "55a02fe513df65f3fea36fb5c11e32472bd15554ac88290c85631c32013ab27e",
+            "accel3.trace":
+                "c8e12d55ef06dd7e252b214406deceb439725815934866a8d81c8a6d6c6fbd8d",
+            "accel4.trace":
+                "d2ff1d1f3a132d318526a833be72aa32f8c6b75b180cd895d4d20034c69c40b7",
+            "accel5.trace":
+                "213aba631c33113216269e8ed80eff2fea8997644a3c93228e8f655729f93920",
+            "accel6.trace":
+                "dfa1b98154bbd4966a5ebba0aa9d50e764687002d44274cd37eea2331170a857",
+            "accel7.trace":
+                "a8c2819376ba35c3e26ff8cdea723219a0773ce20386018c71f95e28c72f0414",
+            "accel8.trace":
+                "8a1c4094fd0260558923246e7e904cb1ec7a7cec2738f97d5944d7ba00d60e25",
+            "accel9.trace":
+                "74e52cbc972b3ac675b20894d9f6b1289cfc7fd88eb21c631038b1eac14a9626",
+            "accel10.trace":
+                "add3990b3c8c07d3079081eb9a669f422b4f9b8cb424a67b1812f53d5741812a",
+            "accel11.trace":
+                "15d50d7f0b1d3ebee6a09636ce28343332463d42437b234c2d28f98567197a6b",
+            "accel12.trace":
+                "7db012cd92adf2e2d6b9d469e4a975af4c0aba8095a628ac355c44c493d886c5",
+            "accel13.trace":
+                "506cb3e7c46e1b1219f93be23d5bfb35a522a553de523d043d627ab3883927ae",
+            "accel14.trace":
+                "d9442524dae619475eb03e57e6912ddc58bf5527b1b5de43c8da24d96754424e",
+            "accel15.trace":
+                "e53076618ee5ad132a17cae96c389331dd77aca513b6cddc9668d5a1cfafa36e"
+        },
+        "run": {
+            "wall_seconds": 21.53578934699908,
+            "command": [
+                "/home/ripopov/work/gem5/main/build/RISCV/gem5.opt",
+                "--outdir=/home/ripopov/work/gem5/main/local-temp/async-batches/kernel-next/final-protocol",
+                "/home/ripopov/work/gem5/main/configs/example/rt_accel.py",
+                "--backend=gem5",
+                "--accelerator-cpu=o3",
+                "--accelerator-cores=16",
+                "--queues=17",
+                "--render-mode=1",
+                "--queue-depth=1",
+                "--trace",
+                "--transport-delay=5ns",
+                "--host-firmware=/home/ripopov/work/gem5/main/util/rt_reference/out/host-test.elf",
+                "--accelerator-firmware=/home/ripopov/work/gem5/main/util/rt_reference/out/accelerator-test.elf"
+            ],
+            "idle_machine_checked": true,
+            "process_checks": 22,
+            "simulations_before": [],
+            "simulations_after": []
+        }
+    },
+    "unit_tests": {
+        "queue": {
+            "tests_per_iteration": 7,
+            "iterations": 20,
+            "log":
+                "local-temp/async-batches/kernel-next/final-queue-tests.log",
+            "log_sha256":
+                "7168623d898773e44675880da07fa3768bc74ad09470a70227e913e16bb2e7e8"
+        },
+        "global": {
+            "tests_per_iteration": 3,
+            "iterations": 1,
+            "log":
+                "local-temp/async-batches/kernel-next/final-global-tests.log",
+            "log_sha256":
+                "8da54e847138fff52e9b18c5b13bbc8d3115b8355937f44bf825e609cffb239f"
+        },
+        "barrier": {
+            "tests_per_iteration": 6,
+            "iterations": 10,
+            "log":
+                "local-temp/async-batches/kernel-next/final-barrier-tests.log",
+            "log_sha256":
+                "633929e4da2dad0c35dfab4250a9f49b9e50984fb2f028faa370506316607eda"
+        },
+        "batch": {
+            "tests_per_iteration": 3,
+            "iterations": 10,
+            "log":
+                "local-temp/async-batches/kernel-next/final-batch-tests.log",
+            "log_sha256":
+                "d57898ec8f85303493f55400f46d59e24797fc1ef718d466116e0cbb61c0ba27"
+        }
+    },
+    "final_production": {
+        "base_commit": "1cb9b680c19f9e5291d4da22355a999cae71f6db",
+        "sha256": {
+            "src/sim/async_event_batch.hh":
+                "3eca207bd694395273e8d100620dec6ffd612b2980b9a8ca08138b492a24cbcf",
+            "src/sim/async_event_batch.test.cc":
+                "9bb4681f269b3f788c765bbe4089e57d7e1c3fd015c643581fd97a934c71e5d9",
+            "src/sim/async_eventq.test.cc":
+                "a050db1f6750de6b91f82bcf954a3ee6b7c3ed89d1aa52f4626a96bc60ae7329",
+            "src/sim/eventq.cc":
+                "e73516427fe411042c1b987fe307e01a2dbb571628af753d12fcaa514d29d52b",
+            "src/sim/eventq.hh":
+                "e2daced6d28988e1c9f23efad561fe73ba03f0c2fdafc9f026ec9a098a50a358",
+            "src/sim/global_event.cc":
+                "678feb45409ddcc571665ddc53cc60b8ba8b7a590d455e67204aaf9afebe96f5",
+            "src/sim/global_event.hh":
+                "fc8d84cb043c91b231e55af200fa6111580ae674398579262f340fa8d8293db1",
+            "src/sim/simulate.cc":
+                "80f72d7cc0d7b79eb7c18624598c089d66ffbd2eac58e0f92bed2a0a27f2b323",
+            "src/sim/SConscript":
+                "77032d43d716d809cee3d0bcbe913d286a19caba4710aa1086edfd7f401d7f4f",
+            "src/sim/quantum_barrier.hh":
+                "11f291cf9d72057278a1df1840a60c02d920037aab7227a06031a4ead0988bcd",
+            "src/sim/quantum_barrier.test.cc":
+                "cfb68d59c088bd94e92016c42ba1bd49b04182861cab6aea8cd4e4c91c79fc06",
+            "src/sim/global_event.test.cc":
+                "9858ff9c6b5b7e1f40113c0aa317a2bdf2f36d1c2d3f05e992806f68eb43f43c",
+            "build/RISCV/gem5.opt":
+                "f3c77ba8d388338330700ca3e09944b0816a67dac8614e03d5b68771aceea9d7",
+            "build/RISCV/librt_accel_opt.so":
+                "6df1c6f87cb0b8a290ea3b89f316c630481c8afdfc2e25edb899540b44daddf9",
+            "configs/example/rt_accel.py":
+                "c4fb3d8bdaded5e96d2125342fbfdd70153eb3bfad6ae6e08e3d2fd3ab110b37",
+            "configs/example/rt_accel_reduction.py":
+                "51c697a29728ba478c1b59684d152e0273f6040d48f12e5c59cbd10b54961c53",
+            "configs/example/rt_accel_system.py":
+                "cc15055760d28991c9ecce518933fd73a89a8bf0e5bc7209b8c9e7a595eb81fd",
+            "util/rt_reference/out/host.elf":
+                "0833efd380ac2d9c18f0dd0db47ceb68fed61c87e699f0db455fa1bc3b31beba",
+            "util/rt_reference/out/accelerator.elf":
+                "dc8d993e1cbb4533758925f66a9e5a052d8025ec5342b4f7f7b0fe5a9d3e0833",
+            "util/rt_reference/out/host-test.elf":
+                "0f09943ac100cd7448d50ef5c568f7d811ec060ccd0aedfaef2a51f7c4d76053",
+            "util/rt_reference/out/accelerator-test.elf":
+                "059f88188bf55f282127f132249a7a8d9671e086a102ef4c65f17f25d93a30cc",
+            "util/rt_reference/out/host-render.elf":
+                "7ecbf6538dd7290f0192e8465738381846e58486cb5e41c55d1d669ce687d0f7",
+            "util/rt_reference/out/host-gem5.elf":
+                "13dc08a18ebb6a7c4c7134ffe2a6607ff9877e3fa5e4b054bedf957f0db76ec9",
+            "util/rt_reference/out/smrnmi-present.elf":
+                "4e2493f32e52b7e4d1cac2a6191f9f398dcdd03f132c2bfce4742244b8a842e0",
+            "util/rt_reference/out/reduction-accelerator.elf":
+                "dd74c08a076bdab38be0d97b04b850d21b0b6e4cef4f4c9fa6ee6a8667c90e2e",
+            "util/rt_reference/out/reduction-host.elf":
+                "a1dc9df51f1612119cba5c2b9239304422047c512198d906077025ae9c583e53",
+            "util/rt_reference/out/smrnmi-absent.elf":
+                "3eb354fe8f1027fcdea9089b3279951dd76a93b6a0d776ed86c2056fb1c89731"
+        },
+        "compiler": "g++ (Ubuntu 15.2.0-16ubuntu1) 15.2.0",
+        "build": "scons build/RISCV/gem5.opt -j 16",
+        "archived_binary_sha256":
+            "f3c77ba8d388338330700ca3e09944b0816a67dac8614e03d5b68771aceea9d7"
+    },
+    "diagnostic_binary": {
+        "base_commit": "1cb9b680c19f9e5291d4da22355a999cae71f6db",
+        "sha256": {
+            "src/sim/async_event_batch.hh":
+                "3eca207bd694395273e8d100620dec6ffd612b2980b9a8ca08138b492a24cbcf",
+            "src/sim/async_event_batch.test.cc":
+                "9bb4681f269b3f788c765bbe4089e57d7e1c3fd015c643581fd97a934c71e5d9",
+            "src/sim/async_eventq.test.cc":
+                "a050db1f6750de6b91f82bcf954a3ee6b7c3ed89d1aa52f4626a96bc60ae7329",
+            "src/sim/eventq.cc":
+                "e73516427fe411042c1b987fe307e01a2dbb571628af753d12fcaa514d29d52b",
+            "src/sim/eventq.hh":
+                "e2daced6d28988e1c9f23efad561fe73ba03f0c2fdafc9f026ec9a098a50a358",
+            "src/sim/global_event.cc":
+                "1368806097b035f1d417280953d046be1a2bad786ca73cad89b3b46458bc6b43",
+            "src/sim/global_event.hh":
+                "fc8d84cb043c91b231e55af200fa6111580ae674398579262f340fa8d8293db1",
+            "src/sim/simulate.cc":
+                "80f72d7cc0d7b79eb7c18624598c089d66ffbd2eac58e0f92bed2a0a27f2b323",
+            "src/sim/SConscript":
+                "77032d43d716d809cee3d0bcbe913d286a19caba4710aa1086edfd7f401d7f4f",
+            "src/sim/quantum_barrier.hh":
+                "11f291cf9d72057278a1df1840a60c02d920037aab7227a06031a4ead0988bcd",
+            "src/sim/quantum_barrier.test.cc":
+                "cfb68d59c088bd94e92016c42ba1bd49b04182861cab6aea8cd4e4c91c79fc06",
+            "src/sim/global_event.test.cc":
+                "9858ff9c6b5b7e1f40113c0aa317a2bdf2f36d1c2d3f05e992806f68eb43f43c",
+            "build/RISCV/gem5.opt":
+                "f7963d9a936a02f2a0a7ddcc35c7eafeca916507549053711461184e962f22a5",
+            "build/RISCV/librt_accel_opt.so":
+                "6df1c6f87cb0b8a290ea3b89f316c630481c8afdfc2e25edb899540b44daddf9",
+            "configs/example/rt_accel.py":
+                "c4fb3d8bdaded5e96d2125342fbfdd70153eb3bfad6ae6e08e3d2fd3ab110b37",
+            "configs/example/rt_accel_reduction.py":
+                "51c697a29728ba478c1b59684d152e0273f6040d48f12e5c59cbd10b54961c53",
+            "configs/example/rt_accel_system.py":
+                "cc15055760d28991c9ecce518933fd73a89a8bf0e5bc7209b8c9e7a595eb81fd",
+            "util/rt_reference/out/host.elf":
+                "0833efd380ac2d9c18f0dd0db47ceb68fed61c87e699f0db455fa1bc3b31beba",
+            "util/rt_reference/out/accelerator.elf":
+                "dc8d993e1cbb4533758925f66a9e5a052d8025ec5342b4f7f7b0fe5a9d3e0833",
+            "util/rt_reference/out/host-test.elf":
+                "0f09943ac100cd7448d50ef5c568f7d811ec060ccd0aedfaef2a51f7c4d76053",
+            "util/rt_reference/out/accelerator-test.elf":
+                "059f88188bf55f282127f132249a7a8d9671e086a102ef4c65f17f25d93a30cc",
+            "util/rt_reference/out/host-render.elf":
+                "7ecbf6538dd7290f0192e8465738381846e58486cb5e41c55d1d669ce687d0f7",
+            "util/rt_reference/out/host-gem5.elf":
+                "13dc08a18ebb6a7c4c7134ffe2a6607ff9877e3fa5e4b054bedf957f0db76ec9",
+            "util/rt_reference/out/smrnmi-present.elf":
+                "4e2493f32e52b7e4d1cac2a6191f9f398dcdd03f132c2bfce4742244b8a842e0",
+            "util/rt_reference/out/reduction-accelerator.elf":
+                "dd74c08a076bdab38be0d97b04b850d21b0b6e4cef4f4c9fa6ee6a8667c90e2e",
+            "util/rt_reference/out/reduction-host.elf":
+                "a1dc9df51f1612119cba5c2b9239304422047c512198d906077025ae9c583e53",
+            "util/rt_reference/out/smrnmi-absent.elf":
+                "3eb354fe8f1027fcdea9089b3279951dd76a93b6a0d776ed86c2056fb1c89731"
+        },
+        "compiler": "g++ (Ubuntu 15.2.0-16ubuntu1) 15.2.0",
+        "build": "scons build/RISCV/gem5.opt -j 16",
+        "archived_binary_sha256":
+            "f7963d9a936a02f2a0a7ddcc35c7eafeca916507549053711461184e962f22a5"
+    },
+    "diagnostic_header_sha256":
+        "66b1086e501e735a96ec0007b61032f2438eb513d16fcaed7571e762d7b25520",
+    "rejected_candidates": {
+        "tree":
+            "No measured advantage over vector-only in screening; added algorithm and participant-index complexity.",
+        "aligned":
+            "Three samples showed no advantage from aligning synchronization-event objects.",
+        "isolated":
+            "Shared-bound cache-line isolation was slower than the following vector-only control."
+    },
+    "notes": [
+        "All workload timings are sequential, with host-wide competing-gem5 checks.",
+        "No build, unit test or diagnostic profiler overlaps an unprofiled timing sample.",
+        "CPU placement unrestricted; desktop active. Samples do not establish a universal speedup.",
+        "Diagnostic phase timing and perf runs are excluded from speedup medians."
+    ]
+}

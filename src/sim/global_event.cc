@@ -34,17 +34,29 @@
 namespace gem5
 {
 
+namespace
+{
+
+// Processor-relax iterations, not simulated cycles. Keep short quantum waits
+// in user space, but allow long waits and oversubscribed workers to park.
+constexpr unsigned QuantumSpinCount = 32768;
+
+} // anonymous namespace
+
 std::mutex BaseGlobalEvent::globalQMutex;
 
 // Defines the function that is called **once** per barrier sync event.
 void
 ProcessBarrier::operator()() const noexcept
 {
-    // BarrierEvent::globalBarrier() releases the event queue lock before
-    // waiting. Global event process() methods expect that lock to be held, so
+    // Local barrier events release the event queue lock before waiting.
+    // Global event process() methods expect that lock to be held, so
     // reacquire it for the duration of the completion step. The other event
     // queues remain unlocked until the barrier phase completes.
     std::lock_guard<EventQueue> lock(*curEventQueue());
+    // All worker batches were published before arrival. Callback posts
+    // must be visible immediately, not left in the last worker's staging.
+    EventQueue::ScopedAsyncBatching unbatched(nullptr);
     event->process();
 }
 
@@ -147,8 +159,27 @@ GlobalEvent::BarrierEvent::process()
 void
 GlobalSyncEvent::BarrierEvent::process()
 {
-    globalBarrier();
+    auto *event = static_cast<GlobalSyncEvent *>(_globalEvent);
+    if (event->quantumBarrier) {
+        EventQueue::publishAsyncBatches();
+        EventQueue::ScopedRelease release(curEventQueue());
+        event->quantumBarrier->arriveAndWait();
+    } else {
+        globalBarrier();
+    }
     curEventQueue()->handleAsyncInsertions();
+}
+
+GlobalSyncEvent::GlobalSyncEvent(Tick when, Tick _repeat, Priority p, Flags f)
+    : Base(p, f),
+      repeat(_repeat),
+      quantumBarrier(std::make_unique<QuantumBarrier<ProcessBarrier>>(
+          numMainEventQueues, ProcessBarrier{this}, QuantumSpinCount))
+{
+    schedule(when);
+    for (int i = 0; i < numMainEventQueues; ++i) {
+        mainEventQueue[i]->setNextSimQuantum(when);
+    }
 }
 
 void

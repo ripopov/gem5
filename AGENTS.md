@@ -1,5 +1,15 @@
 # Repository Guidelines
 
+## Branch Purpose
+
+This branch develops a parallel discrete-event simulation (PDES) of a ray
+tracing system with one host CPU and eight ray tracing accelerators. The host
+CPU runs on its own gem5 event queue, and each accelerator runs on a separate
+event queue to speed up simulation while preserving cycle-accurate semantics.
+
+This is a work in progress. See [SPEC/Accelerator.md](SPEC/Accelerator.md) for
+the accelerator API, timing contracts, and system architecture specification.
+
 ## Project Structure & Module Organization
 
 gem5 is a simulator repository with mixed C++, Python, SCons, and test assets.

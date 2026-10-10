@@ -307,6 +307,9 @@ ISA::ISA(const Params &p)
       elen(p.elen),
       _privilegeModeSet(p.privilege_mode_set),
       _reportedExtensions(p.reported_extensions),
+      _hasSmrnmi(std::find(_reportedExtensions.begin(),
+                           _reportedExtensions.end(),
+                           "Smrnmi") != _reportedExtensions.end()),
       _wfiResumeOnPending(p.wfi_resume_on_pending)
 {
     _regClasses.push_back(&intRegClass);
@@ -334,6 +337,9 @@ ISA::ISA(const Params &p)
 bool
 ISA::reportsExtension(std::string_view extension) const
 {
+    if (extension == "Smrnmi") {
+        return _hasSmrnmi;
+    }
     return std::any_of(_reportedExtensions.begin(), _reportedExtensions.end(),
                        [extension](const std::string &reported) {
                            return std::string_view(reported) == extension;

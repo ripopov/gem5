@@ -1,0 +1,4208 @@
+{
+    "experiment": "memory-controllers",
+    "runs_per_configuration": 3,
+    "artifact_sha256": {
+        "/home/ripopov/work/gem5/main/build/RISCV/gem5.opt":
+            "8f81cffbc0413c64598d224c0a3d2a2bcad25f32cdf19c3d10c21c38936b1ae9",
+        "/home/ripopov/work/gem5/main/util/rt_reference/out/reduction-host.elf":
+            "9f6930cb78491e684f95b0a37be1618f59b4bdfeab60dfee1aa6a565143c1944",
+        "/home/ripopov/work/gem5/main/util/rt_reference/out/reduction-accelerator.elf":
+            "954f94480c7d5241e527fedccfcd0e56d2fe166412865d39b94982652937890a",
+        "/home/ripopov/work/gem5/main/configs/example/rt_accel_system.py":
+            "d23232c076ed0c316a7b09859896f87b190a08bece3a6bb9790e0287a7c4dc15",
+        "/home/ripopov/work/gem5/main/configs/example/rt_accel_reduction.py":
+            "0dc55778e15f80ac95bee48b0366e993aab2beb87081ddeb3c81a9ee2044b4f7",
+        "/home/ripopov/work/gem5/main/src/dev/rt_accel/control.cc":
+            "89af658411682ad283a6fd99eb0721066001594de811cad29704d3f9dbbed6d0",
+        "/home/ripopov/work/gem5/main/src/dev/rt_accel/control.hh":
+            "457c10ad04e49724ad7b964601fc20de451562f860acea0332ef90d765872ec0",
+        "/home/ripopov/work/gem5/main/src/dev/rt_accel/RTAccelerator.py":
+            "80282b710d9121a422c513cb7175956453ec331f36174e5b0943648d59437109",
+        "/home/ripopov/work/gem5/main/util/rt_reference/reduction.h":
+            "5602c124a33514c994432e0bfddbcfc076f95aa97334665853cb9b3e43e10935",
+        "/home/ripopov/work/gem5/main/util/rt_reference/reduction_host.c":
+            "ba5bb0d108f5b777e92026c4fd65a9bf952c8905ff4e10dcc270b3fe44675a5f",
+        "/home/ripopov/work/gem5/main/util/rt_reference/reduction_accelerator.c":
+            "6cf0a3771a286ce458ee32e035cb7ec87ae71d711f1e92fc10c6f633c9a774e8",
+        "/home/ripopov/work/gem5/main/util/rt_reference/host_runtime.c":
+            "ec906b6cb60cf595a1dc0e259c5bd753b3da19e66cb88922b881bca58c00b0a5",
+        "/home/ripopov/work/gem5/main/util/rt_reference/host_runtime.h":
+            "b1374447ba18121b81d866235acaca66ad8b1750600d4098e70e7d796b4bb8af",
+        "/home/ripopov/work/gem5/main/util/rt_reference/accelerator_runtime.c":
+            "fc6571246e77f96248ba3f4065064a4741745f01e427af4b2466dac43ff1e43f",
+        "/home/ripopov/work/gem5/main/util/rt_reference/accelerator_runtime.h":
+            "ba1fdc2378b6eb1d0513b695444452d5fa02858422cc1333e84a62e378eea2bb",
+        "/home/ripopov/work/gem5/main/util/rt_reference/Makefile":
+            "39df666f2670aea13ee176eacee911ff35b8fc3dc2b5dd5e68d526604483831c",
+        "/home/ripopov/work/gem5/main/util/rt_reference/start.S":
+            "a9a60a3e530424df4f78f9629ac118fa132cdf10faa605874579350cad1dc4fe",
+        "/home/ripopov/work/gem5/main/util/rt_reference/link.ld":
+            "be41aaedbef73a331ff538575b8c5644403b47ff495f71f19cf91c4d787a6bc0",
+        "/home/ripopov/work/gem5/main/util/rt_reference/accelerator.ld":
+            "bd7e99766ec041acfa94bf36b3309cfcc1f32cc17609f896930fd9617c038e5e",
+        "/home/ripopov/work/gem5/main/util/rt_reference/experiment.py":
+            "2c0449d60e47fcf5c1b4c4ef9065132fce17552ae784f9abf20f1ad885081d65",
+        "/home/ripopov/work/gem5/main/util/rt_reference/validate_reduction.py":
+            "78b70040cb96f62e344f11590e999336c6e2ae0405c295628a7620bdfa02bf4d",
+        "/home/ripopov/work/gem5/main/util/rt_reference/compare_memory_controllers.py":
+            "db53383521bb3b92bff77a661d23604b31078f6ae6ba6f04e37ee76d499056bb",
+        "/home/ripopov/work/gem5/main/util/rt_reference/report_memory_controllers.py":
+            "389337c72d031e227eef88e279ceedc3a24b0a707a402d403b2259531f0413f1"
+    },
+    "git_commit": "36ebb2984cd19cbce3c996dd9440e6831cf04892",
+    "machine": {
+        "hostname": "Z890-AORUS",
+        "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.43",
+        "lscpu":
+            "Architecture:                            x86_64\nCPU op-mode(s):                          32-bit, 64-bit\nAddress sizes:                           46 bits physical, 48 bits virtual\nByte Order:                              Little Endian\nCPU(s):                                  20\nOn-line CPU(s) list:                     0-19\nVendor ID:                               GenuineIntel\nModel name:                              Intel(R) Core(TM) Ultra 7 265K\nCPU family:                              6\nModel:                                   198\nThread(s) per core:                      1\nCore(s) per socket:                      20\nSocket(s):                               1\nStepping:                                2\nCPU(s) scaling MHz:                      70%\nCPU max MHz:                             5500.0000\nCPU min MHz:                             800.0000\nBogoMIPS:                                7756.80\nFlags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdt_a rdseed adx smap clflushopt clwb intel_pt sha_ni xsaveopt xsavec xgetbv1 xsaves split_lock_detect user_shstk avx_vnni lam wbnoinvd dtherm ida arat pln pts hwp hwp_notify hwp_act_window hwp_epp hwp_pkg_req hfi vnmi umip pku ospke waitpkg gfni vaes vpclmulqdq rdpid bus_lock_detect movdiri movdir64b fsrm md_clear serialize arch_lbr ibt flush_l1d arch_capabilities\nVirtualization:                          VT-x\nL1d cache:                               704 KiB (18 instances)\nL1i cache:                               1.1 MiB (18 instances)\nL2 cache:                                36 MiB (11 instances)\nL3 cache:                                30 MiB (1 instance)\nNUMA node(s):                            1\nNUMA node0 CPU(s):                       0-19\nVulnerability Gather data sampling:      Not affected\nVulnerability Ghostwrite:                Not affected\nVulnerability Indirect target selection: Not affected\nVulnerability Itlb multihit:             Not affected\nVulnerability L1tf:                      Not affected\nVulnerability Mds:                       Not affected\nVulnerability Meltdown:                  Not affected\nVulnerability Mmio stale data:           Not affected\nVulnerability Old microcode:             Not affected\nVulnerability Reg file data sampling:    Not affected\nVulnerability Retbleed:                  Not affected\nVulnerability Spec rstack overflow:      Not affected\nVulnerability Spec store bypass:         Mitigation; Speculative Store Bypass disabled via prctl\nVulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:                Mitigation; Enhanced / Automatic IBRS; IBPB conditional; PBRSB-eIBRS Not affected; BHI BHI_DIS_S\nVulnerability Srbds:                     Not affected\nVulnerability Tsa:                       Not affected\nVulnerability Tsx async abort:           Not affected\nVulnerability Vmscape:                   Mitigation; IBPB before exit to userspace\n",
+        "cpu_affinity": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19
+        ]
+    },
+    "runs": [
+        {
+            "workload": "reduction",
+            "queues": 1,
+            "memory_controllers": 1,
+            "controller_statistics": [
+                {
+                    "path": "system.memory",
+                    "range": "2147483648:2214592512",
+                    "latency_ticks": 100000,
+                    "ticks_per_byte": 29.0,
+                    "dma_read_bytes": 16777600.0,
+                    "dma_write_bytes": 64.0
+                }
+            ],
+            "batch_start_tick": 1036000.0,
+            "batch_end_tick": 524770000.0,
+            "batch_ticks": 523734000.0,
+            "final_tick": 526887000.0,
+            "dma": [
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 482782018.0,
+                    "average_bytes_per_busy_cycle": 2.1720030177263148,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 483533018.0,
+                    "average_bytes_per_busy_cycle": 2.168629568125997,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 484425018.0,
+                    "average_bytes_per_busy_cycle": 2.1646363441947583,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 484357018.0,
+                    "average_bytes_per_busy_cycle": 2.164940242488651,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 484565018.0,
+                    "average_bytes_per_busy_cycle": 2.1640109398074627,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 485640018.0,
+                    "average_bytes_per_busy_cycle": 2.1592207419776512,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 486279018.0,
+                    "average_bytes_per_busy_cycle": 2.156383395509777,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 486449018.0,
+                    "average_bytes_per_busy_cycle": 2.155629801271384,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 486667018.0,
+                    "average_bytes_per_busy_cycle": 2.1546641979342023,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 487081018.0,
+                    "average_bytes_per_busy_cycle": 2.1528328168189876,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 487196018.0,
+                    "average_bytes_per_busy_cycle": 2.152324652210109,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 487207018.0,
+                    "average_bytes_per_busy_cycle": 2.1522760577311715,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 487235518.0,
+                    "average_bytes_per_busy_cycle": 2.152150164060905,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 487233018.0,
+                    "average_bytes_per_busy_cycle": 2.1521612067760154,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 487230518.0,
+                    "average_bytes_per_busy_cycle": 2.152172249604447,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 487235018.0,
+                    "average_bytes_per_busy_cycle": 2.1521523725948613,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                }
+            ],
+            "wire": [
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 516748750,
+                    "last_result_response_tick": 516606250,
+                    "read_sustained_bytes_per_cycle": 4.300894266175697,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 517499750,
+                    "last_result_response_tick": 517357250,
+                    "read_sustained_bytes_per_cycle": 4.299763344727847,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 518389750,
+                    "last_result_response_tick": 518247250,
+                    "read_sustained_bytes_per_cycle": 4.29863301787592,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 518311750,
+                    "last_result_response_tick": 518169250,
+                    "read_sustained_bytes_per_cycle": 4.298068077276909,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 518532750,
+                    "last_result_response_tick": 518390250,
+                    "read_sustained_bytes_per_cycle": 4.296938641440021,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 519598750,
+                    "last_result_response_tick": 519456250,
+                    "read_sustained_bytes_per_cycle": 4.285115303983228,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 520261750,
+                    "last_result_response_tick": 520119250,
+                    "read_sustained_bytes_per_cycle": 4.283992664396123,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 520415750,
+                    "last_result_response_tick": 520273250,
+                    "read_sustained_bytes_per_cycle": 4.282870612886328,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 520646750,
+                    "last_result_response_tick": 520504250,
+                    "read_sustained_bytes_per_cycle": 4.281749148991882,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 521049750,
+                    "last_result_response_tick": 520907250,
+                    "read_sustained_bytes_per_cycle": 4.281188637256185,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 521143750,
+                    "last_result_response_tick": 521001250,
+                    "read_sustained_bytes_per_cycle": 4.280068053919644,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 521186750,
+                    "last_result_response_tick": 521044250,
+                    "read_sustained_bytes_per_cycle": 4.278948057045663,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 521186750,
+                    "last_result_response_tick": 521044750,
+                    "read_sustained_bytes_per_cycle": 4.27782864617397,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 521195750,
+                    "last_result_response_tick": 521053250,
+                    "read_sustained_bytes_per_cycle": 4.276709820844776,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 521195750,
+                    "last_result_response_tick": 521053750,
+                    "read_sustained_bytes_per_cycle": 4.275591580598771,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 521193750,
+                    "last_result_response_tick": 521051250,
+                    "read_sustained_bytes_per_cycle": 4.274473924977127,
+                    "write_sustained_bytes_per_cycle": null
+                }
+            ],
+            "aggregate_input_bytes_per_batch_cycle": 32.03384924408192,
+            "code_tcm_bytes": 1230,
+            "data_tcm_bytes_including_stack": 147536,
+            "simulation_wall": {
+                "wall_seconds": 38.336732214011136,
+                "start_tick": 0,
+                "end_tick": 526887000,
+                "boundary":
+                    "After instantiate through return from simulate; boot, batch, validation and export included; image setup, automatic exit statistics and cleanup excluded"
+            },
+            "process_wall": {
+                "wall_seconds": 40.473154328996316,
+                "command": [
+                    "/home/ripopov/work/gem5/main/build/RISCV/gem5.opt",
+                    "--outdir=/home/ripopov/work/gem5/main/m5out/reduction-memory-controllers/correctness-mc1-q1",
+                    "/home/ripopov/work/gem5/main/configs/example/rt_accel_reduction.py",
+                    "--workload=reduction",
+                    "--queues=1",
+                    "--memory-controllers=1",
+                    "--memory-bandwidth=32GiB/s",
+                    "--trace"
+                ],
+                "idle_machine_checked": true,
+                "process_checks": 40,
+                "simulations_before": [],
+                "simulations_after": []
+            },
+            "run_name": "correctness-mc1-q1",
+            "bandwidth_per_controller": "32GiB/s"
+        },
+        {
+            "workload": "reduction",
+            "queues": 17,
+            "memory_controllers": 1,
+            "controller_statistics": [
+                {
+                    "path": "system.memory",
+                    "range": "2147483648:2214592512",
+                    "latency_ticks": 100000,
+                    "ticks_per_byte": 29.0,
+                    "dma_read_bytes": 16777600.0,
+                    "dma_write_bytes": 64.0
+                }
+            ],
+            "batch_start_tick": 1036000.0,
+            "batch_end_tick": 524770000.0,
+            "batch_ticks": 523734000.0,
+            "final_tick": 526887000.0,
+            "dma": [
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 482782018.0,
+                    "average_bytes_per_busy_cycle": 2.1720030177263148,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 483533018.0,
+                    "average_bytes_per_busy_cycle": 2.168629568125997,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 484425018.0,
+                    "average_bytes_per_busy_cycle": 2.1646363441947583,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 484357018.0,
+                    "average_bytes_per_busy_cycle": 2.164940242488651,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 484565018.0,
+                    "average_bytes_per_busy_cycle": 2.1640109398074627,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 485640018.0,
+                    "average_bytes_per_busy_cycle": 2.1592207419776512,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 486279018.0,
+                    "average_bytes_per_busy_cycle": 2.156383395509777,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 486449018.0,
+                    "average_bytes_per_busy_cycle": 2.155629801271384,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 486667018.0,
+                    "average_bytes_per_busy_cycle": 2.1546641979342023,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 487081018.0,
+                    "average_bytes_per_busy_cycle": 2.1528328168189876,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 487196018.0,
+                    "average_bytes_per_busy_cycle": 2.152324652210109,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 487207018.0,
+                    "average_bytes_per_busy_cycle": 2.1522760577311715,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 487235518.0,
+                    "average_bytes_per_busy_cycle": 2.152150164060905,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 487233018.0,
+                    "average_bytes_per_busy_cycle": 2.1521612067760154,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 487230518.0,
+                    "average_bytes_per_busy_cycle": 2.152172249604447,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 487235018.0,
+                    "average_bytes_per_busy_cycle": 2.1521523725948613,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                }
+            ],
+            "wire": [
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 516748750,
+                    "last_result_response_tick": 516606250,
+                    "read_sustained_bytes_per_cycle": 4.300894266175697,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 517499750,
+                    "last_result_response_tick": 517357250,
+                    "read_sustained_bytes_per_cycle": 4.299763344727847,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 518389750,
+                    "last_result_response_tick": 518247250,
+                    "read_sustained_bytes_per_cycle": 4.29863301787592,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 518311750,
+                    "last_result_response_tick": 518169250,
+                    "read_sustained_bytes_per_cycle": 4.298068077276909,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 518532750,
+                    "last_result_response_tick": 518390250,
+                    "read_sustained_bytes_per_cycle": 4.296938641440021,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 519598750,
+                    "last_result_response_tick": 519456250,
+                    "read_sustained_bytes_per_cycle": 4.285115303983228,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 520261750,
+                    "last_result_response_tick": 520119250,
+                    "read_sustained_bytes_per_cycle": 4.283992664396123,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 520415750,
+                    "last_result_response_tick": 520273250,
+                    "read_sustained_bytes_per_cycle": 4.282870612886328,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 520646750,
+                    "last_result_response_tick": 520504250,
+                    "read_sustained_bytes_per_cycle": 4.281749148991882,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 521049750,
+                    "last_result_response_tick": 520907250,
+                    "read_sustained_bytes_per_cycle": 4.281188637256185,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 521143750,
+                    "last_result_response_tick": 521001250,
+                    "read_sustained_bytes_per_cycle": 4.280068053919644,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 521186750,
+                    "last_result_response_tick": 521044250,
+                    "read_sustained_bytes_per_cycle": 4.278948057045663,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 521186750,
+                    "last_result_response_tick": 521044750,
+                    "read_sustained_bytes_per_cycle": 4.27782864617397,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 521195750,
+                    "last_result_response_tick": 521053250,
+                    "read_sustained_bytes_per_cycle": 4.276709820844776,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 521195750,
+                    "last_result_response_tick": 521053750,
+                    "read_sustained_bytes_per_cycle": 4.275591580598771,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 521193750,
+                    "last_result_response_tick": 521051250,
+                    "read_sustained_bytes_per_cycle": 4.274473924977127,
+                    "write_sustained_bytes_per_cycle": null
+                }
+            ],
+            "aggregate_input_bytes_per_batch_cycle": 32.03384924408192,
+            "code_tcm_bytes": 1230,
+            "data_tcm_bytes_including_stack": 147536,
+            "simulation_wall": {
+                "wall_seconds": 6.34555948599882,
+                "start_tick": 0,
+                "end_tick": 526887000,
+                "boundary":
+                    "After instantiate through return from simulate; boot, batch, validation and export included; image setup, automatic exit statistics and cleanup excluded"
+            },
+            "process_wall": {
+                "wall_seconds": 8.452948414007551,
+                "command": [
+                    "/home/ripopov/work/gem5/main/build/RISCV/gem5.opt",
+                    "--outdir=/home/ripopov/work/gem5/main/m5out/reduction-memory-controllers/correctness-mc1-q17",
+                    "/home/ripopov/work/gem5/main/configs/example/rt_accel_reduction.py",
+                    "--workload=reduction",
+                    "--queues=17",
+                    "--memory-controllers=1",
+                    "--memory-bandwidth=32GiB/s",
+                    "--trace"
+                ],
+                "idle_machine_checked": true,
+                "process_checks": 9,
+                "simulations_before": [],
+                "simulations_after": []
+            },
+            "run_name": "correctness-mc1-q17",
+            "bandwidth_per_controller": "32GiB/s"
+        },
+        {
+            "workload": "reduction",
+            "queues": 1,
+            "memory_controllers": 2,
+            "controller_statistics": [
+                {
+                    "path": "system.memory",
+                    "range": "2147483648:2214592512:0:64",
+                    "latency_ticks": 100000,
+                    "ticks_per_byte": 29.0,
+                    "dma_read_bytes": 8388800.0,
+                    "dma_write_bytes": 64.0
+                },
+                {
+                    "path": "system.memory1",
+                    "range": "2147483648:2214592512:1:64",
+                    "latency_ticks": 100000,
+                    "ticks_per_byte": 29.0,
+                    "dma_read_bytes": 8388800.0,
+                    "dma_write_bytes": 0
+                }
+            ],
+            "batch_start_tick": 1036000.0,
+            "batch_end_tick": 315058000.0,
+            "batch_ticks": 314022000.0,
+            "final_tick": 317179000.0,
+            "dma": [
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 247176018.0,
+                    "average_bytes_per_busy_cycle": 4.242337134826729,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 247538518.0,
+                    "average_bytes_per_busy_cycle": 4.236124577589981,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 247572018.0,
+                    "average_bytes_per_busy_cycle": 4.23555136994521,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 247589518.0,
+                    "average_bytes_per_busy_cycle": 4.235251994795676,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 247830018.0,
+                    "average_bytes_per_busy_cycle": 4.231142007987104,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248169018.0,
+                    "average_bytes_per_busy_cycle": 4.22536224888475,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248202518.0,
+                    "average_bytes_per_busy_cycle": 4.224791949935012,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248235018.0,
+                    "average_bytes_per_busy_cycle": 4.224238821937685,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248268518.0,
+                    "average_bytes_per_busy_cycle": 4.2236688261860085,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248315018.0,
+                    "average_bytes_per_busy_cycle": 4.222877892951283,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248210018.0,
+                    "average_bytes_per_busy_cycle": 4.224664292156008,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248242518.0,
+                    "average_bytes_per_busy_cycle": 4.224111197583002,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248267018.0,
+                    "average_bytes_per_busy_cycle": 4.2236943450942,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248299518.0,
+                    "average_bytes_per_busy_cycle": 4.22314150444706,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248333018.0,
+                    "average_bytes_per_busy_cycle": 4.22257180476903,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248212018.0,
+                    "average_bytes_per_busy_cycle": 4.224630251384524,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                }
+            ],
+            "wire": [
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 311438750,
+                    "last_result_response_tick": 311296250,
+                    "read_sustained_bytes_per_cycle": 8.572477064220184,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 311438750,
+                    "last_result_response_tick": 311296750,
+                    "read_sustained_bytes_per_cycle": 8.567985328792245,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 311439750,
+                    "last_result_response_tick": 311297250,
+                    "read_sustained_bytes_per_cycle": 8.563498297983765,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 311439750,
+                    "last_result_response_tick": 311297750,
+                    "read_sustained_bytes_per_cycle": 8.559015964407223,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 311447750,
+                    "last_result_response_tick": 311305250,
+                    "read_sustained_bytes_per_cycle": 8.556776556776557,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 311456750,
+                    "last_result_response_tick": 311314250,
+                    "read_sustained_bytes_per_cycle": 8.534446764091857,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 311456750,
+                    "last_result_response_tick": 311314750,
+                    "read_sustained_bytes_per_cycle": 8.52999478351591,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 311457750,
+                    "last_result_response_tick": 311315250,
+                    "read_sustained_bytes_per_cycle": 8.527770534550196,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 311457750,
+                    "last_result_response_tick": 311315750,
+                    "read_sustained_bytes_per_cycle": 8.523325514725046,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 311465750,
+                    "last_result_response_tick": 311316250,
+                    "read_sustained_bytes_per_cycle": 8.518885126334983,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 311465750,
+                    "last_result_response_tick": 311323250,
+                    "read_sustained_bytes_per_cycle": 8.514449362145275,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 311466750,
+                    "last_result_response_tick": 311323750,
+                    "read_sustained_bytes_per_cycle": 8.510018214936247,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 311466750,
+                    "last_result_response_tick": 311324250,
+                    "read_sustained_bytes_per_cycle": 8.50559167750325,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 311467750,
+                    "last_result_response_tick": 311324750,
+                    "read_sustained_bytes_per_cycle": 8.501169742656616,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 311474750,
+                    "last_result_response_tick": 311325250,
+                    "read_sustained_bytes_per_cycle": 8.496752403221617,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 311474750,
+                    "last_result_response_tick": 311332250,
+                    "read_sustained_bytes_per_cycle": 8.492339652038432,
+                    "write_sustained_bytes_per_cycle": null
+                }
+            ],
+            "aggregate_input_bytes_per_batch_cycle": 53.42688091917127,
+            "code_tcm_bytes": 1230,
+            "data_tcm_bytes_including_stack": 147536,
+            "simulation_wall": {
+                "wall_seconds": 27.582138611003757,
+                "start_tick": 0,
+                "end_tick": 317179000,
+                "boundary":
+                    "After instantiate through return from simulate; boot, batch, validation and export included; image setup, automatic exit statistics and cleanup excluded"
+            },
+            "process_wall": {
+                "wall_seconds": 29.6707531150023,
+                "command": [
+                    "/home/ripopov/work/gem5/main/build/RISCV/gem5.opt",
+                    "--outdir=/home/ripopov/work/gem5/main/m5out/reduction-memory-controllers/correctness-mc2-q1",
+                    "/home/ripopov/work/gem5/main/configs/example/rt_accel_reduction.py",
+                    "--workload=reduction",
+                    "--queues=1",
+                    "--memory-controllers=2",
+                    "--memory-bandwidth=32GiB/s",
+                    "--trace"
+                ],
+                "idle_machine_checked": true,
+                "process_checks": 30,
+                "simulations_before": [],
+                "simulations_after": []
+            },
+            "run_name": "correctness-mc2-q1",
+            "bandwidth_per_controller": "32GiB/s"
+        },
+        {
+            "workload": "reduction",
+            "queues": 17,
+            "memory_controllers": 2,
+            "controller_statistics": [
+                {
+                    "path": "system.memory",
+                    "range": "2147483648:2214592512:0:64",
+                    "latency_ticks": 100000,
+                    "ticks_per_byte": 29.0,
+                    "dma_read_bytes": 8388800.0,
+                    "dma_write_bytes": 64.0
+                },
+                {
+                    "path": "system.memory1",
+                    "range": "2147483648:2214592512:1:64",
+                    "latency_ticks": 100000,
+                    "ticks_per_byte": 29.0,
+                    "dma_read_bytes": 8388800.0,
+                    "dma_write_bytes": 0
+                }
+            ],
+            "batch_start_tick": 1036000.0,
+            "batch_end_tick": 315058000.0,
+            "batch_ticks": 314022000.0,
+            "final_tick": 317179000.0,
+            "dma": [
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 247176018.0,
+                    "average_bytes_per_busy_cycle": 4.242337134826729,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 247538518.0,
+                    "average_bytes_per_busy_cycle": 4.236124577589981,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 247572018.0,
+                    "average_bytes_per_busy_cycle": 4.23555136994521,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 247589518.0,
+                    "average_bytes_per_busy_cycle": 4.235251994795676,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 247830018.0,
+                    "average_bytes_per_busy_cycle": 4.231142007987104,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248169018.0,
+                    "average_bytes_per_busy_cycle": 4.22536224888475,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248202518.0,
+                    "average_bytes_per_busy_cycle": 4.224791949935012,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248235018.0,
+                    "average_bytes_per_busy_cycle": 4.224238821937685,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248268518.0,
+                    "average_bytes_per_busy_cycle": 4.2236688261860085,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248315018.0,
+                    "average_bytes_per_busy_cycle": 4.222877892951283,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248210018.0,
+                    "average_bytes_per_busy_cycle": 4.224664292156008,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248242518.0,
+                    "average_bytes_per_busy_cycle": 4.224111197583002,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248267018.0,
+                    "average_bytes_per_busy_cycle": 4.2236943450942,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248299518.0,
+                    "average_bytes_per_busy_cycle": 4.22314150444706,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248333018.0,
+                    "average_bytes_per_busy_cycle": 4.22257180476903,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248212018.0,
+                    "average_bytes_per_busy_cycle": 4.224630251384524,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                }
+            ],
+            "wire": [
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 311438750,
+                    "last_result_response_tick": 311296250,
+                    "read_sustained_bytes_per_cycle": 8.572477064220184,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 311438750,
+                    "last_result_response_tick": 311296750,
+                    "read_sustained_bytes_per_cycle": 8.567985328792245,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 311439750,
+                    "last_result_response_tick": 311297250,
+                    "read_sustained_bytes_per_cycle": 8.563498297983765,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 311439750,
+                    "last_result_response_tick": 311297750,
+                    "read_sustained_bytes_per_cycle": 8.559015964407223,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 311447750,
+                    "last_result_response_tick": 311305250,
+                    "read_sustained_bytes_per_cycle": 8.556776556776557,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 311456750,
+                    "last_result_response_tick": 311314250,
+                    "read_sustained_bytes_per_cycle": 8.534446764091857,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 311456750,
+                    "last_result_response_tick": 311314750,
+                    "read_sustained_bytes_per_cycle": 8.52999478351591,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 311457750,
+                    "last_result_response_tick": 311315250,
+                    "read_sustained_bytes_per_cycle": 8.527770534550196,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 311457750,
+                    "last_result_response_tick": 311315750,
+                    "read_sustained_bytes_per_cycle": 8.523325514725046,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 311465750,
+                    "last_result_response_tick": 311316250,
+                    "read_sustained_bytes_per_cycle": 8.518885126334983,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 311465750,
+                    "last_result_response_tick": 311323250,
+                    "read_sustained_bytes_per_cycle": 8.514449362145275,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 311466750,
+                    "last_result_response_tick": 311323750,
+                    "read_sustained_bytes_per_cycle": 8.510018214936247,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 311466750,
+                    "last_result_response_tick": 311324250,
+                    "read_sustained_bytes_per_cycle": 8.50559167750325,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 311467750,
+                    "last_result_response_tick": 311324750,
+                    "read_sustained_bytes_per_cycle": 8.501169742656616,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 311474750,
+                    "last_result_response_tick": 311325250,
+                    "read_sustained_bytes_per_cycle": 8.496752403221617,
+                    "write_sustained_bytes_per_cycle": null
+                },
+                {
+                    "peak_outstanding_reads": 512,
+                    "peak_outstanding_writes": 1,
+                    "peak_transport_requests": 512,
+                    "msi_visible_tick": 311474750,
+                    "last_result_response_tick": 311332250,
+                    "read_sustained_bytes_per_cycle": 8.492339652038432,
+                    "write_sustained_bytes_per_cycle": null
+                }
+            ],
+            "aggregate_input_bytes_per_batch_cycle": 53.42688091917127,
+            "code_tcm_bytes": 1230,
+            "data_tcm_bytes_including_stack": 147536,
+            "simulation_wall": {
+                "wall_seconds": 6.827929321007105,
+                "start_tick": 0,
+                "end_tick": 317179000,
+                "boundary":
+                    "After instantiate through return from simulate; boot, batch, validation and export included; image setup, automatic exit statistics and cleanup excluded"
+            },
+            "process_wall": {
+                "wall_seconds": 8.953524327007472,
+                "command": [
+                    "/home/ripopov/work/gem5/main/build/RISCV/gem5.opt",
+                    "--outdir=/home/ripopov/work/gem5/main/m5out/reduction-memory-controllers/correctness-mc2-q17",
+                    "/home/ripopov/work/gem5/main/configs/example/rt_accel_reduction.py",
+                    "--workload=reduction",
+                    "--queues=17",
+                    "--memory-controllers=2",
+                    "--memory-bandwidth=32GiB/s",
+                    "--trace"
+                ],
+                "idle_machine_checked": true,
+                "process_checks": 9,
+                "simulations_before": [],
+                "simulations_after": []
+            },
+            "run_name": "correctness-mc2-q17",
+            "bandwidth_per_controller": "32GiB/s"
+        },
+        {
+            "workload": "reduction",
+            "queues": 1,
+            "memory_controllers": 1,
+            "controller_statistics": [
+                {
+                    "path": "system.memory",
+                    "range": "2147483648:2214592512",
+                    "latency_ticks": 100000,
+                    "ticks_per_byte": 29.0,
+                    "dma_read_bytes": 16777600.0,
+                    "dma_write_bytes": 64.0
+                }
+            ],
+            "batch_start_tick": 1036000.0,
+            "batch_end_tick": 524770000.0,
+            "batch_ticks": 523734000.0,
+            "final_tick": 526887000.0,
+            "dma": [
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 482782018.0,
+                    "average_bytes_per_busy_cycle": 2.1720030177263148,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 483533018.0,
+                    "average_bytes_per_busy_cycle": 2.168629568125997,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 484425018.0,
+                    "average_bytes_per_busy_cycle": 2.1646363441947583,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 484357018.0,
+                    "average_bytes_per_busy_cycle": 2.164940242488651,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 484565018.0,
+                    "average_bytes_per_busy_cycle": 2.1640109398074627,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 485640018.0,
+                    "average_bytes_per_busy_cycle": 2.1592207419776512,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 486279018.0,
+                    "average_bytes_per_busy_cycle": 2.156383395509777,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 486449018.0,
+                    "average_bytes_per_busy_cycle": 2.155629801271384,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 486667018.0,
+                    "average_bytes_per_busy_cycle": 2.1546641979342023,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 487081018.0,
+                    "average_bytes_per_busy_cycle": 2.1528328168189876,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 487196018.0,
+                    "average_bytes_per_busy_cycle": 2.152324652210109,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 487207018.0,
+                    "average_bytes_per_busy_cycle": 2.1522760577311715,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 487235518.0,
+                    "average_bytes_per_busy_cycle": 2.152150164060905,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 487233018.0,
+                    "average_bytes_per_busy_cycle": 2.1521612067760154,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 487230518.0,
+                    "average_bytes_per_busy_cycle": 2.152172249604447,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 487235018.0,
+                    "average_bytes_per_busy_cycle": 2.1521523725948613,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                }
+            ],
+            "wire": null,
+            "aggregate_input_bytes_per_batch_cycle": 32.03384924408192,
+            "code_tcm_bytes": 1230,
+            "data_tcm_bytes_including_stack": 147536,
+            "simulation_wall": {
+                "wall_seconds": 33.43987729299988,
+                "start_tick": 0,
+                "end_tick": 526887000,
+                "boundary":
+                    "After instantiate through return from simulate; boot, batch, validation and export included; image setup, automatic exit statistics and cleanup excluded"
+            },
+            "process_wall": {
+                "wall_seconds": 35.528284632004215,
+                "command": [
+                    "/home/ripopov/work/gem5/main/build/RISCV/gem5.opt",
+                    "--outdir=/home/ripopov/work/gem5/main/m5out/reduction-memory-controllers/timing-0-mc1-q1",
+                    "/home/ripopov/work/gem5/main/configs/example/rt_accel_reduction.py",
+                    "--workload=reduction",
+                    "--queues=1",
+                    "--memory-controllers=1",
+                    "--memory-bandwidth=32GiB/s"
+                ],
+                "idle_machine_checked": true,
+                "process_checks": 35,
+                "simulations_before": [],
+                "simulations_after": []
+            },
+            "run_name": "timing-0-mc1-q1",
+            "bandwidth_per_controller": "32GiB/s"
+        },
+        {
+            "workload": "reduction",
+            "queues": 17,
+            "memory_controllers": 1,
+            "controller_statistics": [
+                {
+                    "path": "system.memory",
+                    "range": "2147483648:2214592512",
+                    "latency_ticks": 100000,
+                    "ticks_per_byte": 29.0,
+                    "dma_read_bytes": 16777600.0,
+                    "dma_write_bytes": 64.0
+                }
+            ],
+            "batch_start_tick": 1036000.0,
+            "batch_end_tick": 524770000.0,
+            "batch_ticks": 523734000.0,
+            "final_tick": 526887000.0,
+            "dma": [
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 482782018.0,
+                    "average_bytes_per_busy_cycle": 2.1720030177263148,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 483533018.0,
+                    "average_bytes_per_busy_cycle": 2.168629568125997,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 484425018.0,
+                    "average_bytes_per_busy_cycle": 2.1646363441947583,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 484357018.0,
+                    "average_bytes_per_busy_cycle": 2.164940242488651,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 484565018.0,
+                    "average_bytes_per_busy_cycle": 2.1640109398074627,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 485640018.0,
+                    "average_bytes_per_busy_cycle": 2.1592207419776512,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 486279018.0,
+                    "average_bytes_per_busy_cycle": 2.156383395509777,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 486449018.0,
+                    "average_bytes_per_busy_cycle": 2.155629801271384,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 486667018.0,
+                    "average_bytes_per_busy_cycle": 2.1546641979342023,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 487081018.0,
+                    "average_bytes_per_busy_cycle": 2.1528328168189876,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 487196018.0,
+                    "average_bytes_per_busy_cycle": 2.152324652210109,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 487207018.0,
+                    "average_bytes_per_busy_cycle": 2.1522760577311715,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 487235518.0,
+                    "average_bytes_per_busy_cycle": 2.152150164060905,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 487233018.0,
+                    "average_bytes_per_busy_cycle": 2.1521612067760154,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 487230518.0,
+                    "average_bytes_per_busy_cycle": 2.152172249604447,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 487235018.0,
+                    "average_bytes_per_busy_cycle": 2.1521523725948613,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                }
+            ],
+            "wire": null,
+            "aggregate_input_bytes_per_batch_cycle": 32.03384924408192,
+            "code_tcm_bytes": 1230,
+            "data_tcm_bytes_including_stack": 147536,
+            "simulation_wall": {
+                "wall_seconds": 5.3777585530042415,
+                "start_tick": 0,
+                "end_tick": 526887000,
+                "boundary":
+                    "After instantiate through return from simulate; boot, batch, validation and export included; image setup, automatic exit statistics and cleanup excluded"
+            },
+            "process_wall": {
+                "wall_seconds": 7.4358544620044995,
+                "command": [
+                    "/home/ripopov/work/gem5/main/build/RISCV/gem5.opt",
+                    "--outdir=/home/ripopov/work/gem5/main/m5out/reduction-memory-controllers/timing-0-mc1-q17",
+                    "/home/ripopov/work/gem5/main/configs/example/rt_accel_reduction.py",
+                    "--workload=reduction",
+                    "--queues=17",
+                    "--memory-controllers=1",
+                    "--memory-bandwidth=32GiB/s"
+                ],
+                "idle_machine_checked": true,
+                "process_checks": 8,
+                "simulations_before": [],
+                "simulations_after": []
+            },
+            "run_name": "timing-0-mc1-q17",
+            "bandwidth_per_controller": "32GiB/s"
+        },
+        {
+            "workload": "reduction",
+            "queues": 1,
+            "memory_controllers": 2,
+            "controller_statistics": [
+                {
+                    "path": "system.memory",
+                    "range": "2147483648:2214592512:0:64",
+                    "latency_ticks": 100000,
+                    "ticks_per_byte": 29.0,
+                    "dma_read_bytes": 8388800.0,
+                    "dma_write_bytes": 64.0
+                },
+                {
+                    "path": "system.memory1",
+                    "range": "2147483648:2214592512:1:64",
+                    "latency_ticks": 100000,
+                    "ticks_per_byte": 29.0,
+                    "dma_read_bytes": 8388800.0,
+                    "dma_write_bytes": 0
+                }
+            ],
+            "batch_start_tick": 1036000.0,
+            "batch_end_tick": 315058000.0,
+            "batch_ticks": 314022000.0,
+            "final_tick": 317179000.0,
+            "dma": [
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 247176018.0,
+                    "average_bytes_per_busy_cycle": 4.242337134826729,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 247538518.0,
+                    "average_bytes_per_busy_cycle": 4.236124577589981,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 247572018.0,
+                    "average_bytes_per_busy_cycle": 4.23555136994521,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 247589518.0,
+                    "average_bytes_per_busy_cycle": 4.235251994795676,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 247830018.0,
+                    "average_bytes_per_busy_cycle": 4.231142007987104,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248169018.0,
+                    "average_bytes_per_busy_cycle": 4.22536224888475,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248202518.0,
+                    "average_bytes_per_busy_cycle": 4.224791949935012,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248235018.0,
+                    "average_bytes_per_busy_cycle": 4.224238821937685,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248268518.0,
+                    "average_bytes_per_busy_cycle": 4.2236688261860085,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248315018.0,
+                    "average_bytes_per_busy_cycle": 4.222877892951283,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248210018.0,
+                    "average_bytes_per_busy_cycle": 4.224664292156008,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248242518.0,
+                    "average_bytes_per_busy_cycle": 4.224111197583002,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248267018.0,
+                    "average_bytes_per_busy_cycle": 4.2236943450942,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248299518.0,
+                    "average_bytes_per_busy_cycle": 4.22314150444706,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248333018.0,
+                    "average_bytes_per_busy_cycle": 4.22257180476903,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248212018.0,
+                    "average_bytes_per_busy_cycle": 4.224630251384524,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                }
+            ],
+            "wire": null,
+            "aggregate_input_bytes_per_batch_cycle": 53.42688091917127,
+            "code_tcm_bytes": 1230,
+            "data_tcm_bytes_including_stack": 147536,
+            "simulation_wall": {
+                "wall_seconds": 24.117047421997995,
+                "start_tick": 0,
+                "end_tick": 317179000,
+                "boundary":
+                    "After instantiate through return from simulate; boot, batch, validation and export included; image setup, automatic exit statistics and cleanup excluded"
+            },
+            "process_wall": {
+                "wall_seconds": 26.20945518600638,
+                "command": [
+                    "/home/ripopov/work/gem5/main/build/RISCV/gem5.opt",
+                    "--outdir=/home/ripopov/work/gem5/main/m5out/reduction-memory-controllers/timing-0-mc2-q1",
+                    "/home/ripopov/work/gem5/main/configs/example/rt_accel_reduction.py",
+                    "--workload=reduction",
+                    "--queues=1",
+                    "--memory-controllers=2",
+                    "--memory-bandwidth=32GiB/s"
+                ],
+                "idle_machine_checked": true,
+                "process_checks": 26,
+                "simulations_before": [],
+                "simulations_after": []
+            },
+            "run_name": "timing-0-mc2-q1",
+            "bandwidth_per_controller": "32GiB/s"
+        },
+        {
+            "workload": "reduction",
+            "queues": 17,
+            "memory_controllers": 2,
+            "controller_statistics": [
+                {
+                    "path": "system.memory",
+                    "range": "2147483648:2214592512:0:64",
+                    "latency_ticks": 100000,
+                    "ticks_per_byte": 29.0,
+                    "dma_read_bytes": 8388800.0,
+                    "dma_write_bytes": 64.0
+                },
+                {
+                    "path": "system.memory1",
+                    "range": "2147483648:2214592512:1:64",
+                    "latency_ticks": 100000,
+                    "ticks_per_byte": 29.0,
+                    "dma_read_bytes": 8388800.0,
+                    "dma_write_bytes": 0
+                }
+            ],
+            "batch_start_tick": 1036000.0,
+            "batch_end_tick": 315058000.0,
+            "batch_ticks": 314022000.0,
+            "final_tick": 317179000.0,
+            "dma": [
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 247176018.0,
+                    "average_bytes_per_busy_cycle": 4.242337134826729,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 247538518.0,
+                    "average_bytes_per_busy_cycle": 4.236124577589981,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 247572018.0,
+                    "average_bytes_per_busy_cycle": 4.23555136994521,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 247589518.0,
+                    "average_bytes_per_busy_cycle": 4.235251994795676,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 247830018.0,
+                    "average_bytes_per_busy_cycle": 4.231142007987104,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248169018.0,
+                    "average_bytes_per_busy_cycle": 4.22536224888475,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248202518.0,
+                    "average_bytes_per_busy_cycle": 4.224791949935012,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248235018.0,
+                    "average_bytes_per_busy_cycle": 4.224238821937685,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248268518.0,
+                    "average_bytes_per_busy_cycle": 4.2236688261860085,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248315018.0,
+                    "average_bytes_per_busy_cycle": 4.222877892951283,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248210018.0,
+                    "average_bytes_per_busy_cycle": 4.224664292156008,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248242518.0,
+                    "average_bytes_per_busy_cycle": 4.224111197583002,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248267018.0,
+                    "average_bytes_per_busy_cycle": 4.2236943450942,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248299518.0,
+                    "average_bytes_per_busy_cycle": 4.22314150444706,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248333018.0,
+                    "average_bytes_per_busy_cycle": 4.22257180476903,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248212018.0,
+                    "average_bytes_per_busy_cycle": 4.224630251384524,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                }
+            ],
+            "wire": null,
+            "aggregate_input_bytes_per_batch_cycle": 53.42688091917127,
+            "code_tcm_bytes": 1230,
+            "data_tcm_bytes_including_stack": 147536,
+            "simulation_wall": {
+                "wall_seconds": 4.894347629000549,
+                "start_tick": 0,
+                "end_tick": 317179000,
+                "boundary":
+                    "After instantiate through return from simulate; boot, batch, validation and export included; image setup, automatic exit statistics and cleanup excluded"
+            },
+            "process_wall": {
+                "wall_seconds": 6.973948771003052,
+                "command": [
+                    "/home/ripopov/work/gem5/main/build/RISCV/gem5.opt",
+                    "--outdir=/home/ripopov/work/gem5/main/m5out/reduction-memory-controllers/timing-0-mc2-q17",
+                    "/home/ripopov/work/gem5/main/configs/example/rt_accel_reduction.py",
+                    "--workload=reduction",
+                    "--queues=17",
+                    "--memory-controllers=2",
+                    "--memory-bandwidth=32GiB/s"
+                ],
+                "idle_machine_checked": true,
+                "process_checks": 7,
+                "simulations_before": [],
+                "simulations_after": []
+            },
+            "run_name": "timing-0-mc2-q17",
+            "bandwidth_per_controller": "32GiB/s"
+        },
+        {
+            "workload": "reduction",
+            "queues": 17,
+            "memory_controllers": 2,
+            "controller_statistics": [
+                {
+                    "path": "system.memory",
+                    "range": "2147483648:2214592512:0:64",
+                    "latency_ticks": 100000,
+                    "ticks_per_byte": 29.0,
+                    "dma_read_bytes": 8388800.0,
+                    "dma_write_bytes": 64.0
+                },
+                {
+                    "path": "system.memory1",
+                    "range": "2147483648:2214592512:1:64",
+                    "latency_ticks": 100000,
+                    "ticks_per_byte": 29.0,
+                    "dma_read_bytes": 8388800.0,
+                    "dma_write_bytes": 0
+                }
+            ],
+            "batch_start_tick": 1036000.0,
+            "batch_end_tick": 315058000.0,
+            "batch_ticks": 314022000.0,
+            "final_tick": 317179000.0,
+            "dma": [
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 247176018.0,
+                    "average_bytes_per_busy_cycle": 4.242337134826729,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 247538518.0,
+                    "average_bytes_per_busy_cycle": 4.236124577589981,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 247572018.0,
+                    "average_bytes_per_busy_cycle": 4.23555136994521,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 247589518.0,
+                    "average_bytes_per_busy_cycle": 4.235251994795676,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 247830018.0,
+                    "average_bytes_per_busy_cycle": 4.231142007987104,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248169018.0,
+                    "average_bytes_per_busy_cycle": 4.22536224888475,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248202518.0,
+                    "average_bytes_per_busy_cycle": 4.224791949935012,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248235018.0,
+                    "average_bytes_per_busy_cycle": 4.224238821937685,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248268518.0,
+                    "average_bytes_per_busy_cycle": 4.2236688261860085,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248315018.0,
+                    "average_bytes_per_busy_cycle": 4.222877892951283,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248210018.0,
+                    "average_bytes_per_busy_cycle": 4.224664292156008,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248242518.0,
+                    "average_bytes_per_busy_cycle": 4.224111197583002,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248267018.0,
+                    "average_bytes_per_busy_cycle": 4.2236943450942,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248299518.0,
+                    "average_bytes_per_busy_cycle": 4.22314150444706,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248333018.0,
+                    "average_bytes_per_busy_cycle": 4.22257180476903,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248212018.0,
+                    "average_bytes_per_busy_cycle": 4.224630251384524,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                }
+            ],
+            "wire": null,
+            "aggregate_input_bytes_per_batch_cycle": 53.42688091917127,
+            "code_tcm_bytes": 1230,
+            "data_tcm_bytes_including_stack": 147536,
+            "simulation_wall": {
+                "wall_seconds": 5.317018789006397,
+                "start_tick": 0,
+                "end_tick": 317179000,
+                "boundary":
+                    "After instantiate through return from simulate; boot, batch, validation and export included; image setup, automatic exit statistics and cleanup excluded"
+            },
+            "process_wall": {
+                "wall_seconds": 7.385895682004048,
+                "command": [
+                    "/home/ripopov/work/gem5/main/build/RISCV/gem5.opt",
+                    "--outdir=/home/ripopov/work/gem5/main/m5out/reduction-memory-controllers/timing-1-mc2-q17",
+                    "/home/ripopov/work/gem5/main/configs/example/rt_accel_reduction.py",
+                    "--workload=reduction",
+                    "--queues=17",
+                    "--memory-controllers=2",
+                    "--memory-bandwidth=32GiB/s"
+                ],
+                "idle_machine_checked": true,
+                "process_checks": 8,
+                "simulations_before": [],
+                "simulations_after": []
+            },
+            "run_name": "timing-1-mc2-q17",
+            "bandwidth_per_controller": "32GiB/s"
+        },
+        {
+            "workload": "reduction",
+            "queues": 1,
+            "memory_controllers": 2,
+            "controller_statistics": [
+                {
+                    "path": "system.memory",
+                    "range": "2147483648:2214592512:0:64",
+                    "latency_ticks": 100000,
+                    "ticks_per_byte": 29.0,
+                    "dma_read_bytes": 8388800.0,
+                    "dma_write_bytes": 64.0
+                },
+                {
+                    "path": "system.memory1",
+                    "range": "2147483648:2214592512:1:64",
+                    "latency_ticks": 100000,
+                    "ticks_per_byte": 29.0,
+                    "dma_read_bytes": 8388800.0,
+                    "dma_write_bytes": 0
+                }
+            ],
+            "batch_start_tick": 1036000.0,
+            "batch_end_tick": 315058000.0,
+            "batch_ticks": 314022000.0,
+            "final_tick": 317179000.0,
+            "dma": [
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 247176018.0,
+                    "average_bytes_per_busy_cycle": 4.242337134826729,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 247538518.0,
+                    "average_bytes_per_busy_cycle": 4.236124577589981,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 247572018.0,
+                    "average_bytes_per_busy_cycle": 4.23555136994521,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 247589518.0,
+                    "average_bytes_per_busy_cycle": 4.235251994795676,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 247830018.0,
+                    "average_bytes_per_busy_cycle": 4.231142007987104,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248169018.0,
+                    "average_bytes_per_busy_cycle": 4.22536224888475,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248202518.0,
+                    "average_bytes_per_busy_cycle": 4.224791949935012,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248235018.0,
+                    "average_bytes_per_busy_cycle": 4.224238821937685,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248268518.0,
+                    "average_bytes_per_busy_cycle": 4.2236688261860085,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248315018.0,
+                    "average_bytes_per_busy_cycle": 4.222877892951283,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248210018.0,
+                    "average_bytes_per_busy_cycle": 4.224664292156008,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248242518.0,
+                    "average_bytes_per_busy_cycle": 4.224111197583002,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248267018.0,
+                    "average_bytes_per_busy_cycle": 4.2236943450942,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248299518.0,
+                    "average_bytes_per_busy_cycle": 4.22314150444706,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248333018.0,
+                    "average_bytes_per_busy_cycle": 4.22257180476903,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248212018.0,
+                    "average_bytes_per_busy_cycle": 4.224630251384524,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                }
+            ],
+            "wire": null,
+            "aggregate_input_bytes_per_batch_cycle": 53.42688091917127,
+            "code_tcm_bytes": 1230,
+            "data_tcm_bytes_including_stack": 147536,
+            "simulation_wall": {
+                "wall_seconds": 23.187014442999498,
+                "start_tick": 0,
+                "end_tick": 317179000,
+                "boundary":
+                    "After instantiate through return from simulate; boot, batch, validation and export included; image setup, automatic exit statistics and cleanup excluded"
+            },
+            "process_wall": {
+                "wall_seconds": 25.244348680003895,
+                "command": [
+                    "/home/ripopov/work/gem5/main/build/RISCV/gem5.opt",
+                    "--outdir=/home/ripopov/work/gem5/main/m5out/reduction-memory-controllers/timing-1-mc2-q1",
+                    "/home/ripopov/work/gem5/main/configs/example/rt_accel_reduction.py",
+                    "--workload=reduction",
+                    "--queues=1",
+                    "--memory-controllers=2",
+                    "--memory-bandwidth=32GiB/s"
+                ],
+                "idle_machine_checked": true,
+                "process_checks": 25,
+                "simulations_before": [],
+                "simulations_after": []
+            },
+            "run_name": "timing-1-mc2-q1",
+            "bandwidth_per_controller": "32GiB/s"
+        },
+        {
+            "workload": "reduction",
+            "queues": 17,
+            "memory_controllers": 1,
+            "controller_statistics": [
+                {
+                    "path": "system.memory",
+                    "range": "2147483648:2214592512",
+                    "latency_ticks": 100000,
+                    "ticks_per_byte": 29.0,
+                    "dma_read_bytes": 16777600.0,
+                    "dma_write_bytes": 64.0
+                }
+            ],
+            "batch_start_tick": 1036000.0,
+            "batch_end_tick": 524770000.0,
+            "batch_ticks": 523734000.0,
+            "final_tick": 526887000.0,
+            "dma": [
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 482782018.0,
+                    "average_bytes_per_busy_cycle": 2.1720030177263148,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 483533018.0,
+                    "average_bytes_per_busy_cycle": 2.168629568125997,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 484425018.0,
+                    "average_bytes_per_busy_cycle": 2.1646363441947583,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 484357018.0,
+                    "average_bytes_per_busy_cycle": 2.164940242488651,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 484565018.0,
+                    "average_bytes_per_busy_cycle": 2.1640109398074627,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 485640018.0,
+                    "average_bytes_per_busy_cycle": 2.1592207419776512,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 486279018.0,
+                    "average_bytes_per_busy_cycle": 2.156383395509777,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 486449018.0,
+                    "average_bytes_per_busy_cycle": 2.155629801271384,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 486667018.0,
+                    "average_bytes_per_busy_cycle": 2.1546641979342023,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 487081018.0,
+                    "average_bytes_per_busy_cycle": 2.1528328168189876,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 487196018.0,
+                    "average_bytes_per_busy_cycle": 2.152324652210109,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 487207018.0,
+                    "average_bytes_per_busy_cycle": 2.1522760577311715,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 487235518.0,
+                    "average_bytes_per_busy_cycle": 2.152150164060905,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 487233018.0,
+                    "average_bytes_per_busy_cycle": 2.1521612067760154,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 487230518.0,
+                    "average_bytes_per_busy_cycle": 2.152172249604447,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 487235018.0,
+                    "average_bytes_per_busy_cycle": 2.1521523725948613,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                }
+            ],
+            "wire": null,
+            "aggregate_input_bytes_per_batch_cycle": 32.03384924408192,
+            "code_tcm_bytes": 1230,
+            "data_tcm_bytes_including_stack": 147536,
+            "simulation_wall": {
+                "wall_seconds": 5.536192150000716,
+                "start_tick": 0,
+                "end_tick": 526887000,
+                "boundary":
+                    "After instantiate through return from simulate; boot, batch, validation and export included; image setup, automatic exit statistics and cleanup excluded"
+            },
+            "process_wall": {
+                "wall_seconds": 7.63418608099164,
+                "command": [
+                    "/home/ripopov/work/gem5/main/build/RISCV/gem5.opt",
+                    "--outdir=/home/ripopov/work/gem5/main/m5out/reduction-memory-controllers/timing-1-mc1-q17",
+                    "/home/ripopov/work/gem5/main/configs/example/rt_accel_reduction.py",
+                    "--workload=reduction",
+                    "--queues=17",
+                    "--memory-controllers=1",
+                    "--memory-bandwidth=32GiB/s"
+                ],
+                "idle_machine_checked": true,
+                "process_checks": 8,
+                "simulations_before": [],
+                "simulations_after": []
+            },
+            "run_name": "timing-1-mc1-q17",
+            "bandwidth_per_controller": "32GiB/s"
+        },
+        {
+            "workload": "reduction",
+            "queues": 1,
+            "memory_controllers": 1,
+            "controller_statistics": [
+                {
+                    "path": "system.memory",
+                    "range": "2147483648:2214592512",
+                    "latency_ticks": 100000,
+                    "ticks_per_byte": 29.0,
+                    "dma_read_bytes": 16777600.0,
+                    "dma_write_bytes": 64.0
+                }
+            ],
+            "batch_start_tick": 1036000.0,
+            "batch_end_tick": 524770000.0,
+            "batch_ticks": 523734000.0,
+            "final_tick": 526887000.0,
+            "dma": [
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 482782018.0,
+                    "average_bytes_per_busy_cycle": 2.1720030177263148,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 483533018.0,
+                    "average_bytes_per_busy_cycle": 2.168629568125997,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 484425018.0,
+                    "average_bytes_per_busy_cycle": 2.1646363441947583,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 484357018.0,
+                    "average_bytes_per_busy_cycle": 2.164940242488651,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 484565018.0,
+                    "average_bytes_per_busy_cycle": 2.1640109398074627,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 485640018.0,
+                    "average_bytes_per_busy_cycle": 2.1592207419776512,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 486279018.0,
+                    "average_bytes_per_busy_cycle": 2.156383395509777,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 486449018.0,
+                    "average_bytes_per_busy_cycle": 2.155629801271384,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 486667018.0,
+                    "average_bytes_per_busy_cycle": 2.1546641979342023,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 487081018.0,
+                    "average_bytes_per_busy_cycle": 2.1528328168189876,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 487196018.0,
+                    "average_bytes_per_busy_cycle": 2.152324652210109,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 487207018.0,
+                    "average_bytes_per_busy_cycle": 2.1522760577311715,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 487235518.0,
+                    "average_bytes_per_busy_cycle": 2.152150164060905,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 487233018.0,
+                    "average_bytes_per_busy_cycle": 2.1521612067760154,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 487230518.0,
+                    "average_bytes_per_busy_cycle": 2.152172249604447,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 487235018.0,
+                    "average_bytes_per_busy_cycle": 2.1521523725948613,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                }
+            ],
+            "wire": null,
+            "aggregate_input_bytes_per_batch_cycle": 32.03384924408192,
+            "code_tcm_bytes": 1230,
+            "data_tcm_bytes_including_stack": 147536,
+            "simulation_wall": {
+                "wall_seconds": 33.46290133999719,
+                "start_tick": 0,
+                "end_tick": 526887000,
+                "boundary":
+                    "After instantiate through return from simulate; boot, batch, validation and export included; image setup, automatic exit statistics and cleanup excluded"
+            },
+            "process_wall": {
+                "wall_seconds": 35.60922619100893,
+                "command": [
+                    "/home/ripopov/work/gem5/main/build/RISCV/gem5.opt",
+                    "--outdir=/home/ripopov/work/gem5/main/m5out/reduction-memory-controllers/timing-1-mc1-q1",
+                    "/home/ripopov/work/gem5/main/configs/example/rt_accel_reduction.py",
+                    "--workload=reduction",
+                    "--queues=1",
+                    "--memory-controllers=1",
+                    "--memory-bandwidth=32GiB/s"
+                ],
+                "idle_machine_checked": true,
+                "process_checks": 36,
+                "simulations_before": [],
+                "simulations_after": []
+            },
+            "run_name": "timing-1-mc1-q1",
+            "bandwidth_per_controller": "32GiB/s"
+        },
+        {
+            "workload": "reduction",
+            "queues": 1,
+            "memory_controllers": 1,
+            "controller_statistics": [
+                {
+                    "path": "system.memory",
+                    "range": "2147483648:2214592512",
+                    "latency_ticks": 100000,
+                    "ticks_per_byte": 29.0,
+                    "dma_read_bytes": 16777600.0,
+                    "dma_write_bytes": 64.0
+                }
+            ],
+            "batch_start_tick": 1036000.0,
+            "batch_end_tick": 524770000.0,
+            "batch_ticks": 523734000.0,
+            "final_tick": 526887000.0,
+            "dma": [
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 482782018.0,
+                    "average_bytes_per_busy_cycle": 2.1720030177263148,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 483533018.0,
+                    "average_bytes_per_busy_cycle": 2.168629568125997,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 484425018.0,
+                    "average_bytes_per_busy_cycle": 2.1646363441947583,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 484357018.0,
+                    "average_bytes_per_busy_cycle": 2.164940242488651,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 484565018.0,
+                    "average_bytes_per_busy_cycle": 2.1640109398074627,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 485640018.0,
+                    "average_bytes_per_busy_cycle": 2.1592207419776512,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 486279018.0,
+                    "average_bytes_per_busy_cycle": 2.156383395509777,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 486449018.0,
+                    "average_bytes_per_busy_cycle": 2.155629801271384,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 486667018.0,
+                    "average_bytes_per_busy_cycle": 2.1546641979342023,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 487081018.0,
+                    "average_bytes_per_busy_cycle": 2.1528328168189876,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 487196018.0,
+                    "average_bytes_per_busy_cycle": 2.152324652210109,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 487207018.0,
+                    "average_bytes_per_busy_cycle": 2.1522760577311715,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 487235518.0,
+                    "average_bytes_per_busy_cycle": 2.152150164060905,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 487233018.0,
+                    "average_bytes_per_busy_cycle": 2.1521612067760154,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 487230518.0,
+                    "average_bytes_per_busy_cycle": 2.152172249604447,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 487235018.0,
+                    "average_bytes_per_busy_cycle": 2.1521523725948613,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                }
+            ],
+            "wire": null,
+            "aggregate_input_bytes_per_batch_cycle": 32.03384924408192,
+            "code_tcm_bytes": 1230,
+            "data_tcm_bytes_including_stack": 147536,
+            "simulation_wall": {
+                "wall_seconds": 33.33116238799994,
+                "start_tick": 0,
+                "end_tick": 526887000,
+                "boundary":
+                    "After instantiate through return from simulate; boot, batch, validation and export included; image setup, automatic exit statistics and cleanup excluded"
+            },
+            "process_wall": {
+                "wall_seconds": 35.450753240002086,
+                "command": [
+                    "/home/ripopov/work/gem5/main/build/RISCV/gem5.opt",
+                    "--outdir=/home/ripopov/work/gem5/main/m5out/reduction-memory-controllers/timing-2-mc1-q1",
+                    "/home/ripopov/work/gem5/main/configs/example/rt_accel_reduction.py",
+                    "--workload=reduction",
+                    "--queues=1",
+                    "--memory-controllers=1",
+                    "--memory-bandwidth=32GiB/s"
+                ],
+                "idle_machine_checked": true,
+                "process_checks": 35,
+                "simulations_before": [],
+                "simulations_after": []
+            },
+            "run_name": "timing-2-mc1-q1",
+            "bandwidth_per_controller": "32GiB/s"
+        },
+        {
+            "workload": "reduction",
+            "queues": 17,
+            "memory_controllers": 1,
+            "controller_statistics": [
+                {
+                    "path": "system.memory",
+                    "range": "2147483648:2214592512",
+                    "latency_ticks": 100000,
+                    "ticks_per_byte": 29.0,
+                    "dma_read_bytes": 16777600.0,
+                    "dma_write_bytes": 64.0
+                }
+            ],
+            "batch_start_tick": 1036000.0,
+            "batch_end_tick": 524770000.0,
+            "batch_ticks": 523734000.0,
+            "final_tick": 526887000.0,
+            "dma": [
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 482782018.0,
+                    "average_bytes_per_busy_cycle": 2.1720030177263148,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 483533018.0,
+                    "average_bytes_per_busy_cycle": 2.168629568125997,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 484425018.0,
+                    "average_bytes_per_busy_cycle": 2.1646363441947583,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 484357018.0,
+                    "average_bytes_per_busy_cycle": 2.164940242488651,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 484565018.0,
+                    "average_bytes_per_busy_cycle": 2.1640109398074627,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 485640018.0,
+                    "average_bytes_per_busy_cycle": 2.1592207419776512,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 486279018.0,
+                    "average_bytes_per_busy_cycle": 2.156383395509777,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 486449018.0,
+                    "average_bytes_per_busy_cycle": 2.155629801271384,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 486667018.0,
+                    "average_bytes_per_busy_cycle": 2.1546641979342023,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 487081018.0,
+                    "average_bytes_per_busy_cycle": 2.1528328168189876,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 487196018.0,
+                    "average_bytes_per_busy_cycle": 2.152324652210109,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 487207018.0,
+                    "average_bytes_per_busy_cycle": 2.1522760577311715,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 487235518.0,
+                    "average_bytes_per_busy_cycle": 2.152150164060905,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 487233018.0,
+                    "average_bytes_per_busy_cycle": 2.1521612067760154,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 487230518.0,
+                    "average_bytes_per_busy_cycle": 2.152172249604447,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 487235018.0,
+                    "average_bytes_per_busy_cycle": 2.1521523725948613,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                }
+            ],
+            "wire": null,
+            "aggregate_input_bytes_per_batch_cycle": 32.03384924408192,
+            "code_tcm_bytes": 1230,
+            "data_tcm_bytes_including_stack": 147536,
+            "simulation_wall": {
+                "wall_seconds": 5.354776192994905,
+                "start_tick": 0,
+                "end_tick": 526887000,
+                "boundary":
+                    "After instantiate through return from simulate; boot, batch, validation and export included; image setup, automatic exit statistics and cleanup excluded"
+            },
+            "process_wall": {
+                "wall_seconds": 7.430860009000753,
+                "command": [
+                    "/home/ripopov/work/gem5/main/build/RISCV/gem5.opt",
+                    "--outdir=/home/ripopov/work/gem5/main/m5out/reduction-memory-controllers/timing-2-mc1-q17",
+                    "/home/ripopov/work/gem5/main/configs/example/rt_accel_reduction.py",
+                    "--workload=reduction",
+                    "--queues=17",
+                    "--memory-controllers=1",
+                    "--memory-bandwidth=32GiB/s"
+                ],
+                "idle_machine_checked": true,
+                "process_checks": 8,
+                "simulations_before": [],
+                "simulations_after": []
+            },
+            "run_name": "timing-2-mc1-q17",
+            "bandwidth_per_controller": "32GiB/s"
+        },
+        {
+            "workload": "reduction",
+            "queues": 1,
+            "memory_controllers": 2,
+            "controller_statistics": [
+                {
+                    "path": "system.memory",
+                    "range": "2147483648:2214592512:0:64",
+                    "latency_ticks": 100000,
+                    "ticks_per_byte": 29.0,
+                    "dma_read_bytes": 8388800.0,
+                    "dma_write_bytes": 64.0
+                },
+                {
+                    "path": "system.memory1",
+                    "range": "2147483648:2214592512:1:64",
+                    "latency_ticks": 100000,
+                    "ticks_per_byte": 29.0,
+                    "dma_read_bytes": 8388800.0,
+                    "dma_write_bytes": 0
+                }
+            ],
+            "batch_start_tick": 1036000.0,
+            "batch_end_tick": 315058000.0,
+            "batch_ticks": 314022000.0,
+            "final_tick": 317179000.0,
+            "dma": [
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 247176018.0,
+                    "average_bytes_per_busy_cycle": 4.242337134826729,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 247538518.0,
+                    "average_bytes_per_busy_cycle": 4.236124577589981,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 247572018.0,
+                    "average_bytes_per_busy_cycle": 4.23555136994521,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 247589518.0,
+                    "average_bytes_per_busy_cycle": 4.235251994795676,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 247830018.0,
+                    "average_bytes_per_busy_cycle": 4.231142007987104,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248169018.0,
+                    "average_bytes_per_busy_cycle": 4.22536224888475,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248202518.0,
+                    "average_bytes_per_busy_cycle": 4.224791949935012,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248235018.0,
+                    "average_bytes_per_busy_cycle": 4.224238821937685,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248268518.0,
+                    "average_bytes_per_busy_cycle": 4.2236688261860085,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248315018.0,
+                    "average_bytes_per_busy_cycle": 4.222877892951283,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248210018.0,
+                    "average_bytes_per_busy_cycle": 4.224664292156008,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248242518.0,
+                    "average_bytes_per_busy_cycle": 4.224111197583002,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248267018.0,
+                    "average_bytes_per_busy_cycle": 4.2236943450942,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248299518.0,
+                    "average_bytes_per_busy_cycle": 4.22314150444706,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248333018.0,
+                    "average_bytes_per_busy_cycle": 4.22257180476903,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248212018.0,
+                    "average_bytes_per_busy_cycle": 4.224630251384524,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                }
+            ],
+            "wire": null,
+            "aggregate_input_bytes_per_batch_cycle": 53.42688091917127,
+            "code_tcm_bytes": 1230,
+            "data_tcm_bytes_including_stack": 147536,
+            "simulation_wall": {
+                "wall_seconds": 23.589597113008494,
+                "start_tick": 0,
+                "end_tick": 317179000,
+                "boundary":
+                    "After instantiate through return from simulate; boot, batch, validation and export included; image setup, automatic exit statistics and cleanup excluded"
+            },
+            "process_wall": {
+                "wall_seconds": 25.65597609100223,
+                "command": [
+                    "/home/ripopov/work/gem5/main/build/RISCV/gem5.opt",
+                    "--outdir=/home/ripopov/work/gem5/main/m5out/reduction-memory-controllers/timing-2-mc2-q1",
+                    "/home/ripopov/work/gem5/main/configs/example/rt_accel_reduction.py",
+                    "--workload=reduction",
+                    "--queues=1",
+                    "--memory-controllers=2",
+                    "--memory-bandwidth=32GiB/s"
+                ],
+                "idle_machine_checked": true,
+                "process_checks": 26,
+                "simulations_before": [],
+                "simulations_after": []
+            },
+            "run_name": "timing-2-mc2-q1",
+            "bandwidth_per_controller": "32GiB/s"
+        },
+        {
+            "workload": "reduction",
+            "queues": 17,
+            "memory_controllers": 2,
+            "controller_statistics": [
+                {
+                    "path": "system.memory",
+                    "range": "2147483648:2214592512:0:64",
+                    "latency_ticks": 100000,
+                    "ticks_per_byte": 29.0,
+                    "dma_read_bytes": 8388800.0,
+                    "dma_write_bytes": 64.0
+                },
+                {
+                    "path": "system.memory1",
+                    "range": "2147483648:2214592512:1:64",
+                    "latency_ticks": 100000,
+                    "ticks_per_byte": 29.0,
+                    "dma_read_bytes": 8388800.0,
+                    "dma_write_bytes": 0
+                }
+            ],
+            "batch_start_tick": 1036000.0,
+            "batch_end_tick": 315058000.0,
+            "batch_ticks": 314022000.0,
+            "final_tick": 317179000.0,
+            "dma": [
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 247176018.0,
+                    "average_bytes_per_busy_cycle": 4.242337134826729,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 247538518.0,
+                    "average_bytes_per_busy_cycle": 4.236124577589981,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 247572018.0,
+                    "average_bytes_per_busy_cycle": 4.23555136994521,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 247589518.0,
+                    "average_bytes_per_busy_cycle": 4.235251994795676,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 247830018.0,
+                    "average_bytes_per_busy_cycle": 4.231142007987104,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248169018.0,
+                    "average_bytes_per_busy_cycle": 4.22536224888475,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248202518.0,
+                    "average_bytes_per_busy_cycle": 4.224791949935012,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248235018.0,
+                    "average_bytes_per_busy_cycle": 4.224238821937685,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248268518.0,
+                    "average_bytes_per_busy_cycle": 4.2236688261860085,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248315018.0,
+                    "average_bytes_per_busy_cycle": 4.222877892951283,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248210018.0,
+                    "average_bytes_per_busy_cycle": 4.224664292156008,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248242518.0,
+                    "average_bytes_per_busy_cycle": 4.224111197583002,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248267018.0,
+                    "average_bytes_per_busy_cycle": 4.2236943450942,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248299518.0,
+                    "average_bytes_per_busy_cycle": 4.22314150444706,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248333018.0,
+                    "average_bytes_per_busy_cycle": 4.22257180476903,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 248212018.0,
+                    "average_bytes_per_busy_cycle": 4.224630251384524,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                }
+            ],
+            "wire": null,
+            "aggregate_input_bytes_per_batch_cycle": 53.42688091917127,
+            "code_tcm_bytes": 1230,
+            "data_tcm_bytes_including_stack": 147536,
+            "simulation_wall": {
+                "wall_seconds": 4.829812605996267,
+                "start_tick": 0,
+                "end_tick": 317179000,
+                "boundary":
+                    "After instantiate through return from simulate; boot, batch, validation and export included; image setup, automatic exit statistics and cleanup excluded"
+            },
+            "process_wall": {
+                "wall_seconds": 6.922258081991458,
+                "command": [
+                    "/home/ripopov/work/gem5/main/build/RISCV/gem5.opt",
+                    "--outdir=/home/ripopov/work/gem5/main/m5out/reduction-memory-controllers/timing-2-mc2-q17",
+                    "/home/ripopov/work/gem5/main/configs/example/rt_accel_reduction.py",
+                    "--workload=reduction",
+                    "--queues=17",
+                    "--memory-controllers=2",
+                    "--memory-bandwidth=32GiB/s"
+                ],
+                "idle_machine_checked": true,
+                "process_checks": 7,
+                "simulations_before": [],
+                "simulations_after": []
+            },
+            "run_name": "timing-2-mc2-q17",
+            "bandwidth_per_controller": "32GiB/s"
+        },
+        {
+            "workload": "reduction",
+            "queues": 1,
+            "memory_controllers": 1,
+            "controller_statistics": [
+                {
+                    "path": "system.memory",
+                    "range": "2147483648:2214592512",
+                    "latency_ticks": 100000,
+                    "ticks_per_byte": 15.0,
+                    "dma_read_bytes": 16777600.0,
+                    "dma_write_bytes": 64.0
+                }
+            ],
+            "batch_start_tick": 1036000.0,
+            "batch_end_tick": 315566000.0,
+            "batch_ticks": 314530000.0,
+            "final_tick": 317683000.0,
+            "dma": [
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 255611018.0,
+                    "average_bytes_per_busy_cycle": 4.102342724522149,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 255747518.0,
+                    "average_bytes_per_busy_cycle": 4.100153183109288,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 256642018.0,
+                    "average_bytes_per_busy_cycle": 4.08586251063534,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 256657518.0,
+                    "average_bytes_per_busy_cycle": 4.085615758194934,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 256675018.0,
+                    "average_bytes_per_busy_cycle": 4.085337202547698,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 256691518.0,
+                    "average_bytes_per_busy_cycle": 4.085074599153681,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 256709018.0,
+                    "average_bytes_per_busy_cycle": 4.084796117291057,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 256710518.0,
+                    "average_bytes_per_busy_cycle": 4.084772249183806,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 256709018.0,
+                    "average_bytes_per_busy_cycle": 4.084796117291057,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 256725518.0,
+                    "average_bytes_per_busy_cycle": 4.0845335834515675,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 256803018.0,
+                    "average_bytes_per_busy_cycle": 4.083300921331072,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 256819518.0,
+                    "average_bytes_per_busy_cycle": 4.083038579645648,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 256700018.0,
+                    "average_bytes_per_busy_cycle": 4.0849393317923335,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 256716518.0,
+                    "average_bytes_per_busy_cycle": 4.084676779544042,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 256734018.0,
+                    "average_bytes_per_busy_cycle": 4.084398351916106,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 256750518.0,
+                    "average_bytes_per_busy_cycle": 4.084135869202024,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 0.0
+                }
+            ],
+            "wire": null,
+            "aggregate_input_bytes_per_batch_cycle": 53.34059072266557,
+            "code_tcm_bytes": 1230,
+            "data_tcm_bytes_including_stack": 147536,
+            "simulation_wall": {
+                "wall_seconds": 23.385360293003032,
+                "start_tick": 0,
+                "end_tick": 317683000,
+                "boundary":
+                    "After instantiate through return from simulate; boot, batch, validation and export included; image setup, automatic exit statistics and cleanup excluded"
+            },
+            "process_wall": {
+                "wall_seconds": 25.554703875997802,
+                "command": [
+                    "/home/ripopov/work/gem5/main/build/RISCV/gem5.opt",
+                    "--outdir=/home/ripopov/work/gem5/main/m5out/reduction-memory-controllers/bandwidth-control-mc1-64GiB",
+                    "/home/ripopov/work/gem5/main/configs/example/rt_accel_reduction.py",
+                    "--workload=reduction",
+                    "--queues=1",
+                    "--memory-controllers=1",
+                    "--memory-bandwidth=64GiB/s"
+                ],
+                "idle_machine_checked": true,
+                "process_checks": 26,
+                "simulations_before": [],
+                "simulations_after": []
+            },
+            "run_name": "bandwidth-control-mc1-64GiB",
+            "bandwidth_per_controller": "64GiB/s"
+        }
+    ],
+    "comparisons": [
+        {
+            "simulated_counters_compared": 31629,
+            "excluded_host_counters": [
+                "dump0/hostInstRate",
+                "dump0/hostMemory",
+                "dump0/hostOpRate",
+                "dump0/hostSeconds",
+                "dump0/hostTickRate",
+                "dump1/hostInstRate",
+                "dump1/hostMemory",
+                "dump1/hostOpRate",
+                "dump1/hostSeconds",
+                "dump1/hostTickRate"
+            ],
+            "workload": "reduction",
+            "left": "correctness-mc1-q1",
+            "right": "correctness-mc1-q17",
+            "trace_sha256": {
+                "msi.trace":
+                    "78b51f164cc64cf0549aeace84372bc9a37e20e919a8104e33dfa97df4559a12",
+                "host0.trace":
+                    "136ac095a778e2fe1f8d515a3a6c356895f4669bf10b383759397203432acd39",
+                "host1.trace":
+                    "2a76b4f76add9cdc0540f9de829009293f282d07eb14d8e25383f96b3a7a3ce4",
+                "host2.trace":
+                    "67df1c6e55d276d066b186a4fe125b615631b0c0e62544cb27be4224e6605193",
+                "host3.trace":
+                    "8934d4660eb137af9f434239b132cbbcbb6737e6642bb3f3dcdf707a9c8deeb9",
+                "host4.trace":
+                    "be44b0634b6117e2a2431571cbfb290fe90da386227d3444154284deba336ceb",
+                "host5.trace":
+                    "440be466b97c6666c50ae1f4f5713ef9a20fa50356f7906a1b6da51f99b4962a",
+                "host6.trace":
+                    "0811d670575983a91e0160d345d067d5248cde2926d67b43f2c2527af0852b8d",
+                "host7.trace":
+                    "95d69410cd3033af4aba63840d1b851c20f5aad6bf778860374faa07a60cf2b0",
+                "host8.trace":
+                    "71d4a3ebbe68b14b78ecbe5aa2ef4f0ebd2b1d1452fc5e9fcb1adf74a02f9b61",
+                "host9.trace":
+                    "c4abc5b4e3906ee98875bdac01e419c2cafddffdbec8b65fd7ee2f82915edde3",
+                "host10.trace":
+                    "f2055e94bd8323788e585c5a9311b5caf5b0fcdef95f01f03bd532173151d938",
+                "host11.trace":
+                    "acc7b982b2a89e9672f4443db4e1b154211a6a5074a6ea413bbdfef17cc51f6c",
+                "host12.trace":
+                    "a07cd059eb04246740972c23c13db4d84e8b2f7ca82c8f80b9cfbdc6a906159e",
+                "host13.trace":
+                    "9e423f1e1c5e0aa9db993001503073f0f7808b1b6c6e895853f8fe8aab3376a1",
+                "host14.trace":
+                    "7eba24cfe584a5fb79ee2c93f78922764442d415dfcbe27f8a3d3fcc24b93c12",
+                "host15.trace":
+                    "150d059546e367236dd5dc4a782ea57f21c8633fd0e8e5d064edb7c3c2414e3b",
+                "accel0.trace":
+                    "0c5bcc722c30ac64bb9978daaa978b4c3b1c4f4609f4c8b1d39bbf15e6a74a6e",
+                "accel1.trace":
+                    "d3632f4d8f5bd3035771b214032db154aea5e524922e8635657ae24a47e2ea89",
+                "accel2.trace":
+                    "0d30b97780c8cd3eea37bc95f873a0c8265a414bd0ef73b832a942686321cf4c",
+                "accel3.trace":
+                    "319b572f37611389b1a7db10e42d3850802ff62398533e6bb04e0b0fb3b977cd",
+                "accel4.trace":
+                    "27019c49b686675faa146cbe689b4afbc317316639af80cdcf4b80610e76bc16",
+                "accel5.trace":
+                    "b5ac3fa19dd480a5ce64a834fe0d26a6e2cfd4c7d128015cb4b1e40338819433",
+                "accel6.trace":
+                    "3f1c4f946c7dbcfa635d4b75e5dfedeae572c5b03590be13fb2066ed8d95ca9c",
+                "accel7.trace":
+                    "efac442b934579bad53fca85603a5459b7ae94a3d9b59a255f291f3f6257c134",
+                "accel8.trace":
+                    "4ef1c108f1aee6affaf74c7d9e4c9a91da81563e73106b99495e19b24db79f33",
+                "accel9.trace":
+                    "1939309d4ca5d83c26db0e996510e950251c764d61adf94d63068526bc2faffa",
+                "accel10.trace":
+                    "7209febfb3f1e7d0fe38ffa622b23e482e024185e9de27343a8389617e0be352",
+                "accel11.trace":
+                    "db1cf90e017135457a3f4fc9736eb646a2595cafe5c42225176ddc9f15df2254",
+                "accel12.trace":
+                    "5cf407677157a445ff86387e8f4be53fdb77ef7bd32089b7018069ea86cf9b5b",
+                "accel13.trace":
+                    "cf1f99a89466b49d6d9d5a124cf131f0166b8081a3183330426ee3475091aa21",
+                "accel14.trace":
+                    "1d81cfada1a975ea853376f0dcdfbf4a8e0b95588af3f67568368be95e160cc3",
+                "accel15.trace":
+                    "923060ccdd8e6a642252fb4b4e53de6837cfcb085930ec1eda70d4302d5a2da0"
+            }
+        },
+        {
+            "simulated_counters_compared": 31760,
+            "excluded_host_counters": [
+                "dump0/hostInstRate",
+                "dump0/hostMemory",
+                "dump0/hostOpRate",
+                "dump0/hostSeconds",
+                "dump0/hostTickRate",
+                "dump1/hostInstRate",
+                "dump1/hostMemory",
+                "dump1/hostOpRate",
+                "dump1/hostSeconds",
+                "dump1/hostTickRate"
+            ],
+            "workload": "reduction",
+            "left": "correctness-mc2-q1",
+            "right": "correctness-mc2-q17",
+            "trace_sha256": {
+                "msi.trace":
+                    "212358c1988bece57931e54b16eb6b46ee0aec01ff3e127a4c3353c587678a41",
+                "host0.trace":
+                    "af39df7f2f4d605b9a15ca3b0e1aab58b391f60e8cbd969b079397984947d483",
+                "host1.trace":
+                    "507b9a58c3417a258a34fb70e3287d0d5e5d2e32386219bda8e1bb3a92164990",
+                "host2.trace":
+                    "a5fe4702b3dc2629885769a878dfc1a8f049a2044b7f10aa3dfe7db2912ac6aa",
+                "host3.trace":
+                    "fc1daa82555395b9a03e069fed3c0cf3d167af844e2f62c71830cfcdb5735bb7",
+                "host4.trace":
+                    "0591c22ccd82c937b18221042610abb3f424fc8bd4ec87effef00a0ab0d707b9",
+                "host5.trace":
+                    "95e7a92f6ff1ed1f62b9ee8ac20f0fc8aabdccaebe263cbfdc320d54774e8b9e",
+                "host6.trace":
+                    "be0dc01271b54dbf24bad8797b7f577c8ef6a9c0bf72da6f2ab1fb285206911e",
+                "host7.trace":
+                    "e25b8c456796fef6430245c0eb5dffb178b05d9a9c82ff9cf1a7916547fa2ba0",
+                "host8.trace":
+                    "8a66df9eead916efe4bb4b008e8bfb67399501c7e834f72d7b930253b62e2b85",
+                "host9.trace":
+                    "70cd8cd2098917620f98cd2c7ea83c5d95aaf554b054aebecf943ca8d91298ae",
+                "host10.trace":
+                    "599e00dbe75d59748ba5a26d5ea571486049b81c9423713a9c976a8e632167f3",
+                "host11.trace":
+                    "353fdd0d80428e19f5da925b94d66e138997c3c452c763b27c70cdc325eeacb8",
+                "host12.trace":
+                    "5da98a79e6e85d42f5316aa0c6902d934e209bd899da1c854e2cb2e506898eba",
+                "host13.trace":
+                    "aae43a8038908c252455d7722e221f53212f237388176a3970779be51cc70313",
+                "host14.trace":
+                    "60d0b765c94a546ae846acee8eb83254c1a18cfa1b1e526e062b5c6053857cb2",
+                "host15.trace":
+                    "76063e628e07a8a1e7783b9f0895449f5ba7f21f67dd5015aa2fca4d8770db6f",
+                "accel0.trace":
+                    "a6888011fece00ea0941d99e3397c0d219c236be4b1411110504106a430f86a8",
+                "accel1.trace":
+                    "d8c9af8e4f19cfd01133280b6b20573e64b7c782c65ecde62bec50d3a2494449",
+                "accel2.trace":
+                    "76a32bc98d55a37e012a2dfac20353ea50a7a475f9a881330458336138a6d878",
+                "accel3.trace":
+                    "1f679dbccd5e1cdb33d4d1d9491551b5cd5418930d7c737e36f2df07a8ba640b",
+                "accel4.trace":
+                    "21db74e27ef91d9b7d5ac182c4a09f585337e03c08facf3a43ba4910543329ef",
+                "accel5.trace":
+                    "8efa6ebd68b4037f83c77f7f9db8cc25a8f48d9f2595559c9f9427d69fb517f5",
+                "accel6.trace":
+                    "58b1a0b4bb0e8e95d03aee32628ec755feac9849b4e13cfc16c3e6736aa47310",
+                "accel7.trace":
+                    "04ca4f302f9cb34c7eaa0b37fef11c3d99471f20c10d27e8e299f73a429d7b3b",
+                "accel8.trace":
+                    "6b84716d2cb5f9c16b3eaa11023d69e5647bf0afc48a33eeba5526020389f3f2",
+                "accel9.trace":
+                    "e19428c84842c149f28fd9a63416576406aa49771e42b3e8b62eb82b6cf2a730",
+                "accel10.trace":
+                    "ecaeee9a3d320fed6e1c425447f82d9208fb695c3d92fc6b9d82382ffaab27f6",
+                "accel11.trace":
+                    "3a376c4f41a4ae1ff2f2f4529dd0b1c29e2aa909bce2a32371c7ad588a0ccddd",
+                "accel12.trace":
+                    "6184227d1d605ae79e1e5cba5648d4a652a999525d2ade31677e9145f2fdfc30",
+                "accel13.trace":
+                    "7ad1a303a6467de3d92697d6a6dee7a862f6675dd6b7413e8a7af4abec37c6fa",
+                "accel14.trace":
+                    "c92b9c6a829b90eea52d03f5cdeefa8025afa6ec3fe36b86b1edac35b507d896",
+                "accel15.trace":
+                    "c8f89488f36ff4b27b2fb9f1bf8fb2749d52774e158db515741f5c65cecdd21d"
+            }
+        },
+        {
+            "simulated_counters_compared": 31629,
+            "excluded_host_counters": [
+                "dump0/hostInstRate",
+                "dump0/hostMemory",
+                "dump0/hostOpRate",
+                "dump0/hostSeconds",
+                "dump0/hostTickRate",
+                "dump1/hostInstRate",
+                "dump1/hostMemory",
+                "dump1/hostOpRate",
+                "dump1/hostSeconds",
+                "dump1/hostTickRate"
+            ],
+            "workload": "reduction",
+            "left": "timing-0-mc1-q1",
+            "right": "timing-0-mc1-q17"
+        },
+        {
+            "simulated_counters_compared": 31629,
+            "excluded_host_counters": [
+                "dump0/hostInstRate",
+                "dump0/hostMemory",
+                "dump0/hostOpRate",
+                "dump0/hostSeconds",
+                "dump0/hostTickRate",
+                "dump1/hostInstRate",
+                "dump1/hostMemory",
+                "dump1/hostOpRate",
+                "dump1/hostSeconds",
+                "dump1/hostTickRate"
+            ],
+            "workload": "reduction",
+            "left": "correctness-mc1-q1",
+            "right": "timing-0-mc1-q1"
+        },
+        {
+            "simulated_counters_compared": 31760,
+            "excluded_host_counters": [
+                "dump0/hostInstRate",
+                "dump0/hostMemory",
+                "dump0/hostOpRate",
+                "dump0/hostSeconds",
+                "dump0/hostTickRate",
+                "dump1/hostInstRate",
+                "dump1/hostMemory",
+                "dump1/hostOpRate",
+                "dump1/hostSeconds",
+                "dump1/hostTickRate"
+            ],
+            "workload": "reduction",
+            "left": "timing-0-mc2-q1",
+            "right": "timing-0-mc2-q17"
+        },
+        {
+            "simulated_counters_compared": 31760,
+            "excluded_host_counters": [
+                "dump0/hostInstRate",
+                "dump0/hostMemory",
+                "dump0/hostOpRate",
+                "dump0/hostSeconds",
+                "dump0/hostTickRate",
+                "dump1/hostInstRate",
+                "dump1/hostMemory",
+                "dump1/hostOpRate",
+                "dump1/hostSeconds",
+                "dump1/hostTickRate"
+            ],
+            "workload": "reduction",
+            "left": "correctness-mc2-q1",
+            "right": "timing-0-mc2-q1"
+        },
+        {
+            "simulated_counters_compared": 31760,
+            "excluded_host_counters": [
+                "dump0/hostInstRate",
+                "dump0/hostMemory",
+                "dump0/hostOpRate",
+                "dump0/hostSeconds",
+                "dump0/hostTickRate",
+                "dump1/hostInstRate",
+                "dump1/hostMemory",
+                "dump1/hostOpRate",
+                "dump1/hostSeconds",
+                "dump1/hostTickRate"
+            ],
+            "workload": "reduction",
+            "left": "timing-1-mc2-q1",
+            "right": "timing-1-mc2-q17"
+        },
+        {
+            "simulated_counters_compared": 31760,
+            "excluded_host_counters": [
+                "dump0/hostInstRate",
+                "dump0/hostMemory",
+                "dump0/hostOpRate",
+                "dump0/hostSeconds",
+                "dump0/hostTickRate",
+                "dump1/hostInstRate",
+                "dump1/hostMemory",
+                "dump1/hostOpRate",
+                "dump1/hostSeconds",
+                "dump1/hostTickRate"
+            ],
+            "workload": "reduction",
+            "left": "correctness-mc2-q1",
+            "right": "timing-1-mc2-q1"
+        },
+        {
+            "simulated_counters_compared": 31629,
+            "excluded_host_counters": [
+                "dump0/hostInstRate",
+                "dump0/hostMemory",
+                "dump0/hostOpRate",
+                "dump0/hostSeconds",
+                "dump0/hostTickRate",
+                "dump1/hostInstRate",
+                "dump1/hostMemory",
+                "dump1/hostOpRate",
+                "dump1/hostSeconds",
+                "dump1/hostTickRate"
+            ],
+            "workload": "reduction",
+            "left": "timing-1-mc1-q1",
+            "right": "timing-1-mc1-q17"
+        },
+        {
+            "simulated_counters_compared": 31629,
+            "excluded_host_counters": [
+                "dump0/hostInstRate",
+                "dump0/hostMemory",
+                "dump0/hostOpRate",
+                "dump0/hostSeconds",
+                "dump0/hostTickRate",
+                "dump1/hostInstRate",
+                "dump1/hostMemory",
+                "dump1/hostOpRate",
+                "dump1/hostSeconds",
+                "dump1/hostTickRate"
+            ],
+            "workload": "reduction",
+            "left": "correctness-mc1-q1",
+            "right": "timing-1-mc1-q1"
+        },
+        {
+            "simulated_counters_compared": 31629,
+            "excluded_host_counters": [
+                "dump0/hostInstRate",
+                "dump0/hostMemory",
+                "dump0/hostOpRate",
+                "dump0/hostSeconds",
+                "dump0/hostTickRate",
+                "dump1/hostInstRate",
+                "dump1/hostMemory",
+                "dump1/hostOpRate",
+                "dump1/hostSeconds",
+                "dump1/hostTickRate"
+            ],
+            "workload": "reduction",
+            "left": "timing-2-mc1-q1",
+            "right": "timing-2-mc1-q17"
+        },
+        {
+            "simulated_counters_compared": 31629,
+            "excluded_host_counters": [
+                "dump0/hostInstRate",
+                "dump0/hostMemory",
+                "dump0/hostOpRate",
+                "dump0/hostSeconds",
+                "dump0/hostTickRate",
+                "dump1/hostInstRate",
+                "dump1/hostMemory",
+                "dump1/hostOpRate",
+                "dump1/hostSeconds",
+                "dump1/hostTickRate"
+            ],
+            "workload": "reduction",
+            "left": "correctness-mc1-q1",
+            "right": "timing-2-mc1-q1"
+        },
+        {
+            "simulated_counters_compared": 31760,
+            "excluded_host_counters": [
+                "dump0/hostInstRate",
+                "dump0/hostMemory",
+                "dump0/hostOpRate",
+                "dump0/hostSeconds",
+                "dump0/hostTickRate",
+                "dump1/hostInstRate",
+                "dump1/hostMemory",
+                "dump1/hostOpRate",
+                "dump1/hostSeconds",
+                "dump1/hostTickRate"
+            ],
+            "workload": "reduction",
+            "left": "timing-2-mc2-q1",
+            "right": "timing-2-mc2-q17"
+        },
+        {
+            "simulated_counters_compared": 31760,
+            "excluded_host_counters": [
+                "dump0/hostInstRate",
+                "dump0/hostMemory",
+                "dump0/hostOpRate",
+                "dump0/hostSeconds",
+                "dump0/hostTickRate",
+                "dump1/hostInstRate",
+                "dump1/hostMemory",
+                "dump1/hostOpRate",
+                "dump1/hostSeconds",
+                "dump1/hostTickRate"
+            ],
+            "workload": "reduction",
+            "left": "correctness-mc2-q1",
+            "right": "timing-2-mc2-q1"
+        }
+    ],
+    "workload_comparisons": [
+        {
+            "jobs.bin":
+                "1ea20d25c8d6c2dd28fc6534d4c4dc2839770275fd4da75580055787a44c812e",
+            "parameters.bin":
+                "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+            "inputs.elf":
+                "4d7dc7a70c0b3d40f36bb4546a333b48d251fbc70222bb3ff47c815fd1bbd53e",
+            "boot.elf":
+                "8181419b49363c39b877c5bcfea98715dad08e09757297222a199fee5f2ea091",
+            "partials.bin":
+                "908bdfb0e87619de63928b3f9543106f500e3fb7c67f98741bb92088610c9576",
+            "sum.bin":
+                "614ccbddbee93343b5cd8aed8c89e2b8a2ed89fe156d609b9f327c3edf1794a6"
+        },
+        {
+            "jobs.bin":
+                "1ea20d25c8d6c2dd28fc6534d4c4dc2839770275fd4da75580055787a44c812e",
+            "parameters.bin":
+                "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+            "inputs.elf":
+                "4d7dc7a70c0b3d40f36bb4546a333b48d251fbc70222bb3ff47c815fd1bbd53e",
+            "boot.elf":
+                "8181419b49363c39b877c5bcfea98715dad08e09757297222a199fee5f2ea091",
+            "partials.bin":
+                "908bdfb0e87619de63928b3f9543106f500e3fb7c67f98741bb92088610c9576",
+            "sum.bin":
+                "614ccbddbee93343b5cd8aed8c89e2b8a2ed89fe156d609b9f327c3edf1794a6"
+        }
+    ],
+    "summaries": {
+        "1": {
+            "batch_cycles": 523734.0,
+            "input_bytes_per_cycle": 32.03384924408192,
+            "median_simulation_wall_seconds": {
+                "1": 33.43987729299988,
+                "17": 5.3777585530042415
+            },
+            "median_process_wall_seconds": {
+                "1": 35.528284632004215,
+                "17": 7.4358544620044995
+            },
+            "pdes_speedup": 6.218181229858109,
+            "process_speedup": 4.777969339441157
+        },
+        "2": {
+            "batch_cycles": 314022.0,
+            "input_bytes_per_cycle": 53.42688091917127,
+            "median_simulation_wall_seconds": {
+                "1": 23.589597113008494,
+                "17": 4.894347629000549
+            },
+            "median_process_wall_seconds": {
+                "1": 25.65597609100223,
+                "17": 6.973948771003052
+            },
+            "pdes_speedup": 4.819763306805735,
+            "process_speedup": 3.6788305927449727
+        }
+    },
+    "two_controller_model_speedup": 1.6678258211208132
+}

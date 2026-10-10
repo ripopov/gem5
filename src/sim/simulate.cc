@@ -297,6 +297,7 @@ doSimLoop(EventQueue *eventq)
 {
     // set the per thread current eventq pointer
     curEventQueue(eventq);
+    EventQueue::ScopedAsyncBatching batching(eventq);
     eventq->handleAsyncInsertions();
 
     bool mainQueue = eventq == getEventQueue(0);

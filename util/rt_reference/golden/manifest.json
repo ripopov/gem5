@@ -1,0 +1,218 @@
+{
+    "renders": {
+        "smoke": {
+            "parameters": [
+                1,
+                1,
+                0,
+                1
+            ],
+            "gem5_host_seconds": 424.16,
+            "native_render_seconds": 0.01065614000253845,
+            "analytic_smoke_seconds": 0.13316602200211491,
+            "sha256":
+                "79aaad3486ca49955cda1dd8fd6f36b8102cbbd3c89117f327b0c917c090ccaa",
+            "native_mean_byte_error": 0.0,
+            "native_max_byte_error": 0,
+            "analytic_smoke_max_byte_error": 1,
+            "scene_bytes": 11368,
+            "job_bytes": 56,
+            "idle_accelerators": 8,
+            "accelerator_bus_packets": 0,
+            "firmware_and_static_storage_bytes": 204592
+        },
+        "primary": {
+            "parameters": [
+                0,
+                1,
+                0,
+                1
+            ],
+            "gem5_host_seconds": 87.5,
+            "native_render_seconds": 0.003757122001843527,
+            "analytic_smoke_seconds": null,
+            "sha256":
+                "78c063b40cf4f140e17a1d7109a40a0b14ce019704e1fab3cd9b4359e4b7b531",
+            "native_mean_byte_error": 0.0,
+            "native_max_byte_error": 0,
+            "analytic_smoke_max_byte_error": null,
+            "scene_bytes": 11368,
+            "job_bytes": 56,
+            "idle_accelerators": 8,
+            "accelerator_bus_packets": 0,
+            "firmware_and_static_storage_bytes": 204592
+        },
+        "depth1": {
+            "parameters": [
+                0,
+                1,
+                1,
+                1
+            ],
+            "gem5_host_seconds": 204.88,
+            "native_render_seconds": 0.012721736999083078,
+            "analytic_smoke_seconds": null,
+            "sha256":
+                "29bd6b2aea40346a74cd4729a31c47177a9c0e2c8225619259cb64af9feb95c9",
+            "native_mean_byte_error": 0.0,
+            "native_max_byte_error": 0,
+            "analytic_smoke_max_byte_error": null,
+            "scene_bytes": 11368,
+            "job_bytes": 56,
+            "idle_accelerators": 8,
+            "accelerator_bus_packets": 0,
+            "firmware_and_static_storage_bytes": 204592
+        },
+        "path4": {
+            "parameters": [
+                0,
+                4,
+                4,
+                1
+            ],
+            "gem5_host_seconds": 1631.28,
+            "native_render_seconds": 0.06106527099836967,
+            "analytic_smoke_seconds": null,
+            "sha256":
+                "a6138dfcd381274caddf68c195e6d7efbe431955c3c947943b2f83d2a65d74d5",
+            "native_mean_byte_error": 0.0,
+            "native_max_byte_error": 0,
+            "analytic_smoke_max_byte_error": null,
+            "scene_bytes": 11368,
+            "job_bytes": 56,
+            "idle_accelerators": 8,
+            "accelerator_bus_packets": 0,
+            "firmware_and_static_storage_bytes": 204592
+        },
+        "path1": {
+            "parameters": [
+                0,
+                1,
+                4,
+                1
+            ],
+            "gem5_host_seconds": 413.03,
+            "native_render_seconds": 0.016529811000509653,
+            "analytic_smoke_seconds": null,
+            "sha256":
+                "d36e1a5a786f8f2f77c20a6422f315018cf413ffc71284718927ce95b2a563d0",
+            "native_mean_byte_error": 0.0,
+            "native_max_byte_error": 0,
+            "analytic_smoke_max_byte_error": null,
+            "scene_bytes": 11368,
+            "job_bytes": 56,
+            "idle_accelerators": 8,
+            "accelerator_bus_packets": 0,
+            "firmware_and_static_storage_bytes": 204592
+        },
+        "seed2": {
+            "parameters": [
+                0,
+                4,
+                4,
+                2
+            ],
+            "gem5_host_seconds": 1639.26,
+            "native_render_seconds": 0.056545479001215426,
+            "analytic_smoke_seconds": null,
+            "sha256":
+                "5280dc96efde0874db70ed5925c23be21d3ba0f4c361ba29388a44b77f9d409b",
+            "native_mean_byte_error": 0.0,
+            "native_max_byte_error": 0,
+            "analytic_smoke_max_byte_error": null,
+            "scene_bytes": 11368,
+            "job_bytes": 56,
+            "idle_accelerators": 8,
+            "accelerator_bus_packets": 0,
+            "firmware_and_static_storage_bytes": 204592
+        },
+        "repeat": {
+            "parameters": [
+                0,
+                4,
+                4,
+                1
+            ],
+            "gem5_host_seconds": 1632.46,
+            "native_render_seconds": 0.05656591600200045,
+            "analytic_smoke_seconds": null,
+            "sha256":
+                "a6138dfcd381274caddf68c195e6d7efbe431955c3c947943b2f83d2a65d74d5",
+            "native_mean_byte_error": 0.0,
+            "native_max_byte_error": 0,
+            "analytic_smoke_max_byte_error": null,
+            "scene_bytes": 11368,
+            "job_bytes": 56,
+            "idle_accelerators": 8,
+            "accelerator_bus_packets": 0,
+            "firmware_and_static_storage_bytes": 204592
+        },
+        "depth32": {
+            "parameters": [
+                0,
+                1,
+                32,
+                18446744073709551615
+            ],
+            "gem5_host_seconds": 710.79,
+            "native_render_seconds": 0.030033169001399074,
+            "analytic_smoke_seconds": null,
+            "sha256":
+                "657ba17f12db6acb69f9814fcc3c977555ce1777ab6c75fd9accf130bdb8f78c",
+            "native_mean_byte_error": 0.0,
+            "native_max_byte_error": 0,
+            "analytic_smoke_max_byte_error": null,
+            "scene_bytes": 11368,
+            "job_bytes": 56,
+            "idle_accelerators": 8,
+            "accelerator_bus_packets": 0,
+            "firmware_and_static_storage_bytes": 204592
+        }
+    },
+    "checks": [
+        {
+            "name": "Reject --render_mode=2",
+            "seconds": 0.1555199310023454
+        },
+        {
+            "name": "Reject --samples_per_pixel=0",
+            "seconds": 0.15769734000059543
+        },
+        {
+            "name": "Reject --samples_per_pixel=4097",
+            "seconds": 0.1562111349994666
+        },
+        {
+            "name": "Reject --max_secondary_depth=-1",
+            "seconds": 0.1562871770001948
+        },
+        {
+            "name": "Reject --max_secondary_depth=33",
+            "seconds": 0.1563609479999286
+        },
+        {
+            "name": "Reject --seed=-1",
+            "seconds": 0.16210556399892084
+        },
+        {
+            "name": "Reject --seed=18446744073709551616",
+            "seconds": 0.1621691889995418
+        },
+        {
+            "name": "Reject --render_mode=1 --samples_per_pixel=2",
+            "seconds": 0.16459862599731423
+        },
+        {
+            "name": "Reject --render_mode=1 --max_secondary_depth=1",
+            "seconds": 0.1577770399999281
+        },
+        {
+            "name": "C suite including full-scene traversal and tiling",
+            "seconds": 0.08396410299974377
+        },
+        {
+            "name": "Independent double-precision smoke lighting (64 pixels)",
+            "seconds": 0.13316602200211491
+        }
+    ]
+}

@@ -60,18 +60,41 @@ namespace gem5
 namespace statistics
 {
 
-GlobalEvent *dumpEvent;
+BaseGlobalEvent *dumpEvent;
 
 void
 initSimStats()
-{
-}
+{}
 
 /**
  * Event to dump and/or reset the statistics.
  */
-class StatEvent : public GlobalEvent
+class StatEvent : public BaseGlobalEventTemplate<StatEvent>
 {
+  public:
+    using Base = BaseGlobalEventTemplate<StatEvent>;
+
+    class BarrierEvent : public Base::BarrierEvent
+    {
+      public:
+        BarrierEvent(Base *global_event, Priority p, Flags f)
+            : Base::BarrierEvent(global_event, p, f)
+        {}
+
+        void
+        process() override
+        {
+            globalBarrier();
+            // Statistics handlers call Python. Queue 0 runs on the
+            // interpreter thread with the GIL; the barrier completion
+            // step can instead run on any accelerator worker thread.
+            if (curEventQueue() == mainEventQueue[0]) {
+                static_cast<StatEvent *>(_globalEvent)->processStats();
+            }
+            globalBarrier();
+        }
+    };
+
   private:
     bool dump;
     bool reset;
@@ -79,27 +102,37 @@ class StatEvent : public GlobalEvent
 
   public:
     StatEvent(Tick _when, bool _dump, bool _reset, Tick _repeat)
-        : GlobalEvent(_when, Stat_Event_Pri, 0),
-          dump(_dump), reset(_reset), repeat(_repeat)
+        : Base(Stat_Event_Pri, 0), dump(_dump), reset(_reset), repeat(_repeat)
     {
+        schedule(_when);
     }
 
-    virtual void
-    process()
-    {
-        if (dump)
-            statistics::dump();
+    void
+    process() override
+    {}
 
-        if (reset)
+    void
+    processStats()
+    {
+        if (dump) {
+            statistics::dump();
+        }
+
+        if (reset) {
             statistics::reset();
+        }
 
         if (repeat) {
             statistics::schedStatEvent(dump, reset, curTick() + repeat,
-                repeat);
+                                       repeat);
         }
     }
 
-    const char *description() const { return "GlobalStatEvent"; }
+    const char *
+    description() const
+    {
+        return "GlobalStatEvent";
+    }
 };
 
 void

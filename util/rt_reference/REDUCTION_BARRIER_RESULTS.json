@@ -1,0 +1,2458 @@
+{
+    "evaluation": "quantum-barrier-reduction-pdes-only",
+    "git_commit": "2390a8ab58fea58762c05b1f51fab326b78a5040",
+    "started_utc": "2026-10-11T20:05:04.394093+00:00",
+    "artifact_sha256": {
+        "build/RISCV/gem5.opt":
+            "20a80a9ef7049d14173372c53cb5c2cee702d6869f635fccbe81abb25b19581a",
+        "util/rt_reference/out/reduction-host.elf":
+            "a1dc9df51f1612119cba5c2b9239304422047c512198d906077025ae9c583e53",
+        "util/rt_reference/out/reduction-accelerator.elf":
+            "dd74c08a076bdab38be0d97b04b850d21b0b6e4cef4f4c9fa6ee6a8667c90e2e",
+        "configs/example/rt_accel_system.py":
+            "cc15055760d28991c9ecce518933fd73a89a8bf0e5bc7209b8c9e7a595eb81fd",
+        "configs/example/rt_accel_reduction.py":
+            "51c697a29728ba478c1b59684d152e0273f6040d48f12e5c59cbd10b54961c53",
+        "src/dev/rt_accel/control.cc":
+            "43d0637e4a7ee68ae57d3d26a8e0ba8acb26352f9b6619fb20d0b085f84f4cc3",
+        "src/dev/rt_accel/control.hh":
+            "34b680952cd018ea85f1e666d0acb56ce84c473af8386a10af400d77f02a4e89",
+        "src/dev/rt_accel/code_tcm.cc":
+            "99e5ca646b2fdd51f7382d448766683d0843084be16628f97224bf06c6558819",
+        "src/dev/rt_accel/code_tcm.hh":
+            "e7c7ea168f664be931b1daa8c9728030fa2c5638685968e375b4d26aeb1bed87",
+        "src/dev/rt_accel/RTAccelerator.py":
+            "2a2bcc4f398a03e2dc9ea96ad1978f4d3ff0534ed32c862d2e3cac1a90fc07d9",
+        "util/rt_reference/reduction.h":
+            "4e72e32ab01f5740fc83522b558cc9d8b47a1550bc65088000b0137304dd6587",
+        "util/rt_reference/reduction_host.c":
+            "2cd6d6a0a2a5a8a74b99a2cb89c91f2cc8e244ce26c46c2dee6a71504655ce2f",
+        "util/rt_reference/reduction_accelerator.c":
+            "b31f1b64b27ad19c9a2099f5a85c87dc7f6957dbc759d8929546c00953238469",
+        "util/rt_reference/host_runtime.c":
+            "ec906b6cb60cf595a1dc0e259c5bd753b3da19e66cb88922b881bca58c00b0a5",
+        "util/rt_reference/host_runtime.h":
+            "b1374447ba18121b81d866235acaca66ad8b1750600d4098e70e7d796b4bb8af",
+        "util/rt_reference/accelerator_runtime.c":
+            "fc6571246e77f96248ba3f4065064a4741745f01e427af4b2466dac43ff1e43f",
+        "util/rt_reference/accelerator_runtime.h":
+            "ba1fdc2378b6eb1d0513b695444452d5fa02858422cc1333e84a62e378eea2bb",
+        "util/rt_reference/Makefile":
+            "3d1abd0d25eece93c9456396e502dfba17dbd652fde11a45bc2154097726376d",
+        "util/rt_reference/start.S":
+            "a9a60a3e530424df4f78f9629ac118fa132cdf10faa605874579350cad1dc4fe",
+        "util/rt_reference/link.ld":
+            "be41aaedbef73a331ff538575b8c5644403b47ff495f71f19cf91c4d787a6bc0",
+        "util/rt_reference/accelerator.ld":
+            "bd7e99766ec041acfa94bf36b3309cfcc1f32cc17609f896930fd9617c038e5e",
+        "util/rt_reference/experiment.py":
+            "2c0449d60e47fcf5c1b4c4ef9065132fce17552ae784f9abf20f1ad885081d65",
+        "util/rt_reference/validate_reduction.py":
+            "f9f61358cba733d2b97495a136bdab3380ea9d624a5f55203441ade561b8fa8c",
+        "build/RISCV/librt_accel_opt.so":
+            "6df1c6f87cb0b8a290ea3b89f316c630481c8afdfc2e25edb899540b44daddf9",
+        "src/sim/quantum_barrier.hh":
+            "11f291cf9d72057278a1df1840a60c02d920037aab7227a06031a4ead0988bcd",
+        "src/sim/global_event.cc":
+            "a0800d2ff8c18f5072fc973d94b11de336cefb3c2e89f3db25aab6bed48cd442",
+        "src/sim/global_event.hh":
+            "6630c5061b7ca5e8f5504f7ce47276f04b29d04142ea1cb0461db21d05ef1b8d"
+    },
+    "machine": {
+        "hostname": "Z890-AORUS",
+        "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.43",
+        "lscpu":
+            "Architecture:                            x86_64\nCPU op-mode(s):                          32-bit, 64-bit\nAddress sizes:                           46 bits physical, 48 bits virtual\nByte Order:                              Little Endian\nCPU(s):                                  20\nOn-line CPU(s) list:                     0-19\nVendor ID:                               GenuineIntel\nModel name:                              Intel(R) Core(TM) Ultra 7 265K\nCPU family:                              6\nModel:                                   198\nThread(s) per core:                      1\nCore(s) per socket:                      20\nSocket(s):                               1\nStepping:                                2\nCPU(s) scaling MHz:                      72%\nCPU max MHz:                             5500.0000\nCPU min MHz:                             800.0000\nBogoMIPS:                                7756.80\nFlags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdt_a rdseed adx smap clflushopt clwb intel_pt sha_ni xsaveopt xsavec xgetbv1 xsaves split_lock_detect user_shstk avx_vnni lam wbnoinvd dtherm ida arat pln pts hwp hwp_notify hwp_act_window hwp_epp hwp_pkg_req hfi vnmi umip pku ospke waitpkg gfni vaes vpclmulqdq rdpid bus_lock_detect movdiri movdir64b fsrm md_clear serialize arch_lbr ibt flush_l1d arch_capabilities\nVirtualization:                          VT-x\nL1d cache:                               704 KiB (18 instances)\nL1i cache:                               1.1 MiB (18 instances)\nL2 cache:                                36 MiB (11 instances)\nL3 cache:                                30 MiB (1 instance)\nNUMA node(s):                            1\nNUMA node0 CPU(s):                       0-19\nVulnerability Gather data sampling:      Not affected\nVulnerability Ghostwrite:                Not affected\nVulnerability Indirect target selection: Not affected\nVulnerability Itlb multihit:             Not affected\nVulnerability L1tf:                      Not affected\nVulnerability Mds:                       Not affected\nVulnerability Meltdown:                  Not affected\nVulnerability Mmio stale data:           Not affected\nVulnerability Old microcode:             Not affected\nVulnerability Reg file data sampling:    Not affected\nVulnerability Retbleed:                  Not affected\nVulnerability Spec rstack overflow:      Not affected\nVulnerability Spec store bypass:         Mitigation; Speculative Store Bypass disabled via prctl\nVulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:                Mitigation; Enhanced / Automatic IBRS; IBPB conditional; PBRSB-eIBRS Not affected; BHI BHI_DIS_S\nVulnerability Srbds:                     Not affected\nVulnerability Tsa:                       Not affected\nVulnerability Tsx async abort:           Not affected\nVulnerability Vmscape:                   Mitigation; IBPB before exit to userspace\n",
+        "cpu_affinity": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19
+        ]
+    },
+    "pid_namespace": "pid:[4026531836]",
+    "baseline": "util/rt_reference/REDUCTION_QUICK_RESULTS.json",
+    "quantum_ticks": 5000,
+    "transport_delay_ns": 5,
+    "runs": [
+        {
+            "workload": "reduction",
+            "accelerator_cores": 8,
+            "queues": 9,
+            "memory_controllers": 4,
+            "controller_statistics": [
+                {
+                    "path": "system.memory",
+                    "range": "2147483648:2214592512:0:64:128",
+                    "latency_ticks": 100000,
+                    "ticks_per_byte": 29.0,
+                    "dma_read_bytes": 2097200.0,
+                    "dma_write_bytes": 32.0
+                },
+                {
+                    "path": "system.memory1",
+                    "range": "2147483648:2214592512:1:64:128",
+                    "latency_ticks": 100000,
+                    "ticks_per_byte": 29.0,
+                    "dma_read_bytes": 2097200.0,
+                    "dma_write_bytes": 0
+                },
+                {
+                    "path": "system.memory2",
+                    "range": "2147483648:2214592512:2:64:128",
+                    "latency_ticks": 100000,
+                    "ticks_per_byte": 29.0,
+                    "dma_read_bytes": 2097200.0,
+                    "dma_write_bytes": 0
+                },
+                {
+                    "path": "system.memory3",
+                    "range": "2147483648:2214592512:3:64:128",
+                    "latency_ticks": 100000,
+                    "ticks_per_byte": 29.0,
+                    "dma_read_bytes": 2097200.0,
+                    "dma_write_bytes": 0
+                }
+            ],
+            "batch_start_tick": 842000.0,
+            "batch_end_tick": 130249000.0,
+            "batch_ticks": 129407000.0,
+            "final_tick": 131259000.0,
+            "dma": [
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 62304018.0,
+                    "average_bytes_per_busy_cycle": 16.8304394108258,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 7056.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 62489518.0,
+                    "average_bytes_per_busy_cycle": 16.780478287574567,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 6988.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 62659018.0,
+                    "average_bytes_per_busy_cycle": 16.73508512374069,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 7006.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 62693518.0,
+                    "average_bytes_per_busy_cycle": 16.72587587125036,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 7072.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 62727018.0,
+                    "average_bytes_per_busy_cycle": 16.7169432476449,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 6905.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 62805518.0,
+                    "average_bytes_per_busy_cycle": 16.696048904492756,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 6992.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 62789018.0,
+                    "average_bytes_per_busy_cycle": 16.70043637248794,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 6864.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 62820518.0,
+                    "average_bytes_per_busy_cycle": 16.692062297225885,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 6893.0
+                }
+            ],
+            "wire": null,
+            "aggregate_input_bytes_per_batch_cycle": 64.82344849969476,
+            "code_tcm_bytes": 1558,
+            "data_tcm_bytes_including_stack": 147536,
+            "simulation_wall": {
+                "wall_seconds": 2.299045138999645,
+                "start_tick": 0,
+                "end_tick": 131259000,
+                "boundary":
+                    "After instantiate through return from simulate; boot, batch, validation and export included; image setup, automatic exit statistics and cleanup excluded"
+            },
+            "process_wall": {
+                "wall_seconds": 3.6698079599991615,
+                "command": [
+                    "/home/ripopov/work/gem5/main/build/RISCV/gem5.opt",
+                    "--outdir=/home/ripopov/work/gem5/main/local-temp/reduction-barrier-20261011/n8-q9",
+                    "/home/ripopov/work/gem5/main/configs/example/rt_accel_reduction.py",
+                    "--workload=reduction",
+                    "--accelerator-cores=8",
+                    "--queues=9",
+                    "--transport-delay=5ns"
+                ],
+                "idle_machine_checked": true,
+                "process_checks": 4,
+                "simulations_before": [],
+                "simulations_after": []
+            },
+            "comparison_with_saved_des": {
+                "simulated_counters_compared": 19496,
+                "excluded_host_counters": [
+                    "dump0/hostInstRate",
+                    "dump0/hostMemory",
+                    "dump0/hostOpRate",
+                    "dump0/hostSeconds",
+                    "dump0/hostTickRate",
+                    "dump1/hostInstRate",
+                    "dump1/hostMemory",
+                    "dump1/hostOpRate",
+                    "dump1/hostSeconds",
+                    "dump1/hostTickRate"
+                ],
+                "workload": "reduction",
+                "left": "n8-timing-0-q1",
+                "right": "n8-q9"
+            },
+            "output_sha256": {
+                "jobs.bin":
+                    "0262f854b7fdcd9b1b46b003048c80f91c08f4c26e2c692588d1c454fdf61ce9",
+                "parameters.bin":
+                    "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+                "inputs.elf":
+                    "4d7dc7a70c0b3d40f36bb4546a333b48d251fbc70222bb3ff47c815fd1bbd53e",
+                "boot.elf":
+                    "aac7edfe0d6cef5e8329ff3ba1919cc67ad2267808fd2a1c2d6de01ba5fad69d",
+                "partials.bin":
+                    "ba3c6b2eba175e9aeb1b81fd60dfa230679b23c1fa4e0689397c93c129c6a21b",
+                "sum.bin":
+                    "5d6941b983cd61008a67cd3865fe78cc6a4f0966f2c3fb27e1a3ec6667a545dd"
+            },
+            "saved_baseline_simulation_seconds": {
+                "1": 6.66003106900007,
+                "9": 2.270115290999456
+            },
+            "saved_baseline_process_seconds": {
+                "1": 7.986437492000732,
+                "9": 3.6246901560007245
+            },
+            "simulation_speedup_vs_saved_des": 2.896868337216713,
+            "process_speedup_vs_saved_des": 2.1762548828311323,
+            "simulation_speedup_vs_saved_pdes": 0.9874165811234238,
+            "process_speedup_vs_saved_pdes": 0.9877056771116581
+        },
+        {
+            "workload": "reduction",
+            "accelerator_cores": 16,
+            "queues": 17,
+            "memory_controllers": 4,
+            "controller_statistics": [
+                {
+                    "path": "system.memory",
+                    "range": "2147483648:2214592512:0:64:128",
+                    "latency_ticks": 100000,
+                    "ticks_per_byte": 29.0,
+                    "dma_read_bytes": 4194400.0,
+                    "dma_write_bytes": 64.0
+                },
+                {
+                    "path": "system.memory1",
+                    "range": "2147483648:2214592512:1:64:128",
+                    "latency_ticks": 100000,
+                    "ticks_per_byte": 29.0,
+                    "dma_read_bytes": 4194400.0,
+                    "dma_write_bytes": 0
+                },
+                {
+                    "path": "system.memory2",
+                    "range": "2147483648:2214592512:2:64:128",
+                    "latency_ticks": 100000,
+                    "ticks_per_byte": 29.0,
+                    "dma_read_bytes": 4194400.0,
+                    "dma_write_bytes": 0
+                },
+                {
+                    "path": "system.memory3",
+                    "range": "2147483648:2214592512:3:64:128",
+                    "latency_ticks": 100000,
+                    "ticks_per_byte": 29.0,
+                    "dma_read_bytes": 4194400.0,
+                    "dma_write_bytes": 0
+                }
+            ],
+            "batch_start_tick": 925000.0,
+            "batch_end_tick": 146220000.0,
+            "batch_ticks": 145295000.0,
+            "final_tick": 148133000.0,
+            "dma": [
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 120176018.0,
+                    "average_bytes_per_busy_cycle": 8.725567858305972,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 6464.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 120220018.0,
+                    "average_bytes_per_busy_cycle": 8.722374338689585,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 6495.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 120454018.0,
+                    "average_bytes_per_busy_cycle": 8.705429818040606,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 6457.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 120577018.0,
+                    "average_bytes_per_busy_cycle": 8.696549453561706,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 6457.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 120585018.0,
+                    "average_bytes_per_busy_cycle": 8.69597249635108,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 6447.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 120651018.0,
+                    "average_bytes_per_busy_cycle": 8.691215518794877,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 6445.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 120747018.0,
+                    "average_bytes_per_busy_cycle": 8.684305561898018,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 6402.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 120953018.0,
+                    "average_bytes_per_busy_cycle": 8.669514968200298,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 6424.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 121163018.0,
+                    "average_bytes_per_busy_cycle": 8.654488946453942,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 6377.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 121254018.0,
+                    "average_bytes_per_busy_cycle": 8.647993833903302,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 6423.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 121373018.0,
+                    "average_bytes_per_busy_cycle": 8.639514920853332,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 6420.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 121376018.0,
+                    "average_bytes_per_busy_cycle": 8.639301381595827,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 6361.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 121392518.0,
+                    "average_bytes_per_busy_cycle": 8.638127104340978,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 6350.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 121428018.0,
+                    "average_bytes_per_busy_cycle": 8.635601710965915,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 6364.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 121426518.0,
+                    "average_bytes_per_busy_cycle": 8.635708387849844,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 6403.0
+                },
+                {
+                    "bytes_copied": 1048604.0,
+                    "busy_ticks": 121379018.0,
+                    "average_bytes_per_busy_cycle": 8.639087852893981,
+                    "peak_chunks": 512.0,
+                    "read_retries": 0.0,
+                    "write_retries": 6350.0
+                }
+            ],
+            "wire": null,
+            "aggregate_input_bytes_per_batch_cycle": 115.47001617399084,
+            "code_tcm_bytes": 1558,
+            "data_tcm_bytes_including_stack": 147536,
+            "simulation_wall": {
+                "wall_seconds": 4.631044986999768,
+                "start_tick": 0,
+                "end_tick": 148133000,
+                "boundary":
+                    "After instantiate through return from simulate; boot, batch, validation and export included; image setup, automatic exit statistics and cleanup excluded"
+            },
+            "process_wall": {
+                "wall_seconds": 7.012725499000226,
+                "command": [
+                    "/home/ripopov/work/gem5/main/build/RISCV/gem5.opt",
+                    "--outdir=/home/ripopov/work/gem5/main/local-temp/reduction-barrier-20261011/n16-q17",
+                    "/home/ripopov/work/gem5/main/configs/example/rt_accel_reduction.py",
+                    "--workload=reduction",
+                    "--accelerator-cores=16",
+                    "--queues=17",
+                    "--transport-delay=5ns"
+                ],
+                "idle_machine_checked": true,
+                "process_checks": 7,
+                "simulations_before": [],
+                "simulations_after": []
+            },
+            "comparison_with_saved_des": {
+                "simulated_counters_compared": 36816,
+                "excluded_host_counters": [
+                    "dump0/hostInstRate",
+                    "dump0/hostMemory",
+                    "dump0/hostOpRate",
+                    "dump0/hostSeconds",
+                    "dump0/hostTickRate",
+                    "dump1/hostInstRate",
+                    "dump1/hostMemory",
+                    "dump1/hostOpRate",
+                    "dump1/hostSeconds",
+                    "dump1/hostTickRate"
+                ],
+                "workload": "reduction",
+                "left": "n16-timing-0-q1",
+                "right": "n16-q17"
+            },
+            "output_sha256": {
+                "jobs.bin":
+                    "1ea20d25c8d6c2dd28fc6534d4c4dc2839770275fd4da75580055787a44c812e",
+                "parameters.bin":
+                    "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+                "inputs.elf":
+                    "4d7dc7a70c0b3d40f36bb4546a333b48d251fbc70222bb3ff47c815fd1bbd53e",
+                "boot.elf":
+                    "aac7edfe0d6cef5e8329ff3ba1919cc67ad2267808fd2a1c2d6de01ba5fad69d",
+                "partials.bin":
+                    "908bdfb0e87619de63928b3f9543106f500e3fb7c67f98741bb92088610c9576",
+                "sum.bin":
+                    "614ccbddbee93343b5cd8aed8c89e2b8a2ed89fe156d609b9f327c3edf1794a6"
+            },
+            "saved_baseline_simulation_seconds": {
+                "1": 17.361322990999724,
+                "17": 4.658886275000441
+            },
+            "saved_baseline_process_seconds": {
+                "1": 19.6662550609999,
+                "17": 6.982744513000398
+            },
+            "simulation_speedup_vs_saved_des": 3.7488996629780726,
+            "process_speedup_vs_saved_des": 2.804366870456235,
+            "simulation_speedup_vs_saved_pdes": 1.0060118802729898,
+            "process_speedup_vs_saved_pdes": 0.9957247740548091
+        }
+    ],
+    "finished_utc": "2026-10-11T20:05:15.856421+00:00",
+    "optimized_profile": {
+        "git_commit": "2390a8ab58fea58762c05b1f51fab326b78a5040",
+        "instrumented_provenance": {
+            "binary_sha256":
+                "5932ade92b9767d1f6cd95095116ceca124e19c8cd6a2edd29fa66fe5736ffc6",
+            "source_sha256": {
+                "simulate.cc":
+                    "25dbb0f91f67a6709bb2e62dad13e011668c9599148c685172cbdf78f43d77b5",
+                "global_event.cc":
+                    "286892532efc070a4eacfd433991439f2606c8aea23797fd1fb6d068f996d513",
+                "eventq.cc":
+                    "a27ea6d76bd5d4815ef9b797a9313a8f7daa0891311a137000040e28f588b0f8"
+            }
+        },
+        "runs": {
+            "optimized-cpu": {
+                "wall": {
+                    "command": [
+                        "perf",
+                        "record",
+                        "-F",
+                        "499",
+                        "-e",
+                        "cpu-clock:u",
+                        "--call-graph",
+                        "dwarf,4096",
+                        "-o",
+                        "/home/ripopov/work/gem5/main/local-temp/reduction-profile-optimized/optimized-cpu/perf.data",
+                        "--",
+                        "/usr/bin/time",
+                        "-v",
+                        "-o",
+                        "/home/ripopov/work/gem5/main/local-temp/reduction-profile-optimized/optimized-cpu/resources.txt",
+                        "/home/ripopov/work/gem5/main/build/RISCV/gem5.opt",
+                        "--outdir=/home/ripopov/work/gem5/main/local-temp/reduction-profile-optimized/optimized-cpu",
+                        "/home/ripopov/work/gem5/main/configs/example/rt_accel_reduction.py",
+                        "--workload=reduction",
+                        "--accelerator-cores=16",
+                        "--queues=17",
+                        "--transport-delay=5ns"
+                    ],
+                    "binary_sha256":
+                        "20a80a9ef7049d14173372c53cb5c2cee702d6869f635fccbe81abb25b19581a",
+                    "started_utc": "2026-10-11T20:09:46.736710+00:00",
+                    "affinity": [
+                        0,
+                        1,
+                        2,
+                        3,
+                        4,
+                        5,
+                        6,
+                        7,
+                        8,
+                        9,
+                        10,
+                        11,
+                        12,
+                        13,
+                        14,
+                        15,
+                        16,
+                        17,
+                        18,
+                        19
+                    ],
+                    "pid_namespace": "pid:[4026531836]",
+                    "returncode": 0,
+                    "wall_seconds": 8.040069391001452,
+                    "finished_utc": "2026-10-11T20:09:54.790497+00:00"
+                },
+                "simulation": {
+                    "wall_seconds": 5.133290894998936,
+                    "start_tick": 0,
+                    "end_tick": 148133000,
+                    "boundary":
+                        "After instantiate through return from simulate; boot, batch, validation and export included; image setup, automatic exit statistics and cleanup excluded"
+                },
+                "comparison": {
+                    "simulated_counters_compared": 36816,
+                    "excluded_host_counters": [
+                        "dump0/hostInstRate",
+                        "dump0/hostMemory",
+                        "dump0/hostOpRate",
+                        "dump0/hostSeconds",
+                        "dump0/hostTickRate",
+                        "dump1/hostInstRate",
+                        "dump1/hostMemory",
+                        "dump1/hostOpRate",
+                        "dump1/hostSeconds",
+                        "dump1/hostTickRate"
+                    ],
+                    "workload": "reduction",
+                    "left": "n16-timing-0-q1",
+                    "right": "optimized-cpu",
+                    "outputs": {
+                        "jobs.bin":
+                            "1ea20d25c8d6c2dd28fc6534d4c4dc2839770275fd4da75580055787a44c812e",
+                        "parameters.bin":
+                            "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+                        "inputs.elf":
+                            "4d7dc7a70c0b3d40f36bb4546a333b48d251fbc70222bb3ff47c815fd1bbd53e",
+                        "boot.elf":
+                            "aac7edfe0d6cef5e8329ff3ba1919cc67ad2267808fd2a1c2d6de01ba5fad69d",
+                        "partials.bin":
+                            "908bdfb0e87619de63928b3f9543106f500e3fb7c67f98741bb92088610c9576",
+                        "sum.bin":
+                            "614ccbddbee93343b5cd8aed8c89e2b8a2ed89fe156d609b9f327c3edf1794a6"
+                    }
+                },
+                "resources": {
+                    "User time (seconds)": 58.14,
+                    "System time (seconds)": 1.92,
+                    "Voluntary context switches": 860668.0,
+                    "Involuntary context switches": 14767.0
+                },
+                "cpu_or_futex_symbols": [
+                    "56.24% 16060 [.] gem5::GlobalSyncEvent::BarrierEvent::process() - -",
+                    "3.71% 1059 [.] operator new[](unsigned long) - -",
+                    "1.20% 344 [.] std::_Sp_counted_base<(__gnu_cxx::_Lock_policy)2>::_M_release() - -",
+                    "0.83% 237 [.] gem5::RefCountingPtr<gem5::o3::DynInst>::del() - -",
+                    "0.77% 220 [.] operator delete[](void*, unsigned long) - -",
+                    "0.64% 183 [.] gem5::EventQueue::serviceOne() - -",
+                    "0.64% 183 [.] gem5::o3::DependencyGraph<gem5::RefCountingPtr<gem5::o3::DynInst> >::pop(unsigned short) - -",
+                    "0.63% 181 [.] gem5::EventQueue::insert(gem5::Event*) - -",
+                    "0.63% 180 [.] gem5::o3::Fetch::fetch(bool&) - -",
+                    "0.53% 152 [.] feclearexcept - -",
+                    "0.53% 152 [.] std::__detail::_Map_base<gem5::bitfield_backend::BitUnionOperators<gem5::RiscvISA::BitfieldUnderlyingClassesExtMachInst>, std::pair<gem5::bitfield_backend::BitUnionOperators<gem5::RiscvISA::BitfieldUnderlyingClassesExtMachInst> const, gem5::RefCountingPtr<gem5::StaticInst> >, std::allocator<std::pair<gem5::bitfield_backend::BitUnionOperators<gem5::RiscvISA::BitfieldUnderlyingClassesExtMachInst> const, gem5::RefCountingPtr<gem5::StaticInst> > >, std::__detail::_Select1st, std::equal_to<gem5::bitfield_backend::BitUnionOperators<gem5::RiscvISA::BitfieldUnderlyingClassesExtMachInst> >, std::hash<gem5::bitfield_backend::BitUnionOperators<gem5::RiscvISA::BitfieldUnderlyingClassesExtMachInst> >, std::__detail::_Mod_range_hashing, std::__detail::_Default_ranged_hash, std::__detail::_Prime_rehash_policy, std::__detail::_Hashtable_traits<true, false, true>, true>::operator[](gem5::bitfield_backend::BitUnionOperators<gem5::RiscvISA::BitfieldUnderlyingClassesExtMachInst> const&) - -"
+                ]
+            },
+            "original-cpu": {
+                "wall": {
+                    "command": [
+                        "perf",
+                        "record",
+                        "-F",
+                        "499",
+                        "-e",
+                        "cpu-clock:u",
+                        "--call-graph",
+                        "dwarf,4096",
+                        "-o",
+                        "/home/ripopov/work/gem5/main/local-temp/reduction-profile-optimized/original-cpu/perf.data",
+                        "--",
+                        "/usr/bin/time",
+                        "-v",
+                        "-o",
+                        "/home/ripopov/work/gem5/main/local-temp/reduction-profile-optimized/original-cpu/resources.txt",
+                        "/home/ripopov/work/gem5/main/local-temp/quantum-barrier/baseline/bin/gem5.opt",
+                        "--outdir=/home/ripopov/work/gem5/main/local-temp/reduction-profile-optimized/original-cpu",
+                        "/home/ripopov/work/gem5/main/configs/example/rt_accel_reduction.py",
+                        "--workload=reduction",
+                        "--accelerator-cores=16",
+                        "--queues=17",
+                        "--transport-delay=5ns"
+                    ],
+                    "binary_sha256":
+                        "2b89759238e6a833cbbd74cff275c9b0a55c38af8bc25a1fc56ae9748214d66f",
+                    "started_utc": "2026-10-11T20:09:55.408305+00:00",
+                    "affinity": [
+                        0,
+                        1,
+                        2,
+                        3,
+                        4,
+                        5,
+                        6,
+                        7,
+                        8,
+                        9,
+                        10,
+                        11,
+                        12,
+                        13,
+                        14,
+                        15,
+                        16,
+                        17,
+                        18,
+                        19
+                    ],
+                    "pid_namespace": "pid:[4026531836]",
+                    "returncode": 0,
+                    "wall_seconds": 7.989948842998274,
+                    "finished_utc": "2026-10-11T20:10:03.412015+00:00"
+                },
+                "simulation": {
+                    "wall_seconds": 5.051353312999709,
+                    "start_tick": 0,
+                    "end_tick": 148133000,
+                    "boundary":
+                        "After instantiate through return from simulate; boot, batch, validation and export included; image setup, automatic exit statistics and cleanup excluded"
+                },
+                "comparison": {
+                    "simulated_counters_compared": 36816,
+                    "excluded_host_counters": [
+                        "dump0/hostInstRate",
+                        "dump0/hostMemory",
+                        "dump0/hostOpRate",
+                        "dump0/hostSeconds",
+                        "dump0/hostTickRate",
+                        "dump1/hostInstRate",
+                        "dump1/hostMemory",
+                        "dump1/hostOpRate",
+                        "dump1/hostSeconds",
+                        "dump1/hostTickRate"
+                    ],
+                    "workload": "reduction",
+                    "left": "n16-timing-0-q1",
+                    "right": "original-cpu",
+                    "outputs": {
+                        "jobs.bin":
+                            "1ea20d25c8d6c2dd28fc6534d4c4dc2839770275fd4da75580055787a44c812e",
+                        "parameters.bin":
+                            "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+                        "inputs.elf":
+                            "4d7dc7a70c0b3d40f36bb4546a333b48d251fbc70222bb3ff47c815fd1bbd53e",
+                        "boot.elf":
+                            "aac7edfe0d6cef5e8329ff3ba1919cc67ad2267808fd2a1c2d6de01ba5fad69d",
+                        "partials.bin":
+                            "908bdfb0e87619de63928b3f9543106f500e3fb7c67f98741bb92088610c9576",
+                        "sum.bin":
+                            "614ccbddbee93343b5cd8aed8c89e2b8a2ed89fe156d609b9f327c3edf1794a6"
+                    }
+                },
+                "resources": {
+                    "User time (seconds)": 27.83,
+                    "System time (seconds)": 2.53,
+                    "Voluntary context switches": 1151221.0,
+                    "Involuntary context switches": 43774.0
+                },
+                "cpu_or_futex_symbols": [
+                    "7.51% 990 [.] operator new[](unsigned long) - -",
+                    "2.51% 331 [.] std::_Sp_counted_base<(__gnu_cxx::_Lock_policy)2>::_M_release() - -",
+                    "1.84% 242 [.] gem5::RefCountingPtr<gem5::o3::DynInst>::del() - -",
+                    "1.78% 234 [.] operator delete[](void*, unsigned long) - -",
+                    "1.38% 182 [.] gem5::EventQueue::insert(gem5::Event*) - -",
+                    "1.28% 169 [.] gem5::o3::DependencyGraph<gem5::RefCountingPtr<gem5::o3::DynInst> >::pop(unsigned short) - -",
+                    "1.26% 166 [.] gem5::EventQueue::serviceOne() - -",
+                    "1.13% 149 [.] gem5::o3::Fetch::fetch(bool&) - -",
+                    "1.05% 138 [.] std::__detail::_Map_base<gem5::bitfield_backend::BitUnionOperators<gem5::RiscvISA::BitfieldUnderlyingClassesExtMachInst>, std::pair<gem5::bitfield_backend::BitUnionOperators<gem5::RiscvISA::BitfieldUnderlyingClassesExtMachInst> const, gem5::RefCountingPtr<gem5::StaticInst> >, std::allocator<std::pair<gem5::bitfield_backend::BitUnionOperators<gem5::RiscvISA::BitfieldUnderlyingClassesExtMachInst> const, gem5::RefCountingPtr<gem5::StaticInst> > >, std::__detail::_Select1st, std::equal_to<gem5::bitfield_backend::BitUnionOperators<gem5::RiscvISA::BitfieldUnderlyingClassesExtMachInst> >, std::hash<gem5::bitfield_backend::BitUnionOperators<gem5::RiscvISA::BitfieldUnderlyingClassesExtMachInst> >, std::__detail::_Mod_range_hashing, std::__detail::_Default_ranged_hash, std::__detail::_Prime_rehash_policy, std::__detail::_Hashtable_traits<true, false, true>, true>::operator[](gem5::bitfield_backend::BitUnionOperators<gem5::RiscvISA::BitfieldUnderlyingClassesExtMachInst> const&) - -",
+                    "0.96% 127 [.] gem5::o3::CPU::tick() - -",
+                    "0.92% 121 [.] feclearexcept - -",
+                    "0.90% 118 [.] gem5::o3::InstructionQueue::scheduleReadyInsts() - -"
+                ]
+            },
+            "optimized-futex": {
+                "wall": {
+                    "command": [
+                        "perf",
+                        "record",
+                        "-e",
+                        "syscalls:sys_enter_futex",
+                        "-c",
+                        "100",
+                        "--call-graph",
+                        "dwarf,4096",
+                        "-o",
+                        "/home/ripopov/work/gem5/main/local-temp/reduction-profile-optimized/optimized-futex/perf.data",
+                        "--",
+                        "/usr/bin/time",
+                        "-v",
+                        "-o",
+                        "/home/ripopov/work/gem5/main/local-temp/reduction-profile-optimized/optimized-futex/resources.txt",
+                        "/home/ripopov/work/gem5/main/build/RISCV/gem5.opt",
+                        "--outdir=/home/ripopov/work/gem5/main/local-temp/reduction-profile-optimized/optimized-futex",
+                        "/home/ripopov/work/gem5/main/configs/example/rt_accel_reduction.py",
+                        "--workload=reduction",
+                        "--accelerator-cores=16",
+                        "--queues=17",
+                        "--transport-delay=5ns"
+                    ],
+                    "binary_sha256":
+                        "20a80a9ef7049d14173372c53cb5c2cee702d6869f635fccbe81abb25b19581a",
+                    "started_utc": "2026-10-11T20:10:52.553105+00:00",
+                    "affinity": [
+                        0,
+                        1,
+                        2,
+                        3,
+                        4,
+                        5,
+                        6,
+                        7,
+                        8,
+                        9,
+                        10,
+                        11,
+                        12,
+                        13,
+                        14,
+                        15,
+                        16,
+                        17,
+                        18,
+                        19
+                    ],
+                    "pid_namespace": "pid:[4026531836]",
+                    "returncode": 0,
+                    "wall_seconds": 11.342704065998987,
+                    "finished_utc": "2026-10-11T20:11:03.910049+00:00"
+                },
+                "simulation": {
+                    "wall_seconds": 6.623016169996845,
+                    "start_tick": 0,
+                    "end_tick": 148133000,
+                    "boundary":
+                        "After instantiate through return from simulate; boot, batch, validation and export included; image setup, automatic exit statistics and cleanup excluded"
+                },
+                "comparison": {
+                    "simulated_counters_compared": 36816,
+                    "excluded_host_counters": [
+                        "dump0/hostInstRate",
+                        "dump0/hostMemory",
+                        "dump0/hostOpRate",
+                        "dump0/hostSeconds",
+                        "dump0/hostTickRate",
+                        "dump1/hostInstRate",
+                        "dump1/hostMemory",
+                        "dump1/hostOpRate",
+                        "dump1/hostSeconds",
+                        "dump1/hostTickRate"
+                    ],
+                    "workload": "reduction",
+                    "left": "n16-timing-0-q1",
+                    "right": "optimized-futex",
+                    "outputs": {
+                        "jobs.bin":
+                            "1ea20d25c8d6c2dd28fc6534d4c4dc2839770275fd4da75580055787a44c812e",
+                        "parameters.bin":
+                            "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+                        "inputs.elf":
+                            "4d7dc7a70c0b3d40f36bb4546a333b48d251fbc70222bb3ff47c815fd1bbd53e",
+                        "boot.elf":
+                            "aac7edfe0d6cef5e8329ff3ba1919cc67ad2267808fd2a1c2d6de01ba5fad69d",
+                        "partials.bin":
+                            "908bdfb0e87619de63928b3f9543106f500e3fb7c67f98741bb92088610c9576",
+                        "sum.bin":
+                            "614ccbddbee93343b5cd8aed8c89e2b8a2ed89fe156d609b9f327c3edf1794a6"
+                    }
+                },
+                "resources": {
+                    "User time (seconds)": 70.47,
+                    "System time (seconds)": 3.26,
+                    "Voluntary context switches": 809976.0,
+                    "Involuntary context switches": 26631.0
+                },
+                "cpu_or_futex_symbols":
+                    [
+                        "37.89% 37.89% 650869 [.] __GI___lll_lock_wake - -",
+                        "27.91% 27.91% 479446 [.] __GI___lll_lock_wait - -",
+                        "25.08% 25.08% 430831 [.] __syscall_cancel_arch_end - -",
+                        "6.04% 6.04% 103761 [.] pthread_cond_broadcast@@GLIBC_2.3.2 - -",
+                        "3.08% 3.08% 52907 [.] syscall - -",
+                        "1.56% 0.00% 0 [.] _FUN (inlined) - -",
+                        "1.56% 0.00% 0 [.] call<gem5::GlobalSimLoopExitEvent*, pybind11::detail::void_type, gem5::GlobalSimLoopExitEvent* (*&)(long unsigned int)> (inlined) - -",
+                        "1.56% 0.00% 0 [.] call_impl<gem5::GlobalSimLoopExitEvent*, gem5::GlobalSimLoopExitEvent* (*&)(long unsigned int), 0, pybind11::detail::void_type> (inlined) - -",
+                        "1.56% 0.00% 0 [.] dispatcher (inlined) - -",
+                        "1.56% 0.00% 0 [.] doSimLoop (inlined) - -",
+                        "1.56% 0.00% 0 [.] operator() (inlined) - -",
+                        "1.56% 0.00% 0 [.] serviceOne (inlined) - -"
+                    ]
+            },
+            "optimized-waits": {
+                "wall": {
+                    "command": [
+                        "/usr/bin/time",
+                        "-v",
+                        "-o",
+                        "/home/ripopov/work/gem5/main/local-temp/reduction-profile-optimized/optimized-waits/resources.txt",
+                        "/home/ripopov/work/gem5/main/build/RISCV/gem5.opt",
+                        "--outdir=/home/ripopov/work/gem5/main/local-temp/reduction-profile-optimized/optimized-waits",
+                        "/home/ripopov/work/gem5/main/configs/example/rt_accel_reduction.py",
+                        "--workload=reduction",
+                        "--accelerator-cores=16",
+                        "--queues=17",
+                        "--transport-delay=5ns"
+                    ],
+                    "binary_sha256":
+                        "20a80a9ef7049d14173372c53cb5c2cee702d6869f635fccbe81abb25b19581a",
+                    "started_utc": "2026-10-11T20:13:08.398818+00:00",
+                    "affinity": [
+                        0,
+                        1,
+                        2,
+                        3,
+                        4,
+                        5,
+                        6,
+                        7,
+                        8,
+                        9,
+                        10,
+                        11,
+                        12,
+                        13,
+                        14,
+                        15,
+                        16,
+                        17,
+                        18,
+                        19
+                    ],
+                    "pid_namespace": "pid:[4026531836]",
+                    "returncode": 0,
+                    "wall_seconds": 7.978725352000765,
+                    "finished_utc": "2026-10-11T20:13:16.390702+00:00"
+                },
+                "simulation": {
+                    "wall_seconds": 5.655519317002472,
+                    "start_tick": 0,
+                    "end_tick": 148133000,
+                    "boundary":
+                        "After instantiate through return from simulate; boot, batch, validation and export included; image setup, automatic exit statistics and cleanup excluded"
+                },
+                "comparison": {
+                    "simulated_counters_compared": 36816,
+                    "excluded_host_counters": [
+                        "dump0/hostInstRate",
+                        "dump0/hostMemory",
+                        "dump0/hostOpRate",
+                        "dump0/hostSeconds",
+                        "dump0/hostTickRate",
+                        "dump1/hostInstRate",
+                        "dump1/hostMemory",
+                        "dump1/hostOpRate",
+                        "dump1/hostSeconds",
+                        "dump1/hostTickRate"
+                    ],
+                    "workload": "reduction",
+                    "left": "n16-timing-0-q1",
+                    "right": "optimized-waits",
+                    "outputs": {
+                        "jobs.bin":
+                            "1ea20d25c8d6c2dd28fc6534d4c4dc2839770275fd4da75580055787a44c812e",
+                        "parameters.bin":
+                            "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+                        "inputs.elf":
+                            "4d7dc7a70c0b3d40f36bb4546a333b48d251fbc70222bb3ff47c815fd1bbd53e",
+                        "boot.elf":
+                            "aac7edfe0d6cef5e8329ff3ba1919cc67ad2267808fd2a1c2d6de01ba5fad69d",
+                        "partials.bin":
+                            "908bdfb0e87619de63928b3f9543106f500e3fb7c67f98741bb92088610c9576",
+                        "sum.bin":
+                            "614ccbddbee93343b5cd8aed8c89e2b8a2ed89fe156d609b9f327c3edf1794a6"
+                    }
+                },
+                "resources": {
+                    "User time (seconds)": 61.23,
+                    "System time (seconds)": 1.65,
+                    "Voluntary context switches": 910559.0,
+                    "Involuntary context switches": 19095.0
+                },
+                "wait-summary": {
+                    "sampling_period": 128,
+                    "mutex_calls": 260994,
+                    "condition_wait_calls": 509588,
+                    "records": 6006,
+                    "dropped": 0,
+                    "groups": [
+                        {
+                            "kind": 1,
+                            "stack": [
+                                "gem5::EventQueue::asyncInsert(gem5::Event*) + 0x143",
+                                "gem5::rt_accel::post(gem5::EventManager&, unsigned long, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::function<void ()>, signed char) + 0x190",
+                                "gem5::rt_accel::Gem5Wrapper::MemoryPort::recvTimingReq(gem5::Packet*) + 0x22d",
+                                "gem5::CoherentXBar::recvTimingReq(gem5::Packet*, short) + 0x870"
+                            ],
+                            "samples": 3950,
+                            "sampled_wait_ns": 117087320,
+                            "max_sample_ns": 912477
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "gem5::EventQueue::asyncInsert(gem5::Event*) + 0x122",
+                                "gem5::rt_accel::post(gem5::EventManager&, unsigned long, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::function<void ()>, signed char) + 0x190",
+                                "gem5::rt_accel::Gem5Wrapper::MemoryPort::recvTimingReq(gem5::Packet*) + 0x22d",
+                                "gem5::CoherentXBar::recvTimingReq(gem5::Packet*, short) + 0x870"
+                            ],
+                            "samples": 833,
+                            "sampled_wait_ns": 3859087,
+                            "max_sample_ns": 606487
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "gem5::EventQueue::asyncInsert(gem5::Event*) + 0x1ae",
+                                "gem5::rt_accel::post(gem5::EventManager&, unsigned long, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::function<void ()>, signed char) + 0x190",
+                                "gem5::rt_accel::Gem5Wrapper::MemoryPort::recvTimingReq(gem5::Packet*) + 0x22d",
+                                "gem5::CoherentXBar::recvTimingReq(gem5::Packet*, short) + 0x870"
+                            ],
+                            "samples": 820,
+                            "sampled_wait_ns": 1086048,
+                            "max_sample_ns": 55872
+                        },
+                        {
+                            "kind": 1,
+                            "stack": [
+                                "gem5::EventQueue::handleAsyncInsertions() + 0x7b",
+                                "gem5::EventQueue::serviceOne() + 0x1f4",
+                                "gem5::doSimLoop(gem5::EventQueue*) + 0x77",
+                                "gem5::simulate(unsigned long) + 0x1cf"
+                            ],
+                            "samples": 20,
+                            "sampled_wait_ns": 1069895,
+                            "max_sample_ns": 314273
+                        },
+                        {
+                            "kind": 1,
+                            "stack": [
+                                "gem5::EventQueue::asyncInsert(gem5::Event*) + 0x143",
+                                "gem5::rt_accel::post(gem5::EventManager&, unsigned long, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::function<void ()>, signed char) + 0x190",
+                                "gem5::rt_accel::HostAdapter::MasterPort::recvTimingResp(gem5::Packet*) + 0x25d",
+                                "gem5::RespPacketQueue::sendTiming(gem5::Packet*) + 0x35"
+                            ],
+                            "samples": 5,
+                            "sampled_wait_ns": 63729,
+                            "max_sample_ns": 26786
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "gem5::EventQueue::handleAsyncInsertions() + 0x59",
+                                "gem5::EventQueue::serviceOne() + 0x1f4",
+                                "gem5::doSimLoop(gem5::EventQueue*) + 0x77",
+                                "gem5::simulate(unsigned long) + 0x1cf"
+                            ],
+                            "samples": 6,
+                            "sampled_wait_ns": 49572,
+                            "max_sample_ns": 21421
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "gem5::EventQueue::handleAsyncInsertions() + 0x10c",
+                                "gem5::EventQueue::serviceOne() + 0x1f4",
+                                "gem5::doSimLoop(gem5::EventQueue*) + 0x77",
+                                "gem5::simulate(unsigned long) + 0x1cf"
+                            ],
+                            "samples": 46,
+                            "sampled_wait_ns": 20445,
+                            "max_sample_ns": 14236
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "gem5::BaseGlobalEvent::schedule(unsigned long) + 0x23",
+                                "gem5::ProcessBarrier::operator()() const + 0x175",
+                                "gem5::GlobalSyncEvent::BarrierEvent::process() + 0x409",
+                                "gem5::EventQueue::serviceOne() + 0x1f4"
+                            ],
+                            "samples": 220,
+                            "sampled_wait_ns": 20156,
+                            "max_sample_ns": 205
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "Py_GetVersion @ ??:?",
+                                "PyEval_RestoreThread @ ??:?",
+                                "_Py_Gid_Converter @ ??:?"
+                            ],
+                            "samples": 32,
+                            "sampled_wait_ns": 622,
+                            "max_sample_ns": 68
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "gem5::EventQueue::asyncInsert(gem5::Event*) + 0x122",
+                                "gem5::rt_accel::post(gem5::EventManager&, unsigned long, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::function<void ()>, signed char) + 0x190",
+                                "gem5::rt_accel::HostAdapter::MasterPort::recvTimingResp(gem5::Packet*) + 0x25d",
+                                "gem5::RespPacketQueue::sendTiming(gem5::Packet*) + 0x35"
+                            ],
+                            "samples": 9,
+                            "sampled_wait_ns": 585,
+                            "max_sample_ns": 77
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "gem5::EventQueue::handleAsyncInsertions() + 0x10c",
+                                "gem5::EventQueue::serviceOne() + 0x1f4",
+                                "gem5::doSimLoop(gem5::EventQueue*) + 0x77",
+                                "std::thread::_State_impl<std::thread::_Invoker<std::tuple<gem5::SimulatorThreads::runUntilLocalExit()::{lambda(gem5::EventQueue*)#1}, gem5::EventQueue*> > >::_M_run() + 0x131"
+                            ],
+                            "samples": 3,
+                            "sampled_wait_ns": 400,
+                            "max_sample_ns": 250
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "gem5::Drainable::Drainable() + 0x4b",
+                                "gem5::SimObject::SimObject(gem5::SimObjectParams const&) + 0x4c",
+                                "gem5::OpDescParams::create() const + 0x24",
+                                "pybind11::cpp_function::initialize<pybind11::cpp_function::initialize<gem5::OpDesc*, gem5::OpDescParams, , pybind11::name, pybind11::is_method, pybind11::sibling>(gem5::OpDesc* (gem5::OpDescParams::*)() const, pybind11::name const&, pybind11::is_method const&, pybind11::sibling const&)::{lambda(gem5::OpDescParams const*)#1}, gem5::OpDesc*, gem5::OpDescParams const*, pybind11::name, pybind11::is_method, pybind11::sibling>(pybind11::cpp_function::initialize<gem5::OpDesc*, gem5::OpDescParams, , pybind11::name, pybind11::is_method, pybind11::sibling>(gem5::OpDesc* (gem5::OpDescParams::*)() const, pybind11::name const&, pybind11::is_method const&, pybind11::sibling const&)::{lambda(gem5::OpDescParams const*)#1}&&, gem5::OpDesc* (*)(gem5::OpDescParams const*), pybind11::name const&, pybind11::is_method const&, pybind11::sibling const&)::{lambda(pybind11::detail::function_call&)#1}::_FUN(pybind11::detail::function_call&) + 0xbf"
+                            ],
+                            "samples": 14,
+                            "sampled_wait_ns": 326,
+                            "max_sample_ns": 27
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "Py_GetVersion @ ??:?",
+                                "PyEval_RestoreThread @ ??:?",
+                                "PyInit__io @ ??:?"
+                            ],
+                            "samples": 9,
+                            "sampled_wait_ns": 197,
+                            "max_sample_ns": 31
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "PyEval_SaveThread @ ??:?",
+                                "PyInit__io @ ??:?",
+                                "PyObject_VectorcallMethod @ ??:?"
+                            ],
+                            "samples": 3,
+                            "sampled_wait_ns": 177,
+                            "max_sample_ns": 124
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "PyEval_SaveThread @ ??:?",
+                                "_Py_Gid_Converter @ ??:?",
+                                "_Py_Gid_Converter @ ??:?"
+                            ],
+                            "samples": 7,
+                            "sampled_wait_ns": 163,
+                            "max_sample_ns": 33
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "PyEval_SaveThread @ ??:?",
+                                "_Py_Gid_Converter @ ??:?",
+                                "_PyEval_EvalFrameDefault @ ??:?"
+                            ],
+                            "samples": 8,
+                            "sampled_wait_ns": 131,
+                            "max_sample_ns": 30
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "Py_GetVersion @ ??:?",
+                                "PyEval_RestoreThread @ ??:?",
+                                "_Py_write @ ??:?"
+                            ],
+                            "samples": 3,
+                            "sampled_wait_ns": 95,
+                            "max_sample_ns": 40
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "gem5::Drainable::Drainable() + 0x4b",
+                                "gem5::SimObject::SimObject(gem5::SimObjectParams const&) + 0x4c",
+                                "gem5::FUDescParams::create() const + 0x24",
+                                "pybind11::cpp_function::initialize<pybind11::cpp_function::initialize<gem5::FUDesc*, gem5::FUDescParams, , pybind11::name, pybind11::is_method, pybind11::sibling>(gem5::FUDesc* (gem5::FUDescParams::*)() const, pybind11::name const&, pybind11::is_method const&, pybind11::sibling const&)::{lambda(gem5::FUDescParams const*)#1}, gem5::FUDesc*, gem5::FUDescParams const*, pybind11::name, pybind11::is_method, pybind11::sibling>(pybind11::cpp_function::initialize<gem5::FUDesc*, gem5::FUDescParams, , pybind11::name, pybind11::is_method, pybind11::sibling>(gem5::FUDesc* (gem5::FUDescParams::*)() const, pybind11::name const&, pybind11::is_method const&, pybind11::sibling const&)::{lambda(gem5::FUDescParams const*)#1}&&, gem5::FUDesc* (*)(gem5::FUDescParams const*), pybind11::name const&, pybind11::is_method const&, pybind11::sibling const&)::{lambda(pybind11::detail::function_call&)#1}::_FUN(pybind11::detail::function_call&) + 0xcf"
+                            ],
+                            "samples": 3,
+                            "sampled_wait_ns": 70,
+                            "max_sample_ns": 25
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "gem5::Drainable::Drainable() + 0x4b",
+                                "gem5::BaseXBar::Layer<gem5::RequestPort, gem5::ResponsePort>::Layer(gem5::ResponsePort&, gem5::BaseXBar&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) + 0x36",
+                                "gem5::CoherentXBar::CoherentXBar(gem5::CoherentXBarParams const&) + 0x109d",
+                                "gem5::CoherentXBarParams::create() const + 0x24"
+                            ],
+                            "samples": 3,
+                            "sampled_wait_ns": 63,
+                            "max_sample_ns": 22
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "gem5::EventQueue::asyncInsert(gem5::Event*) + 0x1ae",
+                                "gem5::rt_accel::post(gem5::EventManager&, unsigned long, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::function<void ()>, signed char) + 0x190",
+                                "gem5::rt_accel::HostAdapter::MasterPort::recvTimingResp(gem5::Packet*) + 0x25d",
+                                "gem5::RespPacketQueue::sendTiming(gem5::Packet*) + 0x35"
+                            ],
+                            "samples": 1,
+                            "sampled_wait_ns": 59,
+                            "max_sample_ns": 59
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "gem5::Drainable::Drainable() + 0x4b",
+                                "gem5::Queue<gem5::WriteQueueEntry>::Queue(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, int, int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) + 0x38",
+                                "gem5::WriteQueue::WriteQueue(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, int, int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) + 0xea",
+                                "gem5::BaseCache::BaseCache(gem5::BaseCacheParams const&, unsigned int) + 0x48b"
+                            ],
+                            "samples": 1,
+                            "sampled_wait_ns": 30,
+                            "max_sample_ns": 30
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "gem5::Drainable::Drainable() + 0x4b",
+                                "gem5::SimObject::SimObject(gem5::SimObjectParams const&) + 0x4c",
+                                "gem5::VoltageDomain::VoltageDomain(gem5::VoltageDomainParams const&) + 0x29",
+                                "gem5::VoltageDomainParams::create() const + 0x24"
+                            ],
+                            "samples": 1,
+                            "sampled_wait_ns": 30,
+                            "max_sample_ns": 30
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "gem5::Drainable::Drainable() + 0x4b",
+                                "gem5::PacketQueue::PacketQueue(gem5::EventManager&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, bool, bool) + 0x3d",
+                                "gem5::RespPacketQueue::RespPacketQueue(gem5::EventManager&, gem5::ResponsePort&, bool, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >) + 0x54",
+                                "gem5::SimpleTimingPort::SimpleTimingPort(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, gem5::SimObject*) + 0xb8"
+                            ],
+                            "samples": 1,
+                            "sampled_wait_ns": 30,
+                            "max_sample_ns": 30
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "PyEval_SaveThread @ ??:?",
+                                "PyInit__io @ ??:?",
+                                "PyType_GetQualName @ ??:?"
+                            ],
+                            "samples": 1,
+                            "sampled_wait_ns": 29,
+                            "max_sample_ns": 29
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "gem5::Drainable::Drainable() + 0x4b",
+                                "gem5::SimObject::SimObject(gem5::SimObjectParams const&) + 0x4c",
+                                "gem5::replacement_policy::LRU::LRU(gem5::LRURPParams const&) + 0xc",
+                                "gem5::LRURPParams::create() const + 0x24"
+                            ],
+                            "samples": 1,
+                            "sampled_wait_ns": 29,
+                            "max_sample_ns": 29
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "gem5::Drainable::Drainable() + 0x4b",
+                                "gem5::BaseXBar::Layer<gem5::ResponsePort, gem5::RequestPort>::Layer(gem5::RequestPort&, gem5::BaseXBar&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) + 0x36",
+                                "gem5::CoherentXBar::CoherentXBar(gem5::CoherentXBarParams const&) + 0x6ce",
+                                "gem5::CoherentXBarParams::create() const + 0x24"
+                            ],
+                            "samples": 1,
+                            "sampled_wait_ns": 24,
+                            "max_sample_ns": 24
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "gem5::Drainable::Drainable() + 0x4b",
+                                "gem5::SimObject::SimObject(gem5::SimObjectParams const&) + 0x4c",
+                                "gem5::ClockedObject::ClockedObject(gem5::ClockedObjectParams const&) + 0x1f",
+                                "gem5::BaseCache::BaseCache(gem5::BaseCacheParams const&, unsigned int) + 0x32"
+                            ],
+                            "samples": 1,
+                            "sampled_wait_ns": 24,
+                            "max_sample_ns": 24
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "gem5::Drainable::Drainable() + 0x4b",
+                                "gem5::BaseXBar::Layer<gem5::RequestPort, gem5::ResponsePort>::Layer(gem5::ResponsePort&, gem5::BaseXBar&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) + 0x36",
+                                "gem5::NoncoherentXBar::NoncoherentXBar(gem5::NoncoherentXBarParams const&) + 0x6bc",
+                                "gem5::NoncoherentXBarParams::create() const + 0x24"
+                            ],
+                            "samples": 1,
+                            "sampled_wait_ns": 24,
+                            "max_sample_ns": 24
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "gem5::Drainable::Drainable() + 0x4b",
+                                "gem5::SimObject::SimObject(gem5::SimObjectParams const&) + 0x4c",
+                                "gem5::ClockedObject::ClockedObject(gem5::ClockedObjectParams const&) + 0x1f",
+                                "gem5::BaseCPU::BaseCPU(gem5::BaseCPUParams const&, bool) + 0x3b"
+                            ],
+                            "samples": 1,
+                            "sampled_wait_ns": 22,
+                            "max_sample_ns": 22
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "gem5::Drainable::Drainable() + 0x4b",
+                                "gem5::SimObject::SimObject(gem5::SimObjectParams const&) + 0x4c",
+                                "gem5::RiscvMMUParams::create() const + 0x28",
+                                "pybind11::cpp_function::initialize<pybind11::cpp_function::initialize<gem5::RiscvISA::MMU*, gem5::RiscvMMUParams, , pybind11::name, pybind11::is_method, pybind11::sibling>(gem5::RiscvISA::MMU* (gem5::RiscvMMUParams::*)() const, pybind11::name const&, pybind11::is_method const&, pybind11::sibling const&)::{lambda(gem5::RiscvMMUParams const*)#1}, gem5::RiscvISA::MMU*, gem5::RiscvMMUParams const*, pybind11::name, pybind11::is_method, pybind11::sibling>(pybind11::cpp_function::initialize<gem5::RiscvISA::MMU*, gem5::RiscvMMUParams, , pybind11::name, pybind11::is_method, pybind11::sibling>(gem5::RiscvISA::MMU* (gem5::RiscvMMUParams::*)() const, pybind11::name const&, pybind11::is_method const&, pybind11::sibling const&)::{lambda(gem5::RiscvMMUParams const*)#1}&&, gem5::RiscvISA::MMU* (*)(gem5::RiscvMMUParams const*), pybind11::name const&, pybind11::is_method const&, pybind11::sibling const&)::{lambda(pybind11::detail::function_call&)#1}::_FUN(pybind11::detail::function_call&) + 0xbf"
+                            ],
+                            "samples": 1,
+                            "sampled_wait_ns": 18,
+                            "max_sample_ns": 18
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "PyEval_SaveThread @ ??:?",
+                                "_Py_Gid_Converter @ ??:?",
+                                "PyObject_Vectorcall @ ??:?"
+                            ],
+                            "samples": 1,
+                            "sampled_wait_ns": 14,
+                            "max_sample_ns": 14
+                        }
+                    ],
+                    "threads": {
+                        "278209": {
+                            "samples": 408,
+                            "sampled_wait_ns": 10007852
+                        },
+                        "278206": {
+                            "samples": 425,
+                            "sampled_wait_ns": 7394461
+                        },
+                        "278202": {
+                            "samples": 400,
+                            "sampled_wait_ns": 8538519
+                        },
+                        "278203": {
+                            "samples": 416,
+                            "sampled_wait_ns": 9556886
+                        },
+                        "278196": {
+                            "samples": 308,
+                            "sampled_wait_ns": 5841139
+                        },
+                        "278197": {
+                            "samples": 312,
+                            "sampled_wait_ns": 7082969
+                        },
+                        "278205": {
+                            "samples": 414,
+                            "sampled_wait_ns": 8221091
+                        },
+                        "278194": {
+                            "samples": 287,
+                            "sampled_wait_ns": 5665703
+                        },
+                        "278195": {
+                            "samples": 288,
+                            "sampled_wait_ns": 6482424
+                        },
+                        "278204": {
+                            "samples": 416,
+                            "sampled_wait_ns": 8958041
+                        },
+                        "278201": {
+                            "samples": 360,
+                            "sampled_wait_ns": 6205628
+                        },
+                        "278208": {
+                            "samples": 406,
+                            "sampled_wait_ns": 10179222
+                        },
+                        "278207": {
+                            "samples": 415,
+                            "sampled_wait_ns": 10557544
+                        },
+                        "278198": {
+                            "samples": 306,
+                            "sampled_wait_ns": 5372293
+                        },
+                        "278199": {
+                            "samples": 321,
+                            "sampled_wait_ns": 5851675
+                        },
+                        "278151": {
+                            "samples": 184,
+                            "sampled_wait_ns": 1206605
+                        },
+                        "278200": {
+                            "samples": 340,
+                            "sampled_wait_ns": 6137362
+                        }
+                    }
+                }
+            },
+            "original-waits": {
+                "wall": {
+                    "command": [
+                        "/usr/bin/time",
+                        "-v",
+                        "-o",
+                        "/home/ripopov/work/gem5/main/local-temp/reduction-profile-optimized/original-waits/resources.txt",
+                        "/home/ripopov/work/gem5/main/local-temp/quantum-barrier/baseline/bin/gem5.opt",
+                        "--outdir=/home/ripopov/work/gem5/main/local-temp/reduction-profile-optimized/original-waits",
+                        "/home/ripopov/work/gem5/main/configs/example/rt_accel_reduction.py",
+                        "--workload=reduction",
+                        "--accelerator-cores=16",
+                        "--queues=17",
+                        "--transport-delay=5ns"
+                    ],
+                    "binary_sha256":
+                        "2b89759238e6a833cbbd74cff275c9b0a55c38af8bc25a1fc56ae9748214d66f",
+                    "started_utc": "2026-10-11T20:20:23.233293+00:00",
+                    "affinity": [
+                        0,
+                        1,
+                        2,
+                        3,
+                        4,
+                        5,
+                        6,
+                        7,
+                        8,
+                        9,
+                        10,
+                        11,
+                        12,
+                        13,
+                        14,
+                        15,
+                        16,
+                        17,
+                        18,
+                        19
+                    ],
+                    "pid_namespace": "pid:[4026531836]",
+                    "returncode": 0,
+                    "wall_seconds": 7.26506134200099,
+                    "finished_utc": "2026-10-11T20:20:30.511477+00:00"
+                },
+                "simulation": {
+                    "wall_seconds": 4.911776662000193,
+                    "start_tick": 0,
+                    "end_tick": 148133000,
+                    "boundary":
+                        "After instantiate through return from simulate; boot, batch, validation and export included; image setup, automatic exit statistics and cleanup excluded"
+                },
+                "comparison": {
+                    "simulated_counters_compared": 36816,
+                    "excluded_host_counters": [
+                        "dump0/hostInstRate",
+                        "dump0/hostMemory",
+                        "dump0/hostOpRate",
+                        "dump0/hostSeconds",
+                        "dump0/hostTickRate",
+                        "dump1/hostInstRate",
+                        "dump1/hostMemory",
+                        "dump1/hostOpRate",
+                        "dump1/hostSeconds",
+                        "dump1/hostTickRate"
+                    ],
+                    "workload": "reduction",
+                    "left": "n16-timing-0-q1",
+                    "right": "original-waits",
+                    "outputs": {
+                        "jobs.bin":
+                            "1ea20d25c8d6c2dd28fc6534d4c4dc2839770275fd4da75580055787a44c812e",
+                        "parameters.bin":
+                            "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+                        "inputs.elf":
+                            "4d7dc7a70c0b3d40f36bb4546a333b48d251fbc70222bb3ff47c815fd1bbd53e",
+                        "boot.elf":
+                            "aac7edfe0d6cef5e8329ff3ba1919cc67ad2267808fd2a1c2d6de01ba5fad69d",
+                        "partials.bin":
+                            "908bdfb0e87619de63928b3f9543106f500e3fb7c67f98741bb92088610c9576",
+                        "sum.bin":
+                            "614ccbddbee93343b5cd8aed8c89e2b8a2ed89fe156d609b9f327c3edf1794a6"
+                    }
+                },
+                "resources": {
+                    "User time (seconds)": 27.78,
+                    "System time (seconds)": 2.7,
+                    "Voluntary context switches": 1223265.0,
+                    "Involuntary context switches": 26767.0
+                },
+                "wait-summary": {
+                    "sampling_period": 128,
+                    "mutex_calls": 228529,
+                    "condition_wait_calls": 515813,
+                    "records": 5797,
+                    "dropped": 0,
+                    "groups": [
+                        {
+                            "kind": 1,
+                            "stack": [
+                                "gem5::EventQueue::asyncInsert(gem5::Event*) + 0x143",
+                                "gem5::rt_accel::post(gem5::EventManager&, unsigned long, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::function<void ()>, signed char) + 0x190",
+                                "gem5::rt_accel::Gem5Wrapper::MemoryPort::recvTimingReq(gem5::Packet*) + 0x22d",
+                                "gem5::CoherentXBar::recvTimingReq(gem5::Packet*, short) + 0x870"
+                            ],
+                            "samples": 4007,
+                            "sampled_wait_ns": 52433673,
+                            "max_sample_ns": 516051
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "gem5::EventQueue::asyncInsert(gem5::Event*) + 0x122",
+                                "gem5::rt_accel::post(gem5::EventManager&, unsigned long, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::function<void ()>, signed char) + 0x190",
+                                "gem5::rt_accel::Gem5Wrapper::MemoryPort::recvTimingReq(gem5::Packet*) + 0x22d",
+                                "gem5::CoherentXBar::recvTimingReq(gem5::Packet*, short) + 0x870"
+                            ],
+                            "samples": 730,
+                            "sampled_wait_ns": 2074314,
+                            "max_sample_ns": 35347
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "gem5::EventQueue::asyncInsert(gem5::Event*) + 0x1ae",
+                                "gem5::rt_accel::post(gem5::EventManager&, unsigned long, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::function<void ()>, signed char) + 0x190",
+                                "gem5::rt_accel::Gem5Wrapper::MemoryPort::recvTimingReq(gem5::Packet*) + 0x22d",
+                                "gem5::CoherentXBar::recvTimingReq(gem5::Packet*, short) + 0x870"
+                            ],
+                            "samples": 661,
+                            "sampled_wait_ns": 932634,
+                            "max_sample_ns": 31047
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "gem5::BaseGlobalEvent::schedule(unsigned long) + 0x23",
+                                "gem5::ProcessBarrier::operator()() const + 0x175",
+                                "gem5::GlobalSyncEvent::BarrierEvent::process() + 0x235",
+                                "gem5::EventQueue::serviceOne() + 0x1f4"
+                            ],
+                            "samples": 219,
+                            "sampled_wait_ns": 81050,
+                            "max_sample_ns": 57182
+                        },
+                        {
+                            "kind": 1,
+                            "stack": [
+                                "gem5::EventQueue::asyncInsert(gem5::Event*) + 0x143",
+                                "gem5::rt_accel::post(gem5::EventManager&, unsigned long, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::function<void ()>, signed char) + 0x190",
+                                "gem5::rt_accel::HostAdapter::MasterPort::recvTimingResp(gem5::Packet*) + 0x25d",
+                                "gem5::RespPacketQueue::sendTiming(gem5::Packet*) + 0x35"
+                            ],
+                            "samples": 14,
+                            "sampled_wait_ns": 76113,
+                            "max_sample_ns": 13110
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "gem5::EventQueue::handleAsyncInsertions() + 0x10c",
+                                "gem5::EventQueue::serviceOne() + 0x1f4",
+                                "gem5::doSimLoop(gem5::EventQueue*) + 0x77",
+                                "std::thread::_State_impl<std::thread::_Invoker<std::tuple<gem5::SimulatorThreads::runUntilLocalExit()::{lambda(gem5::EventQueue*)#1}, gem5::EventQueue*> > >::_M_run() + 0x131"
+                            ],
+                            "samples": 29,
+                            "sampled_wait_ns": 2395,
+                            "max_sample_ns": 170
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "gem5::EventQueue::asyncInsert(gem5::Event*) + 0x122",
+                                "gem5::rt_accel::post(gem5::EventManager&, unsigned long, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::function<void ()>, signed char) + 0x190",
+                                "gem5::rt_accel::HostAdapter::MasterPort::recvTimingResp(gem5::Packet*) + 0x25d",
+                                "gem5::RespPacketQueue::sendTiming(gem5::Packet*) + 0x35"
+                            ],
+                            "samples": 21,
+                            "sampled_wait_ns": 1623,
+                            "max_sample_ns": 168
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "gem5::EventQueue::handleAsyncInsertions() + 0x10c",
+                                "gem5::EventQueue::serviceOne() + 0x1f4",
+                                "gem5::doSimLoop(gem5::EventQueue*) + 0x77",
+                                "gem5::simulate(unsigned long) + 0x2a3"
+                            ],
+                            "samples": 17,
+                            "sampled_wait_ns": 1004,
+                            "max_sample_ns": 87
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "Py_GetVersion @ ??:?",
+                                "PyEval_RestoreThread @ ??:?",
+                                "_Py_Gid_Converter @ ??:?"
+                            ],
+                            "samples": 31,
+                            "sampled_wait_ns": 579,
+                            "max_sample_ns": 51
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "gem5::Drainable::Drainable() + 0x4b",
+                                "gem5::SimObject::SimObject(gem5::SimObjectParams const&) + 0x4c",
+                                "gem5::OpDescParams::create() const + 0x24",
+                                "pybind11::cpp_function::initialize<pybind11::cpp_function::initialize<gem5::OpDesc*, gem5::OpDescParams, , pybind11::name, pybind11::is_method, pybind11::sibling>(gem5::OpDesc* (gem5::OpDescParams::*)() const, pybind11::name const&, pybind11::is_method const&, pybind11::sibling const&)::{lambda(gem5::OpDescParams const*)#1}, gem5::OpDesc*, gem5::OpDescParams const*, pybind11::name, pybind11::is_method, pybind11::sibling>(pybind11::cpp_function::initialize<gem5::OpDesc*, gem5::OpDescParams, , pybind11::name, pybind11::is_method, pybind11::sibling>(gem5::OpDesc* (gem5::OpDescParams::*)() const, pybind11::name const&, pybind11::is_method const&, pybind11::sibling const&)::{lambda(gem5::OpDescParams const*)#1}&&, gem5::OpDesc* (*)(gem5::OpDescParams const*), pybind11::name const&, pybind11::is_method const&, pybind11::sibling const&)::{lambda(pybind11::detail::function_call&)#1}::_FUN(pybind11::detail::function_call&) + 0xbf"
+                            ],
+                            "samples": 13,
+                            "sampled_wait_ns": 344,
+                            "max_sample_ns": 33
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "gem5::EventQueue::handleAsyncInsertions() + 0x59",
+                                "gem5::EventQueue::serviceOne() + 0x1f4",
+                                "gem5::doSimLoop(gem5::EventQueue*) + 0x77",
+                                "std::thread::_State_impl<std::thread::_Invoker<std::tuple<gem5::SimulatorThreads::runUntilLocalExit()::{lambda(gem5::EventQueue*)#1}, gem5::EventQueue*> > >::_M_run() + 0x131"
+                            ],
+                            "samples": 4,
+                            "sampled_wait_ns": 323,
+                            "max_sample_ns": 89
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "gem5::EventQueue::asyncInsert(gem5::Event*) + 0x1ae",
+                                "gem5::rt_accel::post(gem5::EventManager&, unsigned long, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::function<void ()>, signed char) + 0x190",
+                                "gem5::rt_accel::HostAdapter::MasterPort::recvTimingResp(gem5::Packet*) + 0x25d",
+                                "gem5::RespPacketQueue::sendTiming(gem5::Packet*) + 0x35"
+                            ],
+                            "samples": 3,
+                            "sampled_wait_ns": 203,
+                            "max_sample_ns": 74
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "PyEval_SaveThread @ ??:?",
+                                "_Py_Gid_Converter @ ??:?",
+                                "_PyEval_EvalFrameDefault @ ??:?"
+                            ],
+                            "samples": 9,
+                            "sampled_wait_ns": 166,
+                            "max_sample_ns": 34
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "gem5::Drainable::Drainable() + 0x4b",
+                                "gem5::SimObject::SimObject(gem5::SimObjectParams const&) + 0x4c",
+                                "gem5::PowerState::PowerState(gem5::PowerStateParams const&) + 0x28",
+                                "gem5::PowerStateParams::create() const + 0x24"
+                            ],
+                            "samples": 5,
+                            "sampled_wait_ns": 132,
+                            "max_sample_ns": 35
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "Py_GetVersion @ ??:?",
+                                "PyEval_RestoreThread @ ??:?",
+                                "PyInit__io @ ??:?"
+                            ],
+                            "samples": 5,
+                            "sampled_wait_ns": 112,
+                            "max_sample_ns": 30
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "PyEval_SaveThread @ ??:?",
+                                "_Py_Gid_Converter @ ??:?",
+                                "_Py_Gid_Converter @ ??:?"
+                            ],
+                            "samples": 4,
+                            "sampled_wait_ns": 77,
+                            "max_sample_ns": 30
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "Py_GetVersion @ ??:?",
+                                "PyEval_RestoreThread @ ??:?",
+                                "_Py_write @ ??:?"
+                            ],
+                            "samples": 3,
+                            "sampled_wait_ns": 72,
+                            "max_sample_ns": 36
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "Py_GetVersion @ ??:?",
+                                "PyEval_RestoreThread @ ??:?",
+                                "_Py_stat @ ??:?"
+                            ],
+                            "samples": 3,
+                            "sampled_wait_ns": 69,
+                            "max_sample_ns": 27
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "PyEval_SaveThread @ ??:?",
+                                "PyInit__io @ ??:?",
+                                "PyObject_VectorcallMethod @ ??:?"
+                            ],
+                            "samples": 2,
+                            "sampled_wait_ns": 66,
+                            "max_sample_ns": 39
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "PyEval_SaveThread @ ??:?",
+                                "PyInit__io @ ??:?",
+                                "PyType_GetQualName @ ??:?"
+                            ],
+                            "samples": 2,
+                            "sampled_wait_ns": 63,
+                            "max_sample_ns": 41
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "gem5::Drainable::Drainable() + 0x4b",
+                                "gem5::SimObject::SimObject(gem5::SimObjectParams const&) + 0x4c",
+                                "gem5::FUDescParams::create() const + 0x24",
+                                "pybind11::cpp_function::initialize<pybind11::cpp_function::initialize<gem5::FUDesc*, gem5::FUDescParams, , pybind11::name, pybind11::is_method, pybind11::sibling>(gem5::FUDesc* (gem5::FUDescParams::*)() const, pybind11::name const&, pybind11::is_method const&, pybind11::sibling const&)::{lambda(gem5::FUDescParams const*)#1}, gem5::FUDesc*, gem5::FUDescParams const*, pybind11::name, pybind11::is_method, pybind11::sibling>(pybind11::cpp_function::initialize<gem5::FUDesc*, gem5::FUDescParams, , pybind11::name, pybind11::is_method, pybind11::sibling>(gem5::FUDesc* (gem5::FUDescParams::*)() const, pybind11::name const&, pybind11::is_method const&, pybind11::sibling const&)::{lambda(gem5::FUDescParams const*)#1}&&, gem5::FUDesc* (*)(gem5::FUDescParams const*), pybind11::name const&, pybind11::is_method const&, pybind11::sibling const&)::{lambda(pybind11::detail::function_call&)#1}::_FUN(pybind11::detail::function_call&) + 0xcf"
+                            ],
+                            "samples": 2,
+                            "sampled_wait_ns": 56,
+                            "max_sample_ns": 30
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "gem5::Drainable::Drainable() + 0x4b",
+                                "gem5::PacketQueue::PacketQueue(gem5::EventManager&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, bool, bool) + 0x3d",
+                                "gem5::SnoopRespPacketQueue::SnoopRespPacketQueue(gem5::EventManager&, gem5::RequestPort&, bool, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >) + 0x54",
+                                "gem5::BaseCache::MemSidePort::MemSidePort(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, gem5::BaseCache*, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) + 0x11f"
+                            ],
+                            "samples": 2,
+                            "sampled_wait_ns": 54,
+                            "max_sample_ns": 31
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "gem5::Drainable::Drainable() + 0x4b",
+                                "gem5::SimObject::SimObject(gem5::SimObjectParams const&) + 0x4c",
+                                "gem5::o3::IQUnit::IQUnit(gem5::IQUnitParams const&) + 0x26",
+                                "gem5::IQUnitParams::create() const + 0x24"
+                            ],
+                            "samples": 1,
+                            "sampled_wait_ns": 42,
+                            "max_sample_ns": 42
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "gem5::Drainable::Drainable() + 0x4b",
+                                "gem5::SimObject::SimObject(gem5::SimObjectParams const&) + 0x4c",
+                                "gem5::ClockDomain::ClockDomain(gem5::ClockDomainParams const&, gem5::VoltageDomain*) + 0x14",
+                                "gem5::SrcClockDomain::SrcClockDomain(gem5::SrcClockDomainParams const&) + 0x34"
+                            ],
+                            "samples": 1,
+                            "sampled_wait_ns": 39,
+                            "max_sample_ns": 39
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "gem5::Drainable::Drainable() + 0x4b",
+                                "gem5::BaseXBar::Layer<gem5::ResponsePort, gem5::RequestPort>::Layer(gem5::RequestPort&, gem5::BaseXBar&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) + 0x36",
+                                "gem5::CoherentXBar::CoherentXBar(gem5::CoherentXBarParams const&) + 0x6ce",
+                                "gem5::CoherentXBarParams::create() const + 0x24"
+                            ],
+                            "samples": 2,
+                            "sampled_wait_ns": 35,
+                            "max_sample_ns": 23
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "gem5::Drainable::Drainable() + 0x4b",
+                                "gem5::SimObject::SimObject(gem5::SimObjectParams const&) + 0x4c",
+                                "gem5::IndexingPolicyTemplate<gem5::BTBTagType>::IndexingPolicyTemplate(gem5::BTBIndexingPolicyParams const&, unsigned int, unsigned int) + 0x36",
+                                "gem5::BTBSetAssociativeParams::create() const + 0x2a"
+                            ],
+                            "samples": 1,
+                            "sampled_wait_ns": 31,
+                            "max_sample_ns": 31
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "gem5::Drainable::Drainable() + 0x4b",
+                                "gem5::BaseXBar::Layer<gem5::ResponsePort, gem5::RequestPort>::Layer(gem5::RequestPort&, gem5::BaseXBar&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) + 0x36",
+                                "gem5::NoncoherentXBar::NoncoherentXBar(gem5::NoncoherentXBarParams const&) + 0x114",
+                                "gem5::NoncoherentXBarParams::create() const + 0x24"
+                            ],
+                            "samples": 1,
+                            "sampled_wait_ns": 24,
+                            "max_sample_ns": 24
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "gem5::Drainable::Drainable() + 0x4b",
+                                "gem5::SimObject::SimObject(gem5::SimObjectParams const&) + 0x4c",
+                                "gem5::ClockedObject::ClockedObject(gem5::ClockedObjectParams const&) + 0x1f",
+                                "gem5::BaseTags::BaseTags(gem5::BaseTagsParams const&) + 0x26"
+                            ],
+                            "samples": 1,
+                            "sampled_wait_ns": 23,
+                            "max_sample_ns": 23
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "gem5::Drainable::Drainable() + 0x4b",
+                                "gem5::SimObject::SimObject(gem5::SimObjectParams const&) + 0x4c",
+                                "gem5::branch_prediction::BPredUnit::BPredUnit(gem5::BranchPredictorParams const&) + 0x1c",
+                                "gem5::BranchPredictorParams::create() const + 0x24"
+                            ],
+                            "samples": 1,
+                            "sampled_wait_ns": 23,
+                            "max_sample_ns": 23
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "PyEval_SaveThread @ ??:?",
+                                "_Py_stat @ ??:?",
+                                "PyInit__io @ ??:?"
+                            ],
+                            "samples": 1,
+                            "sampled_wait_ns": 20,
+                            "max_sample_ns": 20
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "PyEval_SaveThread @ ??:?",
+                                "_Py_Gid_Converter @ ??:?",
+                                "PyObject_Vectorcall @ ??:?"
+                            ],
+                            "samples": 1,
+                            "sampled_wait_ns": 17,
+                            "max_sample_ns": 17
+                        },
+                        {
+                            "kind": 0,
+                            "stack": [
+                                "PyEval_SaveThread @ ??:?",
+                                "_Py_write @ ??:?",
+                                "PyInit__io @ ??:?"
+                            ],
+                            "samples": 1,
+                            "sampled_wait_ns": 17,
+                            "max_sample_ns": 17
+                        }
+                    ],
+                    "threads": {
+                        "286793": {
+                            "samples": 289,
+                            "sampled_wait_ns": 3121466
+                        },
+                        "286799": {
+                            "samples": 394,
+                            "sampled_wait_ns": 3873514
+                        },
+                        "286797": {
+                            "samples": 328,
+                            "sampled_wait_ns": 3018493
+                        },
+                        "286804": {
+                            "samples": 410,
+                            "sampled_wait_ns": 3891858
+                        },
+                        "286795": {
+                            "samples": 288,
+                            "sampled_wait_ns": 3105031
+                        },
+                        "286805": {
+                            "samples": 404,
+                            "sampled_wait_ns": 3656720
+                        },
+                        "286801": {
+                            "samples": 415,
+                            "sampled_wait_ns": 3808093
+                        },
+                        "286796": {
+                            "samples": 306,
+                            "sampled_wait_ns": 3022150
+                        },
+                        "286806": {
+                            "samples": 396,
+                            "sampled_wait_ns": 4329725
+                        },
+                        "286803": {
+                            "samples": 406,
+                            "sampled_wait_ns": 3798389
+                        },
+                        "286791": {
+                            "samples": 268,
+                            "sampled_wait_ns": 2919741
+                        },
+                        "286798": {
+                            "samples": 364,
+                            "sampled_wait_ns": 3552221
+                        },
+                        "286802": {
+                            "samples": 410,
+                            "sampled_wait_ns": 3901594
+                        },
+                        "286778": {
+                            "samples": 153,
+                            "sampled_wait_ns": 81463
+                        },
+                        "286792": {
+                            "samples": 270,
+                            "sampled_wait_ns": 2769614
+                        },
+                        "286800": {
+                            "samples": 410,
+                            "sampled_wait_ns": 3877983
+                        },
+                        "286794": {
+                            "samples": 286,
+                            "sampled_wait_ns": 2877338
+                        }
+                    }
+                }
+            },
+            "optimized-coarse-r0": {
+                "wall": {
+                    "command": [
+                        "/usr/bin/time",
+                        "-v",
+                        "-o",
+                        "/home/ripopov/work/gem5/main/local-temp/reduction-profile-optimized/optimized-coarse-r0/resources.txt",
+                        "/home/ripopov/work/gem5/main/local-temp/reduction-profile-optimized/instrumented-bin/gem5.opt",
+                        "--outdir=/home/ripopov/work/gem5/main/local-temp/reduction-profile-optimized/optimized-coarse-r0",
+                        "/home/ripopov/work/gem5/main/configs/example/rt_accel_reduction.py",
+                        "--workload=reduction",
+                        "--accelerator-cores=16",
+                        "--queues=17",
+                        "--transport-delay=5ns"
+                    ],
+                    "binary_sha256":
+                        "5932ade92b9767d1f6cd95095116ceca124e19c8cd6a2edd29fa66fe5736ffc6",
+                    "started_utc": "2026-10-11T20:20:06.693709+00:00",
+                    "affinity": [
+                        0,
+                        1,
+                        2,
+                        3,
+                        4,
+                        5,
+                        6,
+                        7,
+                        8,
+                        9,
+                        10,
+                        11,
+                        12,
+                        13,
+                        14,
+                        15,
+                        16,
+                        17,
+                        18,
+                        19
+                    ],
+                    "pid_namespace": "pid:[4026531836]",
+                    "returncode": 0,
+                    "wall_seconds": 8.25969501399959,
+                    "finished_utc": "2026-10-11T20:20:14.968126+00:00"
+                },
+                "simulation": {
+                    "wall_seconds": 5.897120352998172,
+                    "start_tick": 0,
+                    "end_tick": 148133000,
+                    "boundary":
+                        "After instantiate through return from simulate; boot, batch, validation and export included; image setup, automatic exit statistics and cleanup excluded"
+                },
+                "comparison": {
+                    "simulated_counters_compared": 36816,
+                    "excluded_host_counters": [
+                        "dump0/hostInstRate",
+                        "dump0/hostMemory",
+                        "dump0/hostOpRate",
+                        "dump0/hostSeconds",
+                        "dump0/hostTickRate",
+                        "dump1/hostInstRate",
+                        "dump1/hostMemory",
+                        "dump1/hostOpRate",
+                        "dump1/hostSeconds",
+                        "dump1/hostTickRate"
+                    ],
+                    "workload": "reduction",
+                    "left": "n16-timing-0-q1",
+                    "right": "optimized-coarse-r0",
+                    "outputs": {
+                        "jobs.bin":
+                            "1ea20d25c8d6c2dd28fc6534d4c4dc2839770275fd4da75580055787a44c812e",
+                        "parameters.bin":
+                            "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+                        "inputs.elf":
+                            "4d7dc7a70c0b3d40f36bb4546a333b48d251fbc70222bb3ff47c815fd1bbd53e",
+                        "boot.elf":
+                            "aac7edfe0d6cef5e8329ff3ba1919cc67ad2267808fd2a1c2d6de01ba5fad69d",
+                        "partials.bin":
+                            "908bdfb0e87619de63928b3f9543106f500e3fb7c67f98741bb92088610c9576",
+                        "sum.bin":
+                            "614ccbddbee93343b5cd8aed8c89e2b8a2ed89fe156d609b9f327c3edf1794a6"
+                    }
+                },
+                "resources": {
+                    "User time (seconds)": 63.65,
+                    "System time (seconds)": 1.91,
+                    "Voluntary context switches": 877656.0,
+                    "Involuntary context switches": 22147.0
+                },
+                "critical-summary": {
+                    "tick_window": [
+                        1500000,
+                        144000000
+                    ],
+                    "quanta": 28500,
+                    "wall_seconds": 4.942732637,
+                    "exclusive_critical_seconds": {
+                        "release_to_return": 1.817986545,
+                        "queue_reacquire": 0.001389366,
+                        "incoming_merge": 0.041142726,
+                        "event_work": 2.955308086,
+                        "arrival_unlock": 0.064457244,
+                        "coordination": 0.002338397,
+                        "callback": 0.060110273
+                    },
+                    "critical_async_acquisition_seconds": 1.202314286,
+                    "critical_async_total_seconds": 1.244168049,
+                    "summed_async_acquisition_seconds": 12.361741712,
+                    "queues": [
+                        {
+                            "queue": 0,
+                            "last_arrivals": 109,
+                            "async_acquisition_seconds": 0.00986842,
+                            "outgoing_events": 262160,
+                            "event_work_cpu_seconds": 0.407635129
+                        },
+                        {
+                            "queue": 1,
+                            "last_arrivals": 1964,
+                            "async_acquisition_seconds": 0.560268462,
+                            "outgoing_events": 16385,
+                            "event_work_cpu_seconds": 1.498231657
+                        },
+                        {
+                            "queue": 2,
+                            "last_arrivals": 1626,
+                            "async_acquisition_seconds": 0.560448636,
+                            "outgoing_events": 16385,
+                            "event_work_cpu_seconds": 1.468956141
+                        },
+                        {
+                            "queue": 3,
+                            "last_arrivals": 1655,
+                            "async_acquisition_seconds": 0.625180771,
+                            "outgoing_events": 16385,
+                            "event_work_cpu_seconds": 1.474015326
+                        },
+                        {
+                            "queue": 4,
+                            "last_arrivals": 2486,
+                            "async_acquisition_seconds": 0.613885126,
+                            "outgoing_events": 16385,
+                            "event_work_cpu_seconds": 1.534450233
+                        },
+                        {
+                            "queue": 5,
+                            "last_arrivals": 1393,
+                            "async_acquisition_seconds": 0.610480921,
+                            "outgoing_events": 16385,
+                            "event_work_cpu_seconds": 1.476241212
+                        },
+                        {
+                            "queue": 6,
+                            "last_arrivals": 1309,
+                            "async_acquisition_seconds": 0.636701347,
+                            "outgoing_events": 16385,
+                            "event_work_cpu_seconds": 1.480968857
+                        },
+                        {
+                            "queue": 7,
+                            "last_arrivals": 1671,
+                            "async_acquisition_seconds": 0.70542815,
+                            "outgoing_events": 16385,
+                            "event_work_cpu_seconds": 1.515250561
+                        },
+                        {
+                            "queue": 8,
+                            "last_arrivals": 1823,
+                            "async_acquisition_seconds": 0.782155585,
+                            "outgoing_events": 16385,
+                            "event_work_cpu_seconds": 1.518949046
+                        },
+                        {
+                            "queue": 9,
+                            "last_arrivals": 2331,
+                            "async_acquisition_seconds": 0.882281333,
+                            "outgoing_events": 16385,
+                            "event_work_cpu_seconds": 1.553846686
+                        },
+                        {
+                            "queue": 10,
+                            "last_arrivals": 2028,
+                            "async_acquisition_seconds": 0.921715425,
+                            "outgoing_events": 16385,
+                            "event_work_cpu_seconds": 1.525069618
+                        },
+                        {
+                            "queue": 11,
+                            "last_arrivals": 2222,
+                            "async_acquisition_seconds": 0.934183846,
+                            "outgoing_events": 16385,
+                            "event_work_cpu_seconds": 1.589128672
+                        },
+                        {
+                            "queue": 12,
+                            "last_arrivals": 1703,
+                            "async_acquisition_seconds": 0.915091332,
+                            "outgoing_events": 16385,
+                            "event_work_cpu_seconds": 1.51901089
+                        },
+                        {
+                            "queue": 13,
+                            "last_arrivals": 1575,
+                            "async_acquisition_seconds": 0.913936473,
+                            "outgoing_events": 16385,
+                            "event_work_cpu_seconds": 1.50284381
+                        },
+                        {
+                            "queue": 14,
+                            "last_arrivals": 1453,
+                            "async_acquisition_seconds": 0.913529786,
+                            "outgoing_events": 16385,
+                            "event_work_cpu_seconds": 1.491249516
+                        },
+                        {
+                            "queue": 15,
+                            "last_arrivals": 1556,
+                            "async_acquisition_seconds": 0.893277479,
+                            "outgoing_events": 16385,
+                            "event_work_cpu_seconds": 1.520254712
+                        },
+                        {
+                            "queue": 16,
+                            "last_arrivals": 1596,
+                            "async_acquisition_seconds": 0.88330862,
+                            "outgoing_events": 16385,
+                            "event_work_cpu_seconds": 1.508245504
+                        }
+                    ]
+                }
+            },
+            "optimized-coarse-r1":
+                {
+                    "wall": {
+                        "command":
+                            [
+                                "/usr/bin/time",
+                                "-v",
+                                "-o",
+                                "/home/ripopov/work/gem5/main/local-temp/reduction-profile-optimized/optimized-coarse-r1/resources.txt",
+                                "/home/ripopov/work/gem5/main/local-temp/reduction-profile-optimized/instrumented-bin/gem5.opt",
+                                "--outdir=/home/ripopov/work/gem5/main/local-temp/reduction-profile-optimized/optimized-coarse-r1",
+                                "/home/ripopov/work/gem5/main/configs/example/rt_accel_reduction.py",
+                                "--workload=reduction",
+                                "--accelerator-cores=16",
+                                "--queues=17",
+                                "--transport-delay=5ns"
+                            ],
+                        "binary_sha256":
+                            "5932ade92b9767d1f6cd95095116ceca124e19c8cd6a2edd29fa66fe5736ffc6",
+                        "started_utc": "2026-10-11T20:20:15.559579+00:00",
+                        "affinity": [
+                            0,
+                            1,
+                            2,
+                            3,
+                            4,
+                            5,
+                            6,
+                            7,
+                            8,
+                            9,
+                            10,
+                            11,
+                            12,
+                            13,
+                            14,
+                            15,
+                            16,
+                            17,
+                            18,
+                            19
+                        ],
+                        "pid_namespace": "pid:[4026531836]",
+                        "returncode": 0,
+                        "wall_seconds": 7.075048086000606,
+                        "finished_utc": "2026-10-11T20:20:22.647832+00:00"
+                    },
+                    "simulation": {
+                        "wall_seconds": 4.620155771001009,
+                        "start_tick": 0,
+                        "end_tick": 148133000,
+                        "boundary":
+                            "After instantiate through return from simulate; boot, batch, validation and export included; image setup, automatic exit statistics and cleanup excluded"
+                    },
+                    "comparison": {
+                        "simulated_counters_compared": 36816,
+                        "excluded_host_counters": [
+                            "dump0/hostInstRate",
+                            "dump0/hostMemory",
+                            "dump0/hostOpRate",
+                            "dump0/hostSeconds",
+                            "dump0/hostTickRate",
+                            "dump1/hostInstRate",
+                            "dump1/hostMemory",
+                            "dump1/hostOpRate",
+                            "dump1/hostSeconds",
+                            "dump1/hostTickRate"
+                        ],
+                        "workload": "reduction",
+                        "left": "n16-timing-0-q1",
+                        "right": "optimized-coarse-r1",
+                        "outputs": {
+                            "jobs.bin":
+                                "1ea20d25c8d6c2dd28fc6534d4c4dc2839770275fd4da75580055787a44c812e",
+                            "parameters.bin":
+                                "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+                            "inputs.elf":
+                                "4d7dc7a70c0b3d40f36bb4546a333b48d251fbc70222bb3ff47c815fd1bbd53e",
+                            "boot.elf":
+                                "aac7edfe0d6cef5e8329ff3ba1919cc67ad2267808fd2a1c2d6de01ba5fad69d",
+                            "partials.bin":
+                                "908bdfb0e87619de63928b3f9543106f500e3fb7c67f98741bb92088610c9576",
+                            "sum.bin":
+                                "614ccbddbee93343b5cd8aed8c89e2b8a2ed89fe156d609b9f327c3edf1794a6"
+                        }
+                    },
+                    "resources": {
+                        "User time (seconds)": 49.65,
+                        "System time (seconds)": 1.76,
+                        "Voluntary context switches": 877694.0,
+                        "Involuntary context switches": 11581.0
+                    },
+                    "critical-summary": {
+                        "tick_window": [
+                            1500000,
+                            144000000
+                        ],
+                        "quanta": 28500,
+                        "wall_seconds": 3.57664079,
+                        "exclusive_critical_seconds": {
+                            "release_to_return": 0.576047066,
+                            "queue_reacquire": 0.001407226,
+                            "incoming_merge": 0.020125704,
+                            "event_work": 2.879073847,
+                            "arrival_unlock": 0.037621421,
+                            "coordination": 0.002218149,
+                            "callback": 0.060147377
+                        },
+                        "critical_async_acquisition_seconds": 1.138790611,
+                        "critical_async_total_seconds": 1.183435803,
+                        "summed_async_acquisition_seconds": 11.704298725,
+                        "queues": [
+                            {
+                                "queue": 0,
+                                "last_arrivals": 80,
+                                "async_acquisition_seconds": 0.009417347,
+                                "outgoing_events": 262160,
+                                "event_work_cpu_seconds": 0.394932585
+                            },
+                            {
+                                "queue": 1,
+                                "last_arrivals": 2208,
+                                "async_acquisition_seconds": 0.521617862,
+                                "outgoing_events": 16385,
+                                "event_work_cpu_seconds": 1.424653424
+                            },
+                            {
+                                "queue": 2,
+                                "last_arrivals": 2278,
+                                "async_acquisition_seconds": 0.542146842,
+                                "outgoing_events": 16385,
+                                "event_work_cpu_seconds": 1.425207188
+                            },
+                            {
+                                "queue": 3,
+                                "last_arrivals": 1280,
+                                "async_acquisition_seconds": 0.567667499,
+                                "outgoing_events": 16385,
+                                "event_work_cpu_seconds": 1.428109845
+                            },
+                            {
+                                "queue": 4,
+                                "last_arrivals": 2108,
+                                "async_acquisition_seconds": 0.566373428,
+                                "outgoing_events": 16385,
+                                "event_work_cpu_seconds": 1.483587167
+                            },
+                            {
+                                "queue": 5,
+                                "last_arrivals": 2056,
+                                "async_acquisition_seconds": 0.570075345,
+                                "outgoing_events": 16385,
+                                "event_work_cpu_seconds": 1.491950702
+                            },
+                            {
+                                "queue": 6,
+                                "last_arrivals": 2164,
+                                "async_acquisition_seconds": 0.618225882,
+                                "outgoing_events": 16385,
+                                "event_work_cpu_seconds": 1.494238738
+                            },
+                            {
+                                "queue": 7,
+                                "last_arrivals": 1406,
+                                "async_acquisition_seconds": 0.655598415,
+                                "outgoing_events": 16385,
+                                "event_work_cpu_seconds": 1.426270781
+                            },
+                            {
+                                "queue": 8,
+                                "last_arrivals": 2433,
+                                "async_acquisition_seconds": 0.735159741,
+                                "outgoing_events": 16385,
+                                "event_work_cpu_seconds": 1.488517536
+                            },
+                            {
+                                "queue": 9,
+                                "last_arrivals": 1312,
+                                "async_acquisition_seconds": 0.832152753,
+                                "outgoing_events": 16385,
+                                "event_work_cpu_seconds": 1.472883698
+                            },
+                            {
+                                "queue": 10,
+                                "last_arrivals": 2243,
+                                "async_acquisition_seconds": 0.879046041,
+                                "outgoing_events": 16385,
+                                "event_work_cpu_seconds": 1.538248558
+                            },
+                            {
+                                "queue": 11,
+                                "last_arrivals": 1242,
+                                "async_acquisition_seconds": 0.885995881,
+                                "outgoing_events": 16385,
+                                "event_work_cpu_seconds": 1.467179425
+                            },
+                            {
+                                "queue": 12,
+                                "last_arrivals": 1785,
+                                "async_acquisition_seconds": 0.883390055,
+                                "outgoing_events": 16385,
+                                "event_work_cpu_seconds": 1.493716551
+                            },
+                            {
+                                "queue": 13,
+                                "last_arrivals": 1256,
+                                "async_acquisition_seconds": 0.873168724,
+                                "outgoing_events": 16385,
+                                "event_work_cpu_seconds": 1.453272101
+                            },
+                            {
+                                "queue": 14,
+                                "last_arrivals": 1413,
+                                "async_acquisition_seconds": 0.874485917,
+                                "outgoing_events": 16385,
+                                "event_work_cpu_seconds": 1.465606501
+                            },
+                            {
+                                "queue": 15,
+                                "last_arrivals": 1695,
+                                "async_acquisition_seconds": 0.851851222,
+                                "outgoing_events": 16385,
+                                "event_work_cpu_seconds": 1.502698678
+                            },
+                            {
+                                "queue": 16,
+                                "last_arrivals": 1541,
+                                "async_acquisition_seconds": 0.837925771,
+                                "outgoing_events": 16385,
+                                "event_work_cpu_seconds": 1.486699648
+                            }
+                        ]
+                    }
+                }
+        },
+        "interpretation": {
+            "bottleneck":
+                "Contended destination queue 0 async inbox lock on accelerator memory-request publication; distributed model work and variable barrier resumption also remain.",
+            "critical_window_ticks": [
+                1500000,
+                144000000
+            ],
+            "wait_sampling_period": 128,
+            "futex_trace_excluded_reason":
+                "193856 lost samples, approximately 10.14%; intrusive collection, not used for quantitative attribution."
+        },
+        "workload_contrast": {
+            "reduction": {
+                "directory": "local-temp/reduction-barrier-20261011/n16-q17",
+                "batch_cycles": 145295.0,
+                "dma_read_requests": 262176.0,
+                "dma_reads_per_cycle": 1.8044392442960873
+            },
+            "raytrace": {
+                "directory": "local-temp/quantum-barrier/final/5ns-r0",
+                "batch_cycles": 7637995.0,
+                "dma_read_requests": 6880.0,
+                "dma_reads_per_cycle": 0.0009007599507462364
+            },
+            "dma_read_density_ratio": 2003.240977578095
+        },
+        "restored_production_binary_sha256":
+            "0463efe5456a144e8711038fe9ec6ace7a97b70dc1d076a6123489cede4f2d81"
+    }
+}

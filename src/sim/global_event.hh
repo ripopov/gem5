@@ -31,10 +31,12 @@
 #define __SIM_GLOBAL_EVENT_HH__
 
 #include <barrier>
+#include <memory>
 #include <mutex>
 #include <vector>
 
 #include "sim/eventq.hh"
+#include "sim/quantum_barrier.hh"
 
 namespace gem5
 {
@@ -104,6 +106,7 @@ class BaseGlobalEvent : public EventBase
         void
         globalBarrier()
         {
+            EventQueue::publishAsyncBatches();
             // This method will be called from the process() method in
             // the local barrier events
             // (GlobalSyncEvent::BarrierEvent).  The local event
@@ -235,14 +238,7 @@ class GlobalSyncEvent : public BaseGlobalEventTemplate<GlobalSyncEvent>
         : Base(p, f), repeat(0)
     { }
 
-    GlobalSyncEvent(Tick when, Tick _repeat, Priority p, Flags f)
-        : Base(p, f), repeat(_repeat)
-    {
-        schedule(when);
-        for (int i = 0; i < numMainEventQueues; ++i) {
-            mainEventQueue[i]->setNextSimQuantum(when);
-        }
-    }
+    GlobalSyncEvent(Tick when, Tick _repeat, Priority p, Flags f);
 
     virtual ~GlobalSyncEvent (){}
 
@@ -251,6 +247,11 @@ class GlobalSyncEvent : public BaseGlobalEventTemplate<GlobalSyncEvent>
     const char *description() const;
 
     Tick repeat;
+
+  private:
+    // Only the periodic simulation-quantum constructor enables polling.
+    // Other users (including distributed network sync) keep blocking waits.
+    std::unique_ptr<QuantumBarrier<ProcessBarrier>> quantumBarrier;
 };
 
 } // namespace gem5

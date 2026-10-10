@@ -41,9 +41,12 @@
 import os
 import os.path
 import pickle
+import shlex
+import subprocess
 import sys
 import tempfile
 import textwrap
+from pathlib import Path
 
 import SCons.Node.Python
 import SCons.Script
@@ -306,6 +309,100 @@ def FromValue(node):
     return pickle.loads(node.read())
 
 
+def build_vtr(target, source, env):
+    """Install VTR and retain its native link flags in a response file."""
+    process_env = dict(env["ENV"])
+    subprocess.run(
+        [
+            "bash",
+            source[0].abspath,
+            "--target-dir",
+            env["VTR_TARGET_DIR"],
+            "--prefix",
+            env["VTR_PREFIX"],
+        ],
+        env=process_env,
+        check=True,
+    )
+    process_env["PKG_CONFIG_LIBDIR"] = str(
+        Path(env["VTR_PREFIX"]) / "lib/pkgconfig"
+    )
+    process_env.pop("PKG_CONFIG_PATH", None)
+    flags = subprocess.check_output(
+        ["pkg-config", "--static", "--libs", "vtr"],
+        env=process_env,
+        text=True,
+    )
+    # SCons links the archive node explicitly, keeping it in the dependency
+    # graph. Native flags follow it so static link ordering is preserved.
+    native_flags = [flag for flag in shlex.split(flags) if flag != "-lvtr"]
+    Path(target[-1].abspath).write_text(shlex.join(native_flags) + "\n")
+    return 0
+
+
+def vtr_link_emitter(target, source, env):
+    env.Depends(target, env["VTR_NATIVE_LIBS"])
+    return target, source
+
+
+def VtrTool(env):
+    """Add the native Linux VTR C interface to a gem5 build environment."""
+    root = Path(env.Dir("#ext/volna").abspath)
+    installer = root / "vtr-capi/install.sh"
+    if not installer.is_file():
+        error(
+            "VTR requires the Volna submodule. Run "
+            "'git submodule update --init ext/volna', or use --without-vtr."
+        )
+
+    build = Path(env.Dir(env["BUILDDIR"]).abspath) / "ext/vtr"
+    prefix = build / "prefix"
+    vtr_env = env.Clone(
+        VTR_TARGET_DIR=str(build / "target"), VTR_PREFIX=str(prefix)
+    )
+    # Cargo needs its toolchain/cache settings, but does not inherit gem5's
+    # C++ optimization or linker options.
+    for key, value in os.environ.items():
+        if key.startswith(("CARGO_", "RUSTUP_")) or key == "RUSTFLAGS":
+            vtr_env["ENV"][key] = value
+    vtr_env["ENV"]["CC"] = env.subst("$CC")
+    vtr_env["ENV"]["CXX"] = env.subst("$CXX")
+
+    inputs = [installer, root / "Cargo.lock", root / "rust-toolchain.toml"]
+    # Workspace members inherit metadata from the root manifest, and Cargo
+    # resolves the workspace even when only vtr-capi is selected.
+    inputs += sorted(root.glob("*/Cargo.toml")) + [root / "Cargo.toml"]
+    for crate in ("vtr", "vtr-capi", "vtr-guard"):
+        inputs += sorted((root / crate / "src").rglob("*.rs"))
+        inputs += sorted((root / crate).glob("*.rs"))
+    # The library's rustdoc includes these examples during compilation.
+    inputs += sorted((root / "vtr/examples").glob("*.rs"))
+    headers = ["vtr.h", "vtr_log.hpp", "vtr_track.hpp"]
+    inputs += [root / "vtr-capi/include" / header for header in headers]
+
+    outputs = [prefix / "lib/libvtr.a"]
+    outputs += [prefix / "include" / header for header in headers]
+    outputs += [prefix / "lib/pkgconfig/vtr.pc", build / "native-libs.rsp"]
+    installed = vtr_env.Command(
+        [str(path) for path in outputs],
+        [str(path) for path in inputs],
+        MakeAction(
+            build_vtr,
+            Transform("VTR", max_sources=1),
+            varlist=["VTR_TARGET_DIR", "VTR_PREFIX", "ENV"],
+        ),
+        target_factory=env.File,
+        source_factory=env.File,
+    )
+    vtr_env.Clean(installed, str(build / "target"))
+    env.Append(CPPPATH=[str(prefix / "include")], LIBS=[installed[0]])
+    env["VTR_NATIVE_LIBS"] = installed[-1]
+    env.Append(PROGEMITTER=[vtr_link_emitter], SHLIBEMITTER=[vtr_link_emitter])
+    # A response file lets native flags be discovered by the build action,
+    # without invoking Cargo or requiring installed metadata during setup.
+    env["_LIBFLAGS"] += " @" + shlex.quote(installed[-1].abspath)
+
+
 def patch_re_compile_for_inline_flags():
     """Patch `re.compile` with a version that can handle RE strings with
     inline flags anywhere within them. This is required to use PLY
@@ -356,6 +453,7 @@ __all__ = [
     "error",
     "MakeAction",
     "MakeActionTool",
+    "VtrTool",
     "ToValue",
     "FromValue",
     "patch_re_compile_for_inline_flags",

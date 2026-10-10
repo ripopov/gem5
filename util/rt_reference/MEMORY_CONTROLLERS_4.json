@@ -1,0 +1,297 @@
+{
+    "workload": "reduction",
+    "queues": 17,
+    "memory_controllers": 4,
+    "controller_statistics": [
+        {
+            "path": "system.memory",
+            "range": "2147483648:2214592512:0:64:128",
+            "latency_ticks": 100000,
+            "ticks_per_byte": 29.0,
+            "dma_read_bytes": 4194400.0,
+            "dma_write_bytes": 64.0
+        },
+        {
+            "path": "system.memory1",
+            "range": "2147483648:2214592512:1:64:128",
+            "latency_ticks": 100000,
+            "ticks_per_byte": 29.0,
+            "dma_read_bytes": 4194400.0,
+            "dma_write_bytes": 0
+        },
+        {
+            "path": "system.memory2",
+            "range": "2147483648:2214592512:2:64:128",
+            "latency_ticks": 100000,
+            "ticks_per_byte": 29.0,
+            "dma_read_bytes": 4194400.0,
+            "dma_write_bytes": 0
+        },
+        {
+            "path": "system.memory3",
+            "range": "2147483648:2214592512:3:64:128",
+            "latency_ticks": 100000,
+            "ticks_per_byte": 29.0,
+            "dma_read_bytes": 4194400.0,
+            "dma_write_bytes": 0
+        }
+    ],
+    "batch_start_tick": 1036000.0,
+    "batch_end_tick": 307439000.0,
+    "batch_ticks": 306403000.0,
+    "final_tick": 309556000.0,
+    "dma": [
+        {
+            "bytes_copied": 1048604.0,
+            "busy_ticks": 125763018.0,
+            "average_bytes_per_busy_cycle": 8.337936037762708,
+            "peak_chunks": 512.0,
+            "read_retries": 0.0,
+            "write_retries": 0.0
+        },
+        {
+            "bytes_copied": 1048604.0,
+            "busy_ticks": 126050518.0,
+            "average_bytes_per_busy_cycle": 8.318918610076636,
+            "peak_chunks": 512.0,
+            "read_retries": 0.0,
+            "write_retries": 0.0
+        },
+        {
+            "bytes_copied": 1048604.0,
+            "busy_ticks": 126188018.0,
+            "average_bytes_per_busy_cycle": 8.309853951426671,
+            "peak_chunks": 512.0,
+            "read_retries": 0.0,
+            "write_retries": 0.0
+        },
+        {
+            "bytes_copied": 1048604.0,
+            "busy_ticks": 126444018.0,
+            "average_bytes_per_busy_cycle": 8.293029726404297,
+            "peak_chunks": 512.0,
+            "read_retries": 0.0,
+            "write_retries": 0.0
+        },
+        {
+            "bytes_copied": 1048604.0,
+            "busy_ticks": 126477518.0,
+            "average_bytes_per_busy_cycle": 8.290833158190217,
+            "peak_chunks": 512.0,
+            "read_retries": 0.0,
+            "write_retries": 0.0
+        },
+        {
+            "bytes_copied": 1048604.0,
+            "busy_ticks": 126615018.0,
+            "average_bytes_per_busy_cycle": 8.28182956938015,
+            "peak_chunks": 512.0,
+            "read_retries": 0.0,
+            "write_retries": 0.0
+        },
+        {
+            "bytes_copied": 1048604.0,
+            "busy_ticks": 126647518.0,
+            "average_bytes_per_busy_cycle": 8.279704304982905,
+            "peak_chunks": 512.0,
+            "read_retries": 0.0,
+            "write_retries": 0.0
+        },
+        {
+            "bytes_copied": 1048604.0,
+            "busy_ticks": 126679018.0,
+            "average_bytes_per_busy_cycle": 8.277645474012122,
+            "peak_chunks": 512.0,
+            "read_retries": 0.0,
+            "write_retries": 0.0
+        },
+        {
+            "bytes_copied": 1048604.0,
+            "busy_ticks": 126679018.0,
+            "average_bytes_per_busy_cycle": 8.277645474012122,
+            "peak_chunks": 512.0,
+            "read_retries": 0.0,
+            "write_retries": 0.0
+        },
+        {
+            "bytes_copied": 1048604.0,
+            "busy_ticks": 126711518.0,
+            "average_bytes_per_busy_cycle": 8.27552235622337,
+            "peak_chunks": 512.0,
+            "read_retries": 0.0,
+            "write_retries": 0.0
+        },
+        {
+            "bytes_copied": 1048604.0,
+            "busy_ticks": 126744018.0,
+            "average_bytes_per_busy_cycle": 8.27340032726436,
+            "peak_chunks": 512.0,
+            "read_retries": 0.0,
+            "write_retries": 0.0
+        },
+        {
+            "bytes_copied": 1048604.0,
+            "busy_ticks": 126776518.0,
+            "average_bytes_per_busy_cycle": 8.271279386297705,
+            "peak_chunks": 512.0,
+            "read_retries": 0.0,
+            "write_retries": 0.0
+        },
+        {
+            "bytes_copied": 1048604.0,
+            "busy_ticks": 126673018.0,
+            "average_bytes_per_busy_cycle": 8.278037553348575,
+            "peak_chunks": 512.0,
+            "read_retries": 0.0,
+            "write_retries": 0.0
+        },
+        {
+            "bytes_copied": 1048604.0,
+            "busy_ticks": 126705518.0,
+            "average_bytes_per_busy_cycle": 8.275914234453467,
+            "peak_chunks": 512.0,
+            "read_retries": 0.0,
+            "write_retries": 0.0
+        },
+        {
+            "bytes_copied": 1048604.0,
+            "busy_ticks": 126722018.0,
+            "average_bytes_per_busy_cycle": 8.274836658614449,
+            "peak_chunks": 512.0,
+            "read_retries": 0.0,
+            "write_retries": 0.0
+        },
+        {
+            "bytes_copied": 1048604.0,
+            "busy_ticks": 126754518.0,
+            "average_bytes_per_busy_cycle": 8.272714981252188,
+            "peak_chunks": 512.0,
+            "read_retries": 0.0,
+            "write_retries": 0.0
+        }
+    ],
+    "wire": null,
+    "aggregate_input_bytes_per_batch_cycle": 54.755390776199974,
+    "code_tcm_bytes": 1230,
+    "data_tcm_bytes_including_stack": 147536,
+    "simulation_wall": {
+        "wall_seconds": 5.260615168008371,
+        "start_tick": 0,
+        "end_tick": 309556000,
+        "boundary":
+            "After instantiate through return from simulate; boot, batch, validation and export included; image setup, automatic exit statistics and cleanup excluded"
+    },
+    "process_wall": {
+        "wall_seconds": 7.383640590996947,
+        "command": [
+            "/home/ripopov/work/gem5/main/build/RISCV/gem5.opt",
+            "--outdir=/home/ripopov/work/gem5/main/m5out/reduction-memory-controllers-4-q17",
+            "/home/ripopov/work/gem5/main/configs/example/rt_accel_reduction.py",
+            "--workload=reduction",
+            "--queues=17",
+            "--memory-controllers=4",
+            "--memory-bandwidth=32GiB/s"
+        ],
+        "idle_machine_checked": true,
+        "process_checks": 8,
+        "simulations_before": [],
+        "simulations_after": []
+    },
+    "bandwidth_per_controller": "32GiB/s",
+    "artifact_sha256": {
+        "/home/ripopov/work/gem5/main/build/RISCV/gem5.opt":
+            "8f81cffbc0413c64598d224c0a3d2a2bcad25f32cdf19c3d10c21c38936b1ae9",
+        "/home/ripopov/work/gem5/main/util/rt_reference/out/reduction-host.elf":
+            "9f6930cb78491e684f95b0a37be1618f59b4bdfeab60dfee1aa6a565143c1944",
+        "/home/ripopov/work/gem5/main/util/rt_reference/out/reduction-accelerator.elf":
+            "954f94480c7d5241e527fedccfcd0e56d2fe166412865d39b94982652937890a",
+        "/home/ripopov/work/gem5/main/configs/example/rt_accel_system.py":
+            "9b945d29085002f36492959d87538d80e01bea0352e8ba91e9125620a1a560eb",
+        "/home/ripopov/work/gem5/main/configs/example/rt_accel_reduction.py":
+            "461b0447fda7aaeead1e7fe2c82c60d754838bdfabbaa4d22d1729ae1535ab0e",
+        "/home/ripopov/work/gem5/main/src/dev/rt_accel/control.cc":
+            "89af658411682ad283a6fd99eb0721066001594de811cad29704d3f9dbbed6d0",
+        "/home/ripopov/work/gem5/main/src/dev/rt_accel/control.hh":
+            "457c10ad04e49724ad7b964601fc20de451562f860acea0332ef90d765872ec0",
+        "/home/ripopov/work/gem5/main/src/dev/rt_accel/RTAccelerator.py":
+            "80282b710d9121a422c513cb7175956453ec331f36174e5b0943648d59437109",
+        "/home/ripopov/work/gem5/main/util/rt_reference/reduction.h":
+            "5602c124a33514c994432e0bfddbcfc076f95aa97334665853cb9b3e43e10935",
+        "/home/ripopov/work/gem5/main/util/rt_reference/reduction_host.c":
+            "ba5bb0d108f5b777e92026c4fd65a9bf952c8905ff4e10dcc270b3fe44675a5f",
+        "/home/ripopov/work/gem5/main/util/rt_reference/reduction_accelerator.c":
+            "6cf0a3771a286ce458ee32e035cb7ec87ae71d711f1e92fc10c6f633c9a774e8",
+        "/home/ripopov/work/gem5/main/util/rt_reference/host_runtime.c":
+            "ec906b6cb60cf595a1dc0e259c5bd753b3da19e66cb88922b881bca58c00b0a5",
+        "/home/ripopov/work/gem5/main/util/rt_reference/host_runtime.h":
+            "b1374447ba18121b81d866235acaca66ad8b1750600d4098e70e7d796b4bb8af",
+        "/home/ripopov/work/gem5/main/util/rt_reference/accelerator_runtime.c":
+            "fc6571246e77f96248ba3f4065064a4741745f01e427af4b2466dac43ff1e43f",
+        "/home/ripopov/work/gem5/main/util/rt_reference/accelerator_runtime.h":
+            "ba1fdc2378b6eb1d0513b695444452d5fa02858422cc1333e84a62e378eea2bb",
+        "/home/ripopov/work/gem5/main/util/rt_reference/Makefile":
+            "39df666f2670aea13ee176eacee911ff35b8fc3dc2b5dd5e68d526604483831c",
+        "/home/ripopov/work/gem5/main/util/rt_reference/start.S":
+            "a9a60a3e530424df4f78f9629ac118fa132cdf10faa605874579350cad1dc4fe",
+        "/home/ripopov/work/gem5/main/util/rt_reference/link.ld":
+            "be41aaedbef73a331ff538575b8c5644403b47ff495f71f19cf91c4d787a6bc0",
+        "/home/ripopov/work/gem5/main/util/rt_reference/accelerator.ld":
+            "bd7e99766ec041acfa94bf36b3309cfcc1f32cc17609f896930fd9617c038e5e",
+        "/home/ripopov/work/gem5/main/util/rt_reference/experiment.py":
+            "2c0449d60e47fcf5c1b4c4ef9065132fce17552ae784f9abf20f1ad885081d65",
+        "/home/ripopov/work/gem5/main/util/rt_reference/validate_reduction.py":
+            "576b2589a19abf576e9e7453195ef312ac19a366d9eb4aa322b6e29a453fdea9"
+    },
+    "machine": {
+        "hostname": "Z890-AORUS",
+        "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.43",
+        "lscpu":
+            "Architecture:                            x86_64\nCPU op-mode(s):                          32-bit, 64-bit\nAddress sizes:                           46 bits physical, 48 bits virtual\nByte Order:                              Little Endian\nCPU(s):                                  20\nOn-line CPU(s) list:                     0-19\nVendor ID:                               GenuineIntel\nModel name:                              Intel(R) Core(TM) Ultra 7 265K\nCPU family:                              6\nModel:                                   198\nThread(s) per core:                      1\nCore(s) per socket:                      20\nSocket(s):                               1\nStepping:                                2\nCPU(s) scaling MHz:                      74%\nCPU max MHz:                             5500.0000\nCPU min MHz:                             800.0000\nBogoMIPS:                                7756.80\nFlags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdt_a rdseed adx smap clflushopt clwb intel_pt sha_ni xsaveopt xsavec xgetbv1 xsaves split_lock_detect user_shstk avx_vnni lam wbnoinvd dtherm ida arat pln pts hwp hwp_notify hwp_act_window hwp_epp hwp_pkg_req hfi vnmi umip pku ospke waitpkg gfni vaes vpclmulqdq rdpid bus_lock_detect movdiri movdir64b fsrm md_clear serialize arch_lbr ibt flush_l1d arch_capabilities\nVirtualization:                          VT-x\nL1d cache:                               704 KiB (18 instances)\nL1i cache:                               1.1 MiB (18 instances)\nL2 cache:                                36 MiB (11 instances)\nL3 cache:                                30 MiB (1 instance)\nNUMA node(s):                            1\nNUMA node0 CPU(s):                       0-19\nVulnerability Gather data sampling:      Not affected\nVulnerability Ghostwrite:                Not affected\nVulnerability Indirect target selection: Not affected\nVulnerability Itlb multihit:             Not affected\nVulnerability L1tf:                      Not affected\nVulnerability Mds:                       Not affected\nVulnerability Meltdown:                  Not affected\nVulnerability Mmio stale data:           Not affected\nVulnerability Old microcode:             Not affected\nVulnerability Reg file data sampling:    Not affected\nVulnerability Retbleed:                  Not affected\nVulnerability Spec rstack overflow:      Not affected\nVulnerability Spec store bypass:         Mitigation; Speculative Store Bypass disabled via prctl\nVulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:                Mitigation; Enhanced / Automatic IBRS; IBPB conditional; PBRSB-eIBRS Not affected; BHI BHI_DIS_S\nVulnerability Srbds:                     Not affected\nVulnerability Tsa:                       Not affected\nVulnerability Tsx async abort:           Not affected\nVulnerability Vmscape:                   Mitigation; IBPB before exit to userspace\n",
+        "cpu_affinity": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19
+        ]
+    },
+    "sampling": "One untraced run on 17 queues",
+    "output_sha256": {
+        "jobs.bin":
+            "1ea20d25c8d6c2dd28fc6534d4c4dc2839770275fd4da75580055787a44c812e",
+        "parameters.bin":
+            "df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+        "inputs.elf":
+            "4d7dc7a70c0b3d40f36bb4546a333b48d251fbc70222bb3ff47c815fd1bbd53e",
+        "boot.elf":
+            "8181419b49363c39b877c5bcfea98715dad08e09757297222a199fee5f2ea091",
+        "partials.bin":
+            "908bdfb0e87619de63928b3f9543106f500e3fb7c67f98741bb92088610c9576",
+        "sum.bin":
+            "614ccbddbee93343b5cd8aed8c89e2b8a2ed89fe156d609b9f327c3edf1794a6"
+    },
+    "two_controller_baseline": {
+        "source": "MEMORY_CONTROLLERS.json",
+        "queues": 17,
+        "batch_cycles": 314022.0,
+        "input_bytes_per_cycle": 53.42688091917127,
+        "median_simulation_wall_seconds": 4.894347629000549,
+        "wall_samples": 3
+    },
+    "modeled_speedup_vs_two_controllers": 1.0248659445240418
+}

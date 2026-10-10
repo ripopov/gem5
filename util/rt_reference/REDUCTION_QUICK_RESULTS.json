@@ -1,0 +1,839 @@
+{
+    "evaluation": "quick-reduction",
+    "measured_at_utc": "2026-10-11T12:38:18.463758+00:00",
+    "git_commit": "6f3a6a249d2123c8e2dd610d63ec7f005c1e4c3e",
+    "artifact_sha256": {
+        "/home/ripopov/work/gem5/main/build/RISCV/gem5.opt":
+            "15689a1f63f2a4ae5e2588c34721ba2a1685ef49777befdadce58ee85318daff",
+        "/home/ripopov/work/gem5/main/util/rt_reference/out/reduction-host.elf":
+            "a1dc9df51f1612119cba5c2b9239304422047c512198d906077025ae9c583e53",
+        "/home/ripopov/work/gem5/main/util/rt_reference/out/reduction-accelerator.elf":
+            "dd74c08a076bdab38be0d97b04b850d21b0b6e4cef4f4c9fa6ee6a8667c90e2e",
+        "/home/ripopov/work/gem5/main/configs/example/rt_accel_system.py":
+            "cc15055760d28991c9ecce518933fd73a89a8bf0e5bc7209b8c9e7a595eb81fd",
+        "/home/ripopov/work/gem5/main/configs/example/rt_accel_reduction.py":
+            "51c697a29728ba478c1b59684d152e0273f6040d48f12e5c59cbd10b54961c53",
+        "/home/ripopov/work/gem5/main/src/dev/rt_accel/control.cc":
+            "43d0637e4a7ee68ae57d3d26a8e0ba8acb26352f9b6619fb20d0b085f84f4cc3",
+        "/home/ripopov/work/gem5/main/src/dev/rt_accel/control.hh":
+            "34b680952cd018ea85f1e666d0acb56ce84c473af8386a10af400d77f02a4e89",
+        "/home/ripopov/work/gem5/main/src/dev/rt_accel/code_tcm.cc":
+            "99e5ca646b2fdd51f7382d448766683d0843084be16628f97224bf06c6558819",
+        "/home/ripopov/work/gem5/main/src/dev/rt_accel/code_tcm.hh":
+            "e7c7ea168f664be931b1daa8c9728030fa2c5638685968e375b4d26aeb1bed87",
+        "/home/ripopov/work/gem5/main/src/dev/rt_accel/RTAccelerator.py":
+            "2a2bcc4f398a03e2dc9ea96ad1978f4d3ff0534ed32c862d2e3cac1a90fc07d9",
+        "/home/ripopov/work/gem5/main/util/rt_reference/reduction.h":
+            "4e72e32ab01f5740fc83522b558cc9d8b47a1550bc65088000b0137304dd6587",
+        "/home/ripopov/work/gem5/main/util/rt_reference/reduction_host.c":
+            "2cd6d6a0a2a5a8a74b99a2cb89c91f2cc8e244ce26c46c2dee6a71504655ce2f",
+        "/home/ripopov/work/gem5/main/util/rt_reference/reduction_accelerator.c":
+            "b31f1b64b27ad19c9a2099f5a85c87dc7f6957dbc759d8929546c00953238469",
+        "/home/ripopov/work/gem5/main/util/rt_reference/host_runtime.c":
+            "ec906b6cb60cf595a1dc0e259c5bd753b3da19e66cb88922b881bca58c00b0a5",
+        "/home/ripopov/work/gem5/main/util/rt_reference/host_runtime.h":
+            "b1374447ba18121b81d866235acaca66ad8b1750600d4098e70e7d796b4bb8af",
+        "/home/ripopov/work/gem5/main/util/rt_reference/accelerator_runtime.c":
+            "fc6571246e77f96248ba3f4065064a4741745f01e427af4b2466dac43ff1e43f",
+        "/home/ripopov/work/gem5/main/util/rt_reference/accelerator_runtime.h":
+            "ba1fdc2378b6eb1d0513b695444452d5fa02858422cc1333e84a62e378eea2bb",
+        "/home/ripopov/work/gem5/main/util/rt_reference/Makefile":
+            "3d1abd0d25eece93c9456396e502dfba17dbd652fde11a45bc2154097726376d",
+        "/home/ripopov/work/gem5/main/util/rt_reference/start.S":
+            "a9a60a3e530424df4f78f9629ac118fa132cdf10faa605874579350cad1dc4fe",
+        "/home/ripopov/work/gem5/main/util/rt_reference/link.ld":
+            "be41aaedbef73a331ff538575b8c5644403b47ff495f71f19cf91c4d787a6bc0",
+        "/home/ripopov/work/gem5/main/util/rt_reference/accelerator.ld":
+            "bd7e99766ec041acfa94bf36b3309cfcc1f32cc17609f896930fd9617c038e5e",
+        "/home/ripopov/work/gem5/main/util/rt_reference/experiment.py":
+            "2c0449d60e47fcf5c1b4c4ef9065132fce17552ae784f9abf20f1ad885081d65",
+        "/home/ripopov/work/gem5/main/util/rt_reference/validate_reduction.py":
+            "07bc60a38c054b590a95daf33ec0d07283521abb0a8a61999a0e94b70dce75c3"
+    },
+    "machine": {
+        "hostname": "Z890-AORUS",
+        "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.43",
+        "lscpu":
+            "Architecture:                            x86_64\nCPU op-mode(s):                          32-bit, 64-bit\nAddress sizes:                           46 bits physical, 48 bits virtual\nByte Order:                              Little Endian\nCPU(s):                                  20\nOn-line CPU(s) list:                     0-19\nVendor ID:                               GenuineIntel\nModel name:                              Intel(R) Core(TM) Ultra 7 265K\nCPU family:                              6\nModel:                                   198\nThread(s) per core:                      1\nCore(s) per socket:                      20\nSocket(s):                               1\nStepping:                                2\nCPU(s) scaling MHz:                      47%\nCPU max MHz:                             5500.0000\nCPU min MHz:                             800.0000\nBogoMIPS:                                7756.80\nFlags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdt_a rdseed adx smap clflushopt clwb intel_pt sha_ni xsaveopt xsavec xgetbv1 xsaves split_lock_detect user_shstk avx_vnni lam wbnoinvd dtherm ida arat pln pts hwp hwp_notify hwp_act_window hwp_epp hwp_pkg_req hfi vnmi umip pku ospke waitpkg gfni vaes vpclmulqdq rdpid bus_lock_detect movdiri movdir64b fsrm md_clear serialize arch_lbr ibt flush_l1d arch_capabilities\nVirtualization:                          VT-x\nL1d cache:                               704 KiB (18 instances)\nL1i cache:                               1.1 MiB (18 instances)\nL2 cache:                                36 MiB (11 instances)\nL3 cache:                                30 MiB (1 instance)\nNUMA node(s):                            1\nNUMA node0 CPU(s):                       0-19\nVulnerability Gather data sampling:      Not affected\nVulnerability Ghostwrite:                Not affected\nVulnerability Indirect target selection: Not affected\nVulnerability Itlb multihit:             Not affected\nVulnerability L1tf:                      Not affected\nVulnerability Mds:                       Not affected\nVulnerability Meltdown:                  Not affected\nVulnerability Mmio stale data:           Not affected\nVulnerability Old microcode:             Not affected\nVulnerability Reg file data sampling:    Not affected\nVulnerability Retbleed:                  Not affected\nVulnerability Spec rstack overflow:      Not affected\nVulnerability Spec store bypass:         Mitigation; Speculative Store Bypass disabled via prctl\nVulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:                Mitigation; Enhanced / Automatic IBRS; IBPB conditional; PBRSB-eIBRS Not affected; BHI BHI_DIS_S\nVulnerability Srbds:                     Not affected\nVulnerability Tsa:                       Not affected\nVulnerability Tsx async abort:           Not affected\nVulnerability Vmscape:                   Mitigation; IBPB before exit to userspace\n",
+        "cpu_affinity": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19
+        ]
+    },
+    "transport_delay_ns": 5,
+    "quantum_ticks": 5000,
+    "tick_frequency_hz": 1000000000000,
+    "memory_controllers": 4,
+    "memory_bandwidth_per_controller": "32GiB/s",
+    "memory_latency_ns": 100,
+    "groups": [
+        {
+            "accelerator_cores": 8,
+            "input_bytes": 8388608,
+            "runs": [
+                {
+                    "workload": "reduction",
+                    "accelerator_cores": 8,
+                    "queues": 1,
+                    "memory_controllers": 4,
+                    "controller_statistics": [
+                        {
+                            "path": "system.memory",
+                            "range": "2147483648:2214592512:0:64:128",
+                            "latency_ticks": 100000,
+                            "ticks_per_byte": 29.0,
+                            "dma_read_bytes": 2097200.0,
+                            "dma_write_bytes": 32.0
+                        },
+                        {
+                            "path": "system.memory1",
+                            "range": "2147483648:2214592512:1:64:128",
+                            "latency_ticks": 100000,
+                            "ticks_per_byte": 29.0,
+                            "dma_read_bytes": 2097200.0,
+                            "dma_write_bytes": 0
+                        },
+                        {
+                            "path": "system.memory2",
+                            "range": "2147483648:2214592512:2:64:128",
+                            "latency_ticks": 100000,
+                            "ticks_per_byte": 29.0,
+                            "dma_read_bytes": 2097200.0,
+                            "dma_write_bytes": 0
+                        },
+                        {
+                            "path": "system.memory3",
+                            "range": "2147483648:2214592512:3:64:128",
+                            "latency_ticks": 100000,
+                            "ticks_per_byte": 29.0,
+                            "dma_read_bytes": 2097200.0,
+                            "dma_write_bytes": 0
+                        }
+                    ],
+                    "batch_start_tick": 842000.0,
+                    "batch_end_tick": 130249000.0,
+                    "batch_ticks": 129407000.0,
+                    "final_tick": 131259000.0,
+                    "dma": [
+                        {
+                            "bytes_copied": 1048604.0,
+                            "busy_ticks": 62304018.0,
+                            "average_bytes_per_busy_cycle": 16.8304394108258,
+                            "peak_chunks": 512.0,
+                            "read_retries": 0.0,
+                            "write_retries": 7056.0
+                        },
+                        {
+                            "bytes_copied": 1048604.0,
+                            "busy_ticks": 62489518.0,
+                            "average_bytes_per_busy_cycle": 16.780478287574567,
+                            "peak_chunks": 512.0,
+                            "read_retries": 0.0,
+                            "write_retries": 6988.0
+                        },
+                        {
+                            "bytes_copied": 1048604.0,
+                            "busy_ticks": 62659018.0,
+                            "average_bytes_per_busy_cycle": 16.73508512374069,
+                            "peak_chunks": 512.0,
+                            "read_retries": 0.0,
+                            "write_retries": 7006.0
+                        },
+                        {
+                            "bytes_copied": 1048604.0,
+                            "busy_ticks": 62693518.0,
+                            "average_bytes_per_busy_cycle": 16.72587587125036,
+                            "peak_chunks": 512.0,
+                            "read_retries": 0.0,
+                            "write_retries": 7072.0
+                        },
+                        {
+                            "bytes_copied": 1048604.0,
+                            "busy_ticks": 62727018.0,
+                            "average_bytes_per_busy_cycle": 16.7169432476449,
+                            "peak_chunks": 512.0,
+                            "read_retries": 0.0,
+                            "write_retries": 6905.0
+                        },
+                        {
+                            "bytes_copied": 1048604.0,
+                            "busy_ticks": 62805518.0,
+                            "average_bytes_per_busy_cycle": 16.696048904492756,
+                            "peak_chunks": 512.0,
+                            "read_retries": 0.0,
+                            "write_retries": 6992.0
+                        },
+                        {
+                            "bytes_copied": 1048604.0,
+                            "busy_ticks": 62789018.0,
+                            "average_bytes_per_busy_cycle": 16.70043637248794,
+                            "peak_chunks": 512.0,
+                            "read_retries": 0.0,
+                            "write_retries": 6864.0
+                        },
+                        {
+                            "bytes_copied": 1048604.0,
+                            "busy_ticks": 62820518.0,
+                            "average_bytes_per_busy_cycle": 16.692062297225885,
+                            "peak_chunks": 512.0,
+                            "read_retries": 0.0,
+                            "write_retries": 6893.0
+                        }
+                    ],
+                    "wire": null,
+                    "aggregate_input_bytes_per_batch_cycle": 64.82344849969476,
+                    "code_tcm_bytes": 1558,
+                    "data_tcm_bytes_including_stack": 147536,
+                    "simulation_wall": {
+                        "wall_seconds": 6.66003106900007,
+                        "start_tick": 0,
+                        "end_tick": 131259000,
+                        "boundary":
+                            "After instantiate through return from simulate; boot, batch, validation and export included; image setup, automatic exit statistics and cleanup excluded"
+                    },
+                    "process_wall": {
+                        "wall_seconds": 7.986437492000732,
+                        "command": [
+                            "/home/ripopov/work/gem5/main/build/RISCV/gem5.opt",
+                            "--outdir=/home/ripopov/work/gem5/main/m5out/reduction-5ns-quick-final-20261011/n8-timing-0-q1",
+                            "/home/ripopov/work/gem5/main/configs/example/rt_accel_reduction.py",
+                            "--workload=reduction",
+                            "--accelerator-cores=8",
+                            "--queues=1"
+                        ],
+                        "idle_machine_checked": true,
+                        "process_checks": 8,
+                        "simulations_before": [],
+                        "simulations_after": []
+                    },
+                    "run_name": "n8-timing-0-q1"
+                },
+                {
+                    "workload": "reduction",
+                    "accelerator_cores": 8,
+                    "queues": 9,
+                    "memory_controllers": 4,
+                    "controller_statistics": [
+                        {
+                            "path": "system.memory",
+                            "range": "2147483648:2214592512:0:64:128",
+                            "latency_ticks": 100000,
+                            "ticks_per_byte": 29.0,
+                            "dma_read_bytes": 2097200.0,
+                            "dma_write_bytes": 32.0
+                        },
+                        {
+                            "path": "system.memory1",
+                            "range": "2147483648:2214592512:1:64:128",
+                            "latency_ticks": 100000,
+                            "ticks_per_byte": 29.0,
+                            "dma_read_bytes": 2097200.0,
+                            "dma_write_bytes": 0
+                        },
+                        {
+                            "path": "system.memory2",
+                            "range": "2147483648:2214592512:2:64:128",
+                            "latency_ticks": 100000,
+                            "ticks_per_byte": 29.0,
+                            "dma_read_bytes": 2097200.0,
+                            "dma_write_bytes": 0
+                        },
+                        {
+                            "path": "system.memory3",
+                            "range": "2147483648:2214592512:3:64:128",
+                            "latency_ticks": 100000,
+                            "ticks_per_byte": 29.0,
+                            "dma_read_bytes": 2097200.0,
+                            "dma_write_bytes": 0
+                        }
+                    ],
+                    "batch_start_tick": 842000.0,
+                    "batch_end_tick": 130249000.0,
+                    "batch_ticks": 129407000.0,
+                    "final_tick": 131259000.0,
+                    "dma": [
+                        {
+                            "bytes_copied": 1048604.0,
+                            "busy_ticks": 62304018.0,
+                            "average_bytes_per_busy_cycle": 16.8304394108258,
+                            "peak_chunks": 512.0,
+                            "read_retries": 0.0,
+                            "write_retries": 7056.0
+                        },
+                        {
+                            "bytes_copied": 1048604.0,
+                            "busy_ticks": 62489518.0,
+                            "average_bytes_per_busy_cycle": 16.780478287574567,
+                            "peak_chunks": 512.0,
+                            "read_retries": 0.0,
+                            "write_retries": 6988.0
+                        },
+                        {
+                            "bytes_copied": 1048604.0,
+                            "busy_ticks": 62659018.0,
+                            "average_bytes_per_busy_cycle": 16.73508512374069,
+                            "peak_chunks": 512.0,
+                            "read_retries": 0.0,
+                            "write_retries": 7006.0
+                        },
+                        {
+                            "bytes_copied": 1048604.0,
+                            "busy_ticks": 62693518.0,
+                            "average_bytes_per_busy_cycle": 16.72587587125036,
+                            "peak_chunks": 512.0,
+                            "read_retries": 0.0,
+                            "write_retries": 7072.0
+                        },
+                        {
+                            "bytes_copied": 1048604.0,
+                            "busy_ticks": 62727018.0,
+                            "average_bytes_per_busy_cycle": 16.7169432476449,
+                            "peak_chunks": 512.0,
+                            "read_retries": 0.0,
+                            "write_retries": 6905.0
+                        },
+                        {
+                            "bytes_copied": 1048604.0,
+                            "busy_ticks": 62805518.0,
+                            "average_bytes_per_busy_cycle": 16.696048904492756,
+                            "peak_chunks": 512.0,
+                            "read_retries": 0.0,
+                            "write_retries": 6992.0
+                        },
+                        {
+                            "bytes_copied": 1048604.0,
+                            "busy_ticks": 62789018.0,
+                            "average_bytes_per_busy_cycle": 16.70043637248794,
+                            "peak_chunks": 512.0,
+                            "read_retries": 0.0,
+                            "write_retries": 6864.0
+                        },
+                        {
+                            "bytes_copied": 1048604.0,
+                            "busy_ticks": 62820518.0,
+                            "average_bytes_per_busy_cycle": 16.692062297225885,
+                            "peak_chunks": 512.0,
+                            "read_retries": 0.0,
+                            "write_retries": 6893.0
+                        }
+                    ],
+                    "wire": null,
+                    "aggregate_input_bytes_per_batch_cycle": 64.82344849969476,
+                    "code_tcm_bytes": 1558,
+                    "data_tcm_bytes_including_stack": 147536,
+                    "simulation_wall": {
+                        "wall_seconds": 2.270115290999456,
+                        "start_tick": 0,
+                        "end_tick": 131259000,
+                        "boundary":
+                            "After instantiate through return from simulate; boot, batch, validation and export included; image setup, automatic exit statistics and cleanup excluded"
+                    },
+                    "process_wall": {
+                        "wall_seconds": 3.6246901560007245,
+                        "command": [
+                            "/home/ripopov/work/gem5/main/build/RISCV/gem5.opt",
+                            "--outdir=/home/ripopov/work/gem5/main/m5out/reduction-5ns-quick-final-20261011/n8-timing-0-q9",
+                            "/home/ripopov/work/gem5/main/configs/example/rt_accel_reduction.py",
+                            "--workload=reduction",
+                            "--accelerator-cores=8",
+                            "--queues=9"
+                        ],
+                        "idle_machine_checked": true,
+                        "process_checks": 4,
+                        "simulations_before": [],
+                        "simulations_after": []
+                    },
+                    "run_name": "n8-timing-0-q9"
+                }
+            ],
+            "comparisons": [
+                {
+                    "simulated_counters_compared": 19496,
+                    "excluded_host_counters": [
+                        "dump0/hostInstRate",
+                        "dump0/hostMemory",
+                        "dump0/hostOpRate",
+                        "dump0/hostSeconds",
+                        "dump0/hostTickRate",
+                        "dump1/hostInstRate",
+                        "dump1/hostMemory",
+                        "dump1/hostOpRate",
+                        "dump1/hostSeconds",
+                        "dump1/hostTickRate"
+                    ],
+                    "workload": "reduction",
+                    "left": "n8-timing-0-q1",
+                    "right": "n8-timing-0-q9"
+                }
+            ],
+            "median_simulation_wall_seconds": {
+                "1": 6.66003106900007,
+                "9": 2.270115290999456
+            },
+            "median_process_wall_seconds": {
+                "1": 7.986437492000732,
+                "9": 3.6246901560007245
+            },
+            "pdes_speedup": 2.933785387643409,
+            "process_speedup": 2.203343499244777
+        },
+        {
+            "accelerator_cores": 16,
+            "input_bytes": 16777216,
+            "runs": [
+                {
+                    "workload": "reduction",
+                    "accelerator_cores": 16,
+                    "queues": 1,
+                    "memory_controllers": 4,
+                    "controller_statistics": [
+                        {
+                            "path": "system.memory",
+                            "range": "2147483648:2214592512:0:64:128",
+                            "latency_ticks": 100000,
+                            "ticks_per_byte": 29.0,
+                            "dma_read_bytes": 4194400.0,
+                            "dma_write_bytes": 64.0
+                        },
+                        {
+                            "path": "system.memory1",
+                            "range": "2147483648:2214592512:1:64:128",
+                            "latency_ticks": 100000,
+                            "ticks_per_byte": 29.0,
+                            "dma_read_bytes": 4194400.0,
+                            "dma_write_bytes": 0
+                        },
+                        {
+                            "path": "system.memory2",
+                            "range": "2147483648:2214592512:2:64:128",
+                            "latency_ticks": 100000,
+                            "ticks_per_byte": 29.0,
+                            "dma_read_bytes": 4194400.0,
+                            "dma_write_bytes": 0
+                        },
+                        {
+                            "path": "system.memory3",
+                            "range": "2147483648:2214592512:3:64:128",
+                            "latency_ticks": 100000,
+                            "ticks_per_byte": 29.0,
+                            "dma_read_bytes": 4194400.0,
+                            "dma_write_bytes": 0
+                        }
+                    ],
+                    "batch_start_tick": 925000.0,
+                    "batch_end_tick": 146220000.0,
+                    "batch_ticks": 145295000.0,
+                    "final_tick": 148133000.0,
+                    "dma": [
+                        {
+                            "bytes_copied": 1048604.0,
+                            "busy_ticks": 120176018.0,
+                            "average_bytes_per_busy_cycle": 8.725567858305972,
+                            "peak_chunks": 512.0,
+                            "read_retries": 0.0,
+                            "write_retries": 6464.0
+                        },
+                        {
+                            "bytes_copied": 1048604.0,
+                            "busy_ticks": 120220018.0,
+                            "average_bytes_per_busy_cycle": 8.722374338689585,
+                            "peak_chunks": 512.0,
+                            "read_retries": 0.0,
+                            "write_retries": 6495.0
+                        },
+                        {
+                            "bytes_copied": 1048604.0,
+                            "busy_ticks": 120454018.0,
+                            "average_bytes_per_busy_cycle": 8.705429818040606,
+                            "peak_chunks": 512.0,
+                            "read_retries": 0.0,
+                            "write_retries": 6457.0
+                        },
+                        {
+                            "bytes_copied": 1048604.0,
+                            "busy_ticks": 120577018.0,
+                            "average_bytes_per_busy_cycle": 8.696549453561706,
+                            "peak_chunks": 512.0,
+                            "read_retries": 0.0,
+                            "write_retries": 6457.0
+                        },
+                        {
+                            "bytes_copied": 1048604.0,
+                            "busy_ticks": 120585018.0,
+                            "average_bytes_per_busy_cycle": 8.69597249635108,
+                            "peak_chunks": 512.0,
+                            "read_retries": 0.0,
+                            "write_retries": 6447.0
+                        },
+                        {
+                            "bytes_copied": 1048604.0,
+                            "busy_ticks": 120651018.0,
+                            "average_bytes_per_busy_cycle": 8.691215518794877,
+                            "peak_chunks": 512.0,
+                            "read_retries": 0.0,
+                            "write_retries": 6445.0
+                        },
+                        {
+                            "bytes_copied": 1048604.0,
+                            "busy_ticks": 120747018.0,
+                            "average_bytes_per_busy_cycle": 8.684305561898018,
+                            "peak_chunks": 512.0,
+                            "read_retries": 0.0,
+                            "write_retries": 6402.0
+                        },
+                        {
+                            "bytes_copied": 1048604.0,
+                            "busy_ticks": 120953018.0,
+                            "average_bytes_per_busy_cycle": 8.669514968200298,
+                            "peak_chunks": 512.0,
+                            "read_retries": 0.0,
+                            "write_retries": 6424.0
+                        },
+                        {
+                            "bytes_copied": 1048604.0,
+                            "busy_ticks": 121163018.0,
+                            "average_bytes_per_busy_cycle": 8.654488946453942,
+                            "peak_chunks": 512.0,
+                            "read_retries": 0.0,
+                            "write_retries": 6377.0
+                        },
+                        {
+                            "bytes_copied": 1048604.0,
+                            "busy_ticks": 121254018.0,
+                            "average_bytes_per_busy_cycle": 8.647993833903302,
+                            "peak_chunks": 512.0,
+                            "read_retries": 0.0,
+                            "write_retries": 6423.0
+                        },
+                        {
+                            "bytes_copied": 1048604.0,
+                            "busy_ticks": 121373018.0,
+                            "average_bytes_per_busy_cycle": 8.639514920853332,
+                            "peak_chunks": 512.0,
+                            "read_retries": 0.0,
+                            "write_retries": 6420.0
+                        },
+                        {
+                            "bytes_copied": 1048604.0,
+                            "busy_ticks": 121376018.0,
+                            "average_bytes_per_busy_cycle": 8.639301381595827,
+                            "peak_chunks": 512.0,
+                            "read_retries": 0.0,
+                            "write_retries": 6361.0
+                        },
+                        {
+                            "bytes_copied": 1048604.0,
+                            "busy_ticks": 121392518.0,
+                            "average_bytes_per_busy_cycle": 8.638127104340978,
+                            "peak_chunks": 512.0,
+                            "read_retries": 0.0,
+                            "write_retries": 6350.0
+                        },
+                        {
+                            "bytes_copied": 1048604.0,
+                            "busy_ticks": 121428018.0,
+                            "average_bytes_per_busy_cycle": 8.635601710965915,
+                            "peak_chunks": 512.0,
+                            "read_retries": 0.0,
+                            "write_retries": 6364.0
+                        },
+                        {
+                            "bytes_copied": 1048604.0,
+                            "busy_ticks": 121426518.0,
+                            "average_bytes_per_busy_cycle": 8.635708387849844,
+                            "peak_chunks": 512.0,
+                            "read_retries": 0.0,
+                            "write_retries": 6403.0
+                        },
+                        {
+                            "bytes_copied": 1048604.0,
+                            "busy_ticks": 121379018.0,
+                            "average_bytes_per_busy_cycle": 8.639087852893981,
+                            "peak_chunks": 512.0,
+                            "read_retries": 0.0,
+                            "write_retries": 6350.0
+                        }
+                    ],
+                    "wire": null,
+                    "aggregate_input_bytes_per_batch_cycle":
+                        115.47001617399084,
+                    "code_tcm_bytes": 1558,
+                    "data_tcm_bytes_including_stack": 147536,
+                    "simulation_wall": {
+                        "wall_seconds": 17.361322990999724,
+                        "start_tick": 0,
+                        "end_tick": 148133000,
+                        "boundary":
+                            "After instantiate through return from simulate; boot, batch, validation and export included; image setup, automatic exit statistics and cleanup excluded"
+                    },
+                    "process_wall": {
+                        "wall_seconds": 19.6662550609999,
+                        "command": [
+                            "/home/ripopov/work/gem5/main/build/RISCV/gem5.opt",
+                            "--outdir=/home/ripopov/work/gem5/main/m5out/reduction-5ns-quick-final-20261011/n16-timing-0-q1",
+                            "/home/ripopov/work/gem5/main/configs/example/rt_accel_reduction.py",
+                            "--workload=reduction",
+                            "--accelerator-cores=16",
+                            "--queues=1"
+                        ],
+                        "idle_machine_checked": true,
+                        "process_checks": 20,
+                        "simulations_before": [],
+                        "simulations_after": []
+                    },
+                    "run_name": "n16-timing-0-q1"
+                },
+                {
+                    "workload": "reduction",
+                    "accelerator_cores": 16,
+                    "queues": 17,
+                    "memory_controllers": 4,
+                    "controller_statistics": [
+                        {
+                            "path": "system.memory",
+                            "range": "2147483648:2214592512:0:64:128",
+                            "latency_ticks": 100000,
+                            "ticks_per_byte": 29.0,
+                            "dma_read_bytes": 4194400.0,
+                            "dma_write_bytes": 64.0
+                        },
+                        {
+                            "path": "system.memory1",
+                            "range": "2147483648:2214592512:1:64:128",
+                            "latency_ticks": 100000,
+                            "ticks_per_byte": 29.0,
+                            "dma_read_bytes": 4194400.0,
+                            "dma_write_bytes": 0
+                        },
+                        {
+                            "path": "system.memory2",
+                            "range": "2147483648:2214592512:2:64:128",
+                            "latency_ticks": 100000,
+                            "ticks_per_byte": 29.0,
+                            "dma_read_bytes": 4194400.0,
+                            "dma_write_bytes": 0
+                        },
+                        {
+                            "path": "system.memory3",
+                            "range": "2147483648:2214592512:3:64:128",
+                            "latency_ticks": 100000,
+                            "ticks_per_byte": 29.0,
+                            "dma_read_bytes": 4194400.0,
+                            "dma_write_bytes": 0
+                        }
+                    ],
+                    "batch_start_tick": 925000.0,
+                    "batch_end_tick": 146220000.0,
+                    "batch_ticks": 145295000.0,
+                    "final_tick": 148133000.0,
+                    "dma": [
+                        {
+                            "bytes_copied": 1048604.0,
+                            "busy_ticks": 120176018.0,
+                            "average_bytes_per_busy_cycle": 8.725567858305972,
+                            "peak_chunks": 512.0,
+                            "read_retries": 0.0,
+                            "write_retries": 6464.0
+                        },
+                        {
+                            "bytes_copied": 1048604.0,
+                            "busy_ticks": 120220018.0,
+                            "average_bytes_per_busy_cycle": 8.722374338689585,
+                            "peak_chunks": 512.0,
+                            "read_retries": 0.0,
+                            "write_retries": 6495.0
+                        },
+                        {
+                            "bytes_copied": 1048604.0,
+                            "busy_ticks": 120454018.0,
+                            "average_bytes_per_busy_cycle": 8.705429818040606,
+                            "peak_chunks": 512.0,
+                            "read_retries": 0.0,
+                            "write_retries": 6457.0
+                        },
+                        {
+                            "bytes_copied": 1048604.0,
+                            "busy_ticks": 120577018.0,
+                            "average_bytes_per_busy_cycle": 8.696549453561706,
+                            "peak_chunks": 512.0,
+                            "read_retries": 0.0,
+                            "write_retries": 6457.0
+                        },
+                        {
+                            "bytes_copied": 1048604.0,
+                            "busy_ticks": 120585018.0,
+                            "average_bytes_per_busy_cycle": 8.69597249635108,
+                            "peak_chunks": 512.0,
+                            "read_retries": 0.0,
+                            "write_retries": 6447.0
+                        },
+                        {
+                            "bytes_copied": 1048604.0,
+                            "busy_ticks": 120651018.0,
+                            "average_bytes_per_busy_cycle": 8.691215518794877,
+                            "peak_chunks": 512.0,
+                            "read_retries": 0.0,
+                            "write_retries": 6445.0
+                        },
+                        {
+                            "bytes_copied": 1048604.0,
+                            "busy_ticks": 120747018.0,
+                            "average_bytes_per_busy_cycle": 8.684305561898018,
+                            "peak_chunks": 512.0,
+                            "read_retries": 0.0,
+                            "write_retries": 6402.0
+                        },
+                        {
+                            "bytes_copied": 1048604.0,
+                            "busy_ticks": 120953018.0,
+                            "average_bytes_per_busy_cycle": 8.669514968200298,
+                            "peak_chunks": 512.0,
+                            "read_retries": 0.0,
+                            "write_retries": 6424.0
+                        },
+                        {
+                            "bytes_copied": 1048604.0,
+                            "busy_ticks": 121163018.0,
+                            "average_bytes_per_busy_cycle": 8.654488946453942,
+                            "peak_chunks": 512.0,
+                            "read_retries": 0.0,
+                            "write_retries": 6377.0
+                        },
+                        {
+                            "bytes_copied": 1048604.0,
+                            "busy_ticks": 121254018.0,
+                            "average_bytes_per_busy_cycle": 8.647993833903302,
+                            "peak_chunks": 512.0,
+                            "read_retries": 0.0,
+                            "write_retries": 6423.0
+                        },
+                        {
+                            "bytes_copied": 1048604.0,
+                            "busy_ticks": 121373018.0,
+                            "average_bytes_per_busy_cycle": 8.639514920853332,
+                            "peak_chunks": 512.0,
+                            "read_retries": 0.0,
+                            "write_retries": 6420.0
+                        },
+                        {
+                            "bytes_copied": 1048604.0,
+                            "busy_ticks": 121376018.0,
+                            "average_bytes_per_busy_cycle": 8.639301381595827,
+                            "peak_chunks": 512.0,
+                            "read_retries": 0.0,
+                            "write_retries": 6361.0
+                        },
+                        {
+                            "bytes_copied": 1048604.0,
+                            "busy_ticks": 121392518.0,
+                            "average_bytes_per_busy_cycle": 8.638127104340978,
+                            "peak_chunks": 512.0,
+                            "read_retries": 0.0,
+                            "write_retries": 6350.0
+                        },
+                        {
+                            "bytes_copied": 1048604.0,
+                            "busy_ticks": 121428018.0,
+                            "average_bytes_per_busy_cycle": 8.635601710965915,
+                            "peak_chunks": 512.0,
+                            "read_retries": 0.0,
+                            "write_retries": 6364.0
+                        },
+                        {
+                            "bytes_copied": 1048604.0,
+                            "busy_ticks": 121426518.0,
+                            "average_bytes_per_busy_cycle": 8.635708387849844,
+                            "peak_chunks": 512.0,
+                            "read_retries": 0.0,
+                            "write_retries": 6403.0
+                        },
+                        {
+                            "bytes_copied": 1048604.0,
+                            "busy_ticks": 121379018.0,
+                            "average_bytes_per_busy_cycle": 8.639087852893981,
+                            "peak_chunks": 512.0,
+                            "read_retries": 0.0,
+                            "write_retries": 6350.0
+                        }
+                    ],
+                    "wire": null,
+                    "aggregate_input_bytes_per_batch_cycle":
+                        115.47001617399084,
+                    "code_tcm_bytes": 1558,
+                    "data_tcm_bytes_including_stack": 147536,
+                    "simulation_wall": {
+                        "wall_seconds": 4.658886275000441,
+                        "start_tick": 0,
+                        "end_tick": 148133000,
+                        "boundary":
+                            "After instantiate through return from simulate; boot, batch, validation and export included; image setup, automatic exit statistics and cleanup excluded"
+                    },
+                    "process_wall": {
+                        "wall_seconds": 6.982744513000398,
+                        "command": [
+                            "/home/ripopov/work/gem5/main/build/RISCV/gem5.opt",
+                            "--outdir=/home/ripopov/work/gem5/main/m5out/reduction-5ns-quick-final-20261011/n16-timing-0-q17",
+                            "/home/ripopov/work/gem5/main/configs/example/rt_accel_reduction.py",
+                            "--workload=reduction",
+                            "--accelerator-cores=16",
+                            "--queues=17"
+                        ],
+                        "idle_machine_checked": true,
+                        "process_checks": 7,
+                        "simulations_before": [],
+                        "simulations_after": []
+                    },
+                    "run_name": "n16-timing-0-q17"
+                }
+            ],
+            "comparisons": [
+                {
+                    "simulated_counters_compared": 36816,
+                    "excluded_host_counters": [
+                        "dump0/hostInstRate",
+                        "dump0/hostMemory",
+                        "dump0/hostOpRate",
+                        "dump0/hostSeconds",
+                        "dump0/hostTickRate",
+                        "dump1/hostInstRate",
+                        "dump1/hostMemory",
+                        "dump1/hostOpRate",
+                        "dump1/hostSeconds",
+                        "dump1/hostTickRate"
+                    ],
+                    "workload": "reduction",
+                    "left": "n16-timing-0-q1",
+                    "right": "n16-timing-0-q17"
+                }
+            ],
+            "median_simulation_wall_seconds": {
+                "1": 17.361322990999724,
+                "17": 4.658886275000441
+            },
+            "median_process_wall_seconds": {
+                "1": 19.6662550609999,
+                "17": 6.982744513000398
+            },
+            "pdes_speedup": 3.726496412707151,
+            "process_speedup": 2.8164076495116612
+        }
+    ]
+}

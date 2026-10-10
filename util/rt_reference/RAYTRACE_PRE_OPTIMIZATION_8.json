@@ -1,0 +1,161 @@
+{
+    "description":
+        "Eight-accelerator sweep before the quantum-barrier and asynchronous-inbox optimizations.",
+    "source_commit": "bc835e3176bce63b712c73b829f0e9be7509ade7",
+    "source_file": "util/rt_reference/RAYTRACE_RESULTS.json",
+    "samples_per_configuration": 1,
+    "speedup_definition":
+        "Historical 5 ns, one-queue DES wall time divided by historical PDES wall time.",
+    "timing_parameter_scope":
+        "Top-level timing fields describe the 5 ns baseline; each run and configuration records its own transport delay and quantum.",
+    "workload": {
+        "width": 96,
+        "height": 96,
+        "mode": 1,
+        "samples_per_pixel": 1,
+        "max_secondary_depth": 0,
+        "seed": 1
+    },
+    "baseline_suite_commit": "3ab3dfcad046d3cbd9125b7c56d70057d1782df4",
+    "baseline_gem5_sha256":
+        "2b89759238e6a833cbbd74cff275c9b0a55c38af8bc25a1fc56ae9748214d66f",
+    "transport_sweep_commit": "a9f2c2284f9ed0239d369cd7186c306d426d3886",
+    "transport_sweep_gem5_sha256":
+        "2b89759238e6a833cbbd74cff275c9b0a55c38af8bc25a1fc56ae9748214d66f",
+    "baseline": {
+        "renderer": "Accelerators",
+        "accelerators": 8,
+        "queues": 1,
+        "memory_controllers": 4,
+        "quantum_ticks": 5000,
+        "transport_delay": "5ns",
+        "wall_seconds": 394.84492611600035,
+        "pdes_wall_speedup": 1.0,
+        "artifact_directories": [
+            "m5out/rt_backend/raytrace-5ns-20261011/accel8/q1-0"
+        ],
+        "rgba_sha256":
+            "79aaad3486ca49955cda1dd8fd6f36b8102cbbd3c89117f327b0c917c090ccaa",
+        "samples": 1
+    },
+    "points": [
+        {
+            "renderer": "Accelerators",
+            "accelerators": 8,
+            "queues": 9,
+            "memory_controllers": 4,
+            "quantum_ticks": 5000,
+            "transport_delay": "5ns",
+            "wall_seconds": 154.15293606100022,
+            "pdes_wall_speedup": 2.5613844030823736,
+            "artifact_directories": [
+                "m5out/rt_backend/raytrace-5ns-20261011/accel8/q9-0"
+            ],
+            "rgba_sha256":
+                "79aaad3486ca49955cda1dd8fd6f36b8102cbbd3c89117f327b0c917c090ccaa",
+            "samples": 1
+        },
+        {
+            "renderer": "Accelerators",
+            "accelerators": 8,
+            "queues": 9,
+            "memory_controllers": 4,
+            "quantum_ticks": 10000,
+            "transport_delay": "10ns",
+            "wall_seconds": 165.8959671090015,
+            "pdes_wall_speedup": 2.3800754954854844,
+            "artifact_directories": [
+                "m5out/rt_backend/raytrace-transport-20261011/10ns/q9-0"
+            ],
+            "rgba_sha256":
+                "79aaad3486ca49955cda1dd8fd6f36b8102cbbd3c89117f327b0c917c090ccaa",
+            "samples": 1
+        },
+        {
+            "renderer": "Accelerators",
+            "accelerators": 8,
+            "queues": 9,
+            "memory_controllers": 4,
+            "quantum_ticks": 20000,
+            "transport_delay": "20ns",
+            "wall_seconds": 160.17949644600048,
+            "pdes_wall_speedup": 2.4650154038229855,
+            "artifact_directories": [
+                "m5out/rt_backend/raytrace-transport-20261011/20ns/q9-0"
+            ],
+            "rgba_sha256":
+                "79aaad3486ca49955cda1dd8fd6f36b8102cbbd3c89117f327b0c917c090ccaa",
+            "samples": 1
+        },
+        {
+            "renderer": "Accelerators",
+            "accelerators": 8,
+            "queues": 9,
+            "memory_controllers": 4,
+            "quantum_ticks": 50000,
+            "transport_delay": "50ns",
+            "wall_seconds": 120.26318159900075,
+            "pdes_wall_speedup": 3.283173793227512,
+            "artifact_directories": [
+                "m5out/rt_backend/raytrace-transport-20261011/50ns/q9-0"
+            ],
+            "rgba_sha256":
+                "79aaad3486ca49955cda1dd8fd6f36b8102cbbd3c89117f327b0c917c090ccaa",
+            "samples": 1
+        },
+        {
+            "renderer": "Accelerators",
+            "accelerators": 8,
+            "queues": 9,
+            "memory_controllers": 4,
+            "quantum_ticks": 100000,
+            "transport_delay": "100ns",
+            "wall_seconds": 104.51119907499924,
+            "pdes_wall_speedup": 3.778015462559683,
+            "artifact_directories": [
+                "m5out/rt_backend/raytrace-transport-20261011/100ns/q9-0"
+            ],
+            "rgba_sha256":
+                "79aaad3486ca49955cda1dd8fd6f36b8102cbbd3c89117f327b0c917c090ccaa",
+            "samples": 1
+        },
+        {
+            "renderer": "Accelerators",
+            "accelerators": 8,
+            "queues": 9,
+            "memory_controllers": 4,
+            "quantum_ticks": 200000,
+            "transport_delay": "200ns",
+            "wall_seconds": 90.42773801300063,
+            "pdes_wall_speedup": 4.3664138326586714,
+            "artifact_directories": [
+                "m5out/rt_backend/raytrace-transport-20261011/200ns/q9-0"
+            ],
+            "rgba_sha256":
+                "79aaad3486ca49955cda1dd8fd6f36b8102cbbd3c89117f327b0c917c090ccaa",
+            "samples": 1
+        },
+        {
+            "renderer": "Accelerators",
+            "accelerators": 8,
+            "queues": 9,
+            "memory_controllers": 4,
+            "quantum_ticks": 1000000,
+            "transport_delay": "1000ns",
+            "wall_seconds": 77.11490246799804,
+            "pdes_wall_speedup": 5.120215593605365,
+            "artifact_directories": [
+                "m5out/rt_backend/raytrace-transport-20261011/retry-1000ns/1000ns/q9-0"
+            ],
+            "rgba_sha256":
+                "79aaad3486ca49955cda1dd8fd6f36b8102cbbd3c89117f327b0c917c090ccaa",
+            "samples": 1
+        }
+    ],
+    "notes": [
+        "No historical 1 ns sample was captured.",
+        "The historical 200 ns sample is retained.",
+        "The 1000 ns point is the successful timed retry.",
+        "Historical and current timings were measured in separate sessions on an active desktop."
+    ]
+}

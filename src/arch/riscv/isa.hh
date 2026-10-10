@@ -105,7 +105,9 @@ class ISA : public BaseISA
     PrivilegeModeSet _privilegeModeSet;
 
     /** Effective implemented extensions exposed to software. */
-    std::vector<std::string> _reportedExtensions;
+    const std::vector<std::string> _reportedExtensions;
+    // Interrupt checks and address translation query Smrnmi every instruction.
+    const bool _hasSmrnmi;
 
     /**
      * The WFI instruction can halt the execution of a hart.

@@ -56,6 +56,8 @@ uint32_t numMainEventQueues = 0;
 std::vector<EventQueue *> mainEventQueue;
 __thread EventQueue *_curEventQueue = NULL;
 bool inParallelMode = false;
+thread_local EventQueue *EventQueue::asyncProducer = nullptr;
+std::atomic<uint64_t> EventQueue::nextAsyncId{0};
 
 EventQueue *
 getEventQueue(uint32_t index)
@@ -438,20 +440,60 @@ Event::dump() const
 }
 
 EventQueue::EventQueue(const std::string &n)
-    : objName(n), head(NULL), _curTick(0)
+    : objName(n),
+      head(NULL),
+      _curTick(0),
+      _nextSimQuantum(0),
+      asyncId(nextAsyncId.fetch_add(1, std::memory_order_relaxed))
 {
 }
 
 void
-EventQueue::asyncInsert(Event *event)
+EventQueue::asyncInsert(Event *event, bool global)
 {
     gem5_assert(
         event->when() >= _nextSimQuantum,
         "Asynchronous event must be scheduled after the next sim quantum");
+    if (asyncProducer && !global) {
+        asyncProducer->stageAsync(this, event);
+        event->trace("async staged");
+        return;
+    }
+
     async_queue_mutex.lock();
     async_queue.push_back(event);
     event->trace("async inserted");
     async_queue_mutex.unlock();
+}
+
+void
+EventQueue::stageAsync(EventQueue *destination, Event *event)
+{
+    auto [entry, created] =
+        outgoingBatches.try_emplace(destination->asyncId, nullptr);
+    if (created) {
+        auto batch = std::make_shared<AsyncEventBatch>();
+        entry->second = batch;
+        std::lock_guard<FairUncontendedMutex> lock(
+            destination->async_queue_mutex);
+        destination->asyncBatches.push_back(std::move(batch));
+    }
+    if (entry->second->append(event)) {
+        activeBatches.push_back(entry->second.get());
+    }
+}
+
+void
+EventQueue::publishAsyncBatches()
+{
+    if (!asyncProducer) {
+        return;
+    }
+
+    for (auto *batch : asyncProducer->activeBatches) {
+        batch->publish();
+    }
+    asyncProducer->activeBatches.clear();
 }
 
 void
@@ -460,10 +502,14 @@ EventQueue::handleAsyncInsertions()
     assert(this == curEventQueue());
     async_queue_mutex.lock();
 
-    while (!async_queue.empty()) {
-        insert(async_queue.front());
-        async_queue.pop_front();
+    for (auto &batch : asyncBatches) {
+        batch->drain([this](Event *event) { insert(event); });
     }
+
+    for (Event *event : async_queue) {
+        insert(event);
+    }
+    async_queue.clear();
 
     async_queue_mutex.unlock();
 }

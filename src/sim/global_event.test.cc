@@ -42,11 +42,11 @@ namespace
 
 using namespace std::chrono_literals;
 
-class LockCheckingGlobalEvent : public GlobalEvent
+template <class BaseEvent> class LockCheckingGlobalEvent : public BaseEvent
 {
   public:
     LockCheckingGlobalEvent()
-        : GlobalEvent(Default_Pri, 0),
+        : BaseEvent(Event::Default_Pri, 0),
           contenderIsReady(contenderReady.get_future()),
           contenderStarted(contenderStart.get_future()),
           contenderIsAttempting(contenderAttempt.get_future()),
@@ -79,13 +79,25 @@ class LockCheckingGlobalEvent : public GlobalEvent
     bool lockWasAvailable = false;
 };
 
-TEST(GlobalEventTest, ProcessRunsWithEventQueueLocked)
+// Exercise the constructor used by simulate(), which enables quantum waits.
+class PeriodicSyncEvent : public GlobalSyncEvent
+{
+  public:
+    PeriodicSyncEvent(Priority p, Flags f)
+        : GlobalSyncEvent(curTick(), 1, p, f)
+    {}
+};
+
+template <class BaseEvent>
+void
+checkProcessLock()
 {
     EventQueue *queue = getEventQueue(0);
     curEventQueue(queue);
 
-    LockCheckingGlobalEvent event;
-    GlobalEvent::BarrierEvent barrierEvent(&event, Event::Default_Pri, 0);
+    LockCheckingGlobalEvent<BaseEvent> event;
+    typename BaseEvent::BarrierEvent barrier_event(&event, Event::Default_Pri,
+                                                   0);
 
     std::thread contender([&event, queue] {
         event.contenderReady.set_value();
@@ -98,11 +110,29 @@ TEST(GlobalEventTest, ProcessRunsWithEventQueueLocked)
 
     {
         std::lock_guard<EventQueue> lock(*queue);
-        barrierEvent.process();
+        barrier_event.process();
     }
     contender.join();
 
+    if (event.scheduled()) {
+        event.deschedule();
+    }
     EXPECT_FALSE(event.lockWasAvailable);
+}
+
+TEST(GlobalEventTest, ProcessRunsWithEventQueueLocked)
+{
+    checkProcessLock<GlobalEvent>();
+}
+
+TEST(GlobalEventTest, QuantumProcessRunsWithEventQueueLocked)
+{
+    checkProcessLock<PeriodicSyncEvent>();
+}
+
+TEST(GlobalEventTest, NonPeriodicSyncProcessRunsWithEventQueueLocked)
+{
+    checkProcessLock<GlobalSyncEvent>();
 }
 
 } // anonymous namespace
