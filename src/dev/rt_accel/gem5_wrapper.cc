@@ -24,7 +24,9 @@ Gem5Wrapper::Gem5Wrapper(const Params &p)
       mmioPort(*this),
       memoryPort(*this)
 {
-    fatal_if(!queueDepth || !requestDelay || !responseDelay || p.index > 31,
+    static_assert(DeliveryPriority + 63 <= Event::Maximum_Pri,
+                  "Native transport requires 64 ordered delivery priorities");
+    fatal_if(!queueDepth || !requestDelay || !responseDelay || p.index > 63,
              "Invalid native accelerator transport configuration");
     host.attach(*this);
 }

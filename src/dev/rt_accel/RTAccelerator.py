@@ -111,6 +111,6 @@ class RTAccelMSI(ClockedObject):
 
     trace_file = Param.String("", "Optional completion visibility trace")
     cpu = Param.BaseCPU("Host hart receiving machine external interrupts")
-    accelerator_cores = Param.Unsigned(8, "Discoverable core count (1-32)")
+    accelerator_cores = Param.Unsigned(8, "Discoverable core count (1-64)")
     registers = Param.AddrRange("MSI target and acknowledgement aperture")
     pio = ResponsePort("MSI writes, pending bitmap, and acknowledgement")

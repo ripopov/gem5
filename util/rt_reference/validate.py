@@ -56,9 +56,10 @@ def unit(a):
     return scale(a, 1 / math.sqrt(dot(a, a)))
 
 
-def scene_data(data):
-    m, n, width, height = struct.unpack_from("<4I", data)
-    assert m == 8 and n == 278 and (width, height) == (96, 96)
+def scene_data(data, width=96, height=96):
+    m, n, scene_width, scene_height = struct.unpack_from("<4I", data)
+    assert m == 8 and n == 278
+    assert (scene_width, scene_height) == (width, height)
     assert len(data) == 56 + m * 24 + n * 40
     camera = struct.unpack_from("<10f", data, 16)
     assert all(math.isfinite(x) for x in camera)
@@ -95,7 +96,7 @@ def scene_data(data):
     return camera, materials, objects
 
 
-def analytic_smoke(scene, image):
+def analytic_smoke(scene, image, width=96, height=96):
     """Independent double-precision linear triangle/shadow reference."""
     camera, materials, objects = scene
     position, target, up = camera[:3], camera[3:6], camera[6:9]
@@ -127,10 +128,10 @@ def analytic_smoke(scene, image):
         return selected, best
 
     errors = []
-    for y in range(5, 96, 12):
-        for x in range(5, 96, 12):
-            u = (2 * (x + 0.5) / 96 - 1) * half_height
-            v = (1 - 2 * (y + 0.5) / 96) * half_height
+    for y in range(5, height, 12):
+        for x in range(5, width, 12):
+            u = (2 * (x + 0.5) / width - 1) * half_height * width / height
+            v = (1 - 2 * (y + 0.5) / height) * half_height
             direction = unit(add(forward, add(scale(right, u), scale(up, v))))
             selected, distance = trace(position, direction)
             result = [0.0, 0.0, 0.0]
@@ -164,7 +165,8 @@ def analytic_smoke(scene, image):
                             for a, b, e in zip(result, material[:3], emission)
                         ]
             expected = [int(255 * min(1, max(0, c)) + 0.5) for c in result]
-            pixel = image[4 * (y * 96 + x) : 4 * (y * 96 + x) + 3]
+            offset = 4 * (y * width + x)
+            pixel = image[offset : offset + 3]
             errors.extend(abs(a - b) for a, b in zip(expected, pixel))
     assert max(errors) <= 1, f"analytic smoke differs: {max(errors)}"
     return max(errors)

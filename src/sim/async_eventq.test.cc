@@ -69,6 +69,33 @@ TEST_F(AsyncEventQueueTest, WorkerPublicationAndPriority)
     EXPECT_EQ(order, 2);
 }
 
+TEST_F(AsyncEventQueueTest, SixtyFourDeliveryPrioritiesDoNotWrap)
+{
+    constexpr unsigned Deliveries = 64;
+    constexpr Event::Priority FirstPriority = Event::Progress_Event_Pri + 1;
+    static_assert(FirstPriority + Deliveries - 1 <= Event::Maximum_Pri);
+    EventQueue::ScopedAsyncBatching batching(&source);
+    unsigned received = 0;
+    EventFunctionWrapper barrier([&] { EXPECT_EQ(received, 0); },
+                                 "quantum boundary", false,
+                                 Event::Progress_Event_Pri);
+    // Ascending insertion rules out accidentally relying on LIFO ties.
+    for (unsigned i = 0; i < Deliveries; ++i) {
+        auto *event =
+            new EventFunctionWrapper([&, i] { EXPECT_EQ(received++, i); },
+                                     "delivery", true, FirstPriority + i);
+        destination.schedule(event, 10);
+    }
+    destination.schedule(&barrier, 10);
+    EventQueue::publishAsyncBatches();
+    collect();
+    curEventQueue(&destination);
+    while (!destination.empty()) {
+        destination.serviceOne();
+    }
+    EXPECT_EQ(received, Deliveries);
+}
+
 TEST_F(AsyncEventQueueTest, ExternalThreadDoesNotShareWorkerStaging)
 {
     EventQueue::ScopedAsyncBatching batching(&source);

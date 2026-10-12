@@ -24,7 +24,7 @@ class MSITarget : public ClockedObject
     BaseCPU &cpu;
     const AddrRange registers;
     const unsigned acceleratorCores;
-    uint32_t pending = 0;
+    uint64_t pending = 0;
 
   public:
     using Params = RTAccelMSIParams;

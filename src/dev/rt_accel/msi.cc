@@ -20,9 +20,9 @@ MSITarget::MSITarget(const Params &p)
       registers(p.registers),
       acceleratorCores(p.accelerator_cores)
 {
-    fatal_if(!acceleratorCores || acceleratorCores > 32 ||
-                 registers.size() < 0x10c,
-             "MSI target requires 1-32 cores and discovery registers");
+    fatal_if(!acceleratorCores || acceleratorCores > 64 ||
+                 registers.size() < (acceleratorCores > 32 ? 0x114 : 0x10c),
+             "MSI target requires 1-64 cores and discovery registers");
 }
 void
 MSITarget::init()
@@ -48,13 +48,20 @@ MSITarget::access(PacketPtr pkt)
     if (ok && pkt->isWrite() && offset < 4 * acceleratorCores) {
         ok = pkt->getLE<uint32_t>() == offset / 4 + 1;
         if (ok) {
-            pending |= 1U << (offset / 4);
+            pending |= uint64_t{1} << (offset / 4);
             cpu.postInterrupt(0, 11, 0);
         }
-    } else if (ok && pkt->isRead() && offset == 0x100) {
-        pkt->setLE<uint32_t>(pending);
-    } else if (ok && pkt->isWrite() && offset == 0x104) {
-        pending &= ~pkt->getLE<uint32_t>();
+    } else if (ok && pkt->isRead() &&
+               (offset == 0x100 ||
+                (acceleratorCores > 32 && offset == 0x10c))) {
+        // Preserve the low bank ABI; the high bank covers cores 32-63.
+        const unsigned shift = offset == 0x100 ? 0 : 32;
+        pkt->setLE<uint32_t>(pending >> shift);
+    } else if (ok && pkt->isWrite() &&
+               (offset == 0x104 ||
+                (acceleratorCores > 32 && offset == 0x110))) {
+        const unsigned shift = offset == 0x104 ? 0 : 32;
+        pending &= ~(uint64_t{pkt->getLE<uint32_t>()} << shift);
         if (!pending) {
             cpu.clearInterrupt(0, 11, 0);
         }

@@ -125,7 +125,8 @@ class EventBase
     /**
      * @ingroup api_eventq
      */
-    typedef int8_t Priority;
+    // Native transport uses 64 ordered slots after the quantum barrier.
+    typedef int16_t Priority;
 
     /// Event priorities, to provide tie-breakers for events scheduled
     /// at the same cycle.  Most events are scheduled at the default
@@ -137,7 +138,7 @@ class EventBase
      *
      * @ingroup api_eventq
      */
-    static const Priority Minimum_Pri =          SCHAR_MIN;
+    static const Priority Minimum_Pri = SHRT_MIN;
 
     /**
      * If we enable tracing on a particular cycle, do that as the
@@ -243,7 +244,7 @@ class EventBase
      *
      * @ingroup api_eventq
      */
-    static const Priority Maximum_Pri =          SCHAR_MAX;
+    static const Priority Maximum_Pri = SHRT_MAX;
 };
 
 /*

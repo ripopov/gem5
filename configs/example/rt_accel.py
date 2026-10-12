@@ -90,8 +90,8 @@ parser.add_argument("--seed", type=unsigned, default=1)
 args = parser.parse_args()
 if args.host_render and args.backend != "gem5":
     parser.error("host_render requires backend=gem5")
-if not 1 <= args.accelerator_cores <= 32:
-    parser.error("accelerator_cores must be in [1, 32]")
+if not 1 <= args.accelerator_cores <= 64:
+    parser.error("accelerator_cores must be in [1, 64]")
 if args.queues not in (1, args.accelerator_cores + 1):
     parser.error("queues must be 1 or accelerator_cores + 1")
 if args.samples_per_pixel is None:

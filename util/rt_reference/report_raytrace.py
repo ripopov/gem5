@@ -87,7 +87,10 @@ def accelerator_metrics(run, directory):
         "weighted_core_ipc": ipc["cycle_weighted_core_ipc"],
         "cluster_ipc": ipc["combined_cluster_ipc"],
         "batch_megapixels_per_simulated_second": (
-            9216 * 1000 / run["elapsed_clock_periods"]
+            run.get("width", 96)
+            * run.get("height", 96)
+            * 1000
+            / run["elapsed_clock_periods"]
         ),
         "counted_cpu_occupancy_percent": (
             100

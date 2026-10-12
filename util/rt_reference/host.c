@@ -15,8 +15,15 @@
 
 #endif
 
+#ifndef WIDTH
 #define WIDTH 96
+#endif
+#ifndef HEIGHT
 #define HEIGHT 96
+#endif
+_Static_assert(
+    WIDTH > 0 && WIDTH % 4 == 0 && HEIGHT > 0,
+    "Image dimensions require positive, four-byte-aligned BMP rows");
 #define MATERIAL_COUNT 8
 #define PI 3.14159265358979323846f
 
@@ -31,7 +38,7 @@ static DMA_DATA _Alignas(8) uint8_t pixels[WIDTH * HEIGHT * 4];
 #ifdef ACCEL_HOST
 #include "host_runtime.h"
 
-#define MAX_ACCELERATORS 32
+#define MAX_ACCELERATORS 64
 static DMA_DATA _Alignas(64) uint8_t jobs[MAX_ACCELERATORS][64];
 static uint32_t accelerator_cores;
 #ifdef ACCEL_TEST
@@ -270,7 +277,7 @@ create_scene(void)
 static void
 export_bmp(void)
 {
-    /* 24-bit bottom-up BMP, BGR rows. 96*3 is already aligned to four. */
+    /* 24-bit bottom-up BMP, BGR rows. WIDTH*3 is aligned to four. */
     bmp_header[0] = 'B';
     bmp_header[1] = 'M';
     write32(bmp_header + 2, 54 + WIDTH * HEIGHT * 3);

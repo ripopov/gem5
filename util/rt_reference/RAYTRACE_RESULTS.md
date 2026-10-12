@@ -240,3 +240,133 @@ the competing-simulation guard can see other simulator processes.
 The three separately authorized replacements are recorded under
 `local-temp/raytrace-refresh-20261012/recapture`, with their exact commands in
 each `wall.json`; the default capture command performs no automatic retries.
+
+## 128x128 smoke with 64 accelerators
+
+After rebuilding with the 64-accelerator support and event-priority fix,
+**exactly two fresh runs** completed sequentially from
+`2026-10-12T19:11:16Z` through `2026-10-12T21:01:42Z`. They use commit
+`a84ade8391` plus the archived working-tree patch: one shared event queue
+(DES), and **65 event queues** (PDES: one host queue plus 64 accelerator
+queues). Each mode has one sample, with no averaging, automatic retries,
+traced protocol runs or host-renderer runs. The earlier failed attempts are
+preserved separately below. The 96x96 results above are unchanged; this
+follow-up uses a different image size and updated executable.
+
+**PDES/DES performance ratio is 0.400x** (DES wall divided by PDES wall):
+the 65-queue run was **2.501x slower** on this 20-logical-CPU host. The
+queue pair preserves modeled behavior exactly; correctness does not imply
+that this oversubscribed topology improves simulation throughput.
+
+| Mode | Accelerators | Event queues | Quantum / transport (ns) | RAM controllers | Process wall (s) | Speedup vs DES | Full clocks | Batch clocks | Simulated clocks/s | Equal counters |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| DES | 64 | 1 | 5 | 4 | 1,892.543 | 1.000x | 7,842,357 | 5,283,477 | 4,144 | 141,566 |
+| PDES | 64 | 65 | 5 | 4 | 4,732.906 | 0.400x | 7,842,357 | 5,283,477 | 1,657 | 141,566 |
+
+Process wall includes launch, initialization, boot, rendering, statistics
+dumps, image export and shutdown; artifact archiving, validation and report
+generation are excluded. Full and batch clocks use the same definitions as
+above. Both modes have these identical batch metrics:
+
+- **Retired instructions:** 444,079,023; **CPU clocks sum:** 187,180,958.
+- **Weighted core IPC:** 2.372458; **cluster IPC:** 84.050526.
+- **Modeled throughput:** 3.101 MPixel/s; **CPU occupancy:** 55.36%.
+- **L1I hits:** 99.983%; **L1D hits:** 99.285%; new **L1D MSHR misses:**
+  0.202% of accesses.
+- **DMA duty:** 0.322%; **DMA copied:** 778.000 KiB.
+- **RAM read:** 714.375 KiB; **RAM written:** 64.438 KiB.
+
+### Workload, support changes and validation
+
+The renderer draws **16,384 pixels**: mode 1, one sample per pixel,
+maximum secondary depth 0, seed 1, partitioned into an 8x8 grid of 16x16
+tiles. Modeled MPixel/s uses this pixel count, not the earlier sweep's
+9,216 pixels. Both commands select cached O3 accelerators, 1 GHz CPUs,
+four RAM controllers, 256 outstanding DMA chunks, transport depth 16,
+and the same **5 ns quantum and 5 ns transport delay per direction**.
+Other cache, TCM, bus and RAM settings match the fixed configuration above.
+The separate `host-gem5-128.elf` leaves the default 96x96 image size unchanged.
+
+The measured executable widens `Event::Priority` to signed 16 bits so all
+64 accelerator delivery priorities, 96-159, fit after the quantum-barrier
+priority of 95. The native wrapper accepts indices 0-63 and checks the
+priority range at compile time. A high MSI pending/acknowledgement bank
+handles cores 32-63 without changing the low-bank/discovery ABI. Before
+remeasurement, all 8 asynchronous-event-queue tests and 3 global-event tests
+passed, including the new 64-delivery ordering check.
+
+Both completed runs export RGBA SHA-256
+`5cf8f9e3b7048f761ad1c2fbf06991d7bd17e8311e8a86c2b89ddf41d10a2552`.
+The pixels match the native C 128x128 smoke reference exactly; BMP pixels
+match RGBA. The independent double-precision check differs by at most one
+byte over 121 sampled pixels. Configuration, queue ownership, transport,
+TCM activity, complete/nonoverlapping tile coverage and per-adapter traffic
+checks pass for all 64 accelerators. All accelerator counted cycles and
+retired instructions are zero during the final export statistics interval.
+
+**141,566 simulated counters match exactly across both statistics dumps**,
+excluding host-performance and memory-usage counters. Scene, parameters,
+all 64 tile descriptors, core discovery and output files also match between
+queue modes. No transaction traces were collected for this timing pair.
+
+### Measurement conditions, earlier failures and evidence
+
+Host: `Z890-AORUS`, Intel Core Ultra 7 265K, **20 logical CPUs**, unrestricted
+affinity over CPUs 0-19. The PDES process has 65 simulation threads, so it is
+oversubscribed. Turbo, OS scheduling and ordinary desktop activity remain
+enabled. Barrier polling retains the compiled default of 32,768 iterations,
+with no environment override. No competing gem5 processes were found before,
+during or after either sample. No build, tests or profiling overlapped timing;
+image/counter validation ran after both processes exited.
+
+At the user's progress query during PDES, a brief static symbol/layout lookup
+and two read-only `/proc/PID/mem` snapshots confirmed advancing queue ticks.
+There was no debugger attachment, process pause, signal, tracing or statistics
+change. The check is preserved in `progress-check.json`. One sample per mode
+does not establish timing variance or isolate the slowdown's cause; in
+particular, this comparison does not separate synchronization, oversubscription
+and other simulator/host overheads.
+
+The initial two attempts, from `2026-10-12T18:39:52Z` through
+`2026-10-12T18:39:55Z`, failed during initialization at the old native-wrapper
+`p.index > 31` guard. DES took 1.491 s and PDES 1.439 s, both with exit code 1,
+empty statistics and no image. Those are failed-startup durations, **not
+render timings**, and are excluded from the table and speedup. The user then
+approved this new two-run capture after the priority fix. Thus four attempts
+are preserved overall: two failed starts and two completed measurements.
+
+[Machine-readable results](RAYTRACE_128_64_RESULTS.json) contain full-precision
+aggregate/per-core metrics, commands, timestamps, guards, comparisons,
+source/binary/firmware hashes, the progress check and the previous failed
+capture. Fresh raw outputs, sources, patch and executable/library/firmware
+are under `local-temp/raytrace-128-64-20261012-remeasure`; earlier failures
+remain under `local-temp/raytrace-128-64-20261012`. The source and measured
+artifacts were checked unchanged after both fresh runs. Commit-time source
+formatting was whitespace-only, with identical C/C++ tokens. The JSON retains
+measured-source hashes and records formatted-source hashes separately; the
+archived measured sources remain unchanged. No simulations were rerun for
+formatting. Measured executable SHA-256:
+`60a82d6daba6499b59cbae88572dc87916b5aaf7da6a07dbac4dec6a6fb8e057`.
+
+To reproduce exactly the two queue configurations, build first and use a
+fresh output base with no competing simulator. The recorded capture used a
+monotonic process timer with a competing-simulation guard; this shell loop
+shows the simulator commands and captures process wall with GNU `time`:
+
+```sh
+scons -Q build/RISCV/gem5.opt -j 12
+make -C util/rt_reference out/host-gem5-128.elf out/accelerator.elf
+output=local-temp/raytrace-128-64-new
+for queues in 1 65; do
+    out="$output/5ns-q$queues"
+    mkdir -p "$out"
+    /usr/bin/time -f '%e' -o "$out/process-wall.txt" \
+        build/RISCV/gem5.opt --outdir="$out" \
+        configs/example/rt_accel.py --backend=gem5 \
+        --accelerator-cpu=o3 --accelerator-cores=64 --queues="$queues" \
+        --host-firmware=util/rt_reference/out/host-gem5-128.elf \
+        --accelerator-firmware=util/rt_reference/out/accelerator.elf \
+        --render-mode=1 --samples-per-pixel=1 --max-secondary-depth=0 \
+        --seed=1 --transport-delay=5ns
+done
+```

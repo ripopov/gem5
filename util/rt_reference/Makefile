@@ -27,6 +27,16 @@ out/host-gem5.elf: host.c host_runtime.c host_runtime.h renderer.c renderer.h \
 	    -L$(PICOLIBC)/lib -lm -lc -lgcc -o $@
 	$(CROSS)size $@
 
+# Keep the historical 96x96 firmware separate from the 128x128 study.
+out/host-gem5-128.elf: host.c host_runtime.c host_runtime.h renderer.c \
+                       renderer.h start.S link.ld Makefile
+	@mkdir -p out
+	$(CC) $(FLAGS) -DACCEL_HOST -DWIDTH=128 -DHEIGHT=128 -nostdlib \
+	    -Wl,-T,link.ld,-Map,out/host-gem5-128.map \
+	    start.S host.c host_runtime.c renderer.c ../m5/src/abi/riscv/m5op.S \
+	    -L$(PICOLIBC)/lib -lm -lc -lgcc -o $@
+	$(CROSS)size $@
+
 out/host-render.elf: host.c renderer.c renderer.h start.S link.ld Makefile \
                      ../m5/src/abi/riscv/m5op.S \
                      ../../include/gem5/asm/generic/m5ops.h
@@ -79,6 +89,11 @@ out/native: host.c renderer.c renderer.h Makefile
 	@mkdir -p out
 	cc -std=c11 -O3 -g -ffp-contract=off -Wall -Wextra -Werror \
 	    -DNATIVE host.c renderer.c -lm -o $@
+
+out/native-128: host.c renderer.c renderer.h Makefile
+	@mkdir -p out
+	cc -std=c11 -O3 -g -ffp-contract=off -Wall -Wextra -Werror \
+	    -DNATIVE -DWIDTH=128 -DHEIGHT=128 host.c renderer.c -lm -o $@
 
 out/test: test.c renderer.c renderer.h Makefile
 	@mkdir -p out

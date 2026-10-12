@@ -146,7 +146,7 @@ python3 util/rt_reference/measure_host_render.py \
     --output=m5out/rt_backend/l1-mc4-host-idle-8
 ```
 
-`--accelerator-cores=N` selects 1-32 accelerator cores (default 8).
+`--accelerator-cores=N` selects 1-64 accelerator cores (default 8).
 Each host MMIO window is 4 KiB at `0x10000000 + 0x1000*i`, without gaps.
 The host reads the hardware count from `0x20000108` and partitions the
 96x96 image into one nonoverlapping rectangle per detected core. Integer
@@ -272,11 +272,13 @@ tiles. The host fences descriptor creation before submission. A local machine
 external interrupt wakes the resident accelerator from `WFI`; it acknowledges
 that level before loading the job. The DMA engine acknowledges every output
 write before the completion command can issue its MSI. The host MSI target
-has one word per accelerator at `0x20000000 + 4*i`, a 32-bit pending bitmap
-at offset `0x100`, write-one acknowledgement at `0x104`, and a read-only
-core-count register at `0x108`. The bitmap and acknowledgement offsets moved
-from 32/36 to avoid overlapping the additional MSI words; rebuild the host
-firmware together with gem5. Locally enabled, globally masked interrupts
+has one word per accelerator at `0x20000000 + 4*i`, a low 32-bit pending
+bitmap at offset `0x100`, write-one acknowledgement at `0x104`, and a
+read-only core-count register at `0x108`. Systems with more than 32 cores
+add a high pending bitmap at `0x10c` and its write-one acknowledgement at
+`0x110` for cores 32-63. The low bank and discovery offsets are unchanged;
+all 64 MSI words fit below `0x100`. Rebuild the host firmware together with
+gem5. Locally enabled, globally masked interrupts
 wake `WFI`; firmware handles levels through these registers
 without asynchronous simulator callbacks. The host accumulates and
 acknowledges notifications, waits for all detected cores, then checks every

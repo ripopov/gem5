@@ -30,13 +30,20 @@ host_submit_and_wait(uint8_t jobs[][64], uint32_t accelerator_cores,
         }
     }
     volatile uint32_t *pending = (volatile uint32_t *)0x20000100UL;
-    uint32_t completed = 0;
-    uint32_t expected = UINT32_MAX >> (32 - accelerator_cores);
+    uint64_t completed = 0;
+    uint64_t expected = UINT64_MAX >> (64 - accelerator_cores);
     while (completed != expected) {
-        uint32_t observed = *pending;
-        if (observed) {
-            completed |= observed;
-            *(volatile uint32_t *)0x20000104UL = observed;
+        uint32_t low = *pending;
+        uint32_t high =
+            accelerator_cores > 32 ? *(volatile uint32_t *)0x2000010cUL : 0;
+        if (low || high) {
+            completed |= low | ((uint64_t)high << 32);
+            if (low) {
+                *(volatile uint32_t *)0x20000104UL = low;
+            }
+            if (high) {
+                *(volatile uint32_t *)0x20000110UL = high;
+            }
         } else {
             __asm__ volatile("wfi" : : : "memory");
         }

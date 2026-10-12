@@ -14,7 +14,7 @@ below define the Rendering Kernel's software contract, rather than the
 full set of workloads supported by the hardware.
 
 The default system has one O3 host CPU and eight accelerators. The gem5
-backend permits 1-32 accelerators through `--accelerator-cores=N`. The host CPU
+backend permits 1-64 accelerators through `--accelerator-cores=N`. The host CPU
 has a unified cache; each gem5 accelerator has private L1I and L1D caches
 backed by TCM. A gem5 `NoncoherentXBar` connects the host CPU cache, shared
 memory system, and host adapters. Run the host, its cache, the interconnect,
@@ -613,10 +613,12 @@ to the same split TCM memory path. The host is always `RiscvO3CPU`,
 and all cores are clocked at 1 GHz. `--queues=1` assigns every object to
 queue 0; `--queues=N+1` assigns the complete accelerator systems to
 queues 1-N, where `--accelerator-cores=N` defaults to eight and accepts
-1-32. Host MMIO windows are consecutive 4 KiB ranges starting at
-`0x10000000`. The MSI target exposes the hardware count at `0x20000108`;
-its pending bitmap and write-one acknowledgement are at `0x20000100`
-and `0x20000104`, beyond the 32 possible MSI words. The same host firmware
+1-64. Host MMIO windows are consecutive 4 KiB ranges starting at
+`0x10000000`. The MSI target exposes the hardware count at `0x20000108`.
+Pending and write-one acknowledgement registers for cores 0-31 remain at
+`0x20000100` and `0x20000104`, beyond the 64 possible MSI words. Systems
+with more than 32 cores add the high pending/acknowledgement bank for cores
+32-63 at `0x2000010c` and `0x20000110`. The same host firmware
 reads this count and assigns one rectangle to each detected accelerator.
 Separate `RiscvSystem` objects isolate TCM, thread contexts and workloads.
 Both modes load the same resident scalar ELF into Code TCM and Data TCM.

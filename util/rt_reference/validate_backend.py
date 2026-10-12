@@ -229,7 +229,15 @@ def check_transport(config, transport_delay):
     return quantum
 
 
-def inspect(directory, queues, accelerator_cpu="timing", accelerator_cores=8):
+def inspect(
+    directory,
+    queues,
+    accelerator_cpu="timing",
+    accelerator_cores=8,
+    width=96,
+    height=96,
+    expected_sha256=GOLDEN,
+):
     log = (directory / "run.log").read_text()
     assert re.search(r"Stopped at \d+: m5_exit instruction encountered", log)
     config = json.loads((directory / "config.json").read_text())
@@ -252,7 +260,12 @@ def inspect(directory, queues, accelerator_cpu="timing", accelerator_cores=8):
     memories = check_memory(system, controllers)
     assert parameters.get("accelerator_cpu", "timing") == accelerator_cpu
     assert parameters.get("accelerator_cores", 8) == accelerator_cores
-    kernel_symbols = symbols(ROOT / "util/rt_reference/out/accelerator.elf")
+    kernel_symbols = symbols(
+        Path(
+            parameters.get("accelerator_firmware")
+            or ROOT / "util/rt_reference/out/accelerator.elf"
+        )
+    )
     code_bytes = kernel_symbols["__code_end"] - 0x40000000
     data_bytes = kernel_symbols["__stack_top"] - 0x40010000
     assert 0 < code_bytes <= 65536
@@ -260,8 +273,13 @@ def inspect(directory, queues, accelerator_cpu="timing", accelerator_cores=8):
     tcm_bytes = code_bytes + data_bytes
     check_accelerators(system, queues, accelerator_cpu, accelerator_cores)
     scene = (directory / "scene.bin").read_bytes()
-    scene_model = scene_data(scene)
-    host_symbols = symbols(ROOT / "util/rt_reference/out/host-gem5.elf")
+    scene_model = scene_data(scene, width, height)
+    host_symbols = symbols(
+        Path(
+            parameters.get("host_firmware")
+            or ROOT / "util/rt_reference/out/host-gem5.elf"
+        )
+    )
     raw_jobs = []
     decoded_jobs = []
     covered = set()
@@ -269,26 +287,26 @@ def inspect(directory, queues, accelerator_cpu="timing", accelerator_cores=8):
         raw = (directory / f"job{index}.bin").read_bytes()
         job = struct.unpack("<QQ8IQ", raw)
         assert job[:2] == (host_symbols["scene_bytes"], host_symbols["pixels"])
-        stride, x, y, width, height = job[2:7]
-        assert stride == 384 and width > 0 and height > 0
-        assert x + width <= 96 and y + height <= 96
+        stride, x, y, tile_width, tile_height = job[2:7]
+        assert stride == 4 * width and tile_width > 0 and tile_height > 0
+        assert x + tile_width <= width and y + tile_height <= height
         assigned = {
             (col, row)
-            for row in range(y, y + height)
-            for col in range(x, x + width)
+            for row in range(y, y + tile_height)
+            for col in range(x, x + tile_width)
         }
         assert not assigned & covered
         covered.update(assigned)
         assert job[7:] == (1, 1, 0, 1)
         raw_jobs.append(raw)
         decoded_jobs.append(job)
-    assert len(covered) == 96 * 96
+    assert len(covered) == width * height
     rgba = (directory / "image.rgba").read_bytes()
-    assert len(rgba) == 96 * 96 * 4 and set(rgba[3::4]) == {255}
+    assert len(rgba) == width * height * 4 and set(rgba[3::4]) == {255}
     sha = hashlib.sha256(rgba).hexdigest()
-    assert sha == GOLDEN, f"smoke golden mismatch: {sha}"
+    assert sha == expected_sha256, f"smoke golden mismatch: {sha}"
     bmp = Image.open(directory / "image.bmp").convert("RGB")
-    assert bmp.size == (96, 96)
+    assert bmp.size == (width, height)
     assert bmp.tobytes() == bytes(v for i, v in enumerate(rgba) if i % 4 != 3)
     bmp.save(directory / "image.png")
     table = []
@@ -301,7 +319,7 @@ def inspect(directory, queues, accelerator_cpu="timing", accelerator_cores=8):
         )
         table.append(int(255 * display + 0.5))
     bmp.point(table * 3).save(directory / "preview.png")
-    error = analytic_smoke(scene_model, rgba)
+    error = analytic_smoke(scene_model, rgba, width, height)
     blocks = stats_blocks(directory)
     values = blocks[0]
     if len(blocks) > 1:
@@ -394,6 +412,8 @@ def inspect(directory, queues, accelerator_cpu="timing", accelerator_cores=8):
         "analytic_max_byte_error": error,
         "tiles": accelerator_cores,
         "accelerator_cores": accelerator_cores,
+        "width": width,
+        "height": height,
     }
     if accelerator_cpu == "o3":
         cores = []
@@ -659,7 +679,7 @@ def main():
     )
     args = parser.parse_args()
     assert args.runs >= 1
-    assert 1 <= args.accelerator_cores <= 32
+    assert 1 <= args.accelerator_cores <= 64
     queue_modes = (1, args.accelerator_cores + 1)
     if args.timing_only and args.reuse_correctness:
         parser.error("timing-only cannot reuse a traced correctness pair")
