@@ -1,0 +1,1484 @@
+{
+    "status": "passed",
+    "base_commit": "be9fb9cab9fadbdd1850c939d06e2e214261d114",
+    "initial_git_status": " M .idea/vcs.xml\n",
+    "artifact_directory": "local-temp/raytrace-16-17-5ns-20261012",
+    "gem5_sha256":
+        "60a82d6daba6499b59cbae88572dc87916b5aaf7da6a07dbac4dec6a6fb8e057",
+    "shared_library_sha256":
+        "bdfa6899b222d8342473f225419bc99739f7a1b49e5a60b1e8c261970b983463",
+    "firmware_sha256": {
+        "host-gem5.elf":
+            "13dc08a18ebb6a7c4c7134ffe2a6607ff9877e3fa5e4b054bedf957f0db76ec9",
+        "accelerator.elf":
+            "dc8d993e1cbb4533758925f66a9e5a052d8025ec5342b4f7f7b0fe5a9d3e0833"
+    },
+    "current_tree_source_sha256": {
+        "configs/example/rt_accel.py":
+            "c9e06d8c9e68f678ac51bdba4c86abffba244e935733ea0d029ea85d497408b8",
+        "configs/example/rt_accel_system.py":
+            "c1f5d6dc9c6ff08b7e627d0435f5338f4e39386f237cf8c6bfcb26a5f8e8926a",
+        "src/arch/riscv/isa.cc":
+            "c94b229127c87d1a6b8ce31ca23f3e5db493d8e0244b43ebd493149dd9cccca1",
+        "src/arch/riscv/isa.hh":
+            "78d3f8d1802d14ff7cb4c0fdbdbbe8034153898532a6137a98d038e1365e4a29",
+        "src/dev/rt_accel/RTAccelerator.py":
+            "885da95f5227d6885f2bb545bb087b496ed7f16fc48a9e4e88400f25f669af16",
+        "src/dev/rt_accel/code_tcm.cc":
+            "99e5ca646b2fdd51f7382d448766683d0843084be16628f97224bf06c6558819",
+        "src/dev/rt_accel/code_tcm.hh":
+            "e7c7ea168f664be931b1daa8c9728030fa2c5638685968e375b4d26aeb1bed87",
+        "src/dev/rt_accel/control.cc":
+            "43d0637e4a7ee68ae57d3d26a8e0ba8acb26352f9b6619fb20d0b085f84f4cc3",
+        "src/dev/rt_accel/control.hh":
+            "34b680952cd018ea85f1e666d0acb56ce84c473af8386a10af400d77f02a4e89",
+        "src/dev/rt_accel/gem5_wrapper.cc":
+            "be1dbd36e0529fa43e8d70736ab2067dc20dbd22c8cc08a62fa6af7ba24f7119",
+        "src/dev/rt_accel/msi.cc":
+            "8455a3803dedab552d40a82db010e3325f6b3ebaaab55e9cedb1bcb58acbffcf",
+        "src/dev/rt_accel/msi.hh":
+            "070ae1a6f3d0eac8fa3a2b978a48adfa63f59b5cccab1f46b463cf987be15cdd",
+        "src/sim/async_event_batch.hh":
+            "3eae285f8929dacbf226d8ba830bb77bf37f8fa7510279a5f716c5620d57ea77",
+        "src/sim/async_eventq.test.cc":
+            "121e40508e895d959c2ebed91edd8d2d02d46f5f20686a368a5406b65084589d",
+        "src/sim/eventq.cc":
+            "e73516427fe411042c1b987fe307e01a2dbb571628af753d12fcaa514d29d52b",
+        "src/sim/eventq.hh":
+            "352be47b5a127784b2ac916e132523f2160abaf1bc6d1ea0c2914547e1fdd829",
+        "src/sim/global_event.cc":
+            "678feb45409ddcc571665ddc53cc60b8ba8b7a590d455e67204aaf9afebe96f5",
+        "src/sim/global_event.hh":
+            "fc8d84cb043c91b231e55af200fa6111580ae674398579262f340fa8d8293db1",
+        "src/sim/quantum_barrier.hh":
+            "5c54bb927b0a47e36b85eba2d8fe7f19271db82125f35bb2a505faed833650e7",
+        "util/rt_reference/Makefile":
+            "9c88d7e5919540cc862f43b0b2f179afe92775b960a2dc40aa8c725b40c537dd",
+        "util/rt_reference/accelerator.c":
+            "a0ffc1ec1e2fb606d5303959ba11c447a327b02b250072bb7ae9789fe057d8e6",
+        "util/rt_reference/accelerator.ld":
+            "bd7e99766ec041acfa94bf36b3309cfcc1f32cc17609f896930fd9617c038e5e",
+        "util/rt_reference/accelerator_runtime.c":
+            "fc6571246e77f96248ba3f4065064a4741745f01e427af4b2466dac43ff1e43f",
+        "util/rt_reference/accelerator_runtime.h":
+            "ba1fdc2378b6eb1d0513b695444452d5fa02858422cc1333e84a62e378eea2bb",
+        "util/rt_reference/experiment.py":
+            "2c0449d60e47fcf5c1b4c4ef9065132fce17552ae784f9abf20f1ad885081d65",
+        "util/rt_reference/host.c":
+            "3bae7d33ab8d949d6e8351c2c17dd9b9298b799134947365a6878258460bb793",
+        "util/rt_reference/host_runtime.c":
+            "6f59db163b1fa7fe8b2e54ba40c3c9aa3bb19c323df76025d581047292822773",
+        "util/rt_reference/host_runtime.h":
+            "b1374447ba18121b81d866235acaca66ad8b1750600d4098e70e7d796b4bb8af",
+        "util/rt_reference/link.ld":
+            "be41aaedbef73a331ff538575b8c5644403b47ff495f71f19cf91c4d787a6bc0",
+        "util/rt_reference/measure_host_render.py":
+            "117d2a8a003c90f070f7780c59e235a920f5232b56492106d0881ef0031d3c82",
+        "util/rt_reference/measure_raytrace.py":
+            "72000590daced08e0aef0acc9afe04fd132632492e54286f1ac40e102572fec3",
+        "util/rt_reference/renderer.c":
+            "dcc0cd4ac640961f416f5267e54f70af67b168edc2b63deddddf63007ae78067",
+        "util/rt_reference/renderer.h":
+            "609dcf8b6badc304c8696b4ad48ff45ea2ebc1974e874a1ae91a6a68a9ab5c0e",
+        "util/rt_reference/report_raytrace.py":
+            "2be5d2dbfe3994d73c7e3824a82d4d1b6db2524840e6ad7fcff49879ea130c57",
+        "util/rt_reference/start.S":
+            "a9a60a3e530424df4f78f9629ac118fa132cdf10faa605874579350cad1dc4fe",
+        "util/rt_reference/validate.py":
+            "bddeb458fe9a1252429ca91bbbc6e686b091d1e77a00bc51a7cb8a0a3f685715",
+        "util/rt_reference/validate_backend.py":
+            "278dfba31a3ba8c88cc0477a5105212e680b7e504dc019b3f8cc15b2133e103c"
+    },
+    "simulator_compiled_source_capture":
+        "local-temp/raytrace-128-64-20261012-remeasure",
+    "simulator_compiled_source_sha256": {
+        "configs/example/rt_accel.py":
+            "c9e06d8c9e68f678ac51bdba4c86abffba244e935733ea0d029ea85d497408b8",
+        "configs/example/rt_accel_system.py":
+            "c1f5d6dc9c6ff08b7e627d0435f5338f4e39386f237cf8c6bfcb26a5f8e8926a",
+        "src/arch/riscv/isa.cc":
+            "c94b229127c87d1a6b8ce31ca23f3e5db493d8e0244b43ebd493149dd9cccca1",
+        "src/arch/riscv/isa.hh":
+            "78d3f8d1802d14ff7cb4c0fdbdbbe8034153898532a6137a98d038e1365e4a29",
+        "src/dev/rt_accel/RTAccelerator.py":
+            "885da95f5227d6885f2bb545bb087b496ed7f16fc48a9e4e88400f25f669af16",
+        "src/dev/rt_accel/code_tcm.cc":
+            "99e5ca646b2fdd51f7382d448766683d0843084be16628f97224bf06c6558819",
+        "src/dev/rt_accel/code_tcm.hh":
+            "e7c7ea168f664be931b1daa8c9728030fa2c5638685968e375b4d26aeb1bed87",
+        "src/dev/rt_accel/control.cc":
+            "43d0637e4a7ee68ae57d3d26a8e0ba8acb26352f9b6619fb20d0b085f84f4cc3",
+        "src/dev/rt_accel/control.hh":
+            "34b680952cd018ea85f1e666d0acb56ce84c473af8386a10af400d77f02a4e89",
+        "src/dev/rt_accel/gem5_wrapper.cc":
+            "be1dbd36e0529fa43e8d70736ab2067dc20dbd22c8cc08a62fa6af7ba24f7119",
+        "src/dev/rt_accel/msi.cc":
+            "8455a3803dedab552d40a82db010e3325f6b3ebaaab55e9cedb1bcb58acbffcf",
+        "src/dev/rt_accel/msi.hh":
+            "070ae1a6f3d0eac8fa3a2b978a48adfa63f59b5cccab1f46b463cf987be15cdd",
+        "src/sim/async_event_batch.hh":
+            "3eae285f8929dacbf226d8ba830bb77bf37f8fa7510279a5f716c5620d57ea77",
+        "src/sim/async_eventq.test.cc":
+            "121e40508e895d959c2ebed91edd8d2d02d46f5f20686a368a5406b65084589d",
+        "src/sim/eventq.cc":
+            "e73516427fe411042c1b987fe307e01a2dbb571628af753d12fcaa514d29d52b",
+        "src/sim/eventq.hh":
+            "2dffc7427d8260243eb3538235d927445bbe3e90b29ca993c532cd6a5b0c6539",
+        "src/sim/global_event.cc":
+            "678feb45409ddcc571665ddc53cc60b8ba8b7a590d455e67204aaf9afebe96f5",
+        "src/sim/global_event.hh":
+            "fc8d84cb043c91b231e55af200fa6111580ae674398579262f340fa8d8293db1",
+        "src/sim/quantum_barrier.hh":
+            "5c54bb927b0a47e36b85eba2d8fe7f19271db82125f35bb2a505faed833650e7",
+        "util/rt_reference/Makefile":
+            "9c88d7e5919540cc862f43b0b2f179afe92775b960a2dc40aa8c725b40c537dd",
+        "util/rt_reference/accelerator.c":
+            "a0ffc1ec1e2fb606d5303959ba11c447a327b02b250072bb7ae9789fe057d8e6",
+        "util/rt_reference/accelerator.ld":
+            "bd7e99766ec041acfa94bf36b3309cfcc1f32cc17609f896930fd9617c038e5e",
+        "util/rt_reference/accelerator_runtime.c":
+            "fc6571246e77f96248ba3f4065064a4741745f01e427af4b2466dac43ff1e43f",
+        "util/rt_reference/accelerator_runtime.h":
+            "ba1fdc2378b6eb1d0513b695444452d5fa02858422cc1333e84a62e378eea2bb",
+        "util/rt_reference/experiment.py":
+            "2c0449d60e47fcf5c1b4c4ef9065132fce17552ae784f9abf20f1ad885081d65",
+        "util/rt_reference/host.c":
+            "de2013469e900b9369accd9a90e8ee8fd1352e2501b692337fbc9428aaa7e537",
+        "util/rt_reference/host_runtime.c":
+            "2f03c0926e589d49c95cb6d409eb62bab768a2bca57f0d7db351761942cc1b7b",
+        "util/rt_reference/host_runtime.h":
+            "b1374447ba18121b81d866235acaca66ad8b1750600d4098e70e7d796b4bb8af",
+        "util/rt_reference/link.ld":
+            "be41aaedbef73a331ff538575b8c5644403b47ff495f71f19cf91c4d787a6bc0",
+        "util/rt_reference/measure_host_render.py":
+            "117d2a8a003c90f070f7780c59e235a920f5232b56492106d0881ef0031d3c82",
+        "util/rt_reference/measure_raytrace.py":
+            "72000590daced08e0aef0acc9afe04fd132632492e54286f1ac40e102572fec3",
+        "util/rt_reference/renderer.c":
+            "dcc0cd4ac640961f416f5267e54f70af67b168edc2b63deddddf63007ae78067",
+        "util/rt_reference/renderer.h":
+            "609dcf8b6badc304c8696b4ad48ff45ea2ebc1974e874a1ae91a6a68a9ab5c0e",
+        "util/rt_reference/report_raytrace.py":
+            "2be5d2dbfe3994d73c7e3824a82d4d1b6db2524840e6ad7fcff49879ea130c57",
+        "util/rt_reference/start.S":
+            "a9a60a3e530424df4f78f9629ac118fa132cdf10faa605874579350cad1dc4fe",
+        "util/rt_reference/validate.py":
+            "bddeb458fe9a1252429ca91bbbc6e686b091d1e77a00bc51a7cb8a0a3f685715",
+        "util/rt_reference/validate_backend.py":
+            "278dfba31a3ba8c88cc0477a5105212e680b7e504dc019b3f8cc15b2133e103c"
+    },
+    "firmware_source_capture":
+        "local-temp/raytrace-refresh-20261012/artifacts/source",
+    "measurement_script_sha256":
+        "ae931950d88f50f051cc2daf03ee60ac3a8482ea1de75245d8bb0fbf3dffc22f",
+    "machine": {
+        "hostname": "Z890-AORUS",
+        "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.43",
+        "lscpu":
+            "Architecture:                            x86_64\nCPU op-mode(s):                          32-bit, 64-bit\nAddress sizes:                           46 bits physical, 48 bits virtual\nByte Order:                              Little Endian\nCPU(s):                                  20\nOn-line CPU(s) list:                     0-19\nVendor ID:                               GenuineIntel\nModel name:                              Intel(R) Core(TM) Ultra 7 265K\nCPU family:                              6\nModel:                                   198\nThread(s) per core:                      1\nCore(s) per socket:                      20\nSocket(s):                               1\nStepping:                                2\nCPU(s) scaling MHz:                      71%\nCPU max MHz:                             5500.0000\nCPU min MHz:                             800.0000\nBogoMIPS:                                7756.80\nFlags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdt_a rdseed adx smap clflushopt clwb intel_pt sha_ni xsaveopt xsavec xgetbv1 xsaves split_lock_detect user_shstk avx_vnni lam wbnoinvd dtherm ida arat pln pts hwp hwp_notify hwp_act_window hwp_epp hwp_pkg_req hfi vnmi umip pku ospke waitpkg gfni vaes vpclmulqdq rdpid bus_lock_detect movdiri movdir64b fsrm md_clear serialize arch_lbr ibt flush_l1d arch_capabilities\nVirtualization:                          VT-x\nL1d cache:                               704 KiB (18 instances)\nL1i cache:                               1.1 MiB (18 instances)\nL2 cache:                                36 MiB (11 instances)\nL3 cache:                                30 MiB (1 instance)\nNUMA node(s):                            1\nNUMA node0 CPU(s):                       0-19\nVulnerability Gather data sampling:      Not affected\nVulnerability Ghostwrite:                Not affected\nVulnerability Indirect target selection: Not affected\nVulnerability Itlb multihit:             Not affected\nVulnerability L1tf:                      Not affected\nVulnerability Mds:                       Not affected\nVulnerability Meltdown:                  Not affected\nVulnerability Mmio stale data:           Not affected\nVulnerability Old microcode:             Not affected\nVulnerability Reg file data sampling:    Not affected\nVulnerability Retbleed:                  Not affected\nVulnerability Spec rstack overflow:      Not affected\nVulnerability Spec store bypass:         Mitigation; Speculative Store Bypass disabled via prctl\nVulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:                Mitigation; Enhanced / Automatic IBRS; IBPB conditional; PBRSB-eIBRS Not affected; BHI BHI_DIS_S\nVulnerability Srbds:                     Not affected\nVulnerability Tsa:                       Not affected\nVulnerability Tsx async abort:           Not affected\nVulnerability Vmscape:                   Mitigation; IBPB before exit to userspace\n",
+        "cpu_affinity": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19
+        ],
+        "pid_namespace": "pid:[4026531836]"
+    },
+    "workload": {
+        "width": 96,
+        "height": 96,
+        "mode": 1,
+        "samples_per_pixel": 1,
+        "max_secondary_depth": 0,
+        "seed": 1
+    },
+    "authorized_attempts": 1,
+    "attempts_completed": 1,
+    "samples_per_configuration": 1,
+    "started_utc": "2026-10-12T21:40:40Z",
+    "previous_sample": {
+        "base_commit": "bc835e3176bce63b712c73b829f0e9be7509ade7",
+        "gem5_sha256":
+            "f3c77ba8d388338330700ca3e09944b0816a67dac8614e03d5b68771aceea9d7",
+        "shared_library_sha256":
+            "6df1c6f87cb0b8a290ea3b89f316c630481c8afdfc2e25edb899540b44daddf9",
+        "firmware_sha256": {
+            "accelerator.elf":
+                "dc8d993e1cbb4533758925f66a9e5a052d8025ec5342b4f7f7b0fe5a9d3e0833",
+            "host-gem5.elf":
+                "13dc08a18ebb6a7c4c7134ffe2a6607ff9877e3fa5e4b054bedf957f0db76ec9",
+            "host-render.elf":
+                "7ecbf6538dd7290f0192e8465738381846e58486cb5e41c55d1d669ce687d0f7"
+        },
+        "machine": {
+            "hostname": "Z890-AORUS",
+            "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.43",
+            "lscpu":
+                "Architecture:                            x86_64\nCPU op-mode(s):                          32-bit, 64-bit\nAddress sizes:                           46 bits physical, 48 bits virtual\nByte Order:                              Little Endian\nCPU(s):                                  20\nOn-line CPU(s) list:                     0-19\nVendor ID:                               GenuineIntel\nModel name:                              Intel(R) Core(TM) Ultra 7 265K\nCPU family:                              6\nModel:                                   198\nThread(s) per core:                      1\nCore(s) per socket:                      20\nSocket(s):                               1\nStepping:                                2\nCPU(s) scaling MHz:                      71%\nCPU max MHz:                             5500.0000\nCPU min MHz:                             800.0000\nBogoMIPS:                                7756.80\nFlags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdt_a rdseed adx smap clflushopt clwb intel_pt sha_ni xsaveopt xsavec xgetbv1 xsaves split_lock_detect user_shstk avx_vnni lam wbnoinvd dtherm ida arat pln pts hwp hwp_notify hwp_act_window hwp_epp hwp_pkg_req hfi vnmi umip pku ospke waitpkg gfni vaes vpclmulqdq rdpid bus_lock_detect movdiri movdir64b fsrm md_clear serialize arch_lbr ibt flush_l1d arch_capabilities\nVirtualization:                          VT-x\nL1d cache:                               704 KiB (18 instances)\nL1i cache:                               1.1 MiB (18 instances)\nL2 cache:                                36 MiB (11 instances)\nL3 cache:                                30 MiB (1 instance)\nNUMA node(s):                            1\nNUMA node0 CPU(s):                       0-19\nVulnerability Gather data sampling:      Not affected\nVulnerability Ghostwrite:                Not affected\nVulnerability Indirect target selection: Not affected\nVulnerability Itlb multihit:             Not affected\nVulnerability L1tf:                      Not affected\nVulnerability Mds:                       Not affected\nVulnerability Meltdown:                  Not affected\nVulnerability Mmio stale data:           Not affected\nVulnerability Old microcode:             Not affected\nVulnerability Reg file data sampling:    Not affected\nVulnerability Retbleed:                  Not affected\nVulnerability Spec rstack overflow:      Not affected\nVulnerability Spec store bypass:         Mitigation; Speculative Store Bypass disabled via prctl\nVulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:                Mitigation; Enhanced / Automatic IBRS; IBPB conditional; PBRSB-eIBRS Not affected; BHI BHI_DIS_S\nVulnerability Srbds:                     Not affected\nVulnerability Tsa:                       Not affected\nVulnerability Tsx async abort:           Not affected\nVulnerability Vmscape:                   Mitigation; IBPB before exit to userspace\n",
+            "cpu_affinity": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7,
+                8,
+                9,
+                10,
+                11,
+                12,
+                13,
+                14,
+                15,
+                16,
+                17,
+                18,
+                19
+            ],
+            "pid_namespace": "pid:[4026531836]"
+        },
+        "run": {
+            "renderer": "Accelerators",
+            "accelerators": 16,
+            "active_render_cpus": 16,
+            "queues": 17,
+            "memory_controllers": 4,
+            "quantum_ticks": 5000,
+            "transport_delay": "5ns",
+            "full_simulated_cycles": 9186254.0,
+            "batch_simulated_cycles": 7637995.0,
+            "batch_retired_instructions": 232629683,
+            "batch_counted_cpu_cycles": 98182056,
+            "weighted_core_ipc": 2.3693706617836563,
+            "cluster_ipc": 30.45690433156869,
+            "batch_megapixels_per_simulated_second": 1.2065993758833307,
+            "counted_cpu_occupancy_percent": 80.34017435203872,
+            "dma_batch_duty_percent": 0.07105057675476352,
+            "dma_busy_per_counted_cpu_cycle_percent": 0.08843717022996544,
+            "dma_copied_bytes": 219648,
+            "ram_read_bytes": 183104,
+            "ram_write_bytes": 37184,
+            "cache": {
+                "icache": {
+                    "hits": 34206835,
+                    "misses": 2671,
+                    "hit_percent": 99.99219222867468,
+                    "mshr_hits": 0,
+                    "mshr_misses": 2671,
+                    "mshr_miss_percent": 0.00780777132531525
+                },
+                "dcache": {
+                    "hits": 53145810,
+                    "misses": 280896,
+                    "hit_percent": 99.47424046693052,
+                    "mshr_hits": 206462,
+                    "mshr_misses": 74434,
+                    "mshr_miss_percent": 0.13931983753593194
+                }
+            },
+            "dma": {
+                "bytesCopied": 219648.0,
+                "busyTicks": 86829432.0,
+                "readRequests": 6880.0,
+                "writeRequests": 6880.0,
+                "cleanRequests": 5728.0,
+                "readRetries": 5409.0,
+                "writeRetries": 475.0
+            },
+            "per_core": [
+                {
+                    "core": 0,
+                    "retired_instructions": 11854065,
+                    "counted_cycles": 4828581,
+                    "ipc": 2.4549790093611352,
+                    "cache_statistics": {
+                        "icache.overallHits::total": 1671246,
+                        "icache.overallMisses::total": 168,
+                        "icache.overallMshrHits::total": 0,
+                        "icache.overallMshrMisses::total": 168,
+                        "dcache.overallHits::total": 2634810,
+                        "dcache.overallMisses::total": 6217,
+                        "dcache.overallMshrHits::total": 4186,
+                        "dcache.overallMshrMisses::total": 2031
+                    },
+                    "dma": {
+                        "bytesCopied": 13728.0,
+                        "busyTicks": 5271027.0,
+                        "readRequests": 430.0,
+                        "writeRequests": 430.0,
+                        "cleanRequests": 358.0,
+                        "readRetries": 335.0,
+                        "writeRetries": 52.0,
+                        "peakChunks": 19.0
+                    }
+                },
+                {
+                    "core": 1,
+                    "retired_instructions": 11571752,
+                    "counted_cycles": 4702662,
+                    "ipc": 2.4606812056660674,
+                    "cache_statistics": {
+                        "icache.overallHits::total": 1638834,
+                        "icache.overallMisses::total": 168,
+                        "icache.overallMshrHits::total": 0,
+                        "icache.overallMshrMisses::total": 168,
+                        "dcache.overallHits::total": 2535281,
+                        "dcache.overallMisses::total": 6226,
+                        "dcache.overallMshrHits::total": 4194,
+                        "dcache.overallMshrMisses::total": 2032
+                    },
+                    "dma": {
+                        "bytesCopied": 13728.0,
+                        "busyTicks": 5344027.0,
+                        "readRequests": 430.0,
+                        "writeRequests": 430.0,
+                        "cleanRequests": 358.0,
+                        "readRetries": 335.0,
+                        "writeRetries": 51.0,
+                        "peakChunks": 19.0
+                    }
+                },
+                {
+                    "core": 2,
+                    "retired_instructions": 11648776,
+                    "counted_cycles": 4712220,
+                    "ipc": 2.4720356859399604,
+                    "cache_statistics": {
+                        "icache.overallHits::total": 1610349,
+                        "icache.overallMisses::total": 168,
+                        "icache.overallMshrHits::total": 0,
+                        "icache.overallMshrMisses::total": 168,
+                        "dcache.overallHits::total": 2645529,
+                        "dcache.overallMisses::total": 6216,
+                        "dcache.overallMshrHits::total": 4186,
+                        "dcache.overallMshrMisses::total": 2030
+                    },
+                    "dma": {
+                        "bytesCopied": 13728.0,
+                        "busyTicks": 5370027.0,
+                        "readRequests": 430.0,
+                        "writeRequests": 430.0,
+                        "cleanRequests": 358.0,
+                        "readRetries": 337.0,
+                        "writeRetries": 48.0,
+                        "peakChunks": 19.0
+                    }
+                },
+                {
+                    "core": 3,
+                    "retired_instructions": 10691010,
+                    "counted_cycles": 4343083,
+                    "ipc": 2.461617703368782,
+                    "cache_statistics": {
+                        "icache.overallHits::total": 1485241,
+                        "icache.overallMisses::total": 166,
+                        "icache.overallMshrHits::total": 0,
+                        "icache.overallMshrMisses::total": 166,
+                        "dcache.overallHits::total": 2458283,
+                        "dcache.overallMisses::total": 6219,
+                        "dcache.overallMshrHits::total": 4189,
+                        "dcache.overallMshrMisses::total": 2030
+                    },
+                    "dma": {
+                        "bytesCopied": 13728.0,
+                        "busyTicks": 5401027.0,
+                        "readRequests": 430.0,
+                        "writeRequests": 430.0,
+                        "cleanRequests": 358.0,
+                        "readRetries": 338.0,
+                        "writeRetries": 46.0,
+                        "peakChunks": 19.0
+                    }
+                },
+                {
+                    "core": 4,
+                    "retired_instructions": 14421072,
+                    "counted_cycles": 5891587,
+                    "ipc": 2.447739802535378,
+                    "cache_statistics": {
+                        "icache.overallHits::total": 2014922,
+                        "icache.overallMisses::total": 168,
+                        "icache.overallMshrHits::total": 0,
+                        "icache.overallMshrMisses::total": 168,
+                        "dcache.overallHits::total": 3173525,
+                        "dcache.overallMisses::total": 6221,
+                        "dcache.overallMshrHits::total": 4189,
+                        "dcache.overallMshrMisses::total": 2032
+                    },
+                    "dma": {
+                        "bytesCopied": 13728.0,
+                        "busyTicks": 5374027.0,
+                        "readRequests": 430.0,
+                        "writeRequests": 430.0,
+                        "cleanRequests": 358.0,
+                        "readRetries": 339.0,
+                        "writeRetries": 47.0,
+                        "peakChunks": 18.0
+                    }
+                },
+                {
+                    "core": 5,
+                    "retired_instructions": 16803040,
+                    "counted_cycles": 6778923,
+                    "ipc": 2.478718227069403,
+                    "cache_statistics": {
+                        "icache.overallHits::total": 2339537,
+                        "icache.overallMisses::total": 168,
+                        "icache.overallMshrHits::total": 0,
+                        "icache.overallMshrMisses::total": 168,
+                        "dcache.overallHits::total": 3708062,
+                        "dcache.overallMisses::total": 6229,
+                        "dcache.overallMshrHits::total": 4198,
+                        "dcache.overallMshrMisses::total": 2031
+                    },
+                    "dma": {
+                        "bytesCopied": 13728.0,
+                        "busyTicks": 5435027.0,
+                        "readRequests": 430.0,
+                        "writeRequests": 430.0,
+                        "cleanRequests": 358.0,
+                        "readRetries": 338.0,
+                        "writeRetries": 47.0,
+                        "peakChunks": 19.0
+                    }
+                },
+                {
+                    "core": 6,
+                    "retired_instructions": 15953587,
+                    "counted_cycles": 6419584,
+                    "ipc": 2.4851434298546446,
+                    "cache_statistics": {
+                        "icache.overallHits::total": 2166157,
+                        "icache.overallMisses::total": 169,
+                        "icache.overallMshrHits::total": 0,
+                        "icache.overallMshrMisses::total": 169,
+                        "dcache.overallHits::total": 3617803,
+                        "dcache.overallMisses::total": 6220,
+                        "dcache.overallMshrHits::total": 4190,
+                        "dcache.overallMshrMisses::total": 2030
+                    },
+                    "dma": {
+                        "bytesCopied": 13728.0,
+                        "busyTicks": 5416027.0,
+                        "readRequests": 430.0,
+                        "writeRequests": 430.0,
+                        "cleanRequests": 358.0,
+                        "readRetries": 339.0,
+                        "writeRetries": 8.0,
+                        "peakChunks": 18.0
+                    }
+                },
+                {
+                    "core": 7,
+                    "retired_instructions": 12823784,
+                    "counted_cycles": 5276661,
+                    "ipc": 2.43028384806225,
+                    "cache_statistics": {
+                        "icache.overallHits::total": 1789799,
+                        "icache.overallMisses::total": 166,
+                        "icache.overallMshrHits::total": 0,
+                        "icache.overallMshrMisses::total": 166,
+                        "dcache.overallHits::total": 2966409,
+                        "dcache.overallMisses::total": 6219,
+                        "dcache.overallMshrHits::total": 4189,
+                        "dcache.overallMshrMisses::total": 2030
+                    },
+                    "dma": {
+                        "bytesCopied": 13728.0,
+                        "busyTicks": 5468027.0,
+                        "readRequests": 430.0,
+                        "writeRequests": 430.0,
+                        "cleanRequests": 358.0,
+                        "readRetries": 339.0,
+                        "writeRetries": 5.0,
+                        "peakChunks": 18.0
+                    }
+                },
+                {
+                    "core": 8,
+                    "retired_instructions": 17627918,
+                    "counted_cycles": 7443006,
+                    "ipc": 2.3683869124920767,
+                    "cache_statistics": {
+                        "icache.overallHits::total": 2595570,
+                        "icache.overallMisses::total": 168,
+                        "icache.overallMshrHits::total": 0,
+                        "icache.overallMshrMisses::total": 168,
+                        "dcache.overallHits::total": 3856125,
+                        "dcache.overallMisses::total": 59136,
+                        "dcache.overallMshrHits::total": 44906,
+                        "dcache.overallMshrMisses::total": 14230
+                    },
+                    "dma": {
+                        "bytesCopied": 13728.0,
+                        "busyTicks": 5453027.0,
+                        "readRequests": 430.0,
+                        "writeRequests": 430.0,
+                        "cleanRequests": 358.0,
+                        "readRetries": 338.0,
+                        "writeRetries": 6.0,
+                        "peakChunks": 19.0
+                    }
+                },
+                {
+                    "core": 9,
+                    "retired_instructions": 17203570,
+                    "counted_cycles": 7533974,
+                    "ipc": 2.2834655389041694,
+                    "cache_statistics": {
+                        "icache.overallHits::total": 2709410,
+                        "icache.overallMisses::total": 168,
+                        "icache.overallMshrHits::total": 0,
+                        "icache.overallMshrMisses::total": 168,
+                        "dcache.overallHits::total": 4030676,
+                        "dcache.overallMisses::total": 24816,
+                        "dcache.overallMshrHits::total": 18754,
+                        "dcache.overallMshrMisses::total": 6062
+                    },
+                    "dma": {
+                        "bytesCopied": 13728.0,
+                        "busyTicks": 5478027.0,
+                        "readRequests": 430.0,
+                        "writeRequests": 430.0,
+                        "cleanRequests": 358.0,
+                        "readRetries": 338.0,
+                        "writeRetries": 43.0,
+                        "peakChunks": 19.0
+                    }
+                },
+                {
+                    "core": 10,
+                    "retired_instructions": 15094699,
+                    "counted_cycles": 6496420,
+                    "ipc": 2.323541119570471,
+                    "cache_statistics": {
+                        "icache.overallHits::total": 2297843,
+                        "icache.overallMisses::total": 169,
+                        "icache.overallMshrHits::total": 0,
+                        "icache.overallMshrMisses::total": 169,
+                        "dcache.overallHits::total": 3588568,
+                        "dcache.overallMisses::total": 14652,
+                        "dcache.overallMshrHits::total": 10385,
+                        "dcache.overallMshrMisses::total": 4267
+                    },
+                    "dma": {
+                        "bytesCopied": 13728.0,
+                        "busyTicks": 5485027.0,
+                        "readRequests": 430.0,
+                        "writeRequests": 430.0,
+                        "cleanRequests": 358.0,
+                        "readRetries": 339.0,
+                        "writeRetries": 8.0,
+                        "peakChunks": 18.0
+                    }
+                },
+                {
+                    "core": 11,
+                    "retired_instructions": 14446852,
+                    "counted_cycles": 6125707,
+                    "ipc": 2.358397487832833,
+                    "cache_statistics": {
+                        "icache.overallHits::total": 2108294,
+                        "icache.overallMisses::total": 166,
+                        "icache.overallMshrHits::total": 0,
+                        "icache.overallMshrMisses::total": 166,
+                        "dcache.overallHits::total": 3348099,
+                        "dcache.overallMisses::total": 8610,
+                        "dcache.overallMshrHits::total": 5676,
+                        "dcache.overallMshrMisses::total": 2934
+                    },
+                    "dma": {
+                        "bytesCopied": 13728.0,
+                        "busyTicks": 5500027.0,
+                        "readRequests": 430.0,
+                        "writeRequests": 430.0,
+                        "cleanRequests": 358.0,
+                        "readRetries": 339.0,
+                        "writeRetries": 42.0,
+                        "peakChunks": 18.0
+                    }
+                },
+                {
+                    "core": 12,
+                    "retired_instructions": 17174280,
+                    "counted_cycles": 7637274,
+                    "ipc": 2.2487447746407945,
+                    "cache_statistics": {
+                        "icache.overallHits::total": 2692365,
+                        "icache.overallMisses::total": 165,
+                        "icache.overallMshrHits::total": 0,
+                        "icache.overallMshrMisses::total": 165,
+                        "dcache.overallHits::total": 3830576,
+                        "dcache.overallMisses::total": 80172,
+                        "dcache.overallMshrHits::total": 61491,
+                        "dcache.overallMshrMisses::total": 18681
+                    },
+                    "dma": {
+                        "bytesCopied": 13728.0,
+                        "busyTicks": 5467027.0,
+                        "readRequests": 430.0,
+                        "writeRequests": 430.0,
+                        "cleanRequests": 358.0,
+                        "readRetries": 338.0,
+                        "writeRetries": 7.0,
+                        "peakChunks": 19.0
+                    }
+                },
+                {
+                    "core": 13,
+                    "retired_instructions": 16655498,
+                    "counted_cycles": 7256359,
+                    "ipc": 2.2952968561781466,
+                    "cache_statistics": {
+                        "icache.overallHits::total": 2558485,
+                        "icache.overallMisses::total": 165,
+                        "icache.overallMshrHits::total": 0,
+                        "icache.overallMshrMisses::total": 165,
+                        "dcache.overallHits::total": 3776285,
+                        "dcache.overallMisses::total": 15441,
+                        "dcache.overallMshrHits::total": 11394,
+                        "dcache.overallMshrMisses::total": 4047
+                    },
+                    "dma": {
+                        "bytesCopied": 13728.0,
+                        "busyTicks": 5465027.0,
+                        "readRequests": 430.0,
+                        "writeRequests": 430.0,
+                        "cleanRequests": 358.0,
+                        "readRetries": 339.0,
+                        "writeRetries": 44.0,
+                        "peakChunks": 18.0
+                    }
+                },
+                {
+                    "core": 14,
+                    "retired_instructions": 13197911,
+                    "counted_cycles": 5904199,
+                    "ipc": 2.2353431854177,
+                    "cache_statistics": {
+                        "icache.overallHits::total": 2113173,
+                        "icache.overallMisses::total": 166,
+                        "icache.overallMshrHits::total": 0,
+                        "icache.overallMshrMisses::total": 166,
+                        "dcache.overallHits::total": 3208883,
+                        "dcache.overallMisses::total": 15028,
+                        "dcache.overallMshrHits::total": 10972,
+                        "dcache.overallMshrMisses::total": 4056
+                    },
+                    "dma": {
+                        "bytesCopied": 13728.0,
+                        "busyTicks": 5453027.0,
+                        "readRequests": 430.0,
+                        "writeRequests": 430.0,
+                        "cleanRequests": 358.0,
+                        "readRetries": 339.0,
+                        "writeRetries": 10.0,
+                        "peakChunks": 18.0
+                    }
+                },
+                {
+                    "core": 15,
+                    "retired_instructions": 15461869,
+                    "counted_cycles": 6831816,
+                    "ipc": 2.2632150807340246,
+                    "cache_statistics": {
+                        "icache.overallHits::total": 2415610,
+                        "icache.overallMisses::total": 163,
+                        "icache.overallMshrHits::total": 0,
+                        "icache.overallMshrMisses::total": 163,
+                        "dcache.overallHits::total": 3766896,
+                        "dcache.overallMisses::total": 13274,
+                        "dcache.overallMshrHits::total": 9363,
+                        "dcache.overallMshrMisses::total": 3911
+                    },
+                    "dma": {
+                        "bytesCopied": 13728.0,
+                        "busyTicks": 5449027.0,
+                        "readRequests": 430.0,
+                        "writeRequests": 430.0,
+                        "cleanRequests": 358.0,
+                        "readRetries": 339.0,
+                        "writeRetries": 11.0,
+                        "peakChunks": 18.0
+                    }
+                }
+            ],
+            "controller_statistics": [
+                {
+                    "path": "system.memory",
+                    "read_bytes": 45344,
+                    "write_bytes": 9280
+                },
+                {
+                    "path": "system.memory1",
+                    "read_bytes": 46432,
+                    "write_bytes": 9344
+                },
+                {
+                    "path": "system.memory2",
+                    "read_bytes": 45984,
+                    "write_bytes": 9280
+                },
+                {
+                    "path": "system.memory3",
+                    "read_bytes": 45344,
+                    "write_bytes": 9280
+                }
+            ],
+            "stats_region_start_tick": 283634000.0,
+            "stats_region_end_tick": 7921629000.0,
+            "rgba_sha256":
+                "79aaad3486ca49955cda1dd8fd6f36b8102cbbd3c89117f327b0c917c090ccaa",
+            "analytic_max_byte_error": 1,
+            "wall_seconds": 70.38276757199492,
+            "command": [
+                "/home/ripopov/work/gem5/main/build/RISCV/gem5.opt",
+                "--outdir=/home/ripopov/work/gem5/main/local-temp/raytrace-refresh-20261012/recapture/accel16/5ns-q17",
+                "/home/ripopov/work/gem5/main/configs/example/rt_accel.py",
+                "--backend=gem5",
+                "--accelerator-cpu=o3",
+                "--accelerator-cores=16",
+                "--queues=17",
+                "--render-mode=1",
+                "--samples-per-pixel=1",
+                "--max-secondary-depth=0",
+                "--seed=1",
+                "--transport-delay=5ns"
+            ],
+            "idle_machine_checked": true,
+            "process_checks": 70,
+            "simulations_before": [],
+            "simulations_after": [],
+            "repeat": 0,
+            "artifact_directory":
+                "local-temp/raytrace-refresh-20261012/recapture/accel16/5ns-q17",
+            "raw_artifact_sha256": {
+                "stats.txt":
+                    "c013d6010da1d88cc97dcf606946c58c488322af2adfaa80f604520c622604df",
+                "config.json":
+                    "7898e5587259abeefb89b6893eed548d6830b536398eb289d36fb0561da59c5d",
+                "parameters.json":
+                    "684f9b4a2b52fd5d44c8889f803d7dcc9657277609cc948f262928811e50aa17",
+                "wall.json":
+                    "93c9a530e94d94c19cf831bf36a919d75682c29727a9bf92178fe933c2cef754",
+                "run.log":
+                    "33ab7a4fa1154ee3b5aa4a14945cd69fea268175374f12e65e5cd93e8b79c35a",
+                "validation.json":
+                    "45bbb8cde4d98735773da8ebb7fb6bb6fb01cb2c6c80d4636b8041e46b147a8a"
+            },
+            "output_sha256": {
+                "image.rgba":
+                    "79aaad3486ca49955cda1dd8fd6f36b8102cbbd3c89117f327b0c917c090ccaa",
+                "image.bmp":
+                    "833d12cf725fceb2310f71423cf46822c7dd6ea5b750ef3cc9d31b54e5d74ac7",
+                "scene.bin":
+                    "adce226e05caaba195f582a038cace29b1f5a0edf76c4edd1b0e9e83699e8ba2",
+                "job.bin":
+                    "4412626d3f260cf7e00fd2535fa1142b4661cbd7dce3d2e5cb352b68fe66ef3c",
+                "parameters.bin":
+                    "e871983cc0325ab72dd0f9a1e16fc8559891261993b325a98cec6e70ea45b609",
+                "core_count.bin":
+                    "097328e8c957de2428283954f6a1ee8ff7ad7def12e100a600178407f5decf24",
+                "job0.bin":
+                    "f81116d0951624d231f3288540fb28e27db9ba720ad8b4bf19bf0588a2bdecbe",
+                "job1.bin":
+                    "957001101bcdf2ba1cf212f005a48df729734824630bfee0cd1ca8ccca1d0338",
+                "job2.bin":
+                    "4462c73aeefa435494d94a088d493cb010bdf31c8dcef4f74b81401d1a3d0022",
+                "job3.bin":
+                    "267f650ada4d1532fb44d5f36cf2b16d38abacff8aa49d92bc76ec8ec70614d2",
+                "job4.bin":
+                    "4da64a482169e7c13def15c70c424d92c69f8123b3e19215ef5b7037eb3fc311",
+                "job5.bin":
+                    "5d7bca19b71daffe8333012260e5375ba9ffec18355fb78da744a82b5d9e3786",
+                "job6.bin":
+                    "821f57851dfaba03024ca41b0906b7d428feee78f773ecbddf347b5071eea492",
+                "job7.bin":
+                    "64bc58ffa3ba99639212af4e472f45126e603c5e4f4b15abdb523298a9eb9815",
+                "job8.bin":
+                    "a816ccd51add98fbe82ea9a9cbe8acf6a8240d908b00412982954b2b8e137e49",
+                "job9.bin":
+                    "2c768854fcbaeae20336b5da71123705f2f0c3514c96c45b6e679faacd908d1e",
+                "job10.bin":
+                    "01019f874efeba1ae8c11de6ea39cc7ef90fab6216fb3a08197dac09b72f9912",
+                "job11.bin":
+                    "a2f92e19cb7cd601ff84f764c673436672b405cd6bfd1f833bffbaffdc74de87",
+                "job12.bin":
+                    "ac8a5098d26e6f3e8d723ab03ebb3b9d98eeaf06a40e13b252bf670c81d1cb05",
+                "job13.bin":
+                    "0845431cf40129e209b8983691923c37110adb9b7ac26868a400fcaaa3baeb62",
+                "job14.bin":
+                    "8ea38b5584312eddfc20ad276cb0cba9b343a71596568301cf687bb8f0805d45",
+                "job15.bin":
+                    "4bbbed6bee1b353d39da7e7c5ef52bf7dce2ccc4edddf371089252dfd290cfe4"
+            },
+            "started_utc": "2026-10-12T05:16:58Z",
+            "returncode": 0,
+            "finished_utc": "2026-10-12T05:18:08Z",
+            "status": "passed",
+            "samples": 1,
+            "matched_simulated_counters": 37340,
+            "pdes_wall_speedup": 6.69809692885085,
+            "full_simulated_cycles_per_wall_second": 130518.51066531776
+        }
+    },
+    "measurement_notes": [
+        "Same simulator executable/library as the successful 64-core pair.",
+        "Original 96x96 firmware reused byte-for-byte to isolate simulator changes.",
+        "No rebuild, profiling, traces, progress memory reads, or extra DES run.",
+        "Default barrier spin budget; unrestricted original CPU affinity.",
+        "One attempt only, no retries; validation follows process exit.",
+        "Process wall includes launch through shutdown, excluding validation.",
+        "One old and one new sample cannot establish timing variance or cause."
+    ],
+    "finished_utc": "2026-10-12T21:42:01Z",
+    "wall": {
+        "command": [
+            "/home/ripopov/work/gem5/main/build/RISCV/gem5.opt",
+            "--outdir=/home/ripopov/work/gem5/main/local-temp/raytrace-16-17-5ns-20261012/accel16/5ns-q17",
+            "/home/ripopov/work/gem5/main/configs/example/rt_accel.py",
+            "--backend=gem5",
+            "--accelerator-cpu=o3",
+            "--accelerator-cores=16",
+            "--queues=17",
+            "--render-mode=1",
+            "--samples-per-pixel=1",
+            "--max-secondary-depth=0",
+            "--seed=1",
+            "--transport-delay=5ns",
+            "--host-firmware=/home/ripopov/work/gem5/main/local-temp/raytrace-16-17-5ns-20261012/artifacts/host-gem5.elf",
+            "--accelerator-firmware=/home/ripopov/work/gem5/main/local-temp/raytrace-16-17-5ns-20261012/artifacts/accelerator.elf"
+        ],
+        "started_utc": "2026-10-12T21:40:40Z",
+        "idle_machine_checked": true,
+        "simulations_before": [],
+        "process_checks": 80,
+        "returncode": 0,
+        "wall_seconds": 80.85705261600015,
+        "finished_utc": "2026-10-12T21:42:01Z",
+        "simulations_after": []
+    },
+    "run": {
+        "renderer": "Accelerators",
+        "accelerators": 16,
+        "active_render_cpus": 16,
+        "queues": 17,
+        "memory_controllers": 4,
+        "quantum_ticks": 5000,
+        "transport_delay": "5ns",
+        "full_simulated_cycles": 9186254.0,
+        "batch_simulated_cycles": 7637995.0,
+        "batch_retired_instructions": 232629683,
+        "batch_counted_cpu_cycles": 98182056,
+        "weighted_core_ipc": 2.3693706617836563,
+        "cluster_ipc": 30.45690433156869,
+        "batch_megapixels_per_simulated_second": 1.2065993758833307,
+        "counted_cpu_occupancy_percent": 80.34017435203872,
+        "dma_batch_duty_percent": 0.07105057675476352,
+        "dma_busy_per_counted_cpu_cycle_percent": 0.08843717022996544,
+        "dma_copied_bytes": 219648,
+        "ram_read_bytes": 183104,
+        "ram_write_bytes": 37184,
+        "cache": {
+            "icache": {
+                "hits": 34206835,
+                "misses": 2671,
+                "hit_percent": 99.99219222867468,
+                "mshr_hits": 0,
+                "mshr_misses": 2671,
+                "mshr_miss_percent": 0.00780777132531525
+            },
+            "dcache": {
+                "hits": 53145810,
+                "misses": 280896,
+                "hit_percent": 99.47424046693052,
+                "mshr_hits": 206462,
+                "mshr_misses": 74434,
+                "mshr_miss_percent": 0.13931983753593194
+            }
+        },
+        "dma": {
+            "bytesCopied": 219648.0,
+            "busyTicks": 86829432.0,
+            "readRequests": 6880.0,
+            "writeRequests": 6880.0,
+            "cleanRequests": 5728.0,
+            "readRetries": 5409.0,
+            "writeRetries": 475.0
+        },
+        "per_core": [
+            {
+                "core": 0,
+                "retired_instructions": 11854065,
+                "counted_cycles": 4828581,
+                "ipc": 2.4549790093611352,
+                "cache_statistics": {
+                    "icache.overallHits::total": 1671246,
+                    "icache.overallMisses::total": 168,
+                    "icache.overallMshrHits::total": 0,
+                    "icache.overallMshrMisses::total": 168,
+                    "dcache.overallHits::total": 2634810,
+                    "dcache.overallMisses::total": 6217,
+                    "dcache.overallMshrHits::total": 4186,
+                    "dcache.overallMshrMisses::total": 2031
+                },
+                "dma": {
+                    "bytesCopied": 13728.0,
+                    "busyTicks": 5271027.0,
+                    "readRequests": 430.0,
+                    "writeRequests": 430.0,
+                    "cleanRequests": 358.0,
+                    "readRetries": 335.0,
+                    "writeRetries": 52.0,
+                    "peakChunks": 19.0
+                }
+            },
+            {
+                "core": 1,
+                "retired_instructions": 11571752,
+                "counted_cycles": 4702662,
+                "ipc": 2.4606812056660674,
+                "cache_statistics": {
+                    "icache.overallHits::total": 1638834,
+                    "icache.overallMisses::total": 168,
+                    "icache.overallMshrHits::total": 0,
+                    "icache.overallMshrMisses::total": 168,
+                    "dcache.overallHits::total": 2535281,
+                    "dcache.overallMisses::total": 6226,
+                    "dcache.overallMshrHits::total": 4194,
+                    "dcache.overallMshrMisses::total": 2032
+                },
+                "dma": {
+                    "bytesCopied": 13728.0,
+                    "busyTicks": 5344027.0,
+                    "readRequests": 430.0,
+                    "writeRequests": 430.0,
+                    "cleanRequests": 358.0,
+                    "readRetries": 335.0,
+                    "writeRetries": 51.0,
+                    "peakChunks": 19.0
+                }
+            },
+            {
+                "core": 2,
+                "retired_instructions": 11648776,
+                "counted_cycles": 4712220,
+                "ipc": 2.4720356859399604,
+                "cache_statistics": {
+                    "icache.overallHits::total": 1610349,
+                    "icache.overallMisses::total": 168,
+                    "icache.overallMshrHits::total": 0,
+                    "icache.overallMshrMisses::total": 168,
+                    "dcache.overallHits::total": 2645529,
+                    "dcache.overallMisses::total": 6216,
+                    "dcache.overallMshrHits::total": 4186,
+                    "dcache.overallMshrMisses::total": 2030
+                },
+                "dma": {
+                    "bytesCopied": 13728.0,
+                    "busyTicks": 5370027.0,
+                    "readRequests": 430.0,
+                    "writeRequests": 430.0,
+                    "cleanRequests": 358.0,
+                    "readRetries": 337.0,
+                    "writeRetries": 48.0,
+                    "peakChunks": 19.0
+                }
+            },
+            {
+                "core": 3,
+                "retired_instructions": 10691010,
+                "counted_cycles": 4343083,
+                "ipc": 2.461617703368782,
+                "cache_statistics": {
+                    "icache.overallHits::total": 1485241,
+                    "icache.overallMisses::total": 166,
+                    "icache.overallMshrHits::total": 0,
+                    "icache.overallMshrMisses::total": 166,
+                    "dcache.overallHits::total": 2458283,
+                    "dcache.overallMisses::total": 6219,
+                    "dcache.overallMshrHits::total": 4189,
+                    "dcache.overallMshrMisses::total": 2030
+                },
+                "dma": {
+                    "bytesCopied": 13728.0,
+                    "busyTicks": 5401027.0,
+                    "readRequests": 430.0,
+                    "writeRequests": 430.0,
+                    "cleanRequests": 358.0,
+                    "readRetries": 338.0,
+                    "writeRetries": 46.0,
+                    "peakChunks": 19.0
+                }
+            },
+            {
+                "core": 4,
+                "retired_instructions": 14421072,
+                "counted_cycles": 5891587,
+                "ipc": 2.447739802535378,
+                "cache_statistics": {
+                    "icache.overallHits::total": 2014922,
+                    "icache.overallMisses::total": 168,
+                    "icache.overallMshrHits::total": 0,
+                    "icache.overallMshrMisses::total": 168,
+                    "dcache.overallHits::total": 3173525,
+                    "dcache.overallMisses::total": 6221,
+                    "dcache.overallMshrHits::total": 4189,
+                    "dcache.overallMshrMisses::total": 2032
+                },
+                "dma": {
+                    "bytesCopied": 13728.0,
+                    "busyTicks": 5374027.0,
+                    "readRequests": 430.0,
+                    "writeRequests": 430.0,
+                    "cleanRequests": 358.0,
+                    "readRetries": 339.0,
+                    "writeRetries": 47.0,
+                    "peakChunks": 18.0
+                }
+            },
+            {
+                "core": 5,
+                "retired_instructions": 16803040,
+                "counted_cycles": 6778923,
+                "ipc": 2.478718227069403,
+                "cache_statistics": {
+                    "icache.overallHits::total": 2339537,
+                    "icache.overallMisses::total": 168,
+                    "icache.overallMshrHits::total": 0,
+                    "icache.overallMshrMisses::total": 168,
+                    "dcache.overallHits::total": 3708062,
+                    "dcache.overallMisses::total": 6229,
+                    "dcache.overallMshrHits::total": 4198,
+                    "dcache.overallMshrMisses::total": 2031
+                },
+                "dma": {
+                    "bytesCopied": 13728.0,
+                    "busyTicks": 5435027.0,
+                    "readRequests": 430.0,
+                    "writeRequests": 430.0,
+                    "cleanRequests": 358.0,
+                    "readRetries": 338.0,
+                    "writeRetries": 47.0,
+                    "peakChunks": 19.0
+                }
+            },
+            {
+                "core": 6,
+                "retired_instructions": 15953587,
+                "counted_cycles": 6419584,
+                "ipc": 2.4851434298546446,
+                "cache_statistics": {
+                    "icache.overallHits::total": 2166157,
+                    "icache.overallMisses::total": 169,
+                    "icache.overallMshrHits::total": 0,
+                    "icache.overallMshrMisses::total": 169,
+                    "dcache.overallHits::total": 3617803,
+                    "dcache.overallMisses::total": 6220,
+                    "dcache.overallMshrHits::total": 4190,
+                    "dcache.overallMshrMisses::total": 2030
+                },
+                "dma": {
+                    "bytesCopied": 13728.0,
+                    "busyTicks": 5416027.0,
+                    "readRequests": 430.0,
+                    "writeRequests": 430.0,
+                    "cleanRequests": 358.0,
+                    "readRetries": 339.0,
+                    "writeRetries": 8.0,
+                    "peakChunks": 18.0
+                }
+            },
+            {
+                "core": 7,
+                "retired_instructions": 12823784,
+                "counted_cycles": 5276661,
+                "ipc": 2.43028384806225,
+                "cache_statistics": {
+                    "icache.overallHits::total": 1789799,
+                    "icache.overallMisses::total": 166,
+                    "icache.overallMshrHits::total": 0,
+                    "icache.overallMshrMisses::total": 166,
+                    "dcache.overallHits::total": 2966409,
+                    "dcache.overallMisses::total": 6219,
+                    "dcache.overallMshrHits::total": 4189,
+                    "dcache.overallMshrMisses::total": 2030
+                },
+                "dma": {
+                    "bytesCopied": 13728.0,
+                    "busyTicks": 5468027.0,
+                    "readRequests": 430.0,
+                    "writeRequests": 430.0,
+                    "cleanRequests": 358.0,
+                    "readRetries": 339.0,
+                    "writeRetries": 5.0,
+                    "peakChunks": 18.0
+                }
+            },
+            {
+                "core": 8,
+                "retired_instructions": 17627918,
+                "counted_cycles": 7443006,
+                "ipc": 2.3683869124920767,
+                "cache_statistics": {
+                    "icache.overallHits::total": 2595570,
+                    "icache.overallMisses::total": 168,
+                    "icache.overallMshrHits::total": 0,
+                    "icache.overallMshrMisses::total": 168,
+                    "dcache.overallHits::total": 3856125,
+                    "dcache.overallMisses::total": 59136,
+                    "dcache.overallMshrHits::total": 44906,
+                    "dcache.overallMshrMisses::total": 14230
+                },
+                "dma": {
+                    "bytesCopied": 13728.0,
+                    "busyTicks": 5453027.0,
+                    "readRequests": 430.0,
+                    "writeRequests": 430.0,
+                    "cleanRequests": 358.0,
+                    "readRetries": 338.0,
+                    "writeRetries": 6.0,
+                    "peakChunks": 19.0
+                }
+            },
+            {
+                "core": 9,
+                "retired_instructions": 17203570,
+                "counted_cycles": 7533974,
+                "ipc": 2.2834655389041694,
+                "cache_statistics": {
+                    "icache.overallHits::total": 2709410,
+                    "icache.overallMisses::total": 168,
+                    "icache.overallMshrHits::total": 0,
+                    "icache.overallMshrMisses::total": 168,
+                    "dcache.overallHits::total": 4030676,
+                    "dcache.overallMisses::total": 24816,
+                    "dcache.overallMshrHits::total": 18754,
+                    "dcache.overallMshrMisses::total": 6062
+                },
+                "dma": {
+                    "bytesCopied": 13728.0,
+                    "busyTicks": 5478027.0,
+                    "readRequests": 430.0,
+                    "writeRequests": 430.0,
+                    "cleanRequests": 358.0,
+                    "readRetries": 338.0,
+                    "writeRetries": 43.0,
+                    "peakChunks": 19.0
+                }
+            },
+            {
+                "core": 10,
+                "retired_instructions": 15094699,
+                "counted_cycles": 6496420,
+                "ipc": 2.323541119570471,
+                "cache_statistics": {
+                    "icache.overallHits::total": 2297843,
+                    "icache.overallMisses::total": 169,
+                    "icache.overallMshrHits::total": 0,
+                    "icache.overallMshrMisses::total": 169,
+                    "dcache.overallHits::total": 3588568,
+                    "dcache.overallMisses::total": 14652,
+                    "dcache.overallMshrHits::total": 10385,
+                    "dcache.overallMshrMisses::total": 4267
+                },
+                "dma": {
+                    "bytesCopied": 13728.0,
+                    "busyTicks": 5485027.0,
+                    "readRequests": 430.0,
+                    "writeRequests": 430.0,
+                    "cleanRequests": 358.0,
+                    "readRetries": 339.0,
+                    "writeRetries": 8.0,
+                    "peakChunks": 18.0
+                }
+            },
+            {
+                "core": 11,
+                "retired_instructions": 14446852,
+                "counted_cycles": 6125707,
+                "ipc": 2.358397487832833,
+                "cache_statistics": {
+                    "icache.overallHits::total": 2108294,
+                    "icache.overallMisses::total": 166,
+                    "icache.overallMshrHits::total": 0,
+                    "icache.overallMshrMisses::total": 166,
+                    "dcache.overallHits::total": 3348099,
+                    "dcache.overallMisses::total": 8610,
+                    "dcache.overallMshrHits::total": 5676,
+                    "dcache.overallMshrMisses::total": 2934
+                },
+                "dma": {
+                    "bytesCopied": 13728.0,
+                    "busyTicks": 5500027.0,
+                    "readRequests": 430.0,
+                    "writeRequests": 430.0,
+                    "cleanRequests": 358.0,
+                    "readRetries": 339.0,
+                    "writeRetries": 42.0,
+                    "peakChunks": 18.0
+                }
+            },
+            {
+                "core": 12,
+                "retired_instructions": 17174280,
+                "counted_cycles": 7637274,
+                "ipc": 2.2487447746407945,
+                "cache_statistics": {
+                    "icache.overallHits::total": 2692365,
+                    "icache.overallMisses::total": 165,
+                    "icache.overallMshrHits::total": 0,
+                    "icache.overallMshrMisses::total": 165,
+                    "dcache.overallHits::total": 3830576,
+                    "dcache.overallMisses::total": 80172,
+                    "dcache.overallMshrHits::total": 61491,
+                    "dcache.overallMshrMisses::total": 18681
+                },
+                "dma": {
+                    "bytesCopied": 13728.0,
+                    "busyTicks": 5467027.0,
+                    "readRequests": 430.0,
+                    "writeRequests": 430.0,
+                    "cleanRequests": 358.0,
+                    "readRetries": 338.0,
+                    "writeRetries": 7.0,
+                    "peakChunks": 19.0
+                }
+            },
+            {
+                "core": 13,
+                "retired_instructions": 16655498,
+                "counted_cycles": 7256359,
+                "ipc": 2.2952968561781466,
+                "cache_statistics": {
+                    "icache.overallHits::total": 2558485,
+                    "icache.overallMisses::total": 165,
+                    "icache.overallMshrHits::total": 0,
+                    "icache.overallMshrMisses::total": 165,
+                    "dcache.overallHits::total": 3776285,
+                    "dcache.overallMisses::total": 15441,
+                    "dcache.overallMshrHits::total": 11394,
+                    "dcache.overallMshrMisses::total": 4047
+                },
+                "dma": {
+                    "bytesCopied": 13728.0,
+                    "busyTicks": 5465027.0,
+                    "readRequests": 430.0,
+                    "writeRequests": 430.0,
+                    "cleanRequests": 358.0,
+                    "readRetries": 339.0,
+                    "writeRetries": 44.0,
+                    "peakChunks": 18.0
+                }
+            },
+            {
+                "core": 14,
+                "retired_instructions": 13197911,
+                "counted_cycles": 5904199,
+                "ipc": 2.2353431854177,
+                "cache_statistics": {
+                    "icache.overallHits::total": 2113173,
+                    "icache.overallMisses::total": 166,
+                    "icache.overallMshrHits::total": 0,
+                    "icache.overallMshrMisses::total": 166,
+                    "dcache.overallHits::total": 3208883,
+                    "dcache.overallMisses::total": 15028,
+                    "dcache.overallMshrHits::total": 10972,
+                    "dcache.overallMshrMisses::total": 4056
+                },
+                "dma": {
+                    "bytesCopied": 13728.0,
+                    "busyTicks": 5453027.0,
+                    "readRequests": 430.0,
+                    "writeRequests": 430.0,
+                    "cleanRequests": 358.0,
+                    "readRetries": 339.0,
+                    "writeRetries": 10.0,
+                    "peakChunks": 18.0
+                }
+            },
+            {
+                "core": 15,
+                "retired_instructions": 15461869,
+                "counted_cycles": 6831816,
+                "ipc": 2.2632150807340246,
+                "cache_statistics": {
+                    "icache.overallHits::total": 2415610,
+                    "icache.overallMisses::total": 163,
+                    "icache.overallMshrHits::total": 0,
+                    "icache.overallMshrMisses::total": 163,
+                    "dcache.overallHits::total": 3766896,
+                    "dcache.overallMisses::total": 13274,
+                    "dcache.overallMshrHits::total": 9363,
+                    "dcache.overallMshrMisses::total": 3911
+                },
+                "dma": {
+                    "bytesCopied": 13728.0,
+                    "busyTicks": 5449027.0,
+                    "readRequests": 430.0,
+                    "writeRequests": 430.0,
+                    "cleanRequests": 358.0,
+                    "readRetries": 339.0,
+                    "writeRetries": 11.0,
+                    "peakChunks": 18.0
+                }
+            }
+        ],
+        "controller_statistics": [
+            {
+                "path": "system.memory",
+                "read_bytes": 45344,
+                "write_bytes": 9280
+            },
+            {
+                "path": "system.memory1",
+                "read_bytes": 46432,
+                "write_bytes": 9344
+            },
+            {
+                "path": "system.memory2",
+                "read_bytes": 45984,
+                "write_bytes": 9280
+            },
+            {
+                "path": "system.memory3",
+                "read_bytes": 45344,
+                "write_bytes": 9280
+            }
+        ],
+        "stats_region_start_tick": 283634000.0,
+        "stats_region_end_tick": 7921629000.0,
+        "rgba_sha256":
+            "79aaad3486ca49955cda1dd8fd6f36b8102cbbd3c89117f327b0c917c090ccaa",
+        "analytic_max_byte_error": 1,
+        "wall_seconds": 80.85705261600015,
+        "command": [
+            "/home/ripopov/work/gem5/main/build/RISCV/gem5.opt",
+            "--outdir=/home/ripopov/work/gem5/main/local-temp/raytrace-16-17-5ns-20261012/accel16/5ns-q17",
+            "/home/ripopov/work/gem5/main/configs/example/rt_accel.py",
+            "--backend=gem5",
+            "--accelerator-cpu=o3",
+            "--accelerator-cores=16",
+            "--queues=17",
+            "--render-mode=1",
+            "--samples-per-pixel=1",
+            "--max-secondary-depth=0",
+            "--seed=1",
+            "--transport-delay=5ns",
+            "--host-firmware=/home/ripopov/work/gem5/main/local-temp/raytrace-16-17-5ns-20261012/artifacts/host-gem5.elf",
+            "--accelerator-firmware=/home/ripopov/work/gem5/main/local-temp/raytrace-16-17-5ns-20261012/artifacts/accelerator.elf"
+        ],
+        "idle_machine_checked": true,
+        "process_checks": 80,
+        "simulations_before": [],
+        "simulations_after": [],
+        "repeat": 0,
+        "artifact_directory":
+            "local-temp/raytrace-16-17-5ns-20261012/accel16/5ns-q17",
+        "raw_artifact_sha256": {
+            "stats.txt":
+                "1f717561f922cbcc0a203e5df4409b2e062b0cba28a0471eecea4fe76b03ca33",
+            "config.json":
+                "dfd5bc0b4b7d8f889eea1a590fcdc8f53ced273ad570d87a1e0f489ffab94538",
+            "parameters.json":
+                "24a01a6ca52decd6581704593f106391612e4381f054e08783ac5d7b7e1f6669",
+            "wall.json":
+                "2cbf6449bf0097ba40503f7f505dd54096c0e58c4494eb1992ccb73fb9484d53",
+            "run.log":
+                "0016ff213e6319cfc8f4e5ac9aa87e8b2120be73ba75805fcbb3a1cff44d5eb1",
+            "validation.json":
+                "b87a782ebc1015b78a6a901a476ad8da56ae1128c807b784106cf62046b7c1af"
+        },
+        "output_sha256": {
+            "image.rgba":
+                "79aaad3486ca49955cda1dd8fd6f36b8102cbbd3c89117f327b0c917c090ccaa",
+            "image.bmp":
+                "833d12cf725fceb2310f71423cf46822c7dd6ea5b750ef3cc9d31b54e5d74ac7",
+            "scene.bin":
+                "adce226e05caaba195f582a038cace29b1f5a0edf76c4edd1b0e9e83699e8ba2",
+            "job.bin":
+                "4412626d3f260cf7e00fd2535fa1142b4661cbd7dce3d2e5cb352b68fe66ef3c",
+            "parameters.bin":
+                "e871983cc0325ab72dd0f9a1e16fc8559891261993b325a98cec6e70ea45b609",
+            "core_count.bin":
+                "097328e8c957de2428283954f6a1ee8ff7ad7def12e100a600178407f5decf24",
+            "job0.bin":
+                "f81116d0951624d231f3288540fb28e27db9ba720ad8b4bf19bf0588a2bdecbe",
+            "job1.bin":
+                "957001101bcdf2ba1cf212f005a48df729734824630bfee0cd1ca8ccca1d0338",
+            "job2.bin":
+                "4462c73aeefa435494d94a088d493cb010bdf31c8dcef4f74b81401d1a3d0022",
+            "job3.bin":
+                "267f650ada4d1532fb44d5f36cf2b16d38abacff8aa49d92bc76ec8ec70614d2",
+            "job4.bin":
+                "4da64a482169e7c13def15c70c424d92c69f8123b3e19215ef5b7037eb3fc311",
+            "job5.bin":
+                "5d7bca19b71daffe8333012260e5375ba9ffec18355fb78da744a82b5d9e3786",
+            "job6.bin":
+                "821f57851dfaba03024ca41b0906b7d428feee78f773ecbddf347b5071eea492",
+            "job7.bin":
+                "64bc58ffa3ba99639212af4e472f45126e603c5e4f4b15abdb523298a9eb9815",
+            "job8.bin":
+                "a816ccd51add98fbe82ea9a9cbe8acf6a8240d908b00412982954b2b8e137e49",
+            "job9.bin":
+                "2c768854fcbaeae20336b5da71123705f2f0c3514c96c45b6e679faacd908d1e",
+            "job10.bin":
+                "01019f874efeba1ae8c11de6ea39cc7ef90fab6216fb3a08197dac09b72f9912",
+            "job11.bin":
+                "a2f92e19cb7cd601ff84f764c673436672b405cd6bfd1f833bffbaffdc74de87",
+            "job12.bin":
+                "ac8a5098d26e6f3e8d723ab03ebb3b9d98eeaf06a40e13b252bf670c81d1cb05",
+            "job13.bin":
+                "0845431cf40129e209b8983691923c37110adb9b7ac26868a400fcaaa3baeb62",
+            "job14.bin":
+                "8ea38b5584312eddfc20ad276cb0cba9b343a71596568301cf687bb8f0805d45",
+            "job15.bin":
+                "4bbbed6bee1b353d39da7e7c5ef52bf7dce2ccc4edddf371089252dfd290cfe4"
+        },
+        "started_utc": "2026-10-12T21:40:40Z",
+        "returncode": 0,
+        "finished_utc": "2026-10-12T21:42:01Z",
+        "status": "passed",
+        "samples": 1,
+        "matched_simulated_counters": null,
+        "pdes_wall_speedup": null,
+        "full_simulated_cycles_per_wall_second": 113611.04199069219
+    },
+    "comparison_to_previous": {
+        "simulated_counters_compared": 37340,
+        "excluded_host_counters": [
+            "dump0/hostInstRate",
+            "dump0/hostMemory",
+            "dump0/hostOpRate",
+            "dump0/hostSeconds",
+            "dump0/hostTickRate",
+            "dump1/hostInstRate",
+            "dump1/hostMemory",
+            "dump1/hostOpRate",
+            "dump1/hostSeconds",
+            "dump1/hostTickRate"
+        ],
+        "transaction_trace_sha256": {}
+    },
+    "wall_ratio_new_over_previous": 1.1488188857207273,
+    "wall_change_percent": 14.881888572072732,
+    "validated_utc": "2026-10-12T21:42:02Z"
+}
