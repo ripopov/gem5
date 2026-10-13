@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="gem5-help" type="CLionExternalRunConfiguration" factoryName="Application" PROGRAM_PARAMS="--help" WORKING_DIR="$PROJECT_DIR$" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="gem5" TARGET_NAME="gem5.opt-riscv" CONFIG_NAME="Default" RUN_PATH="$PROJECT_DIR$/build/RISCV/gem5.opt">
+  <configuration default="false" name="gem5-help" type="CLionExternalRunConfiguration" factoryName="Application" PROGRAM_PARAMS="--help" WORKING_DIR="$PROJECT_DIR$" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="gem5" TARGET_NAME="gem5.opt-riscv" CONFIG_NAME="gem5.opt-riscv" RUN_PATH="$PROJECT_DIR$/build/RISCV/gem5.opt">
     <method v="2" />
   </configuration>
 </component>

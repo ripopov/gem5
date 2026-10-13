@@ -27,4 +27,11 @@
             <option name="WORKING_DIRECTORY" value="$ProjectFileDir$" />
         </exec>
     </tool>
+    <tool name="generate-compile-commands-riscv" description="Generate the RISC-V Ruby CHI compilation database" showInMainMenu="true" showInEditor="false" showInProject="true" showInSearchPopup="true" disabled="false" useConsole="true" showConsoleOnStdOut="true" showConsoleOnStdErr="true" synchronizeAfterRun="true">
+        <exec>
+            <option name="COMMAND" value="python3" />
+            <option name="PARAMETERS" value="-c &quot;import os&#10;import subprocess&#10;import sys&#10;commands = [&#10;    ['scons', 'defconfig', 'build/RISCV', 'build_opts/RISCV'],&#10;    ['scons', 'setconfig', 'build/RISCV', 'RUBY=y',&#10;     'PROTOCOL=CHI', 'RUBY_PROTOCOL_CHI=y',&#10;     'RUBY_PROTOCOL_MI_example=n'],&#10;    ['scons', '-j', str(os.cpu_count() or 1),&#10;     'build/RISCV/compile_commands.json'],&#10;]&#10;for command in commands:&#10;    print(' '.join(command), flush=True)&#10;    result = subprocess.run(command)&#10;    if result.returncode:&#10;        sys.exit(result.returncode)&quot;" />
+            <option name="WORKING_DIRECTORY" value="$ProjectFileDir$" />
+        </exec>
+    </tool>
 </toolSet>
