@@ -241,52 +241,6 @@ The three separately authorized replacements are recorded under
 `local-temp/raytrace-refresh-20261012/recapture`, with their exact commands in
 each `wall.json`; the default capture command performs no automatic retries.
 
-## Sixteen-accelerator recheck after 64-core support
-
-The user approved **one** repeat of the original 96x96 row: 16 cached O3
-accelerators, 17 event queues, 5 ns quantum and directional transport delay,
-and four RAM controllers. It completed from `2026-10-12T21:40:40Z` through
-`2026-10-12T21:42:01Z`, using the same simulator executable/shared library as
-the successful 64-accelerator pair below. The current tree is `be9fb9cab9`;
-the compiled-source snapshot and commit-time whitespace-only formatting are
-identified in that pair's evidence.
-
-Both original firmware ELFs were reused byte-for-byte from the archived
-optimized sweep, rather than rebuilding firmware or changing resolution.
-Mode 1, one sample per pixel, secondary depth 0, seed 1 and other modeled
-settings remain identical to the original row. The historical table and
-plots above are not replaced by this recheck.
-
-| Sample | Process wall (s) | Full clocks | Batch clocks | Simulated clocks/s |
-| --- | ---: | ---: | ---: | ---: |
-| Original optimized sweep | 70.383 | 9,186,254 | 7,637,995 | 130,519 |
-| Current simulator recheck | 80.857 | 9,186,254 | 7,637,995 | 113,611 |
-
-The recheck takes **14.88% longer**, or **12.95% less simulation throughput**.
-All **37,340 simulated counters** match the original across both dumps;
-images, scene, parameters, discovery and tile descriptors match exactly.
-Golden-image and independent analytic checks pass. Modeled throughput, IPC,
-cache and traffic metrics are therefore unchanged.
-
-The same 20-logical-CPU host and unrestricted CPU affinity were used. No
-competing simulator, build, tests, profiling or diagnostic lookup overlapped
-timing; the barrier spin budget has no override. Validation ran after exit.
-There was no retry, new DES sample or additional simulator attempt.
-
-This one sample is slower at 16 accelerators too, so measured wall performance
-is not completely unchanged outside the 64-core case. It does **not** prove
-a general code-level regression: timing variance, OS placement on hybrid
-cores, turbo and desktop activity remain uncontrolled. This recheck does not
-establish why the 65-queue run was 2.501x slower than its own DES partner;
-that pair also uses a larger 128x128 workload and an oversubscribed topology.
-A matched old/new-executable A/B experiment at 16 accelerators would be
-needed to test a general regression.
-
-[Machine-readable recheck](RAYTRACE_16_17_RECHECK.json) preserves original and
-new full-precision metrics, firmware identity, simulated-counter comparison,
-commands, guards, source/binary hashes and host metadata. Raw outputs and
-snapshots are under `local-temp/raytrace-16-17-5ns-20261012`.
-
 ## 128x128 smoke with 64 accelerators
 
 After rebuilding with the 64-accelerator support and event-priority fix,
