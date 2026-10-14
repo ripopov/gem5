@@ -44,7 +44,6 @@ from m5.objects import (
     Root,
     RTAccelCodeTCM,
     RTAccelControl,
-    RTAccelerator,
     RTAccelHostAdapter,
     RTAccelMSI,
     RTGem5Accelerator,
@@ -80,14 +79,13 @@ def build_system(
     )
     system.workload = RiscvBareMetal(bootloader=str(firmware))
     system.cpu = RiscvO3CPU(numThreads=1)
-    if args.backend == "gem5":
-        system.cpu.mmu.pma_checker = PMAChecker(
-            uncacheable=[
-                AddrRange(0x10000000, size=0x1000 * args.accelerator_cores),
-                AddrRange(0x20000000, size=0x1000),
-                AddrRange(0x81000000, size="1MiB"),
-            ]
-        )
+    system.cpu.mmu.pma_checker = PMAChecker(
+        uncacheable=[
+            AddrRange(0x10000000, size=0x1000 * args.accelerator_cores),
+            AddrRange(0x20000000, size=0x1000),
+            AddrRange(0x81000000, size="1MiB"),
+        ]
+    )
     system.cpu.createThreads()
     system.cpu.createInterruptController()
     # Multiplex instruction/data requests into the single unified host cache.
@@ -166,156 +164,145 @@ def build_system(
         )
         for i in range(args.accelerator_cores)
     ]
-    if args.backend == "reference":
-        if args.queues != 1:
-            raise ValueError("the host reference requires --queues=1")
-        system.accelerators = [
-            RTAccelerator(host=adapter, queue_depth=1, eventq_index=0)
-            for adapter in system.adapters
-        ]
-    else:
-        system.msi = RTAccelMSI(
-            cpu=system.cpu,
-            accelerator_cores=args.accelerator_cores,
-            registers=AddrRange(0x20000000, size=0x1000),
-            trace_file=str(outdir / "msi.trace") if args.trace else "",
+    system.msi = RTAccelMSI(
+        cpu=system.cpu,
+        accelerator_cores=args.accelerator_cores,
+        registers=AddrRange(0x20000000, size=0x1000),
+        trace_file=str(outdir / "msi.trace") if args.trace else "",
+    )
+    system.msi.pio = system.membus.mem_side_ports
+    system.accelerators = [
+        RiscvSystem(
+            mem_mode="timing",
+            mem_ranges=[
+                AddrRange(0x40000000, size="64KiB"),
+                AddrRange(0x40010000, size="192KiB"),
+            ],
+            eventq_index=i + 1 if args.queues != 1 else 0,
         )
-        system.msi.pio = system.membus.mem_side_ports
-        system.accelerators = [
-            RiscvSystem(
-                mem_mode="timing",
-                mem_ranges=[
-                    AddrRange(0x40000000, size="64KiB"),
-                    AddrRange(0x40010000, size="192KiB"),
-                ],
-                eventq_index=i + 1 if args.queues != 1 else 0,
+        for i in range(args.accelerator_cores)
+    ]
+    for i, accel in enumerate(system.accelerators):
+        accel.voltage_domain = VoltageDomain()
+        accel.clk_domain = SrcClockDomain(
+            clock="1GHz", voltage_domain=accel.voltage_domain
+        )
+        accel.workload = RiscvBareMetal(bootloader=str(kernel))
+        cpu_class = (
+            RiscvO3CPU
+            if args.accelerator_cpu == "o3"
+            else RiscvTimingSimpleCPU
+        )
+        accel.cpu = cpu_class(numThreads=1)
+        accel.cpu.createThreads()
+        accel.cpu.isa[0].riscv_profile = "RVA20S64"
+        accel.cpu.isa[0].extra_extensions = []
+        accel.cpu.createInterruptController()
+        accel.cpu.mmu.pma_checker = PMAChecker(
+            uncacheable=[
+                AddrRange(0x10000000, size=0x1000),
+                AddrRange(0x20000000, size=0x1000),
+                system.mem_ranges[0],
+            ]
+        )
+        cached = args.accelerator_caches == "l1"
+        accel.router_clock = SrcClockDomain(
+            clock="4GHz", voltage_domain=accel.voltage_domain
+        )
+        bus_class = CoherentXBar if cached else NoncoherentXBar
+        coherence = (
+            dict(
+                snoop_response_latency=0,
+                point_of_coherency=True,
+                point_of_unification=True,
+                max_routing_table_size=2048,
             )
-            for i in range(args.accelerator_cores)
-        ]
-        for i, accel in enumerate(system.accelerators):
-            accel.voltage_domain = VoltageDomain()
-            accel.clk_domain = SrcClockDomain(
-                clock="1GHz", voltage_domain=accel.voltage_domain
+            if cached
+            else {}
+        )
+        accel.bus = bus_class(
+            frontend_latency=0,
+            forward_latency=0,
+            response_latency=0,
+            width=64,
+            clk_domain=accel.router_clock,
+            **coherence,
+        )
+        accel.code_tcm = RTAccelCodeTCM(range=accel.mem_ranges[0])
+        accel.data_tcm = SimpleMemory(
+            range=accel.mem_ranges[1], latency="1ns", bandwidth="128GiB/s"
+        )
+        accel.code_tcm.constants = accel.bus.mem_side_ports
+        accel.data_tcm.port = accel.bus.mem_side_ports
+        accel.memories = [accel.code_tcm, accel.data_tcm]
+        if cached:
+            accel.icache = Cache(
+                size="8KiB",
+                assoc=2,
+                tag_latency=1,
+                data_latency=1,
+                response_latency=1,
+                mshrs=4,
+                tgts_per_mshr=16,
+                is_read_only=True,
             )
-            accel.workload = RiscvBareMetal(bootloader=str(kernel))
-            cpu_class = (
-                RiscvO3CPU
-                if args.accelerator_cpu == "o3"
-                else RiscvTimingSimpleCPU
+            accel.dcache = Cache(
+                addr_ranges=accel.mem_ranges,
+                size="16KiB",
+                assoc=4,
+                tag_latency=1,
+                data_latency=1,
+                response_latency=1,
+                mshrs=16,
+                tgts_per_mshr=32,
+                write_buffers=16,
             )
-            accel.cpu = cpu_class(numThreads=1)
-            accel.cpu.createThreads()
-            accel.cpu.isa[0].riscv_profile = "RVA20S64"
-            accel.cpu.isa[0].extra_extensions = []
-            accel.cpu.createInterruptController()
-            accel.cpu.mmu.pma_checker = PMAChecker(
-                uncacheable=[
-                    AddrRange(0x10000000, size=0x1000),
-                    AddrRange(0x20000000, size=0x1000),
-                    system.mem_ranges[0],
-                ]
-            )
-            cached = args.accelerator_caches == "l1"
-            accel.router_clock = SrcClockDomain(
-                clock="4GHz", voltage_domain=accel.voltage_domain
-            )
-            bus_class = CoherentXBar if cached else NoncoherentXBar
-            coherence = (
-                dict(
-                    snoop_response_latency=0,
-                    point_of_coherency=True,
-                    point_of_unification=True,
-                    max_routing_table_size=2048,
-                )
-                if cached
-                else {}
-            )
-            accel.bus = bus_class(
-                frontend_latency=0,
-                forward_latency=0,
-                response_latency=0,
-                width=64,
-                clk_domain=accel.router_clock,
-                **coherence,
-            )
-            accel.code_tcm = RTAccelCodeTCM(range=accel.mem_ranges[0])
-            accel.data_tcm = SimpleMemory(
-                range=accel.mem_ranges[1], latency="1ns", bandwidth="128GiB/s"
-            )
-            accel.code_tcm.constants = accel.bus.mem_side_ports
-            accel.data_tcm.port = accel.bus.mem_side_ports
-            accel.memories = [accel.code_tcm, accel.data_tcm]
-            if cached:
-                accel.icache = Cache(
-                    size="8KiB",
-                    assoc=2,
-                    tag_latency=1,
-                    data_latency=1,
-                    response_latency=1,
-                    mshrs=4,
-                    tgts_per_mshr=16,
-                    is_read_only=True,
-                )
-                accel.dcache = Cache(
-                    addr_ranges=accel.mem_ranges,
-                    size="16KiB",
-                    assoc=4,
-                    tag_latency=1,
-                    data_latency=1,
-                    response_latency=1,
-                    mshrs=16,
-                    tgts_per_mshr=32,
-                    write_buffers=16,
-                )
-                accel.cpu.icache_port = accel.icache.cpu_side
-                accel.icache.mem_side = accel.code_tcm.instruction
-                accel.cpu.dcache_port = accel.dcache.cpu_side
-                accel.dcache.mem_side = accel.bus.cpu_side_ports
-            else:
-                accel.cpu.icache_port = accel.code_tcm.instruction
-                accel.cpu.dcache_port = accel.bus.cpu_side_ports
-            accel.cpu.mmu.connectWalkerPorts(
-                accel.bus.cpu_side_ports, accel.bus.cpu_side_ports
-            )
-            accel.system_port = accel.bus.cpu_side_ports
-            accel.control = RTAccelControl(
-                cpu=accel.cpu,
-                registers=AddrRange(0x10000000, size=0x1000),
-                data_tcm_range=accel.mem_ranges[1],
-                host_range=system.mem_ranges[0],
-                max_outstanding=args.dma_outstanding,
-                coherent_dma=cached,
-            )
-            accel.control.pio = accel.bus.mem_side_ports
-            accel.control.dma = accel.bus.cpu_side_ports
-            accel.control.dma_write = accel.bus.cpu_side_ports
-            if cached:
-                accel.control.dma_clean = accel.bus.cpu_side_ports
-            accel.wrapper = RTGem5Accelerator(
-                host=system.adapters[i],
-                index=i,
-                queue_depth=args.queue_depth,
-                trace_file=(
-                    str(outdir / f"accel{i}.trace") if args.trace else ""
-                ),
-                request_delay=args.transport_delay,
-                response_delay=args.transport_delay,
-                system_ranges=[system.mem_ranges[0], system.msi.registers],
-            )
-            accel.wrapper.mmio = accel.bus.cpu_side_ports
-            accel.wrapper.memory = accel.bus.mem_side_ports
+            accel.cpu.icache_port = accel.icache.cpu_side
+            accel.icache.mem_side = accel.code_tcm.instruction
+            accel.cpu.dcache_port = accel.dcache.cpu_side
+            accel.dcache.mem_side = accel.bus.cpu_side_ports
+        else:
+            accel.cpu.icache_port = accel.code_tcm.instruction
+            accel.cpu.dcache_port = accel.bus.cpu_side_ports
+        accel.cpu.mmu.connectWalkerPorts(
+            accel.bus.cpu_side_ports, accel.bus.cpu_side_ports
+        )
+        accel.system_port = accel.bus.cpu_side_ports
+        accel.control = RTAccelControl(
+            cpu=accel.cpu,
+            registers=AddrRange(0x10000000, size=0x1000),
+            data_tcm_range=accel.mem_ranges[1],
+            host_range=system.mem_ranges[0],
+            max_outstanding=args.dma_outstanding,
+            coherent_dma=cached,
+        )
+        accel.control.pio = accel.bus.mem_side_ports
+        accel.control.dma = accel.bus.cpu_side_ports
+        accel.control.dma_write = accel.bus.cpu_side_ports
+        if cached:
+            accel.control.dma_clean = accel.bus.cpu_side_ports
+        accel.wrapper = RTGem5Accelerator(
+            host=system.adapters[i],
+            index=i,
+            queue_depth=args.queue_depth,
+            trace_file=(str(outdir / f"accel{i}.trace") if args.trace else ""),
+            request_delay=args.transport_delay,
+            response_delay=args.transport_delay,
+            system_ranges=[system.mem_ranges[0], system.msi.registers],
+        )
+        accel.wrapper.mmio = accel.bus.cpu_side_ports
+        accel.wrapper.memory = accel.bus.mem_side_ports
     for adapter in system.adapters:
         adapter.pio = system.membus.mem_side_ports
         adapter.dma = system.membus.cpu_side_ports
     root = Root(full_system=True, system=system)
     # Keep modeled link stages identical in serial and parallel configurations.
-    if args.backend == "gem5":
-        m5.ticks.fixGlobalFrequency()
-        # Both directions have this delay, the largest safe PDES quantum.
-        root.sim_quantum = m5.ticks.fromSeconds(
-            m5.util.convert.toLatency(args.transport_delay)
-        )
-        # Firmware waits past the deferred global statistics event before
-        # submitting jobs or exporting their output.
-        system.init_param = (int(root.sim_quantum) + 999) // 1000
+    m5.ticks.fixGlobalFrequency()
+    # Both directions have this delay, the largest safe PDES quantum.
+    root.sim_quantum = m5.ticks.fromSeconds(
+        m5.util.convert.toLatency(args.transport_delay)
+    )
+    # Firmware waits past the deferred global statistics event before
+    # submitting jobs or exporting their output.
+    system.init_param = (int(root.sim_quantum) + 999) // 1000
     return root, system

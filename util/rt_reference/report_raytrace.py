@@ -344,10 +344,6 @@ def collect_transport_sweep(result, directory):
     assert sweep["baseline_validation_sha256"] == (
         result["queue_pair_comparisons"][0]["validation_sha256"]
     )
-    assert (
-        sweep["shared_library_sha256"]
-        == result["suite"]["artifact_sha256"]["build/RISCV/librt_accel_opt.so"]
-    )
     for name in ("hostname", "platform", "cpu_affinity", "pid_namespace"):
         assert sweep["machine"][name] == result["machine"][name], name
     serial = result["configurations"][0]
@@ -811,7 +807,7 @@ guard counts, comparisons and source/executable/firmware hashes. Raw results
 are under `{evidence}`: `accel8/q1-0`, `accel8/q9-0`, `accel16/q1-0`,
 `accel16/q17-0`, and `host-0`. Each core-count directory also
 contains its new protocol evidence. `artifacts/` preserves the measured
-executable, private shared library, firmware, source patch and initial git
+executable, firmware, source patch and initial git
 status. Previous 1 us raw directories are retained as historical evidence
 and do not contribute to these results.
 {sweep_evidence}

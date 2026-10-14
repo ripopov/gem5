@@ -57,9 +57,6 @@ def main():
     assert digest(gem5) == baseline["gem5_sha256"]
     for name, sha in baseline["firmware_sha256"].items():
         assert digest(ROOT / "util/rt_reference/out" / name) == sha, name
-    original_suite = load(args.baseline.parent / "suite.json")
-    library = "build/RISCV/librt_accel_opt.so"
-    assert digest(ROOT / library) == original_suite["artifact_sha256"][library]
     evidence_path = args.output / "sweep.json"
     if args.inspect_only:
         evidence = load(evidence_path)
@@ -91,7 +88,6 @@ def main():
             "speedup_baseline_transport_delay": "5ns",
             "speedup_baseline_wall_seconds": serial["wall_seconds"],
             "gem5_sha256": baseline["gem5_sha256"],
-            "shared_library_sha256": digest(ROOT / library),
             "firmware_sha256": baseline["firmware_sha256"],
             "source_sha256": baseline["source_sha256"],
             "runner_sha256": digest(runner),

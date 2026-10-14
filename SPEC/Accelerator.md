@@ -45,8 +45,8 @@ The Rendering Kernel contract targets full-system (FS) execution with an OS or
 bare-metal execution without an OS. Initial testing uses bare-metal host
 software. Both environments use the same descriptors, MMIO interface, DMA
 path, and MSI completion protocol. The
-[initial implementation](#initial-implementation) is currently an MMIO mock
-and does not yet implement this contract.
+native gem5 backend executes this contract on configurable scalar
+RISC-V cores.
 
 1. Before submitting work, simulation initialization loads the Rendering
    Kernel into each accelerator's local tightly coupled memory (TCM).
@@ -484,15 +484,14 @@ completion cycles, payloads, ordering, and MSI visibility, including under
 backpressure and concurrent CPU/DMA traffic. Schedule `runCycle` as individual
 gem5 clock events so inputs and synchronization events can interleave.
 
-## Initial implementation
+## Implementation status
 
-The shared library lives in [src/rt_accel/](../src/rt_accel/), with public
-interfaces in [api.hh](../src/rt_accel/api.hh) and
-[accelerator.hh](../src/rt_accel/accelerator.hh). The SimObject adapters live
-in [src/dev/rt_accel/](../src/dev/rt_accel/).
-Building `build/RISCV/gem5.opt` also builds and links
-`build/RISCV/librt_accel_opt.so`; the executable locates it relative to its
-own directory. Build both together to keep their gem5 and C++ ABI consistent.
+The original standalone accelerator library and its MMIO storage mock were
+removed. The simulator uses only the native gem5 backend: the SimObjects in
+[src/dev/rt_accel/](../src/dev/rt_accel/) defined by
+[RTAccelerator.py](../src/dev/rt_accel/RTAccelerator.py). The former
+`librt_accel` shared library, the `RTAccelerator` wrapper SimObject, the
+`--backend=reference` mode, and the mock's C++ unit tests no longer exist.
 
 On Linux, regular SCons builds also build and statically link the Volna VTR
 C interface from the `ext/volna` submodule. Initialize it with
@@ -504,37 +503,18 @@ without extra include or linker flags. Use `--without-vtr` to disable this
 integration. This supplies the interface for tracing; it does not enable
 trace recording by itself.
 
-The current library is an independent, zero-initialized MMIO storage mock per
-instance. It supports bounded requests, masked writes, error responses, and
-completion no earlier than one clock after acceptance. It does not execute
-RISC-V instructions, model hardware multithreading or a VPU, execute the
-Rendering Kernel, or generate DMA/MSI traffic. Atomic and
-functional MMIO, checkpoint persistence, and dynamic clock changes are not
-implemented. The factory takes the MMIO range, clock period, queue capacity,
-and DMA requestor ID; `idle()` lets the wrapper participate in draining.
-
-[configs/example/rt_accel.py](../configs/example/rt_accel.py) retains the
-bare-metal RISC-V O3 software rendering reference with `--backend=reference`.
-In that mode all eight mock accelerators remain idle and the host submits no
-MMIO jobs; this reference validation uses one event queue. The default
-`--backend=gem5` executes the rendering kernel on eight scalar accelerator
-cores as described below. The host creates
-the descriptors specified above and the reference consumer renders a fixed
-Cornell scene, including triangle meshes for spheres. See
+[configs/example/rt_accel.py](../configs/example/rt_accel.py) executes the
+rendering kernel on the scalar accelerator cores as described below. The host
+creates the descriptors specified above and renders a fixed Cornell scene,
+including triangle meshes for spheres. See
 [the Rendering Kernel README](../util/rt_reference/README.md) for build
 instructions, render parameters, fixed storage limits, and numerical
 conventions. Rendered images and descriptor dumps are exported through
 gem5 pseudo-operations.
 
-Run the accelerator MMIO mock's C++ tests with
-`build/RISCV/rt_accel/accelerator.test.opt` after building that SCons target.
-The test source is
-[accelerator.test.cc](../src/rt_accel/accelerator.test.cc).
-
 ## gem5 backend proof of concept
 
-The configuration parameter selects the accelerator implementation
-at simulation initialization:
+The native backend is the only accelerator implementation:
 
 ```python
 backend = "gem5"  # Scalar RISC-V + L1I/L1D + DMA + TCM; one hart, no RVV

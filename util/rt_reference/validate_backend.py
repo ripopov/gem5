@@ -5,6 +5,7 @@
 import argparse
 import hashlib
 import json
+import math
 import os
 import platform
 import re
@@ -24,13 +25,151 @@ from experiment import (
     symbols,
 )
 from PIL import Image
-from validate import (
-    analytic_smoke,
-    scene_data,
-)
 
 ROOT = Path(__file__).resolve().parents[2]
 GOLDEN = "79aaad3486ca49955cda1dd8fd6f36b8102cbbd3c89117f327b0c917c090ccaa"
+
+
+def add(a, b):
+    return tuple(x + y for x, y in zip(a, b))
+
+
+def sub(a, b):
+    return tuple(x - y for x, y in zip(a, b))
+
+
+def scale(a, s):
+    return tuple(x * s for x in a)
+
+
+def dot(a, b):
+    return sum(x * y for x, y in zip(a, b))
+
+
+def cross(a, b):
+    x, y, z = a
+    u, v, w = b
+    return y * w - z * v, z * u - x * w, x * v - y * u
+
+
+def unit(a):
+    return scale(a, 1 / math.sqrt(dot(a, a)))
+
+
+def scene_data(data, width=96, height=96):
+    m, n, scene_width, scene_height = struct.unpack_from("<4I", data)
+    assert m == 8 and n == 278
+    assert (scene_width, scene_height) == (width, height)
+    assert len(data) == 56 + m * 24 + n * 40
+    camera = struct.unpack_from("<10f", data, 16)
+    assert all(math.isfinite(x) for x in camera)
+    materials = [
+        struct.unpack_from("<6f", data, 56 + i * 24) for i in range(m)
+    ]
+    for material in materials:
+        assert all(math.isfinite(x) for x in material)
+        assert all(0 <= x <= 1 for x in material[:3])
+        assert all(x >= 0 for x in material[3:])
+    objects = []
+    for i in range(n):
+        material, *vertices = struct.unpack_from(
+            "<I9f", data, 56 + m * 24 + i * 40
+        )
+        assert material < m and all(math.isfinite(x) for x in vertices)
+        a, b, c = vertices[:3], vertices[3:6], vertices[6:]
+        e1, e2 = sub(b, a), sub(c, a)
+        normal = cross(e1, e2)
+        area = math.sqrt(dot(normal, normal)) / 2
+        assert area > 0
+        objects.append(
+            (
+                material,
+                a,
+                e1,
+                e2,
+                unit(normal),
+                area,
+                scale(add(a, add(b, c)), 1 / 3),
+            )
+        )
+    assert sum(any(x > 0 for x in materials[o[0]][3:]) for o in objects) == 4
+    return camera, materials, objects
+
+
+def analytic_smoke(scene, image, width=96, height=96):
+    """Independent double-precision linear triangle/shadow reference."""
+    camera, materials, objects = scene
+    position, target, up = camera[:3], camera[3:6], camera[6:9]
+    forward = unit(sub(target, position))
+    right = unit(cross(forward, up))
+    up = cross(right, forward)
+    half_height = math.tan(camera[9] * math.pi / 360)
+
+    def trace(origin, direction, limit=1e30):
+        best, selected = limit, -1
+        for index, obj in enumerate(objects):
+            _, vertex, e1, e2, *_ = obj
+            p = cross(direction, e2)
+            determinant = dot(e1, p)
+            if abs(determinant) < 1e-8:
+                continue
+            s = sub(origin, vertex)
+            u = dot(s, p) / determinant
+            q = cross(s, e1)
+            v = dot(direction, q) / determinant
+            distance = dot(e2, q) / determinant
+            if (
+                0 <= u <= 1
+                and v >= 0
+                and u + v <= 1
+                and 1e-4 < distance < best
+            ):
+                best, selected = distance, index
+        return selected, best
+
+    errors = []
+    for y in range(5, height, 12):
+        for x in range(5, width, 12):
+            u = (2 * (x + 0.5) / width - 1) * half_height * width / height
+            v = (1 - 2 * (y + 0.5) / height) * half_height
+            direction = unit(add(forward, add(scale(right, u), scale(up, v))))
+            selected, distance = trace(position, direction)
+            result = [0.0, 0.0, 0.0]
+            if selected >= 0:
+                obj = objects[selected]
+                material = materials[obj[0]]
+                normal = obj[4]
+                if dot(normal, direction) >= 0:
+                    normal = scale(normal, -1)
+                point = add(position, scale(direction, distance))
+                origin = add(point, scale(normal, 1e-4))
+                result = list(material[3:])
+                for index, light in enumerate(objects):
+                    emission = materials[light[0]][3:]
+                    if index == selected or not any(emission):
+                        continue
+                    delta = sub(light[6], point)
+                    squared = dot(delta, delta)
+                    d = unit(delta)
+                    cs, cl = max(0, dot(normal, d)), abs(dot(light[4], d))
+                    shadow = sub(light[6], origin)
+                    blocker, _ = trace(
+                        origin,
+                        unit(shadow),
+                        math.sqrt(dot(shadow, shadow)) - 2e-4,
+                    )
+                    if blocker < 0:
+                        factor = light[5] * cs * cl / (math.pi * squared)
+                        result = [
+                            a + b * e * factor
+                            for a, b, e in zip(result, material[:3], emission)
+                        ]
+            expected = [int(255 * min(1, max(0, c)) + 0.5) for c in result]
+            offset = 4 * (y * width + x)
+            pixel = image[offset : offset + 3]
+            errors.extend(abs(a - b) for a, b in zip(expected, pixel))
+    assert max(errors) <= 1, f"analytic smoke differs: {max(errors)}"
+    return max(errors)
 
 
 def wire_evidence(directory, jobs, job_base, scene_bytes, rgba):
@@ -724,7 +863,6 @@ def main():
             "util/rt_reference/accelerator.ld",
             "util/rt_reference/Makefile",
             "util/rt_reference/experiment.py",
-            "util/rt_reference/validate.py",
             "util/rt_reference/validate_backend.py",
         )
     }

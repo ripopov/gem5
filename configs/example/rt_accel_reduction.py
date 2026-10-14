@@ -131,7 +131,7 @@ if args.memory_bandwidth is None:
     args.memory_bandwidth = (
         "32GiB/s" if args.workload == "reduction" else "64GiB/s"
     )
-args.backend = "gem5"
+args.backend = "gem5"  # Retained in parameters.json
 if args.accelerator_cores is None:
     args.accelerator_cores = 16 if args.workload == "reduction" else 1
 if not 1 <= args.accelerator_cores <= 16:

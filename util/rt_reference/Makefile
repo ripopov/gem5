@@ -7,16 +7,7 @@ FLAGS = -march=rv64imafdc -mabi=lp64d -mcmodel=medany -O3 -g \
         -ffreestanding -fno-builtin -ffp-contract=off \
         -Wall -Wextra -Werror -I../../include -I$(PICOLIBC)/include
 
-all: out/host.elf out/host-gem5.elf out/accelerator.elf
-
-out/host.elf: host.c renderer.c renderer.h start.S link.ld Makefile \
-              ../m5/src/abi/riscv/m5op.S \
-              ../../include/gem5/asm/generic/m5ops.h
-	@mkdir -p out
-	$(CC) $(FLAGS) -nostdlib -Wl,-T,link.ld,-Map,out/host.map \
-	    start.S host.c renderer.c ../../util/m5/src/abi/riscv/m5op.S \
-	    -L$(PICOLIBC)/lib -lm -lc -lgcc -o $@
-	$(CROSS)size $@
+all: out/host-gem5.elf out/accelerator.elf
 
 out/host-gem5.elf: host.c host_runtime.c host_runtime.h renderer.c renderer.h \
                    start.S link.ld Makefile

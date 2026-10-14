@@ -28,9 +28,8 @@
 Import('*')
 
 SimObject('RTAccelerator.py', sim_objects=[
-    'RTAccelHostAdapter', 'RTAccelerator', 'RTGem5Accelerator',
+    'RTAccelHostAdapter', 'RTGem5Accelerator',
     'RTAccelControl', 'RTAccelMSI', 'RTAccelCodeTCM'])
-Source('accelerator_wrapper.cc')
 Source('host_adapter.cc')
 Source('gem5_wrapper.cc')
 Source('control.cc')

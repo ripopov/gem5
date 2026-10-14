@@ -25,7 +25,7 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-"""Bare-metal host reference or configurable scalar gem5 accelerators.
+"""Configurable scalar gem5 RISC-V accelerators.
 
 Build the resident firmware with `make -C util/rt_reference` first.
 """
@@ -45,7 +45,9 @@ def unsigned(value):
 
 
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument("--backend", choices=("reference", "gem5"), default="gem5")
+# The native gem5 backend is the only implementation; the flag remains for
+# compatibility with the recorded measurement harness commands.
+parser.add_argument("--backend", choices=("gem5",), default="gem5")
 parser.add_argument("--accelerator-cores", type=int, default=8)
 parser.add_argument(
     "--queues",
@@ -88,8 +90,6 @@ parser.add_argument(
 )
 parser.add_argument("--seed", type=unsigned, default=1)
 args = parser.parse_args()
-if args.host_render and args.backend != "gem5":
-    parser.error("host_render requires backend=gem5")
 if not 1 <= args.accelerator_cores <= 64:
     parser.error("accelerator_cores must be in [1, 64]")
 if args.queues not in (1, args.accelerator_cores + 1):
@@ -115,11 +115,7 @@ if args.render_mode == 1 and (
 
 firmware = Path(__file__).resolve().parents[2] / (
     "util/rt_reference/out/"
-    + (
-        "host-render.elf"
-        if args.host_render
-        else "host-gem5.elf" if args.backend == "gem5" else "host.elf"
-    )
+    + ("host-render.elf" if args.host_render else "host-gem5.elf")
 )
 if args.host_firmware:
     firmware = args.host_firmware.resolve()
@@ -148,7 +144,7 @@ kernel = (
     if args.accelerator_firmware
     else firmware.with_name("accelerator.elf")
 )
-if args.backend == "gem5" and not kernel.is_file():
+if not kernel.is_file():
     parser.error("build accelerator.elf first")
 root, system = build_system(
     args,

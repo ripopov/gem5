@@ -30,7 +30,6 @@
 #include "dev/rt_accel/host_adapter.hh"
 
 #include "base/logging.hh"
-#include "dev/rt_accel/accelerator_wrapper.hh"
 #include "dev/rt_accel/trace.hh"
 #include "dev/rt_accel/transport.hh"
 #include "sim/system.hh"

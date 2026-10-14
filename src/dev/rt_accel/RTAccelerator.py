@@ -46,17 +46,6 @@ class RTAccelHostAdapter(SimObject):
     dma = RequestPort("Noncoherent DMA and MSI requests")
 
 
-class RTAccelerator(ClockedObject):
-    type = "RTAccelerator"
-    cxx_header = "dev/rt_accel/accelerator_wrapper.hh"
-    cxx_class = "gem5::rt_accel::AcceleratorWrapper"
-
-    host = Param.RTAccelHostAdapter("Host adapter on the host event queue")
-    queue_depth = Param.Unsigned(16, "Model and master request capacity")
-    request_delay = Param.Latency("5ns", "Transport request delay")
-    response_delay = Param.Latency("5ns", "Transport response delay")
-
-
 class RTGem5Accelerator(ClockedObject):
     type = "RTGem5Accelerator"
     cxx_header = "dev/rt_accel/gem5_wrapper.hh"

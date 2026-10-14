@@ -236,8 +236,6 @@ def capture(output, binary):
     artifacts = output / "artifacts"
     artifacts.mkdir()
     shutil.copy2(binary, artifacts / "gem5.opt")
-    library = binary.parent / "librt_accel_opt.so"
-    shutil.copy2(library, artifacts / library.name)
     firmware = {}
     for name in ("accelerator.elf", "host-gem5.elf", "host-render.elf"):
         path = ROOT / "util/rt_reference/out" / name
@@ -257,7 +255,6 @@ def capture(output, binary):
             ["git", "status", "--short"], cwd=ROOT, text=True
         ),
         "gem5_sha256": digest(binary),
-        "shared_library_sha256": digest(library),
         "firmware_sha256": firmware,
         "source_sha256": source_hashes,
         "machine": {
@@ -333,9 +330,6 @@ def main():
             name: digest(ROOT / name) for name in result["source_sha256"]
         }
     assert digest(binary) == result["gem5_sha256"]
-    assert digest(binary.parent / "librt_accel_opt.so") == (
-        result["shared_library_sha256"]
-    )
     for name, sha in result["firmware_sha256"].items():
         assert digest(ROOT / "util/rt_reference/out" / name) == sha
     compare_pairs(result, output)

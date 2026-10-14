@@ -1,11 +1,11 @@
 # Bare-metal host and rendering reference
 
 This stage runs one `RiscvO3CPU` in machine mode, with one unified host cache
-and gem5 `NoncoherentXBar` interconnects. Eight accelerator/MMIO adapter
-pairs are connected and remain idle; the host never writes their doorbells.
-This validation runs on one event queue without an OS or syscall emulation.
+and gem5 `NoncoherentXBar` interconnects. Configurable accelerator
+subsystems are connected through MMIO adapters; the host writes their
+doorbells to submit jobs. The flows run without an OS or syscall emulation.
 The CPU creates the serialized Scene and Job Descriptors in system memory,
-then calls the reference consumer.
+then calls the rendering consumer.
 The consumer decodes the records into fixed local storage and renders through
 a 64x64 RGBA tile buffer. Jobs larger than that buffer use multiple subtiles.
 
@@ -28,9 +28,9 @@ From the repository root:
 ```sh
 make -C util/rt_reference
 build/RISCV/gem5.opt --outdir=m5out/rt-smoke \
-    configs/example/rt_accel.py --backend=reference --render-mode=1
+    configs/example/rt_accel.py --backend=gem5 --render-mode=1
 build/RISCV/gem5.opt --outdir=m5out/rt-path \
-    configs/example/rt_accel.py --backend=reference --render-mode=0 \
+    configs/example/rt_accel.py --backend=gem5 --render-mode=0 \
     --samples-per-pixel=4 --max-secondary-depth=4 --seed=1
 ```
 
@@ -86,7 +86,7 @@ Floating-point contraction is disabled in both RISC-V and native builds.
 
 ```sh
 make -C util/rt_reference check out/native
-python3 util/rt_reference/validate.py --jobs=3
+python3 util/rt_reference/validate_backend.py --runs=2
 ```
 
 The C checks cover serialization, invalid fields, analytic intersections,
@@ -94,47 +94,41 @@ back faces, misses, rendering modes, nonaligned host tiling, partial subtiles,
 and preservation of row padding. A closed emitting room checks bounce
 throughput and final-depth emission against an analytic energy series. To
 compare BVH and linear traversal on 10,000 additional rays through the full
-scene:
+scene, pass any exported scene dump:
 
 ```sh
 util/rt_reference/out/test \
-    m5out/rt_reference/validated/smoke/scene.bin
+    m5out/rt_backend/validated/q1-0/scene.bin
 ```
 
-The Python matrix runs real RISC-V O3 simulations with at most four samples
-per pixel in eight separate output directories under
-`m5out/rt_reference/validated`. It checks every scene record,
-Job Descriptor parameters and ELF-symbol bus addresses, raw RGBA/BMP
-agreement, and agreement with a native build of the same consumer. It also
-checks a separate double-precision linear smoke reference at 64 pixels,
-repeatability, and the effects of samples, depth, and seed. Different math
-libraries can move rare paths across mesh edges; native comparison requires
-mean byte error below 0.2 and fewer than 1% of bytes differing by more than 1.
-Repeated gem5 runs require identical image hashes.
+The Python validator in [validate_backend.py](validate_backend.py) runs real
+RISC-V O3 simulations with the default eight cached accelerators: one small
+traced protocol workload plus repeated direct-lighting smoke pairs on one and
+on `accelerator-cores + 1` event queues. It checks the SimObject wiring,
+transport timing, scene and Job Descriptor records against ELF symbols, raw
+RGBA/BMP agreement, the golden smoke image hash, an independent
+double-precision analytic smoke reference, and equal simulated counters
+across queue modes. Repeated gem5 runs require identical image hashes.
+Different math libraries can move rare paths across mesh edges; native
+comparison requires mean byte error below 0.2 and fewer than 1% of bytes
+differing by more than 1. `--inspect-only` rechecks completed runs without
+launching simulations, and `--protocol-only` runs only the traced workload.
+A passing run prints `PASS:` with the measured speedup and writes
+`validation.json` under the output directory.
 
-Each directory contains `run.log`, parameters, descriptor dumps, BMP, RGBA,
-`image.png` with the original linear RGB bytes, `preview.png` encoded as sRGB
-for screen viewing, native comparison artifacts, and `validation.json`. The
-root `validation.json` records the complete matrix, and `comparison.png` shows
-all eight renders together. Separate `invalid-*` directories record checks
-that malformed command-line parameters fail before simulation.
-`--inspect-only` rechecks completed runs without launching simulations. The
-matrix includes `smoke`,
-`primary`, `depth1`, `path4`, `path1`, `seed2`, `repeat`, and `depth32`.
-
-[RESULTS.md](RESULTS.md) records wall-clock runtimes and golden images for
-every rendering case, plus runtimes of supporting checks. Gem5 runtime comes
-from its `hostSeconds` statistic; native comparisons and supporting checks
-use a monotonic timer. Add `--write-documentation` to the validation command
-to regenerate this report and its golden images after all checks pass.
+[RESULTS.md](RESULTS.md) and the `golden/` images are historical records of
+the removed reference-backend validation matrix, retained for provenance.
+Measured native-backend results and their machine-readable evidence live in
+[RAYTRACE_RESULTS.md](RAYTRACE_RESULTS.md) and
+[REDUCTION_RESULTS.md](REDUCTION_RESULTS.md).
 
 ## Configurable gem5 backend
 
-The default `rt_accel.py` backend is now `gem5`. Use `--backend=reference`
-for the historical host-only renderer and its validation matrix above.
-To render directly on the host while eight real gem5 accelerator CPUs
-remain in WFI, build `out/host-render.elf` and select `--host-render` with
-`--backend=gem5`. The extra host baseline in
+The gem5 accelerator backend is the only `rt_accel.py` implementation; the
+historical host-only `--backend=reference` mode and its mock SimObject were
+removed. To render directly on the host while eight real gem5 accelerator
+CPUs remain in WFI, build `out/host-render.elf` and select `--host-render`.
+The extra host baseline in
 [RAYTRACE_RESULTS.md](RAYTRACE_RESULTS.md) uses this hardware topology.
 Its measured render and export intervals require zero accelerator
 instructions, CPU cycles, DMA and TCM traffic, with WFI suspension and

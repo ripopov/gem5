@@ -18,15 +18,13 @@ from experiment import (
     symbols,
 )
 from PIL import Image
-from validate import (
-    analytic_smoke,
-    scene_data,
-)
 from validate_backend import (
     GOLDEN,
+    analytic_smoke,
     check_accelerators,
     check_memory,
     check_transport,
+    scene_data,
 )
 from validate_reduction import digest
 
