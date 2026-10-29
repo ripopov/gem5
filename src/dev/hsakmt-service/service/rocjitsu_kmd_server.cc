@@ -569,7 +569,7 @@ RocjitsuKmdServer::observeClientState(
     }
     disconnectExitScheduled = true;
     inform("%s rocjitsu KMD client disconnected\n", name());
-    exitSimLoop("rocjitsu KMD client disconnected");
+    exitSimulationLoopClassic("rocjitsu KMD client disconnected");
 }
 
 void
