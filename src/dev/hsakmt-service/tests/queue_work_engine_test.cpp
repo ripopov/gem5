@@ -1,10 +1,12 @@
-#include "dev/hsakmt-service/service/queue_work_engine.hh"
-
 #include <gtest/gtest.h>
 
 #include <cstring>
 #include <string>
 #include <vector>
+
+#include "base/compiler.hh"
+#include "dev/amdgpu/pm4_defines.hh"
+#include "dev/hsakmt-service/service/queue_work_engine.hh"
 
 namespace
 {
@@ -147,8 +149,8 @@ TEST(QueueWorkEngineTest, RegistersUpdatesAndDestroysComputeQueue)
     EXPECT_FALSE(engine.registerDirectQueue(changed, &error));
     EXPECT_EQ(error, "direct queue changed its doorbell");
 
-    ASSERT_TRUE(engine.updateDirectQueue(
-        queue.queueId, 0x400000, 8192, &error))
+    ASSERT_TRUE(
+        engine.updateDirectQueue(queue.queueId, 0x400000, 8192, &error))
         << error;
     EXPECT_EQ(engine.registeredQueueCount(), 1);
     EXPECT_EQ(fake.doorbells.size(), firstDoorbells + 2);
@@ -157,6 +159,39 @@ TEST(QueueWorkEngineTest, RegistersUpdatesAndDestroysComputeQueue)
     EXPECT_EQ(engine.registeredQueueCount(), 0);
     EXPECT_EQ(fake.doorbells.size(), firstDoorbells + 3);
     ASSERT_TRUE(engine.unregisterDirectQueue(queue.queueId, &error)) << error;
+}
+
+TEST(QueueWorkEngineTest, UnmapsOneQueueUsingFirstDoorbellSlot)
+{
+    for (const bool is_sdma : {false, true}) {
+        ServiceStats stats;
+        FakeHardware fake;
+        QueueWorkEngine engine(makeConfig(), fake.callbacks(), stats);
+        DirectHardwareQueue queue = makeQueue();
+        queue.isSdma = is_sdma;
+        std::string error;
+        ASSERT_TRUE(engine.registerDirectQueue(queue, &error)) << error;
+        fake.blobs.clear();
+        ASSERT_TRUE(engine.unregisterDirectQueue(queue.queueId, &error))
+            << error;
+
+        // AMD's KIQ encoding: count 1 selects offset0; offsets1..3
+        // are unused, rather than naming three additional queues.
+        ASSERT_GE(fake.blobs.size(), 2);
+        gem5::PM4Header header = {};
+        ASSERT_EQ(fake.blobs[0].second.size(), sizeof(header));
+        std::memcpy(&header, fake.blobs[0].second.data(), sizeof(header));
+        EXPECT_EQ(header.opcode, gem5::IT_UNMAP_QUEUES);
+        gem5::PM4UnmapQueues packet = {};
+        ASSERT_EQ(fake.blobs[1].second.size(), sizeof(packet));
+        std::memcpy(&packet, fake.blobs[1].second.data(), sizeof(packet));
+        EXPECT_EQ(packet.numQueues, 1);
+        EXPECT_EQ(packet.doorbellOffset0, queue.doorbellOffset >> 2);
+        EXPECT_EQ(packet.doorbellOffset1, 0);
+        EXPECT_EQ(packet.doorbellOffset2, 0);
+        EXPECT_EQ(packet.doorbellOffset3, 0);
+        EXPECT_EQ(packet.engineSel, is_sdma ? 2 : 1);
+    }
 }
 
 TEST(QueueWorkEngineTest, InstallsSdmaQueueDescriptor)

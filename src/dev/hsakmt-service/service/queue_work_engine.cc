@@ -237,8 +237,7 @@ QueueWorkEngine::configureDirectProcess(uint16_t pasid,
                                         std::string *error)
 {
     if (!pasid || !page_table_root || (page_table_root & PageMask) ||
-        (lds_base & 0xffffffffffffULL) ||
-        (scratch_base & 0xffffffffffffULL)) {
+        (lds_base & 0xffffffffffffULL) || (scratch_base & 0xffffffffffffULL)) {
         return reject(error, "direct process metadata is invalid");
     }
 
@@ -253,8 +252,8 @@ QueueWorkEngine::configureDirectProcess(uint16_t pasid,
         map.shMemBases = sh_mem_bases;
         map.numQueues = MaxQueues;
         map.sdma_enable = 1;
-        return submitPm4ControlPacket(
-            gem5::IT_MAP_PROCESS, &map, sizeof(map), error);
+        return submitPm4ControlPacket(gem5::IT_MAP_PROCESS, &map, sizeof(map),
+                                      error);
     }
 
     gem5::PM4MapProcess map = {};
@@ -263,13 +262,12 @@ QueueWorkEngine::configureDirectProcess(uint16_t pasid,
     map.ptBase = page_table_root;
     map.shMemBases = sh_mem_bases;
     map.numQueues = MaxQueues;
-    return submitPm4ControlPacket(
-        gem5::IT_MAP_PROCESS, &map, sizeof(map), error);
+    return submitPm4ControlPacket(gem5::IT_MAP_PROCESS, &map, sizeof(map),
+                                  error);
 }
 
 bool
-QueueWorkEngine::unconfigureDirectProcess(
-    uint16_t pasid, std::string *error)
+QueueWorkEngine::unconfigureDirectProcess(uint16_t pasid, std::string *error)
 {
     if (!pasid) {
         return reject(error, "direct process PASID is invalid");
@@ -278,8 +276,8 @@ QueueWorkEngine::unconfigureDirectProcess(
     unmap.action = 0;
     unmap.queueSel = 1;
     unmap.pasid = pasid;
-    return submitPm4ControlPacket(
-        gem5::IT_UNMAP_QUEUES, &unmap, sizeof(unmap), error);
+    return submitPm4ControlPacket(gem5::IT_UNMAP_QUEUES, &unmap, sizeof(unmap),
+                                  error);
 }
 
 bool
@@ -355,7 +353,7 @@ QueueWorkEngine::registerDirectQueue(const DirectHardwareQueue &queue,
     const auto existing = directQueues.find(queue.queueId);
     if (existing != directQueues.end()) {
         return existing->second.doorbellOffset == queue.doorbellOffset ||
-            reject(error, "direct queue changed its doorbell");
+               reject(error, "direct queue changed its doorbell");
     }
 
     uint32_t slot = 0;
@@ -380,8 +378,8 @@ QueueWorkEngine::updateDirectQueue(uint64_t queue_id, uint64_t ring_base,
     DirectHardwareQueue replacement = queue->second;
     replacement.ringBaseVa = ring_base;
     replacement.ringBytes = ring_size;
-    if (!submitQueueUnmap(
-            replacement.doorbellOffset, replacement.isSdma, error)) {
+    if (!submitQueueUnmap(replacement.doorbellOffset, replacement.isSdma,
+                          error)) {
         return false;
     }
     const auto slot = registeredQueueSlots.find(queue_id);
@@ -400,8 +398,8 @@ QueueWorkEngine::unregisterDirectQueue(uint64_t queue_id, std::string *error)
     if (queue == directQueues.end()) {
         return true;
     }
-    if (!submitQueueUnmap(
-            queue->second.doorbellOffset, queue->second.isSdma, error)) {
+    if (!submitQueueUnmap(queue->second.doorbellOffset, queue->second.isSdma,
+                          error)) {
         return false;
     }
     const auto slot = registeredQueueSlots.find(queue_id);
@@ -416,8 +414,8 @@ QueueWorkEngine::unregisterDirectQueue(uint64_t queue_id, std::string *error)
 }
 
 bool
-QueueWorkEngine::submitQueueUnmap(
-    uint64_t doorbell_offset, bool is_sdma, std::string *error)
+QueueWorkEngine::submitQueueUnmap(uint64_t doorbell_offset, bool is_sdma,
+                                  std::string *error)
 {
     if (doorbell_offset & (sizeof(uint32_t) - 1) ||
         (doorbell_offset >> 2) > MaxDoorbellDwordOffset) {
@@ -427,9 +425,8 @@ QueueWorkEngine::submitQueueUnmap(
     unmap.action = 0;
     unmap.queueSel = 0;
     unmap.engineSel = is_sdma ? 2 : 1;
-    // gem5 selects a single queue from offset3 when numQueues is four.
-    unmap.numQueues = 4;
-    unmap.doorbellOffset3 = static_cast<uint32_t>(doorbell_offset >> 2);
+    unmap.numQueues = 1;
+    unmap.doorbellOffset0 = static_cast<uint32_t>(doorbell_offset >> 2);
     return submitPm4ControlPacket(gem5::IT_UNMAP_QUEUES, &unmap, sizeof(unmap),
                                   error);
 }

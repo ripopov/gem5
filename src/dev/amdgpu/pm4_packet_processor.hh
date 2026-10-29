@@ -89,6 +89,7 @@ class PM4PacketProcessor : public DmaVirtDevice
     bool isSDMAQueue(PM4MapQueues *pkt);
     void mapHostQueue(PM4Queue *q, PM4MapQueues *pkt);
     void mapDeviceQueue(PM4Queue *q, PM4MapQueues *pkt);
+    void writebackMQD(PM4Queue *queue);
     void unmapAllQueues(bool unmap_static);
     void unmapQueueByDoorbell(Addr doorbell, uint32_t engine_sel);
     void completeExternalSubmission(PM4Queue *q);

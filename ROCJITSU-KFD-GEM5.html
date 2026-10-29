@@ -602,7 +602,7 @@ footer { padding:36px 0 60px; color:var(--muted); font-size:14px; }
     <tbody>
       <tr><td><code>MAP_PROCESS</code></td><td>Assign a VMID to a process (by PASID), set its page-table base, and set its LDS and scratch apertures.</td></tr>
       <tr><td><code>MAP_QUEUES</code></td><td>Read an MQD, bind its doorbell, and start serving the queue. Compute (AQL) queues go to the packet processor; SDMA queues go to a copy engine.</td></tr>
-      <tr><td><code>UNMAP_QUEUES</code></td><td>Stop a queue, save its state back to its MQD, and release the doorbell.</td></tr>
+      <tr><td><code>UNMAP_QUEUES</code></td><td>Stop the queues named by the packet’s doorbell entries, save their state back to their MQDs in host memory or VRAM, and release the doorbells. The queue count selects entries starting with the first.</td></tr>
     </tbody>
   </table></div>
   <div class="prose">

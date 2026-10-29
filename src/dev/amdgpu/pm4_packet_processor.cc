@@ -809,6 +809,40 @@ PM4PacketProcessor::updateReadIndex(Addr offset, uint64_t rd_idx)
 }
 
 void
+PM4PacketProcessor::writebackMQD(PM4Queue *queue)
+{
+    QueueDesc *mqd = queue->getMQD();
+    mqd->base >>= 8;
+    Addr mqd_base = queue->mqdBase();
+    if (queue->isDeviceBacked()) {
+        Addr addr = queue->mqdPktAddr() + pm4MqdOffset;
+        auto cb = new EventFunctionWrapper(
+            [this, mqd, mqd_base, addr] {
+                doneMQDWrite(mqd_base, addr);
+                delete mqd;
+            },
+            name());
+
+        ChunkGenerator gen(addr, sizeof(QueueDesc), AMDGPU_MMHUB_PAGE_SIZE);
+        uint8_t *buf = (uint8_t *)mqd;
+        Addr chunk_addr = addr;
+        for (; !gen.done(); gen.next()) {
+            gpuDevice->getMemMgr()->writeRequest(chunk_addr, buf, gen.size(),
+                                                 0, gen.last() ? cb : nullptr);
+            buf += gen.size();
+            chunk_addr += gen.size();
+        }
+    } else {
+        Addr addr = getGARTAddr(queue->mqdBase() + pm4MqdOffset);
+        auto cb = new DmaVirtCallback<uint32_t>([=, this](const uint32_t &) {
+            doneMQDWrite(mqd_base, addr);
+            delete mqd;
+        });
+        dmaWriteVirt(addr, sizeof(QueueDesc), cb, mqd);
+    }
+}
+
+void
 PM4PacketProcessor::unmapAllQueues(bool unmap_static)
 {
     auto &hsa_pp = gpuDevice->CP()->hsaPacketProc();
@@ -832,37 +866,7 @@ PM4PacketProcessor::unmapAllQueues(bool unmap_static)
                     "index %ld\n",
                     id, mqd->mqdReadIndex);
 
-            mqd->base >>= 8;
-            Addr mqd_base = queues[id]->mqdBase();
-            if (queues[id]->isDeviceBacked()) {
-                Addr addr = queues[id]->mqdPktAddr() + pm4MqdOffset;
-                auto cb = new EventFunctionWrapper(
-                    [this, mqd, mqd_base, addr] {
-                        doneMQDWrite(mqd_base, addr);
-                        delete mqd;
-                    },
-                    name());
-
-                ChunkGenerator gen(addr, sizeof(QueueDesc),
-                                   AMDGPU_MMHUB_PAGE_SIZE);
-                uint8_t *buf = (uint8_t *)mqd;
-                Addr chunk_addr = addr;
-                for (; !gen.done(); gen.next()) {
-                    gpuDevice->getMemMgr()->writeRequest(
-                        chunk_addr, buf, gen.size(), 0,
-                        gen.last() ? cb : nullptr);
-                    buf += gen.size();
-                    chunk_addr += gen.size();
-                }
-            } else {
-                Addr addr = getGARTAddr(queues[id]->mqdBase() + pm4MqdOffset);
-                auto cb =
-                    new DmaVirtCallback<uint32_t>([=, this](const uint32_t &) {
-                        doneMQDWrite(mqd_base, addr);
-                        delete mqd;
-                    });
-                dmaWriteVirt(addr, sizeof(QueueDesc), cb, mqd);
-            }
+            writebackMQD(queues[id]);
             queues.erase(id);
             hsa_pp.unsetDeviceQueueDesc(id, 8);
         }
@@ -890,17 +894,8 @@ PM4PacketProcessor::unmapQueueByDoorbell(Addr doorbell, uint32_t engine_sel)
         return;
     }
 
-    QueueDesc *mqd = queue->getMQD();
     const int id = queue->id();
-    const Addr mqd_base = queue->mqdBase();
-    const Addr address = getGARTAddr(mqd_base + 96 * sizeof(uint32_t));
-    auto callback = new DmaVirtCallback<uint32_t>(
-        [this, mqd, mqd_base, address](const uint32_t &) {
-            doneMQDWrite(mqd_base, address);
-            delete mqd;
-        });
-    mqd->base >>= 8;
-    dmaWriteVirt(address, sizeof(QueueDesc), callback, mqd);
+    writebackMQD(queue);
 
     if (const auto vmid = gpuDevice->findVMID(doorbell)) {
         gpuDevice->removeQId(*vmid, id);
@@ -925,38 +920,15 @@ PM4PacketProcessor::unmapQueues(PM4Queue *q, PM4UnmapQueues *pkt)
 
     switch (pkt->queueSel) {
         case 0:
-            switch (pkt->numQueues) {
-                case 1:
-                    unmapQueueByDoorbell(pkt->doorbellOffset0 << 2,
-                                         pkt->engineSel);
-                    unmapQueueByDoorbell(pkt->doorbellOffset1 << 2,
-                                         pkt->engineSel);
-                    unmapQueueByDoorbell(pkt->doorbellOffset2 << 2,
-                                         pkt->engineSel);
-                    unmapQueueByDoorbell(pkt->doorbellOffset3 << 2,
-                                         pkt->engineSel);
-                    break;
-                case 2:
-                    unmapQueueByDoorbell(pkt->doorbellOffset1 << 2,
-                                         pkt->engineSel);
-                    unmapQueueByDoorbell(pkt->doorbellOffset2 << 2,
-                                         pkt->engineSel);
-                    unmapQueueByDoorbell(pkt->doorbellOffset3 << 2,
-                                         pkt->engineSel);
-                    break;
-                case 3:
-                    unmapQueueByDoorbell(pkt->doorbellOffset2 << 2,
-                                         pkt->engineSel);
-                    unmapQueueByDoorbell(pkt->doorbellOffset3 << 2,
-                                         pkt->engineSel);
-                    break;
-                case 4:
-                    unmapQueueByDoorbell(pkt->doorbellOffset3 << 2,
-                                         pkt->engineSel);
-                    break;
-                default:
-                    panic("Unrecognized number of queues %d\n",
-                          pkt->numQueues);
+            panic_if(pkt->numQueues < 1 || pkt->numQueues > 4,
+                     "Invalid UNMAP_QUEUES count %d", pkt->numQueues);
+            {
+                const Addr doorbells[] = {
+                    pkt->doorbellOffset0, pkt->doorbellOffset1,
+                    pkt->doorbellOffset2, pkt->doorbellOffset3};
+                for (unsigned i = 0; i < pkt->numQueues; ++i) {
+                    unmapQueueByDoorbell(doorbells[i] << 2, pkt->engineSel);
+                }
             }
             break;
         case 1:
