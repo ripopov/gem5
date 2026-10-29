@@ -930,6 +930,7 @@ Inst_DS__DS_WRITE_B16_D16_HI::execute(GPUDynInstPtr gpuDynInst)
     Wavefront *wf = gpuDynInst->wavefront();
 
     if (gpuDynInst->exec_mask.none()) {
+        wf->releaseLmResource(gpuDynInst);
         wf->decLGKMInstsIssued();
         wf->untrackLGKMInst(gpuDynInst);
         return;
@@ -945,7 +946,7 @@ Inst_DS__DS_WRITE_B16_D16_HI::execute(GPUDynInstPtr gpuDynInst)
     addr.read();
     data.read();
 
-    calcAddr(gpuDynInst, addr);
+    calcAddr<sizeof(VecElemU16)>(gpuDynInst, addr);
 
     for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {
         if (gpuDynInst->exec_mask[lane]) {
@@ -960,11 +961,7 @@ Inst_DS__DS_WRITE_B16_D16_HI::execute(GPUDynInstPtr gpuDynInst)
 void
 Inst_DS__DS_WRITE_B16_D16_HI::initiateAcc(GPUDynInstPtr gpuDynInst)
 {
-    Addr offset0 = instData.OFFSET0;
-    Addr offset1 = instData.OFFSET1;
-    Addr offset = (offset1 << 8) | offset0;
-
-    initMemWrite<VecElemU16>(gpuDynInst, offset);
+    initMemWrite<VecElemU16>(gpuDynInst);
 } // initiateAcc
 
 void

@@ -70,7 +70,8 @@ modules and Ruby configuration come from the branch-built runner image.
 ## Prepare the local images
 
 Build the matched SDK and runner images from the checked-out gem5 and rocjitsu
-sources. The runner also supplies gem5 for current `full-system` runs:
+sources. This branch is based on gem5 release `v26.0.0.0`; the runner also
+supplies gem5 for current `full-system` runs:
 
 ```sh
 ./scripts/build-hsakmt-images.sh
