@@ -69,7 +69,7 @@ GPUStaticInst::generateVirtToPhysMap(Wavefront *wf, ComputeUnit *cu,
     std::vector<int> phys_idxs;
 
     int num_dwords = op.sizeInDWords();
-    int virt_idx = op.registerIndex(wf->reservedScalarRegs);
+    int virt_idx = op.registerIndex(wf->reservedScalarRegs, wf->accumOffset);
 
     int phys_idx = -1;
     for (int i = 0; i < num_dwords; i++) {

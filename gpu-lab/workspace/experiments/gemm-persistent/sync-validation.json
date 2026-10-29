@@ -1,0 +1,99 @@
+{
+  "description": "LDS ring protocol validation (experiments/gemm-persistent/sync-test.cpp) on gem5-kmd with the model-fixes runner and on simdojo; BROKEN=1 removes consumer waits and must fail.",
+  "runner_image": "gem5-gpu-hsakmt-runner:model-fixes",
+  "sdk_image": "gem5-gpu-hsakmt-sdk:migration",
+  "arguments": "--stages 96 --ks 8 --blocks 8",
+  "runs": [
+    {
+      "variant": "p1g2s4",
+      "gem5_kmd_run": "sync-p1g2s4-gem5-kmd-1789500114",
+      "exit": "exit=0",
+      "config": "ring_test producers=1 groups=2 group_waves=2 stages=4 payload=2048 jitter=8 broken=0 spin_sleep=1 total_stages=96 ks=8 blocks=8",
+      "result": "ring_test: PASS total_stages=96 ring_reuses=24 blocks=8",
+      "shader_active_ticks": 174057963.0,
+      "kernels": 5.0,
+      "simdojo": {
+        "run": "sync-p1g2s4-simdojo-1789498151",
+        "result": "ring_test: PASS total_stages=96 ring_reuses=24 blocks=8"
+      }
+    },
+    {
+      "variant": "p2g1s2",
+      "gem5_kmd_run": "sync-p2g1s2-gem5-kmd-1789500112",
+      "exit": "exit=0",
+      "config": "ring_test producers=2 groups=1 group_waves=4 stages=2 payload=2048 jitter=8 broken=0 spin_sleep=1 total_stages=96 ks=8 blocks=8",
+      "result": "ring_test: PASS total_stages=96 ring_reuses=48 blocks=8",
+      "shader_active_ticks": 224019875.0,
+      "kernels": 5.0,
+      "simdojo": {
+        "run": "sync-p2g1s2-simdojo-1789498149",
+        "result": "ring_test: PASS total_stages=96 ring_reuses=48 blocks=8"
+      }
+    },
+    {
+      "variant": "p2g2s6",
+      "gem5_kmd_run": "sync-p2g2s6-gem5-kmd-1789500116",
+      "exit": "exit=0",
+      "config": "ring_test producers=2 groups=2 group_waves=4 stages=6 payload=1024 jitter=8 broken=0 spin_sleep=1 total_stages=96 ks=8 blocks=8",
+      "result": "ring_test: PASS total_stages=96 ring_reuses=16 blocks=8",
+      "shader_active_ticks": 127301913.0,
+      "kernels": 3.0,
+      "simdojo": {
+        "run": "sync-p2g2s6-simdojo-1789498152",
+        "result": "ring_test: PASS total_stages=96 ring_reuses=16 blocks=8"
+      }
+    },
+    {
+      "variant": "p1g2s3",
+      "gem5_kmd_run": "sync-p1g2s3-gem5-kmd-1789500110",
+      "exit": "exit=0",
+      "config": "ring_test producers=1 groups=2 group_waves=4 stages=3 payload=2048 jitter=8 broken=0 spin_sleep=1 total_stages=96 ks=8 blocks=8",
+      "result": "ring_test: PASS total_stages=96 ring_reuses=32 blocks=8",
+      "shader_active_ticks": 219013785.0,
+      "kernels": 3.0,
+      "simdojo": {
+        "run": "sync-p1g2s3-simdojo-1789498147",
+        "result": "ring_test: PASS total_stages=96 ring_reuses=32 blocks=8"
+      }
+    },
+    {
+      "variant": "nojitter",
+      "gem5_kmd_run": "sync-nojitter-gem5-kmd-1789500118",
+      "exit": "exit=0",
+      "config": "ring_test producers=1 groups=2 group_waves=4 stages=3 payload=2048 jitter=0 broken=0 spin_sleep=1 total_stages=96 ks=8 blocks=8",
+      "result": "ring_test: PASS total_stages=96 ring_reuses=32 blocks=8",
+      "shader_active_ticks": 142846169.0,
+      "kernels": 3.0,
+      "simdojo": {
+        "run": "sync-nojitter-simdojo-1789498154",
+        "result": "ring_test: PASS total_stages=96 ring_reuses=32 blocks=8"
+      }
+    },
+    {
+      "variant": "broken",
+      "gem5_kmd_run": "sync-broken-gem5-kmd-1789500122",
+      "exit": "exit=1",
+      "config": "ring_test producers=1 groups=2 group_waves=4 stages=3 payload=2048 jitter=8 broken=1 spin_sleep=1 total_stages=96 ks=8 blocks=8",
+      "result": "ring_test: FAIL mismatches=12217178",
+      "shader_active_ticks": 149994737.0,
+      "kernels": 3.0,
+      "simdojo": {
+        "run": "sync-broken-simdojo-1789498158",
+        "result": "ring_test: FAIL mismatches=5172101"
+      }
+    },
+    {
+      "variant": "nosleep",
+      "gem5_kmd_run": "sync-nosleep-gem5-kmd-1789500120",
+      "exit": "exit=0",
+      "config": "ring_test producers=1 groups=2 group_waves=4 stages=3 payload=2048 jitter=8 broken=0 spin_sleep=0 total_stages=96 ks=8 blocks=8",
+      "result": "ring_test: PASS total_stages=96 ring_reuses=32 blocks=8",
+      "shader_active_ticks": 233922581.0,
+      "kernels": 3.0,
+      "simdojo": {
+        "run": "sync-nosleep-simdojo-1789498155",
+        "result": "ring_test: PASS total_stages=96 ring_reuses=32 blocks=8"
+      }
+    }
+  ]
+}

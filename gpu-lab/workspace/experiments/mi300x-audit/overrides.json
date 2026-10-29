@@ -1,0 +1,66 @@
+[
+    {
+        "run": "audit-simple-gem5-kmd-20260915T152117Z-1155736-20970",
+        "modeled_cus": 8,
+        "host_seconds": 2.22,
+        "shader_active_ticks": 12372179.0,
+        "gpu_active_cycles": 18548.9940029985,
+        "gpu_active_ms": 0.012372179,
+        "kernels": 4.0,
+        "aql_submitted_and_retired": 8.0,
+        "output": [
+            "hip_vector_add: PASS checksum=6048"
+        ],
+        "completed_wavefronts_per_cu": [
+            25.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+        ],
+        "whole_run_dram": {
+            "system.gpu_mem_ctrls.dram.dramBytesRead": 9536.0,
+            "system.gpu_mem_ctrls.dram.dramBytesWritten": 3328.0,
+            "system.gpu_mem_ctrls.dram.peakBW": 16000.0
+        },
+        "policy": "simple",
+        "gpu_period_ticks": 667,
+        "vector_allocation_unit": 8,
+        "scalar_allocation_unit": 16
+    },
+    {
+        "run": "audit-dynamic-gem5-kmd-20260915T152115Z-1155201-12996",
+        "modeled_cus": 8,
+        "host_seconds": 2.19,
+        "shader_active_ticks": 12153403.0,
+        "gpu_active_cycles": 18220.9940029985,
+        "gpu_active_ms": 0.012153403,
+        "kernels": 4.0,
+        "aql_submitted_and_retired": 8.0,
+        "output": [
+            "hip_vector_add: PASS checksum=6048"
+        ],
+        "completed_wavefronts_per_cu": [
+            25.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+        ],
+        "whole_run_dram": {
+            "system.gpu_mem_ctrls.dram.dramBytesRead": 9408.0,
+            "system.gpu_mem_ctrls.dram.dramBytesWritten": 3456.0,
+            "system.gpu_mem_ctrls.dram.peakBW": 16000.0
+        },
+        "policy": "dynamic",
+        "gpu_period_ticks": 667,
+        "vector_allocation_unit": 8,
+        "scalar_allocation_unit": 16
+    }
+]

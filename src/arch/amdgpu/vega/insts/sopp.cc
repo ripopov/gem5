@@ -31,6 +31,7 @@
 
 #include "arch/amdgpu/vega/insts/instructions.hh"
 #include "debug/GPUSync.hh"
+#include "gpu-compute/hsa_queue_entry.hh"
 #include "gpu-compute/shader.hh"
 
 namespace gem5
@@ -166,7 +167,9 @@ Inst_SOPP__S_ENDPGM::execute(GPUDynInstPtr gpuDynInst)
         bool kernelEnd =
             wf->computeUnit->shader->dispatcher().isReachingKernelEnd(wf);
 
-        bool relNeeded = wf->computeUnit->shader->impl_kern_end_rel;
+        auto *task = wf->computeUnit->shader->dispatcher().hsaTask(wf->kernId);
+        bool relNeeded = task->releaseFenceScope() != 0 ||
+                         wf->computeUnit->shader->impl_kern_end_rel;
 
         // if it is not a kernel end, then retire the workgroup directly
         if (!kernelEnd || !relNeeded) {

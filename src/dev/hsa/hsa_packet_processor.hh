@@ -36,6 +36,8 @@
 #include <cstdint>
 #include <vector>
 
+#include "base/statistics.hh"
+#include "base/stats/group.hh"
 #include "base/types.hh"
 #include "debug/HSAPacketProcessor.hh"
 #include "dev/dma_virt_device.hh"
@@ -87,9 +89,10 @@ class HSAQueueDescriptor
     bool stalledOnDmaBufAvailability;
     bool dmaInProgress;
     GfxVersion gfxVersion;
+    uint16_t vmid;
 
     HSAQueueDescriptor(uint64_t base_ptr, uint64_t db_ptr, uint64_t hri_ptr,
-                       uint32_t size, GfxVersion gfxVersion)
+                       uint32_t size, GfxVersion gfxVersion, uint16_t vmid)
         : basePointer(base_ptr),
           doorbellPointer(db_ptr),
           writeIndex(0),
@@ -98,7 +101,8 @@ class HSAQueueDescriptor
           hostReadIndexPtr(hri_ptr),
           stalledOnDmaBufAvailability(false),
           dmaInProgress(false),
-          gfxVersion(gfxVersion)
+          gfxVersion(gfxVersion),
+          vmid(vmid)
     {}
     uint64_t
     spaceRemaining()
@@ -443,7 +447,7 @@ class HSAPacketProcessor : public DmaVirtDevice
                             uint64_t basePointer, uint64_t queue_id,
                             uint32_t size, int doorbellSize,
                             GfxVersion gfxVersion, Addr offset = 0,
-                            uint64_t rd_idx = 0);
+                            uint64_t rd_idx = 0, uint16_t vmid = 1);
     void unsetDeviceQueueDesc(uint64_t queue_id, int doorbellSize);
     void setDevice(GPUCommandProcessor *dev);
     void setGPUDevice(AMDGPUDevice *gpu_device);
@@ -488,8 +492,8 @@ class HSAPacketProcessor : public DmaVirtDevice
             : pkts_ttl(_pkts_2_go),
               pkts_2_go(_pkts_2_go),
               start_ix(_start_ix),
-              rl_idx(_rl_idx){};
-        ~dma_series_ctx(){};
+              rl_idx(_rl_idx) {};
+        ~dma_series_ctx() {};
     };
 
     void updateReadDispIdDma();
@@ -497,6 +501,15 @@ class HSAPacketProcessor : public DmaVirtDevice
                         uint32_t ix_start, unsigned num_pkts,
                         dma_series_ctx *series_ctx, void *dest_4debug);
     void handleReadDMA();
+
+  protected:
+    struct HSAPacketProcessorStats : public statistics::Group
+    {
+        HSAPacketProcessorStats(statistics::Group *parent);
+
+        statistics::Scalar aqlPacketsSubmitted;
+        statistics::Scalar aqlPacketsRetired;
+    } stats;
 };
 
 } // namespace gem5

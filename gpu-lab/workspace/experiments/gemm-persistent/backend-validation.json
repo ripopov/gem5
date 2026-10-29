@@ -1,0 +1,40 @@
+{
+  "simdojo": {
+    "result": true,
+    "runs": {
+      "hip-vector-add": "hip-vector-add-simdojo-20260915T212534Z-2284174-3193",
+      "hip-matmul": "hip-matmul-simdojo-20260915T212535Z-2284489-13072",
+      "hip-matmul-lds": "hip-matmul-lds-simdojo-20260915T212538Z-2284889-8831",
+      "hip-matmul-regtiles": "hip-matmul-regtiles-simdojo-20260915T212539Z-2285164-21562",
+      "hip-kernel-chain": "hip-kernel-chain-simdojo-20260915T212539Z-2285427-20959",
+      "rainbow-image": "rainbow-image-simdojo-20260915T212540Z-2285697-11663"
+    }
+  },
+  "gem5-kmd": {
+    "result": true,
+    "runs": {
+      "hip-vector-add": "hip-vector-add-gem5-kmd-20260915T212548Z-2289021-32717",
+      "hip-matmul": "hip-matmul-gem5-kmd-20260915T212603Z-2295692-18522",
+      "hip-matmul-lds": "hip-matmul-lds-gem5-kmd-20260915T212739Z-2304689-14671",
+      "hip-matmul-regtiles": "hip-matmul-regtiles-gem5-kmd-20260915T212808Z-2306867-25798",
+      "hip-kernel-chain": "hip-kernel-chain-gem5-kmd-20260915T212834Z-2308655-30476",
+      "rainbow-image": "rainbow-image-gem5-kmd-20260915T212845Z-2309853-12239"
+    }
+  },
+  "full-system": {
+    "result": true,
+    "runs": {
+      "hip-vector-add": "hip-vector-add-full-system-20260915T213542Z-2336735-29805",
+      "hip-matmul": "hip-matmul-full-system-20260915T213753Z-2340089-10944",
+      "hip-matmul-lds": "hip-matmul-lds-full-system-20260915T214056Z-2343641-7308",
+      "hip-matmul-regtiles": "hip-matmul-regtiles-full-system-20260915T214315Z-2346591-17289",
+      "hip-kernel-chain": "hip-kernel-chain-full-system-20260915T214535Z-2355177-2986",
+      "rainbow-image": "rainbow-image-full-system-20260915T214754Z-2357889-31724"
+    }
+  },
+  "images": {
+    "sdk": "gem5-gpu-hsakmt-sdk:migration",
+    "runner": "gem5-gpu-hsakmt-runner:model-fixes",
+    "full_system": "gem5-gpufs-runtime:model-fixes"
+  }
+}

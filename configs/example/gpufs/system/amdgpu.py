@@ -36,7 +36,10 @@ def createGPU(system, args):
         n_wf=args.wfs_per_simd,
         cu_per_sqc=args.cu_per_sqc,
         timing=True,
-        clk_domain=system.clk_domain,
+        clk_domain=SrcClockDomain(
+            clock=args.gpu_clock,
+            voltage_domain=VoltageDomain(voltage=args.gpu_voltage),
+        ),
         progress_interval=args.gpu_progress_interval,
     )
 
@@ -114,7 +117,7 @@ def createGPU(system, args):
                 srf_pool_mgrs.append(
                     SimplePoolManager(
                         pool_size=args.sreg_file_size,
-                        min_alloc=args.vreg_min_alloc,
+                        min_alloc=args.sreg_min_alloc,
                     )
                 )
             elif args.reg_alloc_policy == "dynamic":
@@ -127,7 +130,7 @@ def createGPU(system, args):
                 srf_pool_mgrs.append(
                     DynPoolManager(
                         pool_size=args.sreg_file_size,
-                        min_alloc=args.vreg_min_alloc,
+                        min_alloc=args.sreg_min_alloc,
                     )
                 )
 

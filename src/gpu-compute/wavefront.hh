@@ -303,6 +303,7 @@ class Wavefront : public SimObject
 
     void untrackVMemInst(GPUDynInstPtr gpu_dyn_inst);
     void untrackLGKMInst(GPUDynInstPtr gpu_dyn_inst);
+    void releaseLmResource(GPUDynInstPtr ii);
     void untrackExpInst(GPUDynInstPtr gpu_dyn_inst);
     void untrackInst(InstSeqNum seqNum);
 

@@ -183,6 +183,14 @@ Walker::WalkerState::startWalk()
                     read->getAddr());
             sendPackets();
         } else {
+            // The GPU model has no page fault handling; an invalid entry
+            // would otherwise reach the TLB and trip an assertion there.
+            fatal_if(timingFault != NoFault,
+                     "GPU page walk for vaddr %#lx reached an invalid page "
+                     "table entry (%#lx): no translation exists for this "
+                     "address\n",
+                     tlbPkt->req->getVaddr(), (uint64_t)entry.pte);
+
             // Set physical page address in entry
             entry.paddr = entry.pte.ppn << PageShift;
             entry.paddr += entry.vaddr & mask(entry.logBytes);

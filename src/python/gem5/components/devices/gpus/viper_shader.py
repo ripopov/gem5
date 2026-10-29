@@ -300,6 +300,7 @@ class ViperShader(Shader):
             PM4PacketProcessor(
                 ip_id=i,
                 mmio_range=AddrRange(start=pm4_starts[i], end=pm4_ends[i]),
+                walker=VegaPagetableWalker(),
             )
             for i in range(num_pm4s)
         ]

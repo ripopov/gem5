@@ -44,6 +44,7 @@
 #include "enums/StorageClassType.hh"
 #include "gpu-compute/compute_unit.hh"
 #include "gpu-compute/gpu_exec_context.hh"
+#include "gpu-compute/lds_access.hh"
 #include "gpu-compute/operand_info.hh"
 
 namespace gem5
@@ -216,6 +217,7 @@ class GPUDynInst : public GPUExecContext
     Addr scalarAddr;
     // virtual addressies for vector memory operations
     std::vector<Addr> addr;
+    LdsAccess ldsAccess;
     Addr pAddr;
 
     // vector data to get written

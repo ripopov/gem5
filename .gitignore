@@ -38,3 +38,10 @@ configs/dram/lowp_sweep.cfg
 .vscode
 typings
 .DS_Store
+
+gpu-lab/workspace/work
+gpu-lab/workspace/images
+gpu-lab/workspace/docker
+gpu-lab/workspace/disk
+gpu-lab/workspace/verification
+gpu-lab/workspace/kernel

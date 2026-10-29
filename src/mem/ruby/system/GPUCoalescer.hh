@@ -343,6 +343,8 @@ class GPUCoalescer : public RubyPort
 
     RubySystem *getRubySystem() { return m_ruby_system; }
 
+    void writeBackingStore(PacketPtr pkt, const DataBlock &data);
+
     GMTokenPort& getGMTokenPort() { return gmTokenPort; }
 
     statistics::Histogram& getOutstandReqHist() { return m_outstandReqHist; }

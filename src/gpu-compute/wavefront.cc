@@ -922,6 +922,26 @@ Wavefront::reserveLmResource(GPUDynInstPtr ii)
     execUnitId = localMem;
 }
 
+/**
+ * Undo reserveLmResource() for an instruction that never enters the local
+ * memory pipeline, such as a DS instruction issued with an empty EXEC mask.
+ * The pipeline's issueRequest() normally balances these counters.
+ */
+void
+Wavefront::releaseLmResource(GPUDynInstPtr ii)
+{
+    if (ii->isLoad()) {
+        rdLmReqsInPipe--;
+    } else if (ii->isStore()) {
+        wrLmReqsInPipe--;
+    } else if (ii->isAtomic() || ii->isMemSync()) {
+        wrLmReqsInPipe--;
+        rdLmReqsInPipe--;
+    } else {
+        panic("Invalid memory operation!\n");
+    }
+}
+
 std::vector<int>
 Wavefront::reserveResources()
 {

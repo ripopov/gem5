@@ -300,11 +300,6 @@ class LdsState : public ClockedObject
 
     bool processPacket(PacketPtr packet);
 
-    unsigned countBankConflicts(PacketPtr packet, unsigned *bankAccesses);
-
-    unsigned countBankConflicts(GPUDynInstPtr gpuDynInst,
-                                unsigned *numBankAccesses);
-
   public:
     using Params = LdsStateParams;
 

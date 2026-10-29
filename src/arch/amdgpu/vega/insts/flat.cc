@@ -69,6 +69,7 @@ Inst_FLAT__FLAT_LOAD_UBYTE::execute(GPUDynInstPtr gpuDynInst)
     gpuDynInst->latency.init(gpuDynInst->computeUnit());
     gpuDynInst->latency.set(gpuDynInst->computeUnit()->clockPeriod());
 
+    gpuDynInst->ldsAccess.bytes = sizeof(VecElemU8);
     calcAddr(gpuDynInst, extData.ADDR, extData.SADDR, instData.OFFSET);
 
     issueRequestHelper(gpuDynInst);
@@ -249,6 +250,7 @@ Inst_FLAT__FLAT_LOAD_SBYTE::execute(GPUDynInstPtr gpuDynInst)
     gpuDynInst->latency.init(gpuDynInst->computeUnit());
     gpuDynInst->latency.set(gpuDynInst->computeUnit()->clockPeriod());
 
+    gpuDynInst->ldsAccess.bytes = sizeof(VecElemI8);
     calcAddr(gpuDynInst, extData.ADDR, extData.SADDR, instData.OFFSET);
 
     issueRequestHelper(gpuDynInst);
@@ -430,6 +432,7 @@ Inst_FLAT__FLAT_LOAD_USHORT::execute(GPUDynInstPtr gpuDynInst)
     gpuDynInst->latency.init(gpuDynInst->computeUnit());
     gpuDynInst->latency.set(gpuDynInst->computeUnit()->clockPeriod());
 
+    gpuDynInst->ldsAccess.bytes = sizeof(VecElemU16);
     calcAddr(gpuDynInst, extData.ADDR, extData.SADDR, instData.OFFSET);
 
     issueRequestHelper(gpuDynInst);
@@ -638,6 +641,7 @@ Inst_FLAT__FLAT_LOAD_DWORD::execute(GPUDynInstPtr gpuDynInst)
     gpuDynInst->latency.init(gpuDynInst->computeUnit());
     gpuDynInst->latency.set(gpuDynInst->computeUnit()->clockPeriod());
 
+    gpuDynInst->ldsAccess.bytes = sizeof(VecElemU32);
     calcAddr(gpuDynInst, extData.ADDR, extData.SADDR, instData.OFFSET);
 
     issueRequestHelper(gpuDynInst);
@@ -695,6 +699,7 @@ Inst_FLAT__FLAT_LOAD_DWORDX2::execute(GPUDynInstPtr gpuDynInst)
     gpuDynInst->latency.init(gpuDynInst->computeUnit());
     gpuDynInst->latency.set(gpuDynInst->computeUnit()->clockPeriod());
 
+    gpuDynInst->ldsAccess.bytes = 8;
     calcAddr(gpuDynInst, extData.ADDR, extData.SADDR, instData.OFFSET);
 
     issueRequestHelper(gpuDynInst);
@@ -764,6 +769,7 @@ Inst_FLAT__FLAT_LOAD_DWORDX3::execute(GPUDynInstPtr gpuDynInst)
     gpuDynInst->latency.init(gpuDynInst->computeUnit());
     gpuDynInst->latency.set(gpuDynInst->computeUnit()->clockPeriod());
 
+    gpuDynInst->ldsAccess.bytes = 12;
     calcAddr(gpuDynInst, extData.ADDR, extData.SADDR, instData.OFFSET);
 
     issueRequestHelper(gpuDynInst);
@@ -839,6 +845,7 @@ Inst_FLAT__FLAT_LOAD_DWORDX4::execute(GPUDynInstPtr gpuDynInst)
     gpuDynInst->latency.init(gpuDynInst->computeUnit());
     gpuDynInst->latency.set(gpuDynInst->computeUnit()->clockPeriod());
 
+    gpuDynInst->ldsAccess.bytes = 16;
     calcAddr(gpuDynInst, extData.ADDR, extData.SADDR, instData.OFFSET);
 
     issueRequestHelper(gpuDynInst);
@@ -926,6 +933,7 @@ Inst_FLAT__FLAT_STORE_BYTE::execute(GPUDynInstPtr gpuDynInst)
 
     data.read();
 
+    gpuDynInst->ldsAccess.bytes = sizeof(VecElemU8);
     calcAddr(gpuDynInst, extData.ADDR, extData.SADDR, instData.OFFSET);
 
     for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {
@@ -1044,6 +1052,7 @@ Inst_FLAT__FLAT_STORE_SHORT::execute(GPUDynInstPtr gpuDynInst)
 
     data.read();
 
+    gpuDynInst->ldsAccess.bytes = sizeof(VecElemU16);
     calcAddr(gpuDynInst, extData.ADDR, extData.SADDR, instData.OFFSET);
 
     for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {
@@ -1105,6 +1114,7 @@ Inst_FLAT__FLAT_STORE_SHORT_D16_HI::execute(GPUDynInstPtr gpuDynInst)
 
     data.read();
 
+    gpuDynInst->ldsAccess.bytes = sizeof(VecElemU16);
     calcAddr(gpuDynInst, extData.ADDR, extData.SADDR, instData.OFFSET);
 
     for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {
@@ -1165,6 +1175,7 @@ Inst_FLAT__FLAT_STORE_DWORD::execute(GPUDynInstPtr gpuDynInst)
 
     data.read();
 
+    gpuDynInst->ldsAccess.bytes = sizeof(VecElemU32);
     calcAddr(gpuDynInst, extData.ADDR, extData.SADDR, instData.OFFSET);
 
     for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {
@@ -1225,6 +1236,7 @@ Inst_FLAT__FLAT_STORE_DWORDX2::execute(GPUDynInstPtr gpuDynInst)
 
     data.read();
 
+    gpuDynInst->ldsAccess.bytes = 8;
     calcAddr(gpuDynInst, extData.ADDR, extData.SADDR, instData.OFFSET);
 
     for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {
@@ -1289,6 +1301,7 @@ Inst_FLAT__FLAT_STORE_DWORDX3::execute(GPUDynInstPtr gpuDynInst)
     data1.read();
     data2.read();
 
+    gpuDynInst->ldsAccess.bytes = 12;
     calcAddr(gpuDynInst, extData.ADDR, extData.SADDR, instData.OFFSET);
 
     for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {
@@ -1359,6 +1372,7 @@ Inst_FLAT__FLAT_STORE_DWORDX4::execute(GPUDynInstPtr gpuDynInst)
     data2.read();
     data3.read();
 
+    gpuDynInst->ldsAccess.bytes = 16;
     calcAddr(gpuDynInst, extData.ADDR, extData.SADDR, instData.OFFSET);
 
     for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {
@@ -1416,6 +1430,7 @@ Inst_FLAT__FLAT_LOAD_LDS_UBYTE::execute(GPUDynInstPtr gpuDynInst)
     gpuDynInst->latency.init(gpuDynInst->computeUnit());
     gpuDynInst->latency.set(gpuDynInst->computeUnit()->clockPeriod());
 
+    gpuDynInst->ldsAccess.bytes = sizeof(VecElemU8);
     calcAddr(gpuDynInst, extData.ADDR, extData.SADDR, instData.OFFSET);
 
     issueRequestHelper(gpuDynInst);
@@ -1463,6 +1478,7 @@ Inst_FLAT__FLAT_LOAD_LDS_SBYTE::execute(GPUDynInstPtr gpuDynInst)
     gpuDynInst->latency.init(gpuDynInst->computeUnit());
     gpuDynInst->latency.set(gpuDynInst->computeUnit()->clockPeriod());
 
+    gpuDynInst->ldsAccess.bytes = sizeof(VecElemI8);
     calcAddr(gpuDynInst, extData.ADDR, extData.SADDR, instData.OFFSET);
 
     issueRequestHelper(gpuDynInst);
@@ -1510,6 +1526,7 @@ Inst_FLAT__FLAT_LOAD_LDS_USHORT::execute(GPUDynInstPtr gpuDynInst)
     gpuDynInst->latency.init(gpuDynInst->computeUnit());
     gpuDynInst->latency.set(gpuDynInst->computeUnit()->clockPeriod());
 
+    gpuDynInst->ldsAccess.bytes = sizeof(VecElemU16);
     calcAddr(gpuDynInst, extData.ADDR, extData.SADDR, instData.OFFSET);
 
     issueRequestHelper(gpuDynInst);
@@ -1558,6 +1575,7 @@ Inst_FLAT__FLAT_LOAD_LDS_SSHORT::execute(GPUDynInstPtr gpuDynInst)
     gpuDynInst->latency.init(gpuDynInst->computeUnit());
     gpuDynInst->latency.set(gpuDynInst->computeUnit()->clockPeriod());
 
+    gpuDynInst->ldsAccess.bytes = sizeof(VecElemI16);
     calcAddr(gpuDynInst, extData.ADDR, extData.SADDR, instData.OFFSET);
 
     issueRequestHelper(gpuDynInst);
@@ -1605,6 +1623,7 @@ Inst_FLAT__FLAT_LOAD_LDS_DWORD::execute(GPUDynInstPtr gpuDynInst)
     gpuDynInst->latency.init(gpuDynInst->computeUnit());
     gpuDynInst->latency.set(gpuDynInst->computeUnit()->clockPeriod());
 
+    gpuDynInst->ldsAccess.bytes = sizeof(VecElemU32);
     calcAddr(gpuDynInst, extData.ADDR, extData.SADDR, instData.OFFSET);
 
     issueRequestHelper(gpuDynInst);
@@ -2882,6 +2901,7 @@ Inst_FLAT__FLAT_LOAD_LDS_DWORDX3::execute(GPUDynInstPtr gpuDynInst)
     gpuDynInst->latency.init(gpuDynInst->computeUnit());
     gpuDynInst->latency.set(gpuDynInst->computeUnit()->clockPeriod());
 
+    gpuDynInst->ldsAccess.bytes = 12;
     calcAddr(gpuDynInst, extData.ADDR, extData.SADDR, instData.OFFSET);
 
     issueRequestHelper(gpuDynInst);
@@ -2928,6 +2948,7 @@ Inst_FLAT__FLAT_LOAD_LDS_DWORDX4::execute(GPUDynInstPtr gpuDynInst)
     gpuDynInst->latency.init(gpuDynInst->computeUnit());
     gpuDynInst->latency.set(gpuDynInst->computeUnit()->clockPeriod());
 
+    gpuDynInst->ldsAccess.bytes = 16;
     calcAddr(gpuDynInst, extData.ADDR, extData.SADDR, instData.OFFSET);
 
     issueRequestHelper(gpuDynInst);

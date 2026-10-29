@@ -54,6 +54,9 @@ class X86BareMetalWorkload(Workload):
     type = "X86BareMetalWorkload"
     cxx_header = "arch/x86/bare_metal/workload.hh"
     cxx_class = "gem5::X86ISA::BareMetalWorkload"
+    activate_bootstrap = Param.Bool(
+        True, "Activate the bootstrap processor during workload init"
+    )
 
 
 class X86FsWorkload(KernelWorkload):

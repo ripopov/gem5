@@ -1,0 +1,1817 @@
+<!doctype html>
+<html lang="en" class="no-js">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GPU, Driver and KFD RPC</title>
+<meta name="description" content="How a GPU works, how a driver and a GPU talk, and how rocjitsu's KFD RPC connects ROCr to gem5's HSAKMT service.">
+<script>document.documentElement.classList.replace('no-js','js');</script>
+<style>
+:root {
+  --bg:#f7f5f0; --surface:#ffffff; --surface-2:#efece5; --ink:#16232b; --muted:#56646c;
+  --line:#d6dad2; --accent:#0b6e63; --accent-soft:#dff0ec; --focus:#c05a0c; --warn:#9b4a08;
+  --c-app:#2459c0; --c-app-bg:#e6edfb; --c-rj:#7044bd; --c-rj-bg:#efe8fa;
+  --c-svc:#ad5409; --c-svc-bg:#fbeee0; --c-hw:#13784a; --c-hw-bg:#e2f3e9;
+  --code-bg:#efede7; --hex-hi:#ffe08a; --shadow:0 1px 2px rgba(20,30,40,.06),0 8px 24px rgba(20,30,40,.05);
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:#10161a; --surface:#172026; --surface-2:#1e2930; --ink:#e4eaed; --muted:#9aa9b1;
+    --line:#2d3a43; --accent:#56c6b3; --accent-soft:#173833; --focus:#ff9d4d; --warn:#ffb26b;
+    --c-app:#86abff; --c-app-bg:#1a2742; --c-rj:#bda2ff; --c-rj-bg:#271f3d;
+    --c-svc:#ffb672; --c-svc-bg:#3a2715; --c-hw:#72d8a3; --c-hw-bg:#15322a;
+    --code-bg:#1b252c; --hex-hi:#6a5314; --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.25);
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg:#10161a; --surface:#172026; --surface-2:#1e2930; --ink:#e4eaed; --muted:#9aa9b1;
+  --line:#2d3a43; --accent:#56c6b3; --accent-soft:#173833; --focus:#ff9d4d; --warn:#ffb26b;
+  --c-app:#86abff; --c-app-bg:#1a2742; --c-rj:#bda2ff; --c-rj-bg:#271f3d;
+  --c-svc:#ffb672; --c-svc-bg:#3a2715; --c-hw:#72d8a3; --c-hw-bg:#15322a;
+  --code-bg:#1b252c; --hex-hi:#6a5314; --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.25);
+  color-scheme:dark;
+}
+* { box-sizing:border-box; }
+html { scroll-behavior:smooth; scroll-padding-top:72px; }
+body { margin:0; background:var(--bg); color:var(--ink); font:16.5px/1.65 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; overflow-wrap:break-word; }
+a { color:var(--accent); text-underline-offset:3px; }
+button, input, select { font:inherit; color:inherit; }
+button { cursor:pointer; }
+:focus-visible { outline:3px solid var(--focus); outline-offset:3px; border-radius:4px; }
+h1, h2, h3, h4 { line-height:1.18; margin:0 0 .5em; }
+h2 { font-size:clamp(26px,3.6vw,38px); letter-spacing:-.02em; }
+h3 { font-size:clamp(19px,2.2vw,23px); margin-top:1.8em; letter-spacing:-.01em; }
+h4 { font-size:17px; margin-top:1.2em; }
+p, ul, ol { margin:0 0 1em; }
+code, kbd, .mono { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:.88em; }
+code { background:var(--code-bg); padding:.08em .32em; border-radius:4px; overflow-wrap:anywhere; }
+pre { background:var(--code-bg); border:1px solid var(--line); border-radius:8px; padding:14px 16px; overflow-x:auto; font-size:13.5px; line-height:1.5; margin:0 0 1.2em; }
+pre code { background:none; padding:0; font-size:inherit; overflow-wrap:normal; }
+.wrap { max-width:1120px; margin:0 auto; padding:0 clamp(16px,4vw,40px); }
+.prose { max-width:760px; }
+.skip { position:absolute; left:16px; top:-60px; background:var(--surface); padding:10px 14px; z-index:20; border-radius:6px; }
+.skip:focus { top:10px; }
+
+/* header */
+.top { position:sticky; top:0; z-index:10; background:color-mix(in srgb,var(--bg) 88%,transparent); backdrop-filter:blur(8px); border-bottom:1px solid var(--line); }
+.top .wrap { display:flex; align-items:center; gap:18px; min-height:56px; }
+.brand { font-weight:750; text-decoration:none; color:var(--ink); white-space:nowrap; letter-spacing:-.01em; }
+.top nav { display:flex; gap:4px; overflow-x:auto; scrollbar-width:thin; flex:1; }
+.top nav a { color:var(--muted); text-decoration:none; font-size:13.5px; padding:6px 9px; border-radius:6px; white-space:nowrap; }
+.top nav a:hover, .top nav a.here { color:var(--ink); background:var(--surface-2); }
+.theme-btn { border:1px solid var(--line); background:var(--surface); border-radius:6px; padding:5px 9px; font-size:13px; white-space:nowrap; }
+.no-js .theme-btn { display:none; }
+
+/* hero */
+.hero { padding:clamp(40px,7vw,84px) 0 clamp(28px,4vw,48px); border-bottom:1px solid var(--line); }
+.eyebrow { text-transform:uppercase; letter-spacing:.12em; font-size:12px; font-weight:700; color:var(--accent); margin-bottom:12px; }
+.hero h1 { font-size:clamp(32px,5.4vw,58px); letter-spacing:-.03em; max-width:900px; }
+.hero .lede { font-size:clamp(17px,1.9vw,20px); color:var(--muted); max-width:760px; }
+.stack-strip { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:8px; margin:28px 0 8px; }
+.stack-strip div { border-radius:8px; padding:10px 12px; font-size:13.5px; line-height:1.35; border:1px solid var(--line); background:var(--surface); }
+.stack-strip b { display:block; font-size:14.5px; }
+.legend { display:flex; flex-wrap:wrap; gap:14px; font-size:13px; color:var(--muted); margin-top:12px; }
+.legend span::before { content:""; display:inline-block; width:11px; height:11px; border-radius:3px; margin-right:6px; vertical-align:-1px; background:var(--sw); }
+
+/* parts */
+section.part { padding:clamp(44px,6vw,76px) 0; border-bottom:1px solid var(--line); }
+.part-no { font:700 12.5px/1 ui-monospace,monospace; color:var(--accent); letter-spacing:.08em; margin-bottom:10px; }
+.map-note { color:var(--muted); font-size:14.5px; }
+.cols { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin:1em 0 1.4em; }
+.card { background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:16px 18px; box-shadow:var(--shadow); }
+.card h4 { margin-top:0; }
+.card p:last-child, .card ul:last-child { margin-bottom:0; }
+.callout { border-left:4px solid var(--accent); background:var(--accent-soft); padding:12px 16px; border-radius:0 8px 8px 0; margin:0 0 1.2em; }
+.callout.warn { border-color:var(--warn); background:color-mix(in srgb,var(--warn) 12%,transparent); }
+.tag { display:inline-block; font-size:11.5px; font-weight:700; letter-spacing:.04em; padding:1px 7px; border-radius:20px; vertical-align:1px; white-space:nowrap; }
+.tag.up { background:var(--c-hw-bg); color:var(--c-hw); }
+.tag.ours { background:var(--c-svc-bg); color:var(--c-svc); }
+.tag.illus { background:var(--surface-2); color:var(--muted); }
+.k-app { --k:var(--c-app); --kb:var(--c-app-bg); }
+.k-rj { --k:var(--c-rj); --kb:var(--c-rj-bg); }
+.k-svc { --k:var(--c-svc); --kb:var(--c-svc-bg); }
+.k-hw { --k:var(--c-hw); --kb:var(--c-hw-bg); }
+
+/* tables */
+.tbl { overflow-x:auto; margin:0 0 1.4em; border:1px solid var(--line); border-radius:10px; background:var(--surface); }
+table { border-collapse:collapse; width:100%; font-size:14.5px; }
+th, td { text-align:left; vertical-align:top; padding:8px 12px; border-bottom:1px solid var(--line); }
+th { background:var(--surface-2); font-size:13px; letter-spacing:.02em; }
+tr:last-child td { border-bottom:0; }
+td code { white-space:nowrap; }
+
+/* widgets */
+.widget { background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:clamp(14px,2.4vw,24px); margin:1.2em 0 1.8em; box-shadow:var(--shadow); }
+.widget > h4:first-child { margin-top:0; }
+.widget .hint { font-size:13.5px; color:var(--muted); margin-bottom:12px; }
+.controls { display:flex; flex-wrap:wrap; gap:8px 14px; align-items:center; margin-bottom:14px; }
+.controls label { font-size:14px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.controls input[type=range] { width:min(220px,60vw); accent-color:var(--accent); }
+.btn { border:1px solid var(--line); background:var(--surface-2); border-radius:7px; padding:6px 12px; font-size:14px; }
+.btn:hover { border-color:var(--accent); }
+.btn.primary { background:var(--accent); color:var(--bg); border-color:var(--accent); font-weight:650; }
+.btn[aria-pressed="true"], .seg button[aria-pressed="true"] { background:var(--accent); color:var(--bg); border-color:var(--accent); }
+.btn:disabled { opacity:.45; cursor:default; }
+.seg { display:inline-flex; flex-wrap:wrap; border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+.seg button { border:0; border-right:1px solid var(--line); background:var(--surface-2); padding:6px 12px; font-size:14px; }
+.seg button:last-child { border-right:0; }
+.no-js .js-only { display:none !important; }
+.js .nojs-only { display:none !important; }
+.out { font-size:14.5px; }
+.out b { font-variant-numeric:tabular-nums; }
+.readout { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin:12px 0; }
+.readout div { background:var(--surface-2); border-radius:8px; padding:8px 12px; font-size:13px; color:var(--muted); }
+.readout b { display:block; font-size:19px; color:var(--ink); font-variant-numeric:tabular-nums; }
+.readout div.limit { outline:2px solid var(--warn); }
+
+/* CU grid */
+.cu-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(118px,1fr)); gap:8px; }
+.cu { border:1px solid var(--line); border-radius:8px; padding:6px; background:var(--surface-2); }
+.cu-title { font:600 11px/1.2 ui-monospace,monospace; color:var(--muted); margin-bottom:4px; }
+.simd { display:grid; grid-template-columns:repeat(8,1fr); gap:2px; margin-bottom:3px; }
+.slot { aspect-ratio:1; border-radius:2px; background:color-mix(in srgb,var(--line) 70%,transparent); }
+.slot.on { background:var(--c-hw); }
+.slot.on.b { background:var(--c-app); }
+
+/* EXEC mask */
+.lanes { display:grid; grid-template-columns:repeat(32,1fr); gap:2px; margin:6px 0 10px; }
+.lane { aspect-ratio:1; border-radius:2px; background:var(--line); }
+.lane.on { background:var(--c-hw); }
+.lane.alt { background:var(--c-app); }
+.trace { font:13.5px/1.7 ui-monospace,monospace; background:var(--code-bg); border-radius:8px; padding:10px 14px; }
+.trace .cur { background:var(--hex-hi); border-radius:3px; }
+
+/* timeline */
+.tl { display:grid; gap:4px; font:12px ui-monospace,monospace; }
+.tl-row { display:grid; grid-template-columns:62px 1fr; gap:8px; align-items:center; }
+.tl-cells { display:grid; grid-template-columns:repeat(48,1fr); gap:1px; }
+.tl-cells i { height:16px; background:var(--surface-2); }
+.tl-cells i.x { background:var(--c-hw); }
+.tl-cells i.w { background:repeating-linear-gradient(45deg,var(--line) 0 3px,transparent 3px 6px); }
+.tl-cells i.idle { background:color-mix(in srgb,var(--warn) 35%,transparent); }
+
+/* diagram boxes */
+.diagram { display:grid; gap:10px; }
+.lane-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:8px; }
+.node { border:1.5px solid var(--k,var(--line)); background:var(--kb,var(--surface)); border-radius:9px; padding:9px 11px; text-align:left; font-size:14px; line-height:1.3; width:100%; }
+.node b { display:block; color:var(--k,var(--ink)); }
+.node small { color:var(--muted); font-size:12.5px; }
+button.node:hover { filter:brightness(.97); }
+button.node[aria-pressed="true"] { box-shadow:0 0 0 3px var(--focus) inset; }
+.zone { border:1.5px dashed var(--line); border-radius:12px; padding:10px; }
+.zone > .ztitle { font:700 11.5px/1 ui-monospace,monospace; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); margin:2px 2px 9px; }
+.detail { margin-top:12px; background:var(--surface-2); border-radius:8px; padding:12px 16px; font-size:14.5px; min-height:3em; }
+.detail h5 { margin:0 0 4px; font-size:15px; }
+.detail p:last-child { margin-bottom:0; }
+.boundary { text-align:center; font:600 12px/1.3 ui-monospace,monospace; color:var(--c-rj); padding:4px; border-top:2px dotted var(--c-rj); border-bottom:2px dotted var(--c-rj); }
+
+/* ring buffer */
+.ring-wrap { display:grid; grid-template-columns:minmax(0,1.1fr) minmax(0,1fr); gap:18px; align-items:start; }
+.ring { display:grid; grid-template-columns:repeat(8,1fr); gap:5px; }
+.pkt { aspect-ratio:1.25; border:1.5px solid var(--line); border-radius:6px; font:11px/1.15 ui-monospace,monospace; display:flex; flex-direction:column; justify-content:center; align-items:center; background:var(--surface-2); position:relative; color:var(--muted); }
+.pkt.body { background:var(--c-app-bg); border-color:var(--c-app); color:var(--c-app); }
+.pkt.valid { background:var(--c-app); border-color:var(--c-app); color:var(--bg); }
+.pkt.run { background:var(--c-hw); border-color:var(--c-hw); color:var(--bg); }
+.pkt.done { background:var(--surface-2); color:var(--muted); text-decoration:line-through; }
+.pkt .pw, .pkt .pr { position:absolute; font-size:10px; font-weight:700; }
+.pkt .pw { top:-9px; right:-4px; background:var(--c-app); color:var(--bg); border-radius:3px; padding:0 3px; }
+.pkt .pr { bottom:-9px; left:-4px; background:var(--c-hw); color:var(--bg); border-radius:3px; padding:0 3px; }
+.regs { display:grid; grid-template-columns:auto 1fr; gap:4px 12px; font-size:14px; font-variant-numeric:tabular-nums; }
+.regs dt { color:var(--muted); }
+.regs dd { margin:0; font-family:ui-monospace,monospace; }
+.log { font:13px/1.55 ui-monospace,monospace; background:var(--code-bg); border-radius:8px; padding:10px 12px; max-height:210px; overflow:auto; margin-top:10px; }
+.log div { border-bottom:1px dashed var(--line); padding:2px 0; }
+
+/* byte maps */
+.bytes { display:grid; grid-template-columns:repeat(16,minmax(0,1fr)); gap:2px; font:11.5px/1 ui-monospace,monospace; }
+.bytes .b { padding:7px 0; text-align:center; border-radius:3px; background:var(--surface-2); color:var(--muted); cursor:pointer; border:0; }
+.bytes .b.hi { background:var(--hex-hi); color:var(--ink); }
+.bytes .off { grid-column:1/-1; font-size:11px; color:var(--muted); padding-top:4px; }
+.fields { display:flex; flex-wrap:wrap; gap:6px; margin:10px 0; }
+.fields button { border:1px solid var(--line); background:var(--surface-2); border-radius:6px; font:12.5px/1.2 ui-monospace,monospace; padding:5px 8px; }
+.fields button[aria-pressed="true"] { background:var(--hex-hi); border-color:var(--warn); }
+.f0 { --fc:#4f86e8; } .f1 { --fc:#8c62d9; } .f2 { --fc:#d47a1f; } .f3 { --fc:#1f9a67; } .f4 { --fc:#d24c73; } .f5 { --fc:#2aa0b3; } .f6 { --fc:#8a8f2a; } .f7 { --fc:#a0522d; }
+.bytes .b[data-f] { background:color-mix(in srgb,var(--fc) 26%,var(--surface)); color:var(--ink); }
+.bytes .b[data-f].hi { background:var(--fc); color:#fff; }
+.fields button[data-f] { border-left:5px solid var(--fc); }
+
+/* sequence */
+.seq { display:grid; grid-template-columns:1fr 1fr; gap:0; position:relative; font-size:13.5px; }
+.seq-head { font-weight:700; font-size:13px; padding:6px 10px; border-radius:6px; text-align:center; }
+.seq-msg { grid-column:1/-1; display:grid; grid-template-columns:1fr auto 1fr; align-items:center; gap:6px; padding:3px 0; }
+.seq-msg .arrow { grid-column:1/-1; font:12.5px/1.3 ui-monospace,monospace; padding:6px 10px; border-radius:6px; border:1px solid var(--line); background:var(--surface-2); cursor:pointer; text-align:left; width:100%; }
+.seq-msg.req .arrow { margin-right:18%; border-left:4px solid var(--c-app); }
+.seq-msg.resp .arrow { margin-left:18%; border-right:4px solid var(--c-svc); text-align:right; }
+.seq-msg .arrow[aria-pressed="true"] { background:var(--hex-hi); color:var(--ink); }
+.steps { list-style:none; padding:0; margin:0; counter-reset:st; }
+.steps > li { counter-increment:st; padding:10px 12px 10px 46px; position:relative; border-radius:8px; margin-bottom:6px; background:var(--surface-2); }
+.steps > li::before { content:counter(st,decimal-leading-zero); position:absolute; left:12px; top:10px; font:700 12.5px ui-monospace,monospace; color:var(--accent); }
+.js .stepper .steps > li { display:none; }
+.js .stepper .steps > li.cur { display:block; }
+.stepper .nav { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:10px 0; }
+.stepper .count { font:13px ui-monospace,monospace; color:var(--muted); }
+.journey { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:6px; margin-bottom:10px; }
+.journey .node { transition:opacity .2s, transform .2s; }
+.js .journey.dim .node { opacity:.38; }
+.js .journey.dim .node.lit { opacity:1; transform:translateY(-2px); box-shadow:0 0 0 2px var(--k) ; }
+
+/* slice */
+.slice-bar { display:grid; grid-template-columns:repeat(16,1fr); gap:2px; margin:8px 0; }
+.slice-bar i { height:26px; border-radius:3px; background:var(--surface-2); border:1px solid var(--line); }
+.slice-bar i.o { background:var(--c-hw-bg); }
+.slice-bar i.s { background:var(--c-svc); border-color:var(--c-svc); }
+
+
+/* pickers, panels, lists */
+.js .pick-details > div { display:none; }
+.js .pick-details > div.cur { display:block; }
+.no-js .pick-details > div + div { margin-top:10px; padding-top:10px; border-top:1px dashed var(--line); }
+.js .be { display:none; }
+.js .be.cur { display:block; }
+.no-js .be + .be { margin-top:18px; padding-top:18px; border-top:1px solid var(--line); }
+.be > p { margin-top:12px; }
+.ilist h5 { font:700 11.5px/1.3 ui-monospace,monospace; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:12px 0 5px; }
+.ilist h5:first-child { margin-top:0; }
+.ilist button { display:flex; justify-content:space-between; gap:8px; width:100%; text-align:left; border:1px solid transparent; background:none; border-radius:6px; padding:4px 8px; font:13px/1.35 ui-monospace,monospace; }
+.ilist button:hover { background:var(--surface-2); }
+.ilist button[aria-pressed="true"] { background:var(--accent-soft); border-color:var(--accent); }
+.ilist button small { color:var(--muted); }
+.ilist button.pseudo { font-family:inherit; font-style:italic; color:var(--muted); }
+.kv { display:grid; grid-template-columns:auto 1fr; gap:3px 12px; font-size:13.5px; margin:8px 0; }
+.kv dt { color:var(--muted); }
+.kv dd { margin:0; }
+.detail pre { font-size:12.5px; margin:8px 0 0; padding:8px 10px; }
+.seqrow { display:grid; grid-template-columns:1fr 1fr; gap:6px; width:100%; border:1px solid var(--line); background:var(--surface-2); border-radius:7px; padding:6px 8px; margin-bottom:5px; text-align:left; font:12.5px/1.35 ui-monospace,monospace; }
+.seqrow .rq { color:var(--c-app); }
+.seqrow .rp { color:var(--c-svc); text-align:right; }
+.seqrow.note { grid-template-columns:1fr; font-family:inherit; font-style:italic; color:var(--muted); text-align:center; background:none; border-style:dashed; }
+.seqrow[aria-pressed="true"] { outline:2px solid var(--accent); background:var(--accent-soft); }
+.slice-track { position:relative; height:38px; border-radius:6px; background:repeating-linear-gradient(90deg,var(--surface-2) 0 calc(100%/12 - 1px),var(--line) calc(100%/12 - 1px) calc(100%/12)); border:1px solid var(--line); margin:10px 0 4px; overflow:hidden; }
+.slice-track i { position:absolute; top:4px; bottom:4px; border-radius:3px; background:var(--c-hw); opacity:.45; min-width:4px; }
+#slOut { grid-template-columns:repeat(auto-fit,minmax(175px,1fr)); }
+#slOut b { white-space:nowrap; font-size:14.5px !important; }
+.slice-track i { border-right:2px solid var(--surface); }
+.slice-track i.s { opacity:1; background:var(--c-svc); }
+.slice-scale { display:flex; justify-content:space-between; font:11px ui-monospace,monospace; color:var(--muted); }
+.bitstrip { display:grid; grid-template-columns:9fr 9fr 9fr 9fr 12fr; gap:3px; margin:10px 0; font:12px/1.3 ui-monospace,monospace; text-align:center; }
+.bitstrip div { border-radius:6px; padding:6px 2px; background:var(--surface-2); border:1px solid var(--line); overflow-wrap:anywhere; }
+.bitstrip b { display:block; font-size:14px; }
+.walk { font-size:14px; margin:8px 0 0; padding-left:1.3em; }
+.walk li { margin-bottom:4px; }
+
+.split { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.3fr); gap:14px; align-items:start; }
+.split > .detail { margin-top:0; }
+.detail.sticky { position:sticky; top:70px; }
+.split.wide-left { grid-template-columns:minmax(0,1.5fr) minmax(0,1fr); }
+.js .stepper .steps > li { padding-left:14px; }
+.js .stepper .steps > li::before { content:none; }
+.no-js .pick [data-show] { pointer-events:none; cursor:default; }
+@media (max-width:820px) { .split { grid-template-columns:1fr; } .detail.sticky { position:static; } }
+.bytes .off[data-f] { background:color-mix(in srgb,var(--fc) 14%,transparent); border-radius:3px; padding:6px 0; }
+details { background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:10px 16px; margin:0 0 10px; }
+details > summary { cursor:pointer; font-weight:650; }
+details[open] > summary { margin-bottom:8px; }
+
+footer { padding:36px 0 60px; color:var(--muted); font-size:14px; }
+
+@media (max-width:820px) {
+  .stack-strip { grid-template-columns:1fr 1fr; }
+  .ring-wrap { grid-template-columns:1fr; }
+  .lanes { grid-template-columns:repeat(16,1fr); }
+  .bytes { grid-template-columns:repeat(8,minmax(0,1fr)); }
+  .tl-cells { grid-template-columns:repeat(24,1fr); }
+  .tl-cells i:nth-child(n+25) { display:none; }
+  .seq-msg.req .arrow { margin-right:6%; } .seq-msg.resp .arrow { margin-left:6%; }
+  .brand small { display:none; }
+}
+@media (max-width:480px) { .stack-strip { grid-template-columns:1fr; } body { font-size:16px; } }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior:auto; }
+  *, *::before, *::after { animation:none !important; transition:none !important; }
+}
+@media print { .top, .controls, .js-only { display:none !important; } .js .stepper .steps > li { display:block; } }
+</style>
+</head>
+<body>
+<a class="skip" href="#gpu">Skip to the content</a>
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="#top">GPU · KFD · gem5 <small style="font-weight:500;color:var(--muted)">field guide</small></a>
+    <nav aria-label="Parts of this page">
+      <a href="#gpu">1 GPU</a>
+      <a href="#interface">2 Driver ↔ GPU</a>
+      <a href="#kfd">3 ROCm &amp; KFD</a>
+      <a href="#rocjitsu">4 rocjitsu</a>
+      <a href="#rpc">5 KFD RPC</a>
+      <a href="#gem5">6 gem5 service</a>
+      <a href="#limits">7 Limits</a>
+    </nav>
+    <button class="theme-btn" id="themeBtn" type="button" aria-label="Switch colour theme">Theme</button>
+  </div>
+</header>
+
+<main id="top">
+<div class="hero">
+  <div class="wrap">
+    <p class="eyebrow">GPU microarchitecture lab · Architecture guide</p>
+    <h1>From a HIP kernel launch to gem5's GPU</h1>
+    <p class="lede">This page builds the picture from the bottom up. It covers what a GPU is and how it runs work, then how a kernel-mode driver and a GPU cooperate. Finally, it shows how rocjitsu's KFD RPC protocol lets gem5 take the place of both the Linux driver and the hardware.</p>
+    <div class="stack-strip" aria-label="The layers a kernel launch crosses in the gem5-kmd backend">
+      <div class="k-app" style="border-color:var(--c-app)"><b style="color:var(--c-app)">HIP application</b>your kernel and data</div>
+      <div class="k-app" style="border-color:var(--c-app)"><b style="color:var(--c-app)">ROCr + libhsakmt</b>queues, memory, signals</div>
+      <div class="k-rj" style="border-color:var(--c-rj)"><b style="color:var(--c-rj)">rocjitsu</b>fake <code>/dev/kfd</code>, KFD RPC client and server</div>
+      <div class="k-svc" style="border-color:var(--c-svc)"><b style="color:var(--c-svc)">gem5 HSAKMT service</b>plays driver and firmware</div>
+      <div class="k-hw" style="border-color:var(--c-hw)"><b style="color:var(--c-hw)">gem5 GPU model</b>packet processor, CUs, caches</div>
+    </div>
+    <div class="legend" aria-hidden="true">
+      <span style="--sw:var(--c-app)">Application and ROCm</span>
+      <span style="--sw:var(--c-rj)">rocjitsu</span>
+      <span style="--sw:var(--c-svc)">gem5 HSAKMT service</span>
+      <span style="--sw:var(--c-hw)">GPU hardware / gem5 model</span>
+    </div>
+    <p class="map-note" style="margin-top:18px">Parts 1 and 2 describe how AMD GPUs work in general. Wherever this page gives a number, it is the lab's gem5 configuration unless stated otherwise. Parts 3 to 6 follow one application through the lab's <em>gem5-kmd</em> backend. Every interactive figure is an illustration for reasoning, not measured simulation output.</p>
+  </div>
+</div>
+
+<!-- ============================ PART 1 ============================ -->
+<section class="part" id="gpu" aria-labelledby="gpu-h">
+<div class="wrap">
+  <p class="part-no">PART 1 · HOW A GPU WORKS</p>
+  <h2 id="gpu-h">A GPU is a throughput machine</h2>
+  <div class="prose">
+    <p>A CPU core spends its transistors on making one thread fast: large caches, branch prediction, out-of-order execution. A GPU spends them on running a great many threads at once and accepts that each one is slow. Instead of avoiding the long wait for memory, it keeps enough other work resident that something is always ready to run. Almost everything in this part follows from that choice.</p>
+    <p>The lab models an AMD Instinct MI300X, whose architecture is CDNA3 and whose instruction set is called <code>gfx942</code>. The real chip has 304 compute units (CUs) and 192 GB of HBM3 memory. The lab keeps MI300X's resources <em>per CU</em> but simulates only 8 CUs, a 1 MiB shared L2 cache and 1 GiB of device memory, so that runs finish in reasonable time. The reasoning behind each value is in the <a href="gpu-lab/MI300XConfiguration.md">MI300X configuration audit</a>.</p>
+  </div>
+
+  <h3>Work is split into four levels</h3>
+  <div class="prose">
+    <p>When you launch a HIP kernel you choose a grid size and a workgroup (block) size. The hardware sees that launch at four levels:</p>
+  </div>
+  <div class="tbl"><table>
+    <thead><tr><th>Level</th><th>What it is</th><th>Where it runs</th></tr></thead>
+    <tbody>
+      <tr><td><b>Grid</b></td><td>All work-items of one kernel launch.</td><td>The whole GPU.</td></tr>
+      <tr><td><b>Workgroup</b></td><td>Up to 1024 work-items that can share LDS memory and synchronize with barriers.</td><td>One CU. A workgroup never spans CUs.</td></tr>
+      <tr><td><b>Wavefront</b> (wave)</td><td>64 work-items that execute every instruction together. This is the unit the hardware schedules.</td><td>One SIMD unit inside the CU.</td></tr>
+      <tr><td><b>Work-item</b> (lane)</td><td>One thread of your kernel.</td><td>One of the 64 lanes of a wave.</td></tr>
+    </tbody>
+  </table></div>
+  <div class="prose">
+    <p>The dispatcher places a workgroup on a CU only when that CU has enough of <em>every</em> resource at once: a free wave slot for each wave, vector and scalar registers for each wave, the workgroup's LDS allocation, and a barrier slot if the workgroup has more than one wave. Whichever resource runs out first limits <em>occupancy</em>, the number of waves resident on a CU. Occupancy matters because resident waves are what a CU switches between while other waves wait for memory.</p>
+  </div>
+
+  <div class="widget" id="w-launch">
+    <h4>Try it: how a launch fills the eight CUs</h4>
+    <p class="hint">This applies the lab's per-CU limits (4 SIMDs × 8 wave slots, 512 vector-register slots and 800 scalar registers per SIMD allocated in groups of 16, 64 KiB LDS, 16 barrier slots) with the same checks gem5's dispatcher performs. It is an estimate: the simulator makes the real decision SIMD by SIMD, at run time.</p>
+    <div class="controls js-only">
+      <label>Grid <select id="lnGrid"><option value="4096">4,096 work-items</option><option value="65536" selected>65,536 work-items</option><option value="1048576">1,048,576 work-items</option><option value="640">640 work-items</option></select></label>
+      <label>Workgroup size <input type="range" id="lnWg" min="64" max="1024" step="64" value="256"><b id="lnWgV">256</b></label>
+      <label>VGPRs per lane <input type="range" id="lnV" min="8" max="512" step="8" value="64"><b id="lnVV">64</b></label>
+      <label>SGPRs per wave <input type="range" id="lnS" min="16" max="112" step="16" value="32"><b id="lnSV">32</b></label>
+      <label>LDS per workgroup <input type="range" id="lnL" min="0" max="64" step="2" value="0"><b id="lnLV">0 KiB</b></label>
+    </div>
+    <div class="readout js-only" id="lnOut" aria-live="polite"></div>
+    <div class="cu-grid js-only" id="lnGridView" aria-hidden="true"></div>
+    <p class="out js-only" id="lnNote" style="margin-top:10px"></p>
+    <p class="nojs-only">With JavaScript enabled, this figure computes occupancy. Rule of thumb: waves per SIMD = min(8, ⌊512 ÷ VGPRs rounded up to 16⌋, ⌊800 ÷ SGPRs rounded up to 16⌋). For example, 64 VGPRs allow 8 waves per SIMD (32 per CU) and 128 VGPRs allow 4 (16 per CU). LDS use and barrier slots can lower this further.</p>
+  </div>
+
+  <h3>Inside a compute unit</h3>
+  <div class="prose">
+    <p>A CU is a small, independent processor. It has four SIMD units that execute vector instructions for waves, one scalar unit for values that are the same in every lane, and its own local memory and L1 cache. Select a part to see what it does and how gem5 models it.</p>
+  </div>
+  <div class="widget pick" id="w-cu">
+    <div class="diagram">
+      <div class="lane-row">
+        <button class="node k-hw" type="button" data-show="cu-fetch"><b>Instruction fetch</b><small>SQC cache → instruction buffers</small></button>
+        <button class="node k-hw" type="button" data-show="cu-sched"><b>Scoreboard and scheduler</b><small>which wave issues next</small></button>
+        <button class="node k-hw" type="button" data-show="cu-salu"><b>Scalar unit + SGPRs</b><small>uniform values, branches</small></button>
+      </div>
+      <div class="lane-row">
+        <button class="node k-hw" type="button" data-show="cu-simd"><b>SIMD 0</b><small>8 wave slots · VGPRs</small></button>
+        <button class="node k-hw" type="button" data-show="cu-simd"><b>SIMD 1</b><small>8 wave slots · VGPRs</small></button>
+        <button class="node k-hw" type="button" data-show="cu-simd"><b>SIMD 2</b><small>8 wave slots · VGPRs</small></button>
+        <button class="node k-hw" type="button" data-show="cu-simd"><b>SIMD 3</b><small>8 wave slots · VGPRs</small></button>
+      </div>
+      <div class="lane-row">
+        <button class="node k-hw" type="button" data-show="cu-mfma"><b>Matrix cores</b><small>MFMA instructions</small></button>
+        <button class="node k-hw" type="button" data-show="cu-lds"><b>LDS</b><small>64 KiB · 32 banks</small></button>
+        <button class="node k-hw" type="button" data-show="cu-tcp"><b>Vector L1 (TCP)</b><small>32 KiB · coalescer</small></button>
+      </div>
+    </div>
+    <div class="detail pick-details" aria-live="polite">
+      <div data-id="cu-fetch"><h5>Instruction fetch</h5><p>Each SIMD has a fetch unit. Each cycle it picks one wave that needs instructions and fetches the next cache line through the instruction cache (SQC), which two CUs share. Decoded instructions wait in the wave's instruction buffer, which holds up to 13 instructions in gem5. Fetch pauses at branches until the target is known.</p></div>
+      <div data-id="cu-sched"><h5>Scoreboard and scheduler</h5><p>gem5 ticks the CU's pipeline as fetch → scoreboard check → schedule → execute. The scoreboard marks a wave <em>not ready</em> while it waits on outstanding memory (<code>s_waitcnt</code>), a barrier, busy registers or a busy matrix core. Among the ready waves, one scheduler per execution resource picks the oldest.</p></div>
+      <div data-id="cu-salu"><h5>Scalar unit and SGPRs</h5><p>Addresses, loop counters and kernel arguments are usually the same for all 64 lanes. The compiler computes them once on the scalar ALU and keeps them in scalar registers (SGPRs). Each SIMD has a pool of 800 SGPRs. Branch decisions and the EXEC mask, described below, also live on the scalar side.</p></div>
+      <div data-id="cu-simd"><h5>SIMD unit and vector registers</h5><p>A SIMD holds up to 8 resident waves. Its vector register file has 512 slots, each 64 lanes × 32 bits wide (128 KiB). A wave's registers are carved out of it in groups of 16 slots. On hardware, a 16-lane SIMD runs one wave64 instruction over 4 cycles. gem5 models this by reserving the SIMD for 4 cycles per vector instruction. MI300X keeps normal VGPRs and matrix accumulators (AGPRs) in this one file.</p></div>
+      <div data-id="cu-mfma"><h5>Matrix cores</h5><p>Matrix fused multiply-add (MFMA) instructions multiply small tiles held in registers. gem5 models each SIMD's matrix core as busy for the number of cycles in the gfx942 table. For example, <code>v_mfma_f32_16x16x4_f32</code> occupies it for 32 cycles.</p></div>
+      <div data-id="cu-lds"><h5>Local data share (LDS)</h5><p>The LDS is 64 KiB of fast scratchpad memory per CU, allocated to workgroups at dispatch according to their group-segment size. It has 32 banks of 4-byte words. Lanes that hit the same bank in the same access phase are serialized, and reads of the same word are broadcast.</p></div>
+      <div data-id="cu-tcp"><h5>Vector L1 cache (TCP)</h5><p>Each CU has a 32 KiB write-through vector L1. In front of it, a coalescer merges the requests of lanes that access the same 64-byte line into one cache request. Adjacent lanes reading adjacent words therefore cost one request, while strided access costs many.</p></div>
+    </div>
+  </div>
+
+  <h3>SIMT: one instruction, 64 lanes, and a mask</h3>
+  <div class="prose">
+    <p>A wave has one program counter. Every vector instruction runs for all 64 lanes at once. This is called SIMT, single instruction, multiple threads. When lanes disagree on an <code>if</code>, the wave cannot take both branches at once. The hardware uses a 64-bit <strong>EXEC mask</strong> in which each bit enables one lane: the wave executes <em>both</em> sides of the branch, each time with only the relevant lanes enabled. Disabled lanes do nothing but still occupy the SIMD for the whole instruction, so divergent code wastes throughput.</p>
+  </div>
+  <div class="widget" id="w-exec">
+    <h4>Try it: a divergent <code>if</code> on one wave</h4>
+    <p class="hint">Kernel source: <code>if (lane &lt; k) x *= 2; else x += 1;</code> The instruction sequence below is a simplified form of what the compiler emits for gfx9-family GPUs.</p>
+    <div class="controls js-only">
+      <label>k = <input type="range" id="exK" min="0" max="64" value="24"><b id="exKV">24</b></label>
+      <span class="seg" role="group" aria-label="Condition"><button type="button" data-cond="lt" aria-pressed="true">lane &lt; k</button><button type="button" data-cond="odd" aria-pressed="false">lane is odd</button></span>
+      <button class="btn" type="button" id="exPrev">◀ Back</button>
+      <button class="btn primary" type="button" id="exNext">Step ▶</button>
+    </div>
+    <pre class="trace" id="exCode"><code><span data-l="0">v_cmp_gt_u32        vcc, k, v0          ; VCC bit = (lane &lt; k), one bit per lane</span>
+<span data-l="1">s_and_saveexec_b64  s[0:1], vcc         ; save EXEC in s[0:1]; EXEC &amp;= VCC</span>
+<span data-l="2">v_mul_f32           v1, 2.0, v1         ; "then" side, enabled lanes only</span>
+<span data-l="3">s_xor_b64           exec, s[0:1], exec  ; EXEC = saved ^ EXEC → the "else" lanes</span>
+<span data-l="4">v_add_f32           v1, 1.0, v1         ; "else" side</span>
+<span data-l="5">s_mov_b64           exec, s[0:1]        ; restore the full mask</span></code></pre>
+    <div class="js-only">
+      <div class="out" id="exLabel" style="margin-top:10px">EXEC mask</div>
+      <div class="lanes" id="exLanes" aria-hidden="true"></div>
+      <p class="out" id="exOut" aria-live="polite"></p>
+    </div>
+    <p class="nojs-only">The two vector instructions each take a full 4-cycle issue slot. With k = 24, the first runs 24 useful lanes and the second 40, so the two together do 64 lanes of work in the time of 128.</p>
+  </div>
+  <div class="prose">
+    <p>If no lane is enabled, the compiler usually adds <code>s_cbranch_execz</code> to jump over the empty side. gem5 executes vector instructions lane by lane under EXEC and reports the effect in the per-CU statistics <code>vALUUtilization</code> and <code>controlFlowDivergenceDist</code>.</p>
+  </div>
+
+  <h3>Hiding memory latency with more waves</h3>
+  <div class="prose">
+    <p>A load from device memory takes hundreds of cycles. A wave that needs the result stops at an <code>s_waitcnt</code> instruction until its outstanding loads return. If that wave is the only one on its SIMD, the SIMD sits idle. With more resident waves, the scheduler issues another wave's instruction in each slot while the first one waits. This is why occupancy, from the launch figure above, matters.</p>
+  </div>
+  <div class="widget" id="w-lat">
+    <h4>Try it: one SIMD, several waves</h4>
+    <p class="hint">Each wave repeats: two ALU instructions, one load, then waits 10 issue slots for the data. The SIMD issues at most one instruction per slot, oldest ready wave first. <span class="tag illus">illustrative timing</span></p>
+    <div class="controls js-only">
+      <label>Resident waves <input type="range" id="ltN" min="1" max="8" value="1"><b id="ltNV">1</b></label>
+    </div>
+    <div class="tl js-only" id="ltView" aria-hidden="true"></div>
+    <p class="out js-only" id="ltOut" aria-live="polite" style="margin-top:10px"></p>
+    <p class="legend js-only"><span style="--sw:var(--c-hw)">issuing</span><span style="--sw:var(--line)">waiting for memory</span><span style="--sw:color-mix(in srgb,var(--warn) 35%,transparent)">SIMD idle</span></p>
+    <p class="nojs-only">With one wave the SIMD issues in about 3 of every 13 slots. With four or more waves it is busy almost every slot.</p>
+  </div>
+
+  <h3>The memory hierarchy</h3>
+  <div class="prose">
+    <p>Each level is larger, slower and shared by more CUs than the one above it. In GPU terms, a kernel is fast when most of its accesses are served high in this table and its lanes' requests coalesce.</p>
+  </div>
+  <div class="tbl"><table>
+    <thead><tr><th>Level</th><th>Lab configuration</th><th>Shared by</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>Vector registers</td><td>512 slots × 64 lanes per SIMD</td><td>one wave's allocation</td><td>Fastest storage; more per lane means fewer waves.</td></tr>
+      <tr><td>LDS</td><td>64 KiB, 32 banks</td><td>one workgroup</td><td>Explicitly managed by the kernel.</td></tr>
+      <tr><td>Vector L1 (TCP)</td><td>32 KiB</td><td>one CU</td><td>Write-through; invalidated at every kernel launch.</td></tr>
+      <tr><td>Scalar cache / instruction cache</td><td>16 KiB / 64 KiB</td><td>two CUs</td><td>Kernel arguments, constants, code.</td></tr>
+      <tr><td>L2 (TCC)</td><td>1 MiB (scaled down)</td><td>all CUs</td><td>The point where all CUs meet.</td></tr>
+      <tr><td>Device memory</td><td>1 GiB, one HBM interface, 16 GB/s peak</td><td>whole GPU</td><td>Real MI300X: 192 GB at about 5.3 TB/s. Bandwidth can limit lab workloads.</td></tr>
+    </tbody>
+  </table></div>
+  <div class="prose">
+    <p>Addresses used by a kernel are <em>virtual</em>. Translation lookaside buffers (TLBs) cache translations: a 32-entry L1 TLB per CU, then shared L2 and L3 TLBs, and finally a page-table walker. Part 2 explains the page tables they read.</p>
+  </div>
+
+  <h3>The GPU is fed, not called</h3>
+  <div class="prose">
+    <p>Nothing above involves the CPU. The CPU never calls a function on the GPU. It writes commands into memory the GPU can read and then tells the GPU how far to read. How that memory, and the permission to use it, are set up is the subject of the next part.</p>
+  </div>
+</div>
+</section>
+
+<!-- ============================ PART 2 ============================ -->
+<section class="part" id="interface" aria-labelledby="if-h">
+<div class="wrap">
+  <p class="part-no">PART 2 · HOW THE DRIVER AND THE GPU TALK</p>
+  <h2 id="if-h">The driver prepares, the application submits</h2>
+  <div class="prose">
+    <p>To the CPU, a discrete GPU is a PCI Express device. Everything the host does with it is one of three things: read or write a device register, write memory that the GPU will read, or receive an interrupt. The GPU, for its part, reads and writes memory on its own through direct memory access (DMA). To follow the rest of this page, you need to know who performs each of these actions, and when.</p>
+  </div>
+
+  <h3>A PCI device with three windows</h3>
+  <div class="prose">
+    <p>At boot, firmware enumerates the PCI bus and programs each device's Base Address Registers (BARs). Each BAR is a window in the host's physical address space that reaches into the device. Three of the AMD GPU's BARs matter here. The addresses are the ones the gem5-kmd service assigns, which Part 6 returns to.</p>
+  </div>
+  <div class="tbl"><table>
+    <thead><tr><th>BAR</th><th>Reaches</th><th>Used for</th><th>Lab address</th></tr></thead>
+    <tbody>
+      <tr><td><b>BAR0</b></td><td>Device memory (VRAM)</td><td>Host access to page tables, rings and application buffers</td><td><code>0x24_0000_0000</code>, 16 GiB window</td></tr>
+      <tr><td><b>BAR2</b></td><td>Doorbells</td><td>One 64-bit doorbell per queue. Writing it tells the GPU that new work exists.</td><td><code>0x22_0000_0000</code>, 2 MiB</td></tr>
+      <tr><td><b>BAR5</b></td><td>MMIO registers</td><td>Privileged configuration: the interrupt ring, hardware queue registers, memory apertures</td><td><code>0xECE0_0000</code> in the runner image</td></tr>
+    </tbody>
+  </table></div>
+  <div class="prose">
+    <p>The GPU reports events through an <strong>interrupt handler (IH) ring</strong>. This is a ring buffer in memory to which the GPU appends 32-byte <em>cookies</em>, such as "a kernel finished and its signal has event 7", before raising an interrupt. The driver reads the cookies and advances the ring's read pointer.</p>
+  </div>
+
+  <h3>Privileged setup, unprivileged submission</h3>
+  <div class="cols">
+    <div class="card k-svc" style="border-top:4px solid var(--c-svc)">
+      <h4>Kernel-mode driver: once per device, process or queue</h4>
+      <ul>
+        <li>Bring up the device: BARs, firmware, the interrupt ring.</li>
+        <li>Give each process a GPU address space: a VMID and page tables.</li>
+        <li>Allocate memory and map it for both the GPU and the CPU.</li>
+        <li>Create queues: describe each one and have the GPU's command processor attach it to a hardware queue.</li>
+        <li>Turn interrupts into wake-ups for sleeping threads.</li>
+      </ul>
+    </div>
+    <div class="card k-app" style="border-top:4px solid var(--c-app)">
+      <h4>User mode (ROCr): every kernel launch, no system call</h4>
+      <ul>
+        <li>Write a 64-byte AQL packet into the queue's ring buffer.</li>
+        <li>Write the queue's doorbell.</li>
+        <li>Check or wait for the completion signal.</li>
+      </ul>
+      <p>After setup, launching a kernel is only a few memory stores. This split is what makes ROCm's launch path fast, and it keeps the driver out of the hot path.</p>
+    </div>
+  </div>
+
+  <h3>GPU virtual memory</h3>
+  <div class="prose">
+    <p>Every process gets its own GPU address space. The GPU's memory-management hardware (GPUVM) translates each virtual address through a four-level page table: three levels of page-directory entries (PDE2, PDE1, PDE0) and a final page-table entry (PTE). Each level uses 9 bits of the address and pages are 4 KiB, which gives 48-bit virtual addresses. A hardware context number, the <strong>VMID</strong>, selects the page table in use. The driver assigns a VMID to each process and identifies the process to the GPU by its PASID. The model has 16 VMIDs. Each PTE also carries permission bits and a memory type (MTYPE) that sets the cache policy.</p>
+  </div>
+  <div class="widget" id="w-va">
+    <h4>Try it: split a GPU virtual address</h4>
+    <p class="hint">Enter a 48-bit virtual address. Each 9-bit field indexes one table of 512 eight-byte entries. The root table address is the start of the service's page-table area in VRAM; the other table addresses are examples.</p>
+    <div class="controls js-only">
+      <label>GPU VA <input id="vaIn" class="mono" value="0x7f3a_1240_5a38" size="20" spellcheck="false" aria-describedby="vaErr"></label>
+      <button class="btn" type="button" data-va="0x7f3a12405a38">heap address</button>
+      <button class="btn" type="button" data-va="0x71211000">service PM4 ring</button>
+      <span id="vaErr" class="out" style="color:var(--warn)"></span>
+    </div>
+    <div class="js-only" id="vaBits" aria-live="polite"></div>
+    <p class="nojs-only">Bits 47–39 index PDE2, 38–30 PDE1, 29–21 PDE0 and 20–12 the PTE. Bits 11–0 are the offset in the 4 KiB page.</p>
+  </div>
+
+  <h3>User-mode queues and doorbells</h3>
+  <div class="prose">
+    <p>A queue is a ring buffer in memory plus two counters. The producer (ROCr) owns the <em>write index</em>, and the consumer (the GPU's packet processor) owns the <em>read index</em>. Both are 64-bit and only ever grow; a packet's slot is its index modulo the ring size. ROCr publishes a packet in two stores. It first writes the packet body, then writes the 16-bit header that turns the slot from <code>INVALID</code> into a real packet. Only then does it write the doorbell.</p>
+    <p>The doorbell carries no packet. It carries only the index of the latest published packet, so the GPU knows how far it may read. The GPU then fetches the packets from the ring by DMA.</p>
+  </div>
+  <div class="widget" id="w-ring">
+    <h4>Try it: submit kernels through a queue</h4>
+    <p class="hint">This ring has 16 slots for readability; real AQL rings are much larger. Step through a submission, or run several and let the packet processor catch up.</p>
+    <div class="controls js-only">
+      <button class="btn primary" type="button" id="rgNext">Next action ▶</button>
+      <button class="btn" type="button" id="rgBurst">Submit 3 kernels</button>
+      <button class="btn" type="button" id="rgGpu">Let the GPU run</button>
+      <button class="btn" type="button" id="rgReset">Reset</button>
+    </div>
+    <div class="ring-wrap js-only">
+      <div>
+        <div class="ring" id="rgView" aria-hidden="true"></div>
+        <p class="legend"><span style="--sw:var(--c-app-bg)">body written</span><span style="--sw:var(--c-app)">published</span><span style="--sw:var(--c-hw)">executing</span></p>
+      </div>
+      <div>
+        <dl class="regs" id="rgRegs"></dl>
+        <div class="log" id="rgLog" aria-live="polite"></div>
+      </div>
+    </div>
+    <ol class="nojs-only">
+      <li>ROCr reserves a slot by incrementing the write index.</li>
+      <li>It writes the 64-byte packet body with the header still <code>INVALID</code>.</li>
+      <li>It writes the header, which publishes the packet.</li>
+      <li>It writes the packet's index to the doorbell.</li>
+      <li>The packet processor DMA-reads packets up to that index, dispatches the kernel and, when it finishes, advances the read index and decrements the completion signal.</li>
+    </ol>
+  </div>
+
+  <h3>Anatomy of an AQL kernel dispatch packet</h3>
+  <div class="prose">
+    <p>AQL, the Architected Queuing Language, is the packet format defined by the HSA standard. Every packet is 64 bytes. A kernel-dispatch packet contains everything the GPU needs to launch: the grid and workgroup sizes, how much private and LDS memory to reserve, where the compiled kernel and its arguments live, and which signal to decrement when it is done.</p>
+  </div>
+  <div class="widget" id="w-aql">
+    <h4>Try it: select a field or a byte</h4>
+    <div class="fields" id="aqlFields" role="group" aria-label="AQL packet fields"></div>
+    <div class="bytes" id="aqlBytes" aria-hidden="true"></div>
+    <div class="detail" id="aqlDetail" aria-live="polite"><p>Select a field to see its offset, size and meaning.</p></div>
+  </div>
+
+  <h3>How a queue becomes a hardware queue</h3>
+  <div class="prose">
+    <p>The GPU cannot watch every ring in memory. Its command processor runs a limited set of <em>hardware queue descriptors</em> (HQDs); the model has 10. To install a queue, the driver fills in a <strong>memory queue descriptor</strong> (MQD) in memory. The MQD records the ring's address and size, where the read and write pointers live, the doorbell offset and the VMID. The driver then sends PM4 packets, the command processor's own privileged command format, over a queue that only the kernel driver owns:</p>
+  </div>
+  <div class="tbl"><table>
+    <thead><tr><th>PM4 packet</th><th>Effect</th></tr></thead>
+    <tbody>
+      <tr><td><code>MAP_PROCESS</code></td><td>Assign a VMID to a process (by PASID), set its page-table base, and set its LDS and scratch apertures.</td></tr>
+      <tr><td><code>MAP_QUEUES</code></td><td>Read an MQD, bind its doorbell, and start serving the queue. Compute (AQL) queues go to the packet processor; SDMA queues go to a copy engine.</td></tr>
+      <tr><td><code>UNMAP_QUEUES</code></td><td>Stop a queue, save its state back to its MQD, and release the doorbell.</td></tr>
+    </tbody>
+  </table></div>
+  <div class="prose">
+    <p>SDMA (system DMA) engines are separate copy engines that move and fill memory without using CUs. ROCr can use SDMA queues for copies, alongside compute queues for kernels.</p>
+  </div>
+
+  <h3>Completion: signals, interrupts and events</h3>
+  <ol class="steps">
+    <li><b>A signal is memory.</b> ROCr allocates a 64-bit signal value (for example, 1) and puts its address in the dispatch packet.</li>
+    <li><b>The GPU decrements it.</b> When the kernel's last workgroup finishes, the packet processor advances the read index and the command processor decrements the signal.</li>
+    <li><b>Spinning is enough, but wastes a CPU.</b> A host thread can poll the value. To sleep instead, the thread asks the driver to wait on a <em>KFD event</em>. The signal then carries an event mailbox, which tells the command processor which event to raise.</li>
+    <li><b>An interrupt wakes the sleeper.</b> After decrementing, the command processor writes an IH cookie containing the event ID. The driver consumes the IH ring and wakes every thread waiting on that event.</li>
+  </ol>
+  <div class="prose" style="margin-top:1em">
+    <p>This is the contract of real hardware. On a real Linux system, the kernel's <code>amdgpu</code> driver and its compute component, KFD, perform the privileged half. The next part looks at the interface through which ROCr asks KFD for it.</p>
+  </div>
+</div>
+</section>
+
+<!-- ============================ PART 3 ============================ -->
+<section class="part" id="kfd" aria-labelledby="kfd-h">
+<div class="wrap">
+  <p class="part-no">PART 3 · THE ROCm STACK AND KFD</p>
+  <h2 id="kfd-h">ROCr asks the kernel for resources through KFD</h2>
+  <div class="prose">
+    <p>A HIP program never touches BARs or page tables. Its requests pass down a stack of libraries until one of them makes a system call. Each layer has one job:</p>
+  </div>
+  <div class="tbl"><table>
+    <thead><tr><th>Layer</th><th>Job</th></tr></thead>
+    <tbody>
+      <tr><td><b>HIP runtime</b> (CLR)</td><td>Implements <code>hipMalloc</code>, <code>hipLaunchKernel</code> and streams on top of HSA.</td></tr>
+      <tr><td><b>ROCr</b> (HSA runtime)</td><td>Owns agents, memory regions, queues and signals. Writes AQL packets and rings doorbells itself.</td></tr>
+      <tr><td><b>libhsakmt</b> ("the thunk")</td><td>A thin C library that turns <code>hsaKmt*</code> calls into KFD system calls and reads the device topology from sysfs.</td></tr>
+      <tr><td><b>KFD</b> (<code>/dev/kfd</code>)</td><td>The compute part of the Linux <code>amdgpu</code> kernel driver. It manages processes, GPU memory, queues and events for compute.</td></tr>
+      <tr><td><b>DRM render node</b> (<code>/dev/dri/renderD128</code>)</td><td>The graphics side of the same driver. ROCr maps memory through it and hands its GPU address space to KFD.</td></tr>
+    </tbody>
+  </table></div>
+  <div class="prose">
+    <p>Below libhsakmt, everything goes through four ordinary operations. It <strong>opens</strong> <code>/dev/kfd</code> and the render node. It issues <strong>ioctls</strong> on them, each a numbered request with a pointer to an argument struct. It <strong>mmaps</strong> offsets the driver hands back. And it <strong>reads files</strong> under <code>/sys/devices/virtual/kfd/kfd/topology</code> that describe the GPU: CU and SIMD counts, <code>gfx_target_version</code>, LDS size, memory size and the render-node number. That narrow surface is the whole contract between the ROCm user-space stack and the kernel.</p>
+  </div>
+
+  <h3>The ioctls of one HIP program</h3>
+  <div class="prose">
+    <p>Most driver work happens before the first kernel runs. The list below follows a HIP program from start-up to exit, in the order the libraries issue the calls. Select one to see its arguments. Some steps are conditional on the GPU, the kernel version or environment variables.</p>
+  </div>
+  <div class="widget pick" id="w-ioctl">
+    <div class="split">
+      <div id="ioctlList" role="group" aria-label="KFD ioctls in order"></div>
+      <div class="detail sticky" id="ioctlDetail" aria-live="polite"><p>Select an ioctl.</p></div>
+    </div>
+    <noscript><p>GET_VERSION → GET_PROCESS_APERTURES_NEW → ACQUIRE_VM → SET_MEMORY_POLICY → CREATE_EVENT → SET_SCRATCH_BACKING_VA → SET_TRAP_HANDLER → ALLOC_MEMORY_OF_GPU + MAP_MEMORY_TO_GPU (per allocation) → CREATE_QUEUE → doorbell page allocation and mmap → (kernel launches: no ioctl) → WAIT_EVENTS / SET_EVENT → DESTROY_QUEUE, UNMAP, FREE.</p></noscript>
+  </div>
+  <div class="prose">
+    <p>Notice what is missing: <strong>launching a kernel issues no ioctl at all</strong>. After CREATE_QUEUE, the queue, its ring and its doorbell page are ordinary memory in the application's address space.</p>
+  </div>
+
+  <h3>How the driver shares memory: mmap offsets</h3>
+  <div class="prose">
+    <p>An ioctl can only return numbers. To give a process access to memory, the driver returns an <em>mmap offset</em>, an opaque 64-bit token that the process passes to <code>mmap</code>. The top bits say what kind of object the token names:</p>
+  </div>
+  <div class="tbl"><table>
+    <thead><tr><th>Object</th><th>Offset returned by</th><th>Mapped through</th><th>Encoding</th></tr></thead>
+    <tbody>
+      <tr><td>Memory allocation</td><td>ALLOC_MEMORY_OF_GPU</td><td>render node</td><td>driver-specific handle</td></tr>
+      <tr><td>Doorbell page</td><td>CREATE_QUEUE (<code>doorbell_offset</code>)</td><td><code>/dev/kfd</code></td><td>type <code>3 &lt;&lt; 62</code>, gpu_id in bits 61–46</td></tr>
+      <tr><td>Events page (APUs)</td><td>CREATE_EVENT</td><td><code>/dev/kfd</code></td><td>type <code>2 &lt;&lt; 62</code>, gpu_id in bits 61–46</td></tr>
+    </tbody>
+  </table></div>
+  <div class="prose">
+    <p>A doorbell page holds 1024 eight-byte doorbells (8 KiB). The low bits of <code>doorbell_offset</code> give the queue's position inside it, so ROCr's doorbell pointer is the page mapping plus that in-page offset. On a discrete GPU, the thunk allocates the events page itself as ordinary GPU-visible memory and hands its handle to CREATE_EVENT.</p>
+    <p>One more convention makes GPU programming feel like CPU programming. For ordinary allocations, the thunk first reserves a range of CPU virtual addresses and then asks KFD to use <em>the same addresses</em> on the GPU. A pointer from <code>hipMalloc</code> therefore means the same thing to the host and to the kernel. The exception is USERPTR memory, which registers existing CPU pages: there the CPU address travels in <code>mmap_offset</code> and the GPU address may differ.</p>
+    <p>Because the whole driver contract is open, ioctl, mmap and file reads, anything that can answer those four operations can stand in for the kernel driver. That is exactly what rocjitsu does.</p>
+  </div>
+</div>
+</section>
+
+<!-- ============================ PART 4 ============================ -->
+<section class="part" id="rocjitsu" aria-labelledby="rj-h">
+<div class="wrap">
+  <p class="part-no">PART 4 · ROCJITSU REPLACES THE KERNEL DRIVER</p>
+  <h2 id="rj-h">A fake <code>/dev/kfd</code> in front of an unmodified ROCm stack</h2>
+  <div class="prose">
+    <p>rocjitsu, the ROCm Just-in-Time Suite, is part of AMD's <code>rocm-systems</code> repository. The lab pins it, together with ROCr, as a submodule. Its launcher preloads an <strong>interposer</strong> library (<code>LD_PRELOAD</code>) that overrides the C library entry points used by libhsakmt. HIP, ROCr and libhsakmt run unmodified; they simply receive different answers.</p>
+  </div>
+  <div class="tbl"><table>
+    <thead><tr><th>What ROCr does</th><th>What the interposer does instead</th></tr></thead>
+    <tbody>
+      <tr><td><code>open("/dev/kfd")</code></td><td>Returns a synthetic file descriptor (an eventfd), and routes every ioctl and mmap on it to rocjitsu's own KFD implementation.</td></tr>
+      <tr><td><code>open("/dev/dri/renderD128")</code></td><td>Returns a memfd-backed descriptor and emulates the amdgpu DRM ioctls itself. Memory mmaps on it are forwarded to the KFD implementation.</td></tr>
+      <tr><td>Open <code>/sys/devices/virtual/kfd/…</code>, <code>/sys/class/kfd/…</code> or <code>/sys/class/drm/…</code></td><td>Redirects the path to a generated topology or DRM directory. The file is then read normally; <code>read</code> itself is not intercepted.</td></tr>
+      <tr><td><code>mmap</code>, <code>munmap</code>, <code>mprotect</code>, <code>mremap</code></td><td>Keeps its bookkeeping of which ranges belong to GPU memory consistent.</td></tr>
+    </tbody>
+  </table></div>
+  <div class="prose">
+    <p>Behind the fake device sits the part that decides what each ioctl means. <strong><code>SimulatedKfd</code></strong> is rocjitsu's implementation of KFD <em>policy</em>. It validates arguments, owns processes, handles, allocations, queues and events, generates the sysfs topology, and returns the same results a kernel driver would. KFD policy, however, does not execute kernels; a <em>device</em> has to do that. Where that device lives, and how <code>SimulatedKfd</code> is reached, is what distinguishes the lab's backends.</p>
+  </div>
+
+  <h3>Four ways to run the same application</h3>
+  <div class="widget" id="w-backend">
+    <div class="controls js-only">
+      <span class="seg" role="group" aria-label="Execution backend">
+        <button type="button" data-be="local" aria-pressed="false">simdojo, local</button>
+        <button type="button" data-be="daemon" aria-pressed="false">simdojo, daemon</button>
+        <button type="button" data-be="kmd" aria-pressed="true">gem5-kmd</button>
+        <button type="button" data-be="fs" aria-pressed="false">full-system</button>
+      </span>
+    </div>
+    <div class="be-panels">
+      <div class="be" data-be="local">
+        <h4>simdojo, local: <code>rocjitsu-run app</code></h4>
+        <div class="diagram">
+          <div class="zone"><div class="ztitle">Application process</div>
+            <div class="lane-row">
+              <div class="node k-app"><b>HIP + ROCr + libhsakmt</b><small>unmodified</small></div>
+              <div class="node k-rj"><b>Interposer</b><small>fake /dev/kfd</small></div>
+              <div class="node k-rj"><b>SimulatedKfd</b><small>KFD policy</small></div>
+              <div class="node k-rj"><b>SimdojoDeviceBackend</b><small>simdojo executes the ISA</small></div>
+            </div></div>
+        </div>
+        <p>Everything runs inside the application's process. No socket and no RPC are involved: the interposer calls <code>SimulatedKfd</code> directly, and simdojo, rocjitsu's <em>functional</em> AMDGPU simulator, executes the kernels. Results are correct, but there is no timing model.</p>
+      </div>
+      <div class="be" data-be="daemon">
+        <h4>simdojo, daemon: <code>rocjitsu-run --daemon app</code></h4>
+        <div class="diagram">
+          <div class="zone"><div class="ztitle">Application process</div>
+            <div class="lane-row">
+              <div class="node k-app"><b>HIP + ROCr + libhsakmt</b><small>unmodified</small></div>
+              <div class="node k-rj"><b>Interposer → RemoteDriver</b><small>KFD RPC client</small></div>
+            </div></div>
+          <div class="boundary">Unix socket &lt;runtime&gt;/&lt;launcher pid&gt;/daemon.sock · KFD RPC v4 · file descriptors via SCM_RIGHTS</div>
+          <div class="zone"><div class="ztitle">rocjitsu daemon process</div>
+            <div class="lane-row">
+              <div class="node k-rj"><b>KmdRpcServer</b><small>socket transport</small></div>
+              <div class="node k-rj"><b>SimulatedKfd</b><small>KFD policy</small></div>
+              <div class="node k-rj"><b>SimdojoDeviceBackend</b><small>simdojo</small></div>
+            </div></div>
+        </div>
+        <p>The launcher forks a daemon that owns the simulated GPU. The application reaches it through <strong>RemoteDriver</strong>, which turns each driver operation into a KFD RPC message. Several processes can then share one simulated GPU, which multi-process workloads such as <code>torchrun</code> need. Upstream rocjitsu already provides this mode; KFD RPC was created for it.</p>
+      </div>
+      <div class="be" data-be="kmd">
+        <h4>gem5-kmd: <code>rocjitsu-run --attach app</code></h4>
+        <div class="diagram">
+          <div class="zone"><div class="ztitle">SDK container · application process</div>
+            <div class="lane-row">
+              <div class="node k-app"><b>HIP + ROCr + libhsakmt</b><small>unmodified</small></div>
+              <div class="node k-rj"><b>Interposer → RemoteDriver</b><small>KFD RPC client</small></div>
+            </div></div>
+          <div class="boundary">Unix socket /run/rocjitsu/daemon.sock (shared volume) · KFD RPC v4 · SCM_RIGHTS</div>
+          <div class="zone"><div class="ztitle">Runner container · gem5 process</div>
+            <div class="lane-row">
+              <div class="node k-rj"><b>KmdRpcServer + SimulatedKfd</b><small>librocjitsu_kmd_server.so.2</small></div>
+              <div class="node k-rj"><b>CallbackDeviceBackend</b><small>C ABI v2 callbacks</small></div>
+              <div class="node k-svc"><b>HSAKMT service</b><small>driver and platform work</small></div>
+              <div class="node k-hw"><b>gem5 GPU model</b><small>timing simulation</small></div>
+            </div></div>
+        </div>
+        <p>The same client talks to the same kind of server, but the server is a library embedded in gem5. Its device backend forwards every device operation, such as allocate, map or create queue, to gem5's HSAKMT service. The service performs it on the modeled GPU through BARs, page tables, PM4 packets, doorbells and the interrupt ring. There is no Linux guest and no simdojo in this path.</p>
+      </div>
+      <div class="be" data-be="fs">
+        <h4>full-system</h4>
+        <div class="diagram">
+          <div class="zone"><div class="ztitle">gem5 process · simulated machine</div>
+            <div class="lane-row">
+              <div class="node k-app"><b>HIP application in a Linux guest</b><small>X86KvmCPU</small></div>
+              <div class="node k-app"><b>Real amdgpu / KFD driver</b><small>guest kernel</small></div>
+              <div class="node k-hw"><b>gem5 GPU model</b><small>timing simulation</small></div>
+            </div></div>
+        </div>
+        <p>gem5 boots a complete Linux system. The real kernel driver programs the modeled GPU and rocjitsu is not used at all. This backend is the reference for "what a real driver does", but it needs an x86-64 host with KVM and a guest disk image.</p>
+      </div>
+    </div>
+  </div>
+  <div class="prose">
+    <p>The remote modes reuse one idea: the KFD policy stays identical, and only its location changes. In gem5-kmd, <strong>two different boundaries</strong> are crossed, and it helps to keep them apart. The Unix socket crosses <em>processes and containers</em>, and it carries KFD RPC, the subject of Part 5. The C callback ABI connects rocjitsu's embedded library to gem5 <em>inside one process</em>, the subject of Part 6.</p>
+  </div>
+
+  <h3>One KFD policy, two device backends</h3>
+  <div class="prose">
+    <p>Upstream rocjitsu fuses KFD policy with simdojo, so it cannot drive any other device. The lab's fork splits them. <code>SimulatedKfd</code> now calls an abstract <code>DeviceBackend</code> whenever the device must act: register a process, create or destroy a queue, map memory, read or write a 64-bit value in GPU memory. Two implementations exist. <code>SimdojoDeviceBackend</code> preserves upstream behavior, and <code>CallbackDeviceBackend</code> forwards the operations to an embedding program through a C API.</p>
+  </div>
+  <div class="cols">
+    <div class="card"><h4><span class="tag up">UPSTREAM</span> AMD rocm-systems</h4>
+      <ul>
+        <li>The interposer, the DRM emulation and the sysfs generator.</li>
+        <li><code>SimulatedKfd</code> and the simdojo functional simulator.</li>
+        <li>Daemon mode, <code>RemoteDriver</code> and KFD RPC version 3, including ioctl marshalling and descriptor passing.</li>
+      </ul></div>
+    <div class="card"><h4><span class="tag ours">OUR FORK</span> one commit on top</h4>
+      <ul>
+        <li>The <code>DeviceBackend</code> seam with its simdojo and callback implementations.</li>
+        <li><code>KmdRpcServer</code>, the daemon's socket loop extracted into a reusable server.</li>
+        <li>KFD RPC version 4: backing-file slices in replies.</li>
+        <li><code>librocjitsu_kmd_server.so.2</code>, a server-only library with a versioned C ABI, plus owner-thread callback dispatch and a doorbell monitor.</li>
+        <li>USERPTR memory promoted into shared backing, AArch64 host support and a few simulator fixes.</li>
+      </ul></div>
+  </div>
+  <p class="map-note">The comparison baseline is <code>ROCm/rocm-systems</code> develop at <code>7f51f6b2</code>. The parent repository's submodule pin identifies the fork revision in use.</p>
+</div>
+</section>
+
+<!-- ============================ PART 5 ============================ -->
+<section class="part" id="rpc" aria-labelledby="rpc-h">
+<div class="wrap">
+  <p class="part-no">PART 5 · KFD RPC IN DETAIL</p>
+  <h2 id="rpc-h">KFD RPC: a driver call over a socket</h2>
+  <div class="prose">
+    <p>KFD RPC, also called KMD RPC in the source, is the protocol between <code>RemoteDriver</code> in the application and the rocjitsu server. The server is either rocjitsu's own daemon or the library embedded in gem5. AMD designed the protocol for daemon mode (version 3); the lab's fork extends it to version 4. Its definition is <a href="ext/hsakmt-client/rocm-systems/emulation/rocjitsu/lib/rocjitsu/src/rocjitsu/kmd/linux/rpc.h"><code>rpc.h</code></a> in rocjitsu.</p>
+    <p>An ioctl is a function call into the kernel. The kernel can read and write the caller's memory directly and can make pages appear in the caller's address space. None of that works across a process boundary, so the protocol has to solve four problems:</p>
+  </div>
+  <div class="cols">
+    <div class="card"><h4>1 · Copy the argument struct</h4><p>The struct is sent as raw bytes, and the server's version of it is copied back after the call.</p></div>
+    <div class="card"><h4>2 · Pointers inside arguments</h4><p>A pointer into the client's memory is meaningless in the server. The arrays it points to are sent inline, and the server rewrites the pointer.</p></div>
+    <div class="card"><h4>3 · Shared memory</h4><p>mmap must yield <em>the same</em> pages in both processes. The server passes file descriptors over the socket (<code>SCM_RIGHTS</code>), and the client maps them.</p></div>
+    <div class="card"><h4>4 · Hot-path signals</h4><p>A message per doorbell store would defeat user-mode queues. Doorbells and events therefore travel through shared pages, never as messages.</p></div>
+  </div>
+
+  <h3>Transport and framing</h3>
+  <div class="prose">
+    <p>The transport is a Unix-domain stream socket. Every message, request or reply, is a 16-byte header followed by <code>payload_bytes</code> of payload:</p>
+  </div>
+  <div class="tbl"><table>
+    <thead><tr><th>Offset</th><th>Field</th><th>Type</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td>0</td><td><code>opcode</code></td><td>u16</td><td>Message kind; see the next table.</td></tr>
+      <tr><td>2</td><td><code>reserved</code></td><td>u16</td><td>Must be 0. The server disconnects otherwise.</td></tr>
+      <tr><td>4</td><td><code>request_id</code></td><td>u32</td><td>A per-connection counter starting at 0. The server echoes it; the client does not check it, so it serves only as a debugging aid.</td></tr>
+      <tr><td>8</td><td><code>payload_bytes</code></td><td>u32</td><td>Bytes that follow the header. At most 16 MiB.</td></tr>
+      <tr><td>12</td><td><code>result</code></td><td>i32</td><td>0 in requests. In replies, 0 or a negative Linux errno.</td></tr>
+    </tbody>
+  </table></div>
+  <div class="tbl"><table>
+    <thead><tr><th>Opcode</th><th>Request payload</th><th>Reply payload</th><th>Descriptors</th></tr></thead>
+    <tbody>
+      <tr><td><code>0 HANDSHAKE</code></td><td>none</td><td>328-byte <code>RpcHandshakeResponse</code>, then the topology path and the DRM path</td><td>—</td></tr>
+      <tr><td><code>1 OPEN</code></td><td colspan="3">Defined but never sent. The handshake opens the KFD process, and a server that receives OPEN disconnects.</td></tr>
+      <tr><td><code>2 CLOSE</code></td><td>none</td><td>none; the client does not wait for it</td><td>—</td></tr>
+      <tr><td><code>3 MMAP</code></td><td>32-byte <code>RpcMmapRequest</code></td><td>24-byte <code>RpcMmapResponse</code></td><td>reply: 0 or 1</td></tr>
+      <tr><td><code>4 MUNMAP</code></td><td>16-byte <code>RpcMunmapRequest</code></td><td>none</td><td>—</td></tr>
+      <tr><td><code>5 IOCTL</code></td><td>8-byte <code>RpcIoctlRequest</code>, the argument struct, inline arrays</td><td>[16-byte <code>RpcSharedBacking</code> if a descriptor is attached], then the argument struct and arrays</td><td>reply: 0 or 1; request: 3 only for debugger enable</td></tr>
+    </tbody>
+  </table></div>
+  <div class="prose">
+    <p>A few rules follow from how both ends are implemented:</p>
+    <ul>
+      <li><strong>Native byte order and struct layout.</strong> Nothing is converted; structs, including the kernel's own ioctl argument structs, are copied with <code>memcpy</code>. That is safe only because both ends share one kernel and one ABI, which a Unix socket and descriptor passing require anyway.</li>
+      <li><strong>One request in flight per connection.</strong> The client serializes every exchange with a mutex, and the server reads a request, handles it and replies before reading the next one. Replies therefore arrive in order, and the server never sends an unsolicited message.</li>
+      <li><strong>Descriptors ride on the first byte.</strong> A frame that carries descriptors is sent with a single <code>sendmsg</code>, so the <code>SCM_RIGHTS</code> control message arrives together with the header.</li>
+    </ul>
+  </div>
+
+  <div class="widget" id="w-msg">
+    <h4>Try it: inspect real message layouts</h4>
+    <p class="hint">Byte layouts follow <code>rpc.h</code> and the KFD uapi structs on a 64-bit little-endian host. Values such as addresses, handles and the request ID are examples.</p>
+    <div class="controls js-only"><label>Message <select id="msgSel"></select></label></div>
+    <div class="js-only">
+      <div class="fields" id="msgFields" role="group" aria-label="Fields of the selected message"></div>
+      <div class="bytes" id="msgBytes" aria-hidden="true"></div>
+      <div class="detail" id="msgDetail" aria-live="polite"></div>
+    </div>
+    <p class="nojs-only">With JavaScript enabled, this figure shows the bytes of each message kind. For example, an ALLOC_MEMORY_OF_GPU reply in version 4 is a 16-byte header with payload 56, a 16-byte <code>RpcSharedBacking {offset, size}</code>, then the 40-byte argument struct, with one file descriptor attached.</p>
+  </div>
+
+  <h3>Handshake: the connection becomes a KFD process</h3>
+  <div class="prose">
+    <p>When ROCr opens <code>/dev/kfd</code>, the interposer connects to the server and sends HANDSHAKE, an empty request. The server identifies the client's process ID from the socket itself (<code>SO_PEERCRED</code>) and <strong>opens a KFD process for it</strong>. There is no separate OPEN step. The reply has four parts:</p>
+    <ul>
+      <li><b>version</b>: the protocol version, 4. The client compares it with its own and, on a mismatch, fails the open. Only the server announces a version, so an old client cannot be detected on the server side.</li>
+      <li><b>gpu_id</b> and <b>gpu_info</b>: a 312-byte device description that the client's DRM emulation uses to answer amdgpu queries.</li>
+      <li><b>Topology path</b> and <b>DRM path</b>: the directories where the server generated the sysfs trees. These are paths on the server's filesystem and are not NUL-terminated. The client redirects its sysfs reads there, so both sides must see the same directory. The lab mounts a shared <code>/run/rocjitsu</code> volume into both containers for this.</li>
+    </ul>
+    <p>The client then creates its synthetic <code>/dev/kfd</code> descriptor. From here on, ROCr's reads of the topology files go straight to the shared directory, with no RPC involved.</p>
+  </div>
+
+  <h3>IOCTL: arguments, arrays and rewritten pointers</h3>
+  <div class="prose">
+    <p>An IOCTL request carries the full 32-bit ioctl number (for example <code>0xC0184B0C</code> for WAIT_EVENTS) and <code>args_bytes</code>, followed by the argument struct and any inline arrays. The struct's size is taken from the ioctl number itself (<code>_IOC_SIZE</code>). The direction bits are ignored: the whole struct is sent on every call and the server's copy is written back on return, even for write-only ioctls. The server checks that <code>args_bytes</code> equals the struct size plus the exact expected array size, and disconnects on any mismatch.</p>
+    <p>Most KFD ioctls contain only numbers. A few contain <strong>pointers to arrays</strong> in the caller's memory, and for those the client appends the array after the struct:</p>
+  </div>
+  <div class="tbl"><table>
+    <thead><tr><th>ioctl</th><th>Pointer field</th><th>Array sent inline</th><th>Direction</th></tr></thead>
+    <tbody>
+      <tr><td>WAIT_EVENTS</td><td><code>events_ptr</code></td><td><code>num_events</code> × 48-byte <code>kfd_event_data</code></td><td>in and out</td></tr>
+      <tr><td>MAP / UNMAP_MEMORY_TO_GPU</td><td><code>device_ids_array_ptr</code></td><td><code>n_devices</code> × 4-byte gpu_id</td><td>in</td></tr>
+      <tr><td>GET_PROCESS_APERTURES_NEW</td><td><code>kfd_process_device_apertures_ptr</code></td><td><code>num_of_nodes</code> × 56-byte aperture entries (zero-filled)</td><td>out</td></tr>
+      <tr><td>SET_CU_MASK</td><td><code>cu_mask_ptr</code></td><td>one bit per CU, at most 128 bytes</td><td>in</td></tr>
+      <tr><td>DBG_TRAP (several operations)</td><td>runtime info, snapshots, queue arrays</td><td>operation-specific, bounded</td><td>mostly out</td></tr>
+    </tbody>
+  </table></div>
+  <div class="prose">
+    <p>The client, the server's size check and the server's pointer reconstruction each keep their own copy of this list, and all three must agree. CREATE_QUEUE is <em>not</em> on it, because its ring, read-pointer and write-pointer addresses are GPU virtual addresses, which mean the same thing on both sides.</p>
+  </div>
+  <div class="widget stepper" id="w-ptr">
+    <h4>Follow one WAIT_EVENTS call across the socket</h4>
+    <div class="nav js-only"><button class="btn" type="button" data-step="-1">◀ Back</button><button class="btn primary" type="button" data-step="1">Next ▶</button><span class="count" aria-live="polite"></span></div>
+    <ol class="steps">
+      <li><b>ROCr calls the ioctl.</b> <code>args.events_ptr = 0x7ffd5c2a1e40</code> points to one 48-byte <code>kfd_event_data</code> in the application's memory, asking about event 7.</li>
+      <li><b>RemoteDriver builds the frame.</b> It saves the original pointer and sends header (payload 80) + <code>{cmd 0xC0184B0C, args_bytes 72}</code> + the 24-byte struct, still containing the client's pointer, + a copy of the 48-byte array. The frame totals 96 bytes. It also forces <code>timeout = 0</code>; the section on events below explains why.</li>
+      <li><b>The server checks and rewrites.</b> 72 = 24 + 1 × 48, so the frame is valid. The server points <code>events_ptr</code> at the array's copy inside its own receive buffer, for example <code>0x5591c0a3f030</code>.</li>
+      <li><b>SimulatedKfd runs the ioctl</b> exactly as it would for a local caller. It updates the event's <code>last_event_age</code> in the array and sets <code>wait_result</code>: 0 means complete, 1 means timeout.</li>
+      <li><b>The reply comes back</b> with the mutated struct and array. Its <code>events_ptr</code> still holds the server's address. The client copies the array back to <code>0x7ffd5c2a1e40</code> and restores the original pointer. ROCr sees an ordinary ioctl return.</li>
+    </ol>
+  </div>
+
+  <h3>Memory: file descriptors and backing slices</h3>
+  <div class="prose">
+    <p>This is the heart of the protocol. When a real driver maps GPU memory into a process, the CPU and the GPU end up addressing the same physical pages. KFD RPC reproduces that with <strong>shared files</strong>. The server passes a file descriptor over the socket, and the client maps that file with <code>MAP_SHARED</code> at the address ROCr asked for. Both processes then see the same pages, and a store by either one is visible to the other without any message.</p>
+    <p>Descriptors reach the client by two routes. The <strong>ALLOC_MEMORY_OF_GPU reply</strong> carries the allocation's descriptor. The client stores it by handle, so a later mmap of that allocation's offset needs no new descriptor. The <strong>MMAP reply</strong> carries descriptors for pages that have no allocation of their own, such as the doorbell page. The client always maps read-write, whatever protection was requested, and the server's <code>mapped_addr</code> is informational only.</p>
+    <p>Version 3 of the protocol assumed that each allocation had its own memfd, starting at offset 0. gem5 cannot work that way. Its device memory is <em>one</em> shared-memory file, <code>/gem5-rocjitsu-vram-&lt;pid&gt;</code>, which is also the backing store of the simulated VRAM, and every allocation is a slice of it. Version 4 therefore adds <code>RpcSharedBacking {offset, size}</code> to every descriptor-carrying reply. The client checks that <code>offset + size</code> fits within the file, maps exactly that slice at <code>offset</code>, and never resizes the file.</p>
+  </div>
+  <div class="widget" id="w-slice">
+    <h4>Try it: allocations inside gem5's VRAM file</h4>
+    <p class="hint">The bar shows the first 12 MiB of the 768 MiB allocation heap, which starts at VRAM address <code>0x1000_0000</code>. In the lab, VRAM address 0 is file offset 0, so a slice's file offset equals its device physical address. The allocation sizes and addresses are examples. <span class="tag illus">example layout</span></p>
+    <div class="controls js-only" id="slSel" role="group" aria-label="Allocations"></div>
+    <div class="slice-bar js-only" id="slBar" aria-hidden="true"></div>
+    <div class="readout js-only" id="slOut" aria-live="polite"></div>
+    <p class="out js-only" id="slNote"></p>
+    <p class="nojs-only">Example: a 4 MiB <code>hipMalloc</code> buffer at CPU and GPU address <code>0x7f3a12400000</code> could be the slice {offset <code>0x10400000</code>, size 4 MiB} of the VRAM file. The application maps that slice at its CPU address, and the GPU's page table points the same virtual address at device address <code>0x10400000</code>.</p>
+  </div>
+  <div class="prose">
+    <p><strong>USERPTR</strong> memory is the one case where the application already owns the pages. The client copies the caller's data into the slice and maps the slice over the caller's buffer at the original CPU address. When the memory is released, it restores a private copy there, so the buffer outlives its registration.</p>
+  </div>
+
+  <h3>Doorbells and events: shared pages instead of messages</h3>
+  <div class="cols">
+    <div class="card k-hw"><h4>Doorbells</h4>
+      <p>An MMAP of the doorbell offset returns a memfd for the process's doorbell page, and the client maps it where ROCr expects the doorbell page. ROCr's 64-bit doorbell store therefore lands in shared memory, and <strong>no RPC is sent</strong>.</p>
+      <p>On the gem5 path, the server's <code>DoorbellMonitor</code> thread samples each active queue's doorbell every 250 µs of <em>host</em> time, keeps the latest value, and signals an eventfd. gem5 then performs a real doorbell write on the modeled GPU. The simdojo backend's own command processor polls the same page instead.</p></div>
+    <div class="card k-app"><h4>Events</h4>
+      <p>The events page is shared memory too. For a discrete GPU, the thunk allocates it as ordinary memory, and its descriptor arrives with the ALLOC reply.</p>
+      <p><code>WAIT_EVENTS</code> never blocks the socket. <code>RemoteDriver</code> sends it with <code>timeout = 0</code>, which is a non-blocking check. If nothing has fired, it sleeps 5 ms and asks again until the caller's deadline. Interrupt-driven waits therefore have roughly 5 ms granularity in daemon and gem5-kmd modes. HIP usually spins on its completion signals in shared memory instead, which sees the GPU's write directly.</p></div>
+  </div>
+
+  <h3>Failure, concurrency and teardown</h3>
+  <div class="prose">
+    <ul>
+      <li><strong>The server does not send error replies for broken frames.</strong> A wrong size, unknown opcode, nonzero reserved field or oversized payload makes it disconnect. Errors <em>from the driver</em>, such as <code>-EINVAL</code> or <code>-ENOTSUP</code>, travel normally in <code>result</code>.</li>
+      <li><strong>The client poisons a broken stream.</strong> On any framing error it shuts the socket down. Every later ioctl returns <code>-EPROTO</code> and every mmap fails. The protocol has no socket timeouts.</li>
+      <li><strong>Every <code>munmap</code> in the process becomes an RPC</strong> while the connection is live. The server acknowledges it, and the client then unmaps locally.</li>
+      <li><strong>Server threads.</strong> The server runs one accept thread and one thread per connection, so different connections can run concurrently.</li>
+      <li><strong>Close and crash clean up the same way.</strong> On CLOSE, which the client sends without waiting for the reply, or on an abrupt disconnect, the server closes the KFD process. It wakes waiters with <code>-EBADF</code>, destroys queues, unregisters the process from the device, and releases every allocation and the doorbell page.</li>
+    </ul>
+  </div>
+  <details>
+    <summary>How does the client find the socket?</summary>
+    <p>The runtime directory is <code>$ROCJITSU_RUNTIME_DIR</code>, otherwise <code>$XDG_RUNTIME_DIR/rocjitsu</code>, otherwise <code>/tmp/rocjitsu-&lt;uid&gt;</code>. The interposer first tries <code>$ROCJITSU_INVOCATION_DIR/daemon.sock</code>, or <code>&lt;runtime&gt;/&lt;pid&gt;/daemon.sock</code> when that variable is unset. Only if that per-invocation <em>directory</em> does not exist does it fall back to the well-known <code>&lt;runtime&gt;/daemon.sock</code>.</p>
+    <p>The <code>--daemon</code> launcher creates a per-invocation directory with its own socket. <code>--attach</code> sets no invocation directory, so the client uses the well-known socket, which gem5 publishes at <code>/run/rocjitsu/daemon.sock</code>. Local simdojo mode creates the directory without a socket, so the connection attempt fails and the in-process driver is used.</p>
+  </details>
+
+  <h3>A whole session, message by message</h3>
+  <div class="prose">
+    <p>The sequence below puts the pieces together for a small HIP program on the gem5-kmd backend. Select a message to see what each side does. <span class="tag illus">representative order</span> The order is derived from the ROCr and rocjitsu sources, not captured from a run; conditional steps and repeated allocations are condensed.</p>
+  </div>
+  <div class="widget" id="w-seq">
+    <div class="split wide-left">
+      <div>
+        <div class="seq" style="margin-bottom:6px"><div class="seq-head k-app" style="background:var(--c-app-bg);color:var(--c-app)">RemoteDriver (application)</div><div class="seq-head k-rj" style="background:var(--c-rj-bg);color:var(--c-rj)">KFD server (gem5)</div></div>
+        <div id="seqList" role="group" aria-label="Messages in the session"></div>
+      </div>
+      <div class="detail sticky" id="seqDetail" aria-live="polite"><p>Select a message.</p></div>
+    </div>
+    <noscript><p>HANDSHAKE → IOCTL GET_VERSION → GET_PROCESS_APERTURES_NEW → ACQUIRE_VM → SET_MEMORY_POLICY → CREATE_EVENT → ALLOC_MEMORY_OF_GPU (fd + slice) → MMAP → MAP_MEMORY_TO_GPU → CREATE_QUEUE → ALLOC (doorbell) → MMAP doorbell (fd) → doorbell stores without RPC → WAIT_EVENTS polls → DESTROY_QUEUE → UNMAP / FREE → CLOSE.</p></noscript>
+  </div>
+</div>
+</section>
+
+<!-- ============================ PART 6 ============================ -->
+<section class="part" id="gem5" aria-labelledby="g5-h">
+<div class="wrap">
+  <p class="part-no">PART 6 · THE gem5 HSAKMT SERVICE</p>
+  <h2 id="g5-h">gem5 plays the driver, the firmware and the platform</h2>
+  <div class="prose">
+    <p>In the gem5-kmd backend, the rocjitsu server runs inside the gem5 process, and gem5's HSAKMT service in <code>src/dev/hsakmt-service/</code> acts as the device. Firmware and a kernel driver would normally program the GPU. The service does that work instead, through the same interfaces they would use: PCI configuration, BAR registers, doorbells, GPU page tables, PM4 packets and the interrupt ring. The GPU model itself knows nothing about the service. It receives only the register writes, memory contents and doorbells a real driver would produce.</p>
+  </div>
+
+  <h3>The embedding C ABI</h3>
+  <div class="prose">
+    <p>rocjitsu builds a separate server-only library, <code>librocjitsu_kmd_server.so.2</code>, with its own CMake project. It contains <code>SimulatedKfd</code> and the socket server, but neither the interposer nor simdojo, and it exports only the <code>rj_kmd_server_*</code> functions declared in <a href="ext/hsakmt-client/rocm-systems/emulation/rocjitsu/lib/rocjitsu/include/rocjitsu/kmd/server.h"><code>rocjitsu/kmd/server.h</code></a>. gem5 links it through SCons when <code>ROCJITSU_KMD_PREFIX</code> is given. No C++ type or exception crosses this boundary, and every struct begins with <code>abi_version</code> (2) and <code>struct_size</code>.</p>
+  </div>
+  <div class="tbl"><table>
+    <thead><tr><th>Function</th><th>gem5 uses it to</th></tr></thead>
+    <tbody>
+      <tr><td><code>rj_kmd_server_create</code></td><td>Build the server from a device description and 14 callbacks, and generate the topology and DRM trees.</td></tr>
+      <tr><td><code>rj_kmd_server_listen</code></td><td>Bind the socket and start accepting clients.</td></tr>
+      <tr><td><code>rj_kmd_server_poll_fds</code> / <code>_process_fd</code></td><td>Learn which descriptor signals pending callbacks, and run those callbacks on gem5's thread.</td></tr>
+      <tr><td><code>rj_kmd_server_notification_fd</code> / <code>_drain_doorbells</code></td><td>Learn that doorbells changed, and collect <code>{process, queue, offset, value}</code> records.</td></tr>
+      <tr><td><code>rj_kmd_server_post_interrupt</code></td><td>Deliver a KFD event ID taken from the interrupt ring.</td></tr>
+      <tr><td><code>rj_kmd_server_get_stats</code></td><td>Count clients, processes, queues and pending replies, which drive the exit decision.</td></tr>
+      <tr><td><code>rj_kmd_server_stop_accepting</code> / <code>_destroy</code></td><td>Quiesce and tear down.</td></tr>
+    </tbody>
+  </table></div>
+  <div class="prose">
+    <p>Threads are the subtle part. rocjitsu's socket threads must never touch gem5 objects, because gem5 is single-threaded. When a request needs the device, the RPC worker thread queues the callback, signals an eventfd, and <strong>blocks</strong>. gem5 notices on its own event-queue thread, runs the callback, and the worker resumes and sends its reply. The service watches the descriptors through gem5's poll queue. It also checks them on its periodic 1000-tick interrupt poll, because an eventfd can become readable without waking gem5. Callbacks must return 0 or a negative errno and must not block, throw or call back into the server.</p>
+  </div>
+
+  <h3>Bringing up a GPU without firmware or an OS</h3>
+  <div class="prose">
+    <p>Before any application connects, the service does what the BIOS and the kernel driver do at boot. It performs every step through the modeled PCI host and BARs:</p>
+  </div>
+  <ol class="steps">
+    <li><b>Enumerate the device.</b> Write the GPU's PCI configuration space, assign BAR0 (VRAM), BAR2 (doorbells) and BAR5 (registers), enable memory decoding, and check that each window is reachable.</li>
+    <li><b>Route device DMA.</b> Register VRAM as memory for the GPU's DMA clients: the packet processor, the command processor, PM4, the interrupt handler and the SDMA engines.</li>
+    <li><b>Set up the interrupt ring.</b> Clear a 64 KiB ring at VRAM <code>0x120_0000</code> and its write-pointer word, then program the <code>IH_RB_*</code> registers through BAR5, including the doorbell used to acknowledge consumed entries.</li>
+    <li><b>Create a private PM4 queue.</b> Place a 4 KiB ring at VRAM <code>0x121_1000</code>, open an aperture that makes GPU virtual addresses from <code>0x7000_0000</code> reach VRAM directly, and write the hardware-queue registers through BAR5. This is how a kernel driver starts its own kernel interface queue (KIQ). The service later uses this queue to send MAP_PROCESS, MAP_QUEUES and UNMAP_QUEUES.</li>
+    <li><b>Publish the socket.</b> Only now does the service create the server and listen on <code>/run/rocjitsu/daemon.sock</code>. The lab's Compose health check waits for that socket before starting the application.</li>
+  </ol>
+  <div class="tbl" style="margin-top:1em"><table>
+    <thead><tr><th>VRAM region</th><th>Address</th><th>Size</th></tr></thead>
+    <tbody>
+      <tr><td>Page-table pages</td><td><code>0x100_0000</code></td><td>2 MiB</td></tr>
+      <tr><td>Interrupt ring, then its write pointer</td><td><code>0x120_0000</code>, <code>0x121_0000</code></td><td>64 KiB, 4 B</td></tr>
+      <tr><td>Private PM4 ring</td><td><code>0x121_1000</code></td><td>4 KiB</td></tr>
+      <tr><td>Queue descriptors (MQDs), 64 slots</td><td><code>0x121_3000</code></td><td>256 KiB</td></tr>
+      <tr><td>Heap exported to applications</td><td><code>0x1000_0000</code>–<code>0x3FFF_FFFF</code></td><td>768 MiB</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>What each device callback does</h3>
+  <div class="prose">
+    <p>Once a client is attached, <code>SimulatedKfd</code> decides <em>whether</em> an operation is valid, and the service decides <em>how the device performs it</em>. Each callback below is the device half of one or more KFD ioctls from Part 3.</p>
+  </div>
+  <div class="tbl"><table>
+    <thead><tr><th>Callback</th><th>Triggered by</th><th>What the service does</th></tr></thead>
+    <tbody>
+      <tr><td><code>open_process</code></td><td>HANDSHAKE</td><td>Records the process. A second process is rejected with <code>-EBUSY</code>.</td></tr>
+      <tr><td><code>set_apertures</code></td><td>first open</td><td>Stores the LDS and scratch aperture bases for MAP_PROCESS.</td></tr>
+      <tr><td><code>allocate</code></td><td>ALLOC_MEMORY_OF_GPU</td><td>Takes a 4 KiB-aligned extent from the heap, first fit. Returns a slice <code>{device address, size, fd, fd offset}</code> of the VRAM backing file; the descriptor becomes rocjitsu's.</td></tr>
+      <tr><td><code>map</code></td><td>MAP_MEMORY_TO_GPU</td><td>Writes four-level page-table entries for VMID 1 and invalidates the GPU TLBs. The KFD flags become a memory type: uncached (UC), coherent (CC) or read-write (RW). Non-temporal (NT) is rejected.</td></tr>
+      <tr><td><code>unmap</code> / <code>free</code></td><td>UNMAP / FREE, or the last lease</td><td>Clears entries, returns the extent to the heap. Refuses with <code>-EBUSY</code> while a live queue uses those pages.</td></tr>
+      <tr><td><code>create_queue</code></td><td>CREATE_QUEUE</td><td>Sends MAP_PROCESS on the first queue. It then writes an MQD and sends MAP_QUEUES with VMID 1, which makes the model register the queue with its packet processor or, for SDMA, with a copy engine. It also registers the doorbell for forwarding.</td></tr>
+      <tr><td><code>update_queue</code> / <code>destroy_queue</code></td><td>UPDATE / DESTROY_QUEUE</td><td>Sends UNMAP_QUEUES, then either maps the queue again or clears its MQD slot. Suspension (0 %) is rejected.</td></tr>
+      <tr><td><code>read64</code> / <code>write64</code></td><td>queue setup</td><td>Translate a GPU virtual address through the service's page tables and access VRAM through BAR0.</td></tr>
+      <tr><td><code>close_process</code></td><td>CLOSE or disconnect</td><td>Destroys queues, sends UNMAP_QUEUES for the process and removes its mappings. Storage survives until its last lease is released.</td></tr>
+      <tr><td><code>shutdown</code></td><td>server teardown</td><td>Quiesces everything and frees any remaining storage.</td></tr>
+    </tbody>
+  </table></div>
+  <div class="prose">
+    <p>Page-table pages are written through the memory backdoor. The page-table base is set by a direct call on the model's VM object, and MAP_PROCESS later programs the same base through PM4. The Vega TLB model reads a PTE's cacheable bit but not its memory type, so programming CC rather than RW does not produce different modeled cache behavior.</p>
+  </div>
+
+  <h3>One kernel, end to end</h3>
+  <div class="prose">
+    <p>Everything from Parts 1 to 6 meets in a single launch. Step through it: the highlighted boxes are the components active in each step.</p>
+  </div>
+  <div class="widget stepper" id="w-journey">
+    <div class="journey dim" id="jnMap" aria-hidden="true">
+      <div class="node k-app" data-n="app"><b>HIP app + ROCr</b><small>application</small></div>
+      <div class="node k-rj" data-n="rd"><b>RemoteDriver</b><small>client</small></div>
+      <div class="node k-rj" data-n="srv"><b>SimulatedKfd</b><small>embedded server</small></div>
+      <div class="node k-svc" data-n="svc"><b>HSAKMT service</b><small>callbacks, doorbells, IH</small></div>
+      <div class="node k-hw" data-n="cp"><b>Packet processor + CP</b><small>PM4, AQL</small></div>
+      <div class="node k-hw" data-n="cu"><b>CUs + caches</b><small>execution</small></div>
+      <div class="node k-hw" data-n="mem"><b>VRAM file</b><small>shared backing</small></div>
+    </div>
+    <div class="nav js-only"><button class="btn" type="button" data-step="-1">◀ Back</button><button class="btn primary" type="button" data-step="1">Next ▶</button><span class="count" aria-live="polite"></span></div>
+    <ol class="steps">
+      <li data-lit="app rd srv svc mem"><b>Allocate.</b> <code>hipMalloc</code> becomes ALLOC_MEMORY_OF_GPU over KFD RPC. The <code>allocate</code> callback carves a slice of the VRAM file, the reply carries the descriptor and <code>{offset, size}</code>, and the client maps the slice at the pointer <code>hipMalloc</code> will return.</li>
+      <li data-lit="app rd srv svc mem"><b>Map for the GPU.</b> MAP_MEMORY_TO_GPU reaches the <code>map</code> callback, which writes page-table entries so that the same virtual address resolves to the slice's device address for VMID 1.</li>
+      <li data-lit="app rd srv svc cp"><b>Create the queue</b> on first use. CREATE_QUEUE reaches <code>create_queue</code>. The service writes the MQD and sends MAP_PROCESS and MAP_QUEUES on its private PM4 ring, and the model binds the doorbell to the AQL queue. The client then maps the shared doorbell page.</li>
+      <li data-lit="app mem"><b>Write the packet.</b> ROCr fills a 64-byte AQL packet in the ring and publishes the header last. The ring is itself a slice of the VRAM file, so these are plain stores that the GPU will read.</li>
+      <li data-lit="app"><b>Ring the doorbell.</b> ROCr stores the packet index to its doorbell. The page is shared memory, so no RPC or system call occurs.</li>
+      <li data-lit="srv svc"><b>Notice the doorbell.</b> Within about 250 µs of host time, rocjitsu's doorbell monitor sees the new value and signals gem5. On its next poll, the service performs a real 64-bit write to BAR2 at the queue's doorbell offset.</li>
+      <li data-lit="cp mem"><b>Fetch.</b> The doorbell advances the queue's write index. The packet processor DMA-reads the new packet from the ring through VMID 1's page tables, and the command processor reads the kernel descriptor.</li>
+      <li data-lit="cp cu mem"><b>Execute.</b> The dispatcher places workgroups on CUs as resources allow, as in Part 1. Waves fetch instructions and data through the caches. Modeled writes reach the VRAM file, which is also the application's memory.</li>
+      <li data-lit="cp mem app"><b>Complete.</b> After the last workgroup, the packet processor writes back the read index and the command processor decrements the completion signal. A spinning HIP thread sees the new value directly.</li>
+      <li data-lit="cp svc srv"><b>Interrupt</b>, for signals with an event mailbox. The command processor appends a cookie with the event ID to the interrupt ring. The service's 1000-tick poll reads it through BAR0, calls <code>rj_kmd_server_post_interrupt</code>, and acknowledges the ring through its doorbell.</li>
+      <li data-lit="srv rd app"><b>Wake the waiter.</b> <code>SimulatedKfd</code> marks the event as signaled in the shared events page. The client's next 5 ms WAIT_EVENTS poll returns <em>complete</em>, and ROCr's wait returns.</li>
+      <li data-lit="app rd srv svc cp"><b>Tear down.</b> At exit the client sends CLOSE. The service unmaps the queues and mappings, releases storage when the last lease goes, and gem5 ends the simulation once the client has disconnected and all state has drained.</li>
+    </ol>
+  </div>
+</div>
+</section>
+
+<!-- ============================ PART 7 ============================ -->
+<section class="part" id="limits" aria-labelledby="lim-h">
+<div class="wrap">
+  <p class="part-no">PART 7 · BOUNDARIES AND LIMITS</p>
+  <h2 id="lim-h">What the gem5-kmd backend supports, and how results are checked</h2>
+  <div class="prose">
+    <p>The service supports <strong>one attached process and one MI300X (gfx942) GPU</strong>. It uses VMID 1 and PASID <code>0x8000</code>, and the model's command processor and packet processor also assume VMID 1. The topology it reports matches the modeled GPU: 8 CUs by default, one XCC, and the configured SIMD, wave-slot and memory sizes. Anything the service cannot perform fails explicitly rather than being faked:</p>
+    <ul>
+      <li>A second process gets <code>-EBUSY</code>. Cross-process IPC workloads are therefore not supported.</li>
+      <li>SVM attribute and migration ioctls return <code>-ENOTSUP</code>, and ROCr falls back to ordinary GTT and USERPTR registration.</li>
+      <li>Non-temporal mappings, queue suspension, CU masks, debugger (<code>DBG_TRAP</code>), dma-buf import and export, and PM4-type compute queues are rejected. At most 64 queues can exist at once.</li>
+      <li>Checkpoints are <em>cold</em> only: taken before the listener is published and before any client connects.</li>
+    </ul>
+    <p>None of these limits applies to simdojo, which has its own capabilities.</p>
+  </div>
+  <details>
+    <summary>Known gaps in the current implementation</summary>
+    <ul>
+      <li><code>SimulatedKfd</code> returns success for an ioctl it does not recognize, such as <code>SMI_EVENTS</code>, without filling in its outputs. This is also true for the external backend.</li>
+      <li>The service never reclaims space in its 4 KiB private PM4 ring outside unit tests. After about 1024 dwords of MAP_PROCESS, MAP_QUEUES and UNMAP_QUEUES packets in one run, roughly 77 queue create/destroy pairs, <code>create_queue</code> fails.</li>
+      <li>The model's interrupt-ring write pointer does not wrap. The service stops with a fatal error once 64 KiB of cookies (2048 interrupts) have been written in one run.</li>
+      <li>rocjitsu reports KFD interface 1.18, the version of its vendored header, while the pinned libhsakmt was built against 1.19. The version checks libhsakmt performs are all satisfied.</li>
+    </ul>
+  </details>
+
+  <h3>Reading timing results</h3>
+  <div class="prose">
+    <p>Kernel execution happens entirely inside the timing model: fetch, dispatch, waves, caches, memory and completion. The path <em>into</em> the model is not. Doorbells are sampled in host time (250 µs) and picked up on a 1000-tick poll, and gem5 synchronizes simulated time with wall-clock time. The simulated gap between a doorbell store and the packet fetch therefore depends on the host. Measure kernels with the GPU's own statistics, such as <code>shaderActiveTicks</code> and the per-CU counters, rather than with total simulated time. The model also charges a fixed 4.4 µs per AQL packet, and the single HBM interface peaks at 16 GB/s. See <a href="gpu-lab/RunningTheLab.md#model-size-and-interpretation">model size and interpretation</a>.</p>
+  </div>
+
+  <h3>Build and packaging follow the ownership</h3>
+  <div class="cols">
+    <div class="card k-rj" style="border-top:4px solid var(--c-rj)"><h4>rocjitsu: CMake</h4><p><code>ext/hsakmt-client/rocm-systems/emulation/rocjitsu/</code> owns the interposer, KFD RPC, <code>SimulatedKfd</code>, the device-backend contract, the C ABI and its tests. The <b>SDK image</b> holds HIP, the pinned ROCr and full rocjitsu.</p></div>
+    <div class="card k-svc" style="border-top:4px solid var(--c-svc)"><h4>gem5 service: SCons</h4><p><code>src/dev/hsakmt-service/</code> owns the platform, GPUVM, queue, doorbell and interrupt work, and the C callback adapter. The <b>runner image</b> holds <code>gem5.opt</code>, the service and the server-only rocjitsu library.</p></div>
+  </div>
+  <div class="prose">
+    <p>The dependency points one way. gem5 includes the installed <code>server.h</code> and links the library, but rocjitsu never includes gem5 headers or invokes SCons. The two containers share one Linux kernel and exchange only the socket, the generated topology files and passed descriptors through the <code>/run/rocjitsu</code> volume. No IP network is involved.</p>
+  </div>
+
+  <h3>How a run is verified</h3>
+  <div class="prose">
+    <p>A zero exit code is not evidence. <code>make -C src/dev/hsakmt-service verify-sample-workloads</code> runs every sample application on the gem5-kmd backend. A run passes only if all of the following hold:</p>
+    <ul>
+      <li>the application prints its exact expected result, and the rainbow image matches a fixed digest;</li>
+      <li>gem5 launched the expected number of kernels;</li>
+      <li>every submitted AQL packet retired;</li>
+      <li>no gem5 fault, reactor error or stale doorbell was reported;</li>
+      <li>gem5 logged that the KMD state drained after the client disconnected.</li>
+    </ul>
+    <p>A pass on one backend is never evidence for another.</p>
+  </div>
+
+  <h3>Where to go next</h3>
+  <div class="cols">
+    <a class="card" href="gpu-lab/RunningTheLab.md" style="text-decoration:none;color:inherit"><h4>Run the lab ↗</h4><p>Backends, images and launch commands.</p></a>
+    <a class="card" href="src/dev/hsakmt-service/README.md" style="text-decoration:none;color:inherit"><h4>Service implementation ↗</h4><p>Build boundary, tests and memory contract.</p></a>
+    <a class="card" href="ext/hsakmt-client/rocm-systems/emulation/rocjitsu/README.md" style="text-decoration:none;color:inherit"><h4>rocjitsu ↗</h4><p>Modes, configuration and simdojo.</p></a>
+    <a class="card" href="gpu-lab/MI300XConfiguration.md" style="text-decoration:none;color:inherit"><h4>MI300X configuration ↗</h4><p>Where every model size comes from.</p></a>
+  </div>
+</div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>A self-contained page that works offline. The interactive figures illustrate concepts; they are not simulation output. Keep this page consistent with the implementation, as <a href="AGENTS.md">AGENTS.md</a> requires.</p>
+  </div>
+</footer>
+
+<script>
+(function () {
+'use strict';
+var $ = function (s, r) { return (r || document).querySelector(s); };
+var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+function el(tag, cls, html) { var e = document.createElement(tag); if (cls) e.className = cls; if (html !== undefined) e.innerHTML = html; return e; }
+function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+function hx(n, w) { return '0x' + n.toString(16).toUpperCase().padStart(w || 0, '0'); }
+function group(h) { return '0x' + h.replace(/^0x/, '').replace(/\B(?=([0-9A-F]{4})+$)/g, '_'); }
+var store = {
+  get: function (k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } },
+  set: function (k, v) { try { window.localStorage.setItem(k, v); } catch (e) {} }
+};
+function press(buttons, active) { buttons.forEach(function (b) { b.setAttribute('aria-pressed', b === active ? 'true' : 'false'); }); }
+
+/* ---------- theme ---------- */
+var root = document.documentElement, themeBtn = $('#themeBtn');
+function applyTheme(t) {
+  if (t === 'light' || t === 'dark') root.setAttribute('data-theme', t); else root.removeAttribute('data-theme');
+  var label = t === 'dark' ? 'Dark' : t === 'light' ? 'Light' : 'Auto';
+  themeBtn.textContent = 'Theme: ' + label;
+  themeBtn.setAttribute('aria-label', 'Colour theme is ' + label + '. Activate to change.');
+}
+var theme = store.get('kfd-guide-theme') || 'auto';
+applyTheme(theme);
+themeBtn.addEventListener('click', function () {
+  theme = theme === 'auto' ? 'light' : theme === 'light' ? 'dark' : 'auto';
+  store.set('kfd-guide-theme', theme); applyTheme(theme);
+});
+
+/* ---------- nav highlight ---------- */
+if ('IntersectionObserver' in window) {
+  var navLinks = $$('.top nav a');
+  var io = new IntersectionObserver(function (entries) {
+    entries.forEach(function (en) {
+      if (!en.isIntersecting) return;
+      navLinks.forEach(function (a) { a.classList.toggle('here', a.getAttribute('href') === '#' + en.target.id); });
+    });
+  }, { rootMargin: '-45% 0px -50% 0px' });
+  $$('section.part').forEach(function (s) { io.observe(s); });
+}
+
+/* ---------- generic pickers (CU parts) ---------- */
+$$('.pick').forEach(function (w) {
+  var btns = $$('[data-show]', w), panes = $$('.pick-details > div', w);
+  if (!btns.length) return;
+  function show(b) {
+    press(btns, b);
+    panes.forEach(function (p) { p.classList.toggle('cur', p.getAttribute('data-id') === b.getAttribute('data-show')); });
+  }
+  btns.forEach(function (b) { b.addEventListener('click', function () { show(b); }); });
+  show(btns[0]);
+});
+
+/* ---------- launch / occupancy ---------- */
+(function () {
+  var ids = ['lnGrid', 'lnWg', 'lnV', 'lnS', 'lnL'];
+  if (!$('#lnGrid')) return;
+  var view = $('#lnGridView');
+  for (var c = 0; c < 8; c++) {
+    var cu = el('div', 'cu'); cu.appendChild(el('div', 'cu-title', 'CU ' + c));
+    for (var s = 0; s < 4; s++) { var row = el('div', 'simd'); for (var k = 0; k < 8; k++) row.appendChild(el('i', 'slot')); cu.appendChild(row); }
+    view.appendChild(cu);
+  }
+  function update() {
+    var grid = +$('#lnGrid').value, wg = +$('#lnWg').value, v = +$('#lnV').value, sg = +$('#lnS').value, ldsK = +$('#lnL').value;
+    $('#lnWgV').textContent = wg; $('#lnVV').textContent = v; $('#lnSV').textContent = sg; $('#lnLV').textContent = ldsK + ' KiB';
+    var nWG = Math.ceil(grid / wg);
+    var wpw = Math.ceil(Math.min(wg, grid) / 64);
+    var vA = Math.ceil(v / 16) * 16, sA = Math.ceil(sg / 16) * 16;
+    var byV = Math.floor(512 / vA), byS = Math.floor(800 / sA), W = Math.min(8, byV, byS);
+    var ldsLimit = ldsK > 0 ? Math.floor(64 / ldsK) : Infinity;
+    var barLimit = wpw > 1 ? 16 : Infinity;
+    var occ = [0, 0, 0, 0], slots = [[], [], [], []], placed = 0, reason = '';
+    for (;;) {
+      if (placed >= ldsLimit) { reason = 'LDS'; break; }
+      if (placed >= barLimit) { reason = 'barrier slots'; break; }
+      var trial = occ.slice(), where = [], ok = true;
+      for (var w = 0; w < wpw; w++) {
+        var best = -1;
+        for (var i = 0; i < 4; i++) if (trial[i] < W && (best < 0 || trial[i] < trial[best])) best = i;
+        if (best < 0) { ok = false; break; }
+        trial[best]++; where.push(best);
+      }
+      if (!ok) { reason = W === 8 ? 'wave slots' : (byV <= byS ? 'VGPRs' : 'SGPRs'); break; }
+      where.forEach(function (i) { slots[i].push(placed); });
+      occ = trial; placed++;
+    }
+    var resident = Math.min(nWG, 8 * placed);
+    if (placed > 0 && resident < 8 * placed) reason = 'grid size';
+    var perCuWaves = placed * wpw;
+    var out = $('#lnOut'); out.innerHTML = '';
+    function box(label, value, lim) { var d = el('div', lim ? 'limit' : '', '<b>' + value + '</b>' + label); out.appendChild(d); }
+    box('workgroups in the grid', nWG.toLocaleString('en'));
+    box('waves per workgroup', wpw);
+    box('waves per SIMD (slot limit 8, VGPR limit ' + byV + ', SGPR limit ' + byS + ')', W, reason === 'VGPRs' || reason === 'SGPRs' || reason === 'wave slots');
+    box('workgroups per CU', placed, reason === 'LDS' || reason === 'barrier slots');
+    box('resident waves per CU (of 32)', placed ? perCuWaves : 0, reason === 'grid size');
+    box('occupancy', placed ? Math.round(100 * perCuWaves / 32) + '%' : '—');
+    var cus = $$('.cu', view);
+    cus.forEach(function (cu, c) {
+      var count = Math.floor(resident / 8) + (c < resident % 8 ? 1 : 0);
+      $$('.simd', cu).forEach(function (row, s) {
+        $$('.slot', row).forEach(function (sl, k) {
+          var wgi = slots[s][k];
+          var on = wgi !== undefined && wgi < count;
+          sl.className = 'slot' + (on ? ' on' + (wgi % 2 ? ' b' : '') : '');
+        });
+      });
+    });
+    var note = $('#lnNote');
+    if (!placed) {
+      note.innerHTML = '<b>This workgroup never fits on a CU</b>: it needs ' + wpw + ' waves, but only ' + (4 * W) + ' can be resident with these register counts. gem5 stops with an error for such a kernel.';
+    } else {
+      var rounds = Math.ceil(nWG / (8 * placed));
+      note.innerHTML = 'Limited by <b>' + reason + '</b>. ' + (rounds > 1
+        ? 'If every workgroup took the same time, the grid would need about <b>' + rounds.toLocaleString('en') + '</b> rounds of workgroups on the 8 CUs.'
+        : 'The whole grid is resident at once.') + ' Colours alternate between workgroups; each row is one SIMD.';
+    }
+  }
+  ids.forEach(function (id) { $('#' + id).addEventListener('input', update); });
+  update();
+})();
+
+/* ---------- EXEC mask ---------- */
+(function () {
+  if (!$('#exK')) return;
+  var lanesBox = $('#exLanes'), lanes = [], step = 0, cond = 'lt';
+  for (var i = 0; i < 64; i++) { var l = el('i', 'lane'); lanes.push(l); lanesBox.appendChild(l); }
+  var lines = $$('#exCode [data-l]');
+  var condBtns = $$('#w-exec [data-cond]');
+  function test(l) { var k = +$('#exK').value; return cond === 'lt' ? l < k : l % 2 === 1; }
+  function count(f) { var n = 0; for (var i = 0; i < 64; i++) if (f(i)) n++; return n; }
+  function render() {
+    $('#exKV').textContent = $('#exK').value;
+    lines.forEach(function (ln, i) { ln.classList.toggle('cur', i === step - 1); });
+    var t = count(test), e = 64 - t, mask, label, alt = false, msg;
+    if (step === 0) { mask = function () { return true; }; label = 'EXEC before the if: all 64 lanes enabled'; msg = 'Press Step to execute the first instruction.'; }
+    else if (step === 1) { mask = test; alt = true; label = 'VCC after the compare (one bit per lane); EXEC is unchanged'; msg = 'The compare runs on all enabled lanes and records the condition in VCC.'; }
+    else if (step === 2) { mask = test; label = 'EXEC = old EXEC AND VCC'; msg = 'The old mask is saved in s[0:1]. Only lanes where the condition holds stay enabled.'; }
+    else if (step === 3) { mask = test; label = 'EXEC while v_mul_f32 executes'; msg = 'v_mul_f32 changes ' + t + ' lanes but occupies the SIMD for the full 4 cycles.' + (t === 0 ? ' No lane is enabled: the compiler would normally skip this side with s_cbranch_execz.' : ''); }
+    else if (step === 4) { mask = function (l) { return !test(l); }; label = 'EXEC = saved XOR EXEC: the other lanes'; msg = 'The mask is flipped to the lanes that failed the condition.'; }
+    else if (step === 5) { mask = function (l) { return !test(l); }; label = 'EXEC while v_add_f32 executes'; msg = 'v_add_f32 changes ' + e + ' lanes, again for the full 4 cycles.' + (e === 0 ? ' No lane is enabled: this side would normally be skipped.' : ''); }
+    else { mask = function () { return true; }; label = 'EXEC restored'; msg = 'Both sides took ' + ((t ? 4 : 0) + (e ? 4 : 0)) + ' cycles of vector issue for 64 useful lane-operations, a SIMD utilization of ' + Math.round(100 * 64 / (64 * ((t ? 1 : 0) + (e ? 1 : 0)))) + '% for this if/else.'; }
+    lanes.forEach(function (ln, i) { ln.className = 'lane' + (mask(i) ? (alt ? ' alt' : ' on') : ''); });
+    $('#exLabel').textContent = label + ' (' + count(mask) + ' of 64 lanes)';
+    $('#exOut').textContent = msg;
+    $('#exPrev').disabled = step === 0; $('#exNext').disabled = step === 6;
+  }
+  $('#exNext').addEventListener('click', function () { if (step < 6) step++; render(); });
+  $('#exPrev').addEventListener('click', function () { if (step > 0) step--; render(); });
+  $('#exK').addEventListener('input', render);
+  condBtns.forEach(function (b) { b.addEventListener('click', function () { cond = b.getAttribute('data-cond'); press(condBtns, b); render(); }); });
+  render();
+})();
+
+/* ---------- latency hiding ---------- */
+(function () {
+  if (!$('#ltN')) return;
+  var T = 48, MEM = 10;
+  function update() {
+    var n = +$('#ltN').value; $('#ltNV').textContent = n;
+    var waves = [], rows = [], busy = [], issued = 0;
+    for (var w = 0; w < n; w++) { waves.push({ pc: 0, ready: 0, waiting: false }); rows.push([]); }
+    for (var t = 0; t < T; t++) {
+      var pick = -1;
+      for (var w2 = 0; w2 < n; w2++) if (waves[w2].ready <= t) { pick = w2; break; }
+      for (var w3 = 0; w3 < n; w3++) {
+        var wv = waves[w3];
+        if (w3 === pick) {
+          rows[w3].push('x');
+          if (wv.pc === 2) { wv.ready = t + 1 + MEM; wv.waiting = true; } else { wv.ready = t + 1; wv.waiting = false; }
+          wv.pc = (wv.pc + 1) % 3;
+        } else rows[w3].push(wv.ready > t && wv.waiting ? 'w' : '');
+      }
+      busy.push(pick >= 0 ? 'x' : 'idle'); if (pick >= 0) issued++;
+    }
+    var view = $('#ltView'); view.innerHTML = '';
+    function addRow(label, cells) {
+      var r = el('div', 'tl-row'); r.appendChild(el('span', '', label));
+      var cs = el('div', 'tl-cells'); cells.forEach(function (c) { cs.appendChild(el('i', c)); }); r.appendChild(cs); view.appendChild(r);
+    }
+    rows.forEach(function (r, i) { addRow('wave ' + i, r); });
+    addRow('SIMD', busy);
+    $('#ltOut').innerHTML = 'The SIMD issues in <b>' + issued + ' of ' + T + '</b> slots (' + Math.round(100 * issued / T) + '% busy).' +
+      (n === 1 ? ' One wave spends most of its time waiting for memory.' : n >= 4 ? ' Other waves fill the slots while each one waits.' : '');
+  }
+  $('#ltN').addEventListener('input', update); update();
+})();
+
+/* ---------- GPU VA decoder ---------- */
+(function () {
+  var inp = $('#vaIn'); if (!inp) return;
+  var levels = [['PDE2', 39], ['PDE1', 30], ['PDE0', 21], ['PTE', 12]];
+  var exampleTables = [0x1000000, 0x1001000, 0x1002000, 0x1003000];
+  function update() {
+    var raw = inp.value.trim().replace(/[_\s]/g, '');
+    var err = $('#vaErr'), out = $('#vaBits');
+    var v;
+    try { if (!/^(0x)?[0-9a-fA-F]+$/.test(raw)) throw 0; v = BigInt(raw.startsWith('0x') || raw.startsWith('0X') ? raw : '0x' + raw); } catch (e) { err.textContent = 'Enter a hexadecimal address.'; return; }
+    if (v >= (1n << 48n)) { err.textContent = 'GPU virtual addresses have 48 bits here.'; return; }
+    err.textContent = '';
+    var idx = levels.map(function (l) { return Number((v >> BigInt(l[1])) & 0x1FFn); });
+    var off = Number(v & 0xFFFn);
+    var html = '<div class="bitstrip">' + levels.map(function (l, i) {
+      return '<div><b>' + idx[i] + '</b>' + l[0] + '<br>bits ' + (l[1] + 8) + '–' + l[1] + '</div>';
+    }).join('') + '<div><b>' + hx(off, 3) + '</b>offset<br>bits 11–0</div></div>';
+    var num = Number(v);
+    if (num >= 0x70000000 && num <= 0x71FFFFFF) {
+      html += '<p class="out">This address lies in the aperture the gem5 service opens at start-up (<code>0x7000_0000</code>–<code>0x71FF_FFFF</code>). The model translates it without page tables: device address = VA − <code>0x7000_0000</code> = <code>' + hx(num - 0x70000000) + '</code>' +
+        (num >= 0x71211000 && num < 0x71212000 ? ', which is the service\'s private PM4 ring.' : num >= 0x71213000 && num < 0x71253000 ? ', inside the queue-descriptor (MQD) slots.' : '.') + '</p>';
+    } else {
+      html += '<ol class="walk">' + levels.map(function (l, i) {
+        var addr = exampleTables[i] + idx[i] * 8;
+        return '<li>' + (i === 0 ? 'Root table (' + l[0] + ') at VRAM <code>' + hx(exampleTables[0]) + '</code>' : l[0] + ' table at <code>' + hx(exampleTables[i]) + '</code>') +
+          ': read entry ' + idx[i] + ' at <code>' + hx(addr) + '</code> → ' + (i < 3 ? 'address of the next table (flags V, C)' : 'physical page + flags V, C, X, R, W and a memory type') + '</li>';
+      }).join('') + '<li>Device address = page base + <code>' + hx(off, 3) + '</code>. The TLBs cache the result, so most accesses skip this walk.</li></ol>';
+    }
+    out.innerHTML = html;
+  }
+  inp.addEventListener('input', update);
+  $$('#w-va [data-va]').forEach(function (b) { b.addEventListener('click', function () { inp.value = b.getAttribute('data-va'); update(); }); });
+  update();
+})();
+
+/* ---------- ring buffer ---------- */
+(function () {
+  if (!$('#rgView')) return;
+  var SIZE = 16, st, pending;
+  function reset() {
+    st = { slots: [], wi: 0, ri: 0, db: -1, gpuWi: 0, fetched: 0, signals: {} };
+    for (var i = 0; i < SIZE; i++) st.slots.push({ s: 'empty', p: null });
+    pending = []; $('#rgLog').innerHTML = ''; log('sys', 'Queue created: 16 slots, read and write index 0, doorbell registered with the packet processor.'); render();
+  }
+  function log(who, msg) {
+    var d = el('div', '', '<b style="color:' + (who === 'app' ? 'var(--c-app)' : who === 'gpu' ? 'var(--c-hw)' : 'var(--muted)') + '">' + (who === 'app' ? 'ROCr' : who === 'gpu' ? 'GPU' : '—') + '</b> ' + msg);
+    var lg = $('#rgLog'); lg.appendChild(d); lg.scrollTop = lg.scrollHeight;
+  }
+  function slot(i) { return st.slots[i % SIZE]; }
+  function appSteps(n) {
+    var base = null, list = [];
+    for (var k = 0; k < n; k++) {
+      (function (k) {
+        var idx;
+        list.push({ who: 'app', run: function () {
+          if (st.wi - st.ri >= SIZE) { log('app', 'Queue full: waits for the read index to advance.'); return false; }
+          idx = st.wi++; if (base === null) base = idx; slot(idx).s = 'body'; slot(idx).p = idx; st.signals[idx] = 1;
+          log('app', 'Reserves packet ' + idx + ' (write_dispatch_id ' + idx + ' → ' + st.wi + ') and writes its body; the header still says INVALID.');
+        } });
+        list.push({ who: 'app', run: function () { slot(idx).s = 'valid'; log('app', 'Release-stores the header of packet ' + idx + ': type KERNEL_DISPATCH. The packet is now published.'); } });
+      })(k);
+    }
+    list.push({ who: 'app', run: function () {
+      var last = st.wi - 1; st.db = last;
+      log('app', 'Writes ' + last + ' to the doorbell: the index of the last published packet. No packet data travels with it.');
+      pending.push({ who: 'gpu', run: fetch });
+    } });
+    return list;
+  }
+  function fetch() {
+    st.gpuWi = st.db + 1;
+    var from = st.fetched, to = st.db;
+    if (from > to) { log('gpu', 'Write index is ' + st.gpuWi + '; no new packets to fetch.'); return; }
+    for (var i = from; i <= to; i++) { pending.push(execStep(i)); pending.push(doneStep(i)); }
+    st.fetched = to + 1;
+    log('gpu', 'Write index becomes ' + st.gpuWi + '. The packet processor DMA-reads packet' + (from === to ? ' ' + from : 's ' + from + '–' + to) + ' from the ring.');
+  }
+  function execStep(i) { return { who: 'gpu', run: function () { slot(i).s = 'run'; log('gpu', 'Dispatches packet ' + i + ': reads the kernel descriptor and places workgroups on CUs.'); } }; }
+  function doneStep(i) { return { who: 'gpu', run: function () {
+    slot(i).s = 'empty'; st.ri = i + 1; st.signals[i] = 0;
+    log('gpu', 'Packet ' + i + ' done: read_dispatch_id → ' + st.ri + ', completion signal 1 → 0.');
+  } }; }
+  function next() {
+    if (!pending.length) pending = appSteps(1);
+    var s = pending.shift(); if (s.run() === false) pending.unshift(s); render();
+  }
+  function render() {
+    var v = $('#rgView'); v.innerHTML = '';
+    for (var i = 0; i < SIZE; i++) {
+      var sl = st.slots[i];
+      var cls = 'pkt' + (sl.s === 'body' ? ' body' : sl.s === 'valid' ? ' valid' : sl.s === 'run' ? ' run' : '');
+      var d = el('div', cls, '<span>slot ' + i + '</span><span>' + (sl.s === 'empty' ? '' : '#' + sl.p) + '</span>');
+      if (st.wi % SIZE === i) d.appendChild(el('span', 'pw', 'W'));
+      if (st.ri % SIZE === i) d.appendChild(el('span', 'pr', 'R'));
+      v.appendChild(d);
+    }
+    $('#rgRegs').innerHTML = '<dt>write_dispatch_id (ROCr)</dt><dd>' + st.wi + '</dd><dt>read_dispatch_id (GPU)</dt><dd>' + st.ri + '</dd><dt>last doorbell value</dt><dd>' + (st.db < 0 ? '—' : st.db) + '</dd><dt>packets in flight</dt><dd>' + (st.wi - st.ri) + '</dd>' +
+      '<dt>next action</dt><dd>' + (pending.length ? (pending[0].who === 'app' ? 'ROCr' : 'GPU') : 'ROCr: new packet') + '</dd>';
+  }
+  $('#rgNext').addEventListener('click', next);
+  $('#rgBurst').addEventListener('click', function () {
+    while (pending.length && pending[0].who === 'app') { var s = pending.shift(); s.run(); }
+    pending = appSteps(3).concat(pending);
+    while (pending.length && pending[0].who === 'app') { var s2 = pending.shift(); if (s2.run() === false) { pending.unshift(s2); break; } }
+    render();
+  });
+  $('#rgGpu').addEventListener('click', function () {
+    var guard = 0; while (pending.length && pending[0].who === 'gpu' && guard++ < 200) pending.shift().run(); render();
+  });
+  $('#rgReset').addEventListener('click', reset);
+  reset();
+})();
+
+/* ---------- byte-field viewer (shared by AQL + RPC messages) ---------- */
+function leBytes(value, size) {
+  var out = [];
+  if (typeof value === 'string') { for (var i = 0; i < value.length; i++) out.push(value.charCodeAt(i) & 0xFF); return out; }
+  var v = BigInt.asUintN(size * 8, BigInt(value));
+  for (var j = 0; j < size; j++) { out.push(Number(v & 0xFFn)); v >>= 8n; }
+  return out;
+}
+function fmtVal(f) {
+  if (typeof f.v === 'string') return '"' + f.v + '"';
+  if (f.fmt === 'dec') return String(f.v);
+  var big = BigInt.asUintN(f.size * 8, BigInt(f.v));
+  if (f.size >= 4 && f.fmt !== 'hexonly' && big < 100000n) return big.toString() + ' (' + '0x' + big.toString(16).toUpperCase() + ')';
+  return '0x' + big.toString(16).toUpperCase();
+}
+function ByteView(fieldsBox, bytesBox, detailBox) {
+  this.fb = fieldsBox; this.bb = bytesBox; this.db = detailBox;
+}
+ByteView.prototype.load = function (segments, intro) {
+  var self = this; this.fields = []; this.fb.innerHTML = ''; this.bb.innerHTML = ''; this.intro = intro;
+  var off = 0, fi = 0;
+  segments.forEach(function (seg) {
+    self.bb.appendChild(el('div', 'off', esc(seg.title) + ' · bytes ' + off + '–' + (off + seg.fields.reduce(function (a, f) { return a + (f.elide || f.size); }, 0) - 1)));
+    seg.fields.forEach(function (f) {
+      f.off = off; f.idx = fi; f.color = 'f' + (fi % 8); self.fields.push(f);
+      var b = el('button', f.color); b.type = 'button'; b.setAttribute('data-f', fi); b.setAttribute('aria-pressed', 'false');
+      b.textContent = f.n; b.addEventListener('click', function () { self.select(f.idx); });
+      self.fb.appendChild(b);
+      if (f.elide) {
+        var e = el('div', 'off', '… ' + f.elide + ' bytes: ' + esc(f.n) + ' …'); e.style.textAlign = 'center';
+        e.setAttribute('data-f', fi); e.className = 'off ' + f.color; self.bb.appendChild(e); off += f.elide;
+      } else {
+        leBytes(f.v, f.size).forEach(function (byte) {
+          var c = el('span', 'b ' + f.color, byte.toString(16).toUpperCase().padStart(2, '0'));
+          c.setAttribute('data-f', fi); c.title = f.n + ' @ ' + off;
+          c.addEventListener('click', function () { self.select(f.idx); });
+          self.bb.appendChild(c); off++;
+        });
+      }
+      fi++;
+    });
+  });
+  this.total = off;
+  this.db.innerHTML = intro;
+};
+ByteView.prototype.select = function (i) {
+  var f = this.fields[i];
+  $$('[data-f]', this.fb).forEach(function (b) { b.setAttribute('aria-pressed', +b.getAttribute('data-f') === i ? 'true' : 'false'); });
+  $$('.b', this.bb).forEach(function (b) { b.classList.toggle('hi', +b.getAttribute('data-f') === i); });
+  var size = f.elide || f.size;
+  this.db.innerHTML = '<h5>' + esc(f.n) + '</h5><dl class="kv"><dt>offset</dt><dd>' + f.off + '</dd><dt>size</dt><dd>' + size + ' byte' + (size > 1 ? 's' : '') + '</dd>' +
+    (f.elide ? '' : '<dt>value</dt><dd><code>' + esc(fmtVal(f)) + '</code></dd>') + '</dl><p>' + f.d + '</p>';
+};
+
+/* ---------- AQL packet ---------- */
+(function () {
+  if (!$('#aqlBytes')) return;
+  var hdr = 2 | (0 << 8) | (2 << 9) | (2 << 11);
+  var F = [
+    { n: 'header', size: 2, v: hdr, fmt: 'hexonly', d: 'Bits 0–7: packet type (2 = KERNEL_DISPATCH; 1 = INVALID marks a slot that is not yet published). Bit 8: barrier, wait for all earlier packets to complete. Bits 9–10 and 11–12: acquire and release fence scope (0 none, 1 agent, 2 system). Here <code>0x1402</code> = dispatch, system-scope acquire and release. ROCr writes it last, together with <code>setup</code>, as one 32-bit release store.' },
+    { n: 'setup', size: 2, v: 1, fmt: 'dec', d: 'Bits 0–1: number of grid dimensions (1 to 3).' },
+    { n: 'workgroup_size_x', size: 2, v: 256, fmt: 'dec', d: 'Work-items per workgroup in X. 256 work-items make 4 waves.' },
+    { n: 'workgroup_size_y', size: 2, v: 1, fmt: 'dec', d: 'Work-items per workgroup in Y.' },
+    { n: 'workgroup_size_z', size: 2, v: 1, fmt: 'dec', d: 'Work-items per workgroup in Z.' },
+    { n: 'reserved0', size: 2, v: 0, fmt: 'dec', d: 'Must be 0.' },
+    { n: 'grid_size_x', size: 4, v: 65536, fmt: 'dec', d: 'Grid size in X, counted in <em>work-items</em>, not workgroups. 65,536 ÷ 256 = 256 workgroups.' },
+    { n: 'grid_size_y', size: 4, v: 1, fmt: 'dec', d: 'Grid size in Y.' },
+    { n: 'grid_size_z', size: 4, v: 1, fmt: 'dec', d: 'Grid size in Z.' },
+    { n: 'private_segment_size', size: 4, v: 0, fmt: 'dec', d: 'Scratch bytes per work-item, for register spills and private arrays.' },
+    { n: 'group_segment_size', size: 4, v: 0, fmt: 'dec', d: 'LDS bytes per workgroup. The dispatcher reserves this much LDS on the CU before placing the workgroup.' },
+    { n: 'kernel_object', size: 8, v: 0x7F3A10001000, d: 'GPU address of the 64-byte kernel descriptor produced by the compiler: code entry offset, register counts, LDS and scratch requirements. The command processor reads it before dispatch.' },
+    { n: 'kernarg_address', size: 8, v: 0x7F3A13000000, d: 'GPU address of the kernel\'s argument buffer, which the kernel reads through the scalar cache.' },
+    { n: 'reserved2', size: 8, v: 0, d: 'Reserved. HIP stores a profiler correlation ID here.' },
+    { n: 'completion_signal', size: 8, v: 0x7F3A14000080, d: 'Address of an <code>amd_signal_t</code>, or 0 for none. When the kernel finishes, the command processor decrements its value. If the signal has an event mailbox, it also raises an interrupt with the event ID.' }
+  ];
+  var bv = new ByteView($('#aqlFields'), $('#aqlBytes'), $('#aqlDetail'));
+  bv.load([{ title: 'hsa_kernel_dispatch_packet_t', fields: F }], '<p>Select a field to see its offset, size and meaning. The values are an example launch of 65,536 work-items in workgroups of 256.</p>');
+  bv.select(0);
+})();
+
+/* ---------- ioctl explorer ---------- */
+(function () {
+  var list = $('#ioctlList'); if (!list) return;
+  list.className = 'ilist';
+  var P = [
+    ['Open the device', [
+      { n: 'open("/dev/kfd")', pseudo: 1, d: 'libhsakmt opens the KFD character device once. This one descriptor carries every KFD ioctl and the doorbell mmaps. It also opens the render node <code>/dev/dri/renderD&lt;minor&gt;</code>, whose number it reads from sysfs.' },
+      { n: 'GET_VERSION', c: 0x80084B01, f: 'major_version, minor_version', d: 'The interface version. libhsakmt refuses to run unless the major version is 1, and enables newer features by minor version.' },
+      { n: 'read sysfs topology', pseudo: 1, d: 'Not an ioctl. libhsakmt reads <code>system_properties</code> and <code>nodes/N/properties</code>, including <code>simd_count</code>, <code>gfx_target_version</code>, <code>lds_size_in_kb</code>, <code>local_mem_size</code> and <code>drm_render_minor</code>, plus cache and memory-bank files.' }
+    ]],
+    ['Set up the process', [
+      { n: 'GET_PROCESS_APERTURES_NEW', c: 0xC0104B14, f: 'kfd_process_device_apertures_ptr, num_of_nodes, pad', d: 'Returns, for each GPU, the base and limit of the LDS, scratch and GPUVM apertures, in 56-byte entries that the pointer refers to.' },
+      { n: 'ACQUIRE_VM', c: 0x40084B15, f: 'drm_fd, gpu_id', d: 'Hands the render node\'s GPU address space to KFD so that graphics and compute share one VM per process.' },
+      { n: 'SET_MEMORY_POLICY', c: 0x40204B04, f: 'alternate_aperture_base, alternate_aperture_size, gpu_id, default_policy, alternate_policy, misc_process_flag', d: 'Selects the default cache coherence policy (non-coherent unless caching is disabled) and a coherent alternate aperture.' },
+      { n: 'RUNTIME_ENABLE', c: 0xC0104B25, f: 'r_debug, mode_mask, capabilities_mask', d: 'Conditional: only with debug-capable firmware and KFD 1.13 or later. Tells KFD the runtime is up, for debugger support.' },
+      { n: 'SET_XNACK_MODE', c: 0xC0044B21, f: 'xnack_enabled', d: 'Queries (−1) or sets whether GPU page faults can be retried.' },
+      { n: 'GET_CLOCK_COUNTERS', c: 0xC0284B05, f: 'gpu_clock_counter, cpu_clock_counter, system_clock_counter, system_clock_freq, gpu_id, pad', d: 'Samples GPU and CPU clocks together so ROCr can convert GPU timestamps to host time.' }
+    ]],
+    ['Runtime services', [
+      { n: 'CREATE_EVENT', c: 0xC0204B08, f: 'event_page_offset, event_trigger_data, event_type, auto_reset, node_id, event_id, event_slot_index', d: 'Creates a KFD event. ROCr creates MEMORY and HW_EXCEPTION events for error reporting and SIGNAL events for interrupt-backed signals and queues. On a discrete GPU, the first call passes the handle of a 32 KiB events page that libhsakmt allocated itself.' },
+      { n: 'SET_SCRATCH_BACKING_VA', c: 0xC0104B11, f: 'va_addr, gpu_id, pad', d: 'Registers the virtual range that backs per-wave scratch memory.' },
+      { n: 'SET_TRAP_HANDLER', c: 0x40184B13, f: 'tba_addr, tma_addr, gpu_id, pad', d: 'Installs the trap-handler code the GPU jumps to on exceptions. ROCr first allocates and maps that code like any other memory.' }
+    ]],
+    ['Allocate memory (every hipMalloc)', [
+      { n: 'ALLOC_MEMORY_OF_GPU', c: 0xC0284B16, f: 'va_addr, size, handle (out), mmap_offset (in/out), gpu_id, flags', d: 'Creates an allocation at <code>va_addr</code>, usually a CPU range libhsakmt reserved first, so the GPU address equals the CPU address. Flags choose the kind: VRAM (bit 0), GTT pinned system memory (1), USERPTR (2), DOORBELL (3), MMIO_REMAP (4), plus WRITABLE (31), EXECUTABLE (30), PUBLIC (29), NO_SUBSTITUTE (28), COHERENT (26) and UNCACHED (25). Returns a handle and an mmap offset.' },
+      { n: 'mmap(render node, mmap_offset)', pseudo: 1, d: 'Maps the allocation into the CPU address space at its reserved address (<code>MAP_SHARED | MAP_FIXED</code>). USERPTR allocations are not mapped, because they already are CPU memory.' },
+      { n: 'MAP_MEMORY_TO_GPU', c: 0xC0184B18, f: 'handle, device_ids_array_ptr, n_devices, n_success', d: 'Installs GPU page-table entries for the allocation on each listed GPU. <code>n_success</code> is an in/out cursor that lets a partially failed call be retried.' }
+    ]],
+    ['Create a queue (first launch on a stream)', [
+      { n: 'allocate ring + queue struct', pseudo: 1, d: 'The AQL ring (HIP asks for 16,384 packets, 1 MiB) and ROCr\'s <code>amd_queue_t</code> are ordinary GTT allocations: ALLOC, mmap and MAP, as above.' },
+      { n: 'CREATE_QUEUE', c: 0xC0604B02, f: 'ring_base_address, write_pointer_address, read_pointer_address, doorbell_offset (out), ring_size, gpu_id, queue_type, queue_percentage, queue_priority, queue_id (out), eop_buffer_address, eop_buffer_size, ctx_save_restore_address, ctx_save_restore_size, ctl_stack_size, sdma_engine_id, metadata_ring_size', d: 'Creates a hardware-backed queue. <code>queue_type</code> 2 is COMPUTE_AQL. For AQL queues the read and write pointers point into ROCr\'s <code>amd_queue_t</code>, at <code>read_dispatch_id</code> and <code>write_dispatch_id</code>. The result includes the queue ID and the doorbell\'s mmap offset.' },
+      { n: 'map the doorbell page', pseudo: 1, d: 'After the first CREATE_QUEUE on a GPU, libhsakmt allocates the doorbell page (ALLOC with DOORBELL), mmaps <code>/dev/kfd</code> at the doorbell offset, and maps it to the GPU. The queue\'s doorbell pointer is that mapping plus the in-page offset.' },
+      { n: 'AVAILABLE_MEMORY', c: 0xC0104B23, f: 'available, gpu_id, pad', d: 'Queries free device memory, used when reserving scratch.' }
+    ]],
+    ['Launch and wait', [
+      { n: 'launch a kernel', pseudo: 1, d: '<b>No ioctl.</b> ROCr writes the AQL packet into the ring and stores the packet index to the doorbell.' },
+      { n: 'WAIT_EVENTS', c: 0xC0184B0C, f: 'events_ptr, num_events, wait_for_all, timeout, wait_result (out)', d: 'Sleeps until events fire or the timeout (ms) expires. <code>wait_result</code>: 0 complete, 1 timeout, 2 fail. An interrupt signal spins for about 200 µs before calling it. ROCr\'s asynchronous-events thread also waits here.' },
+      { n: 'SET_EVENT', c: 0x40084B0A, f: 'event_id, pad', d: 'Fires an event from the CPU, used when the host signals a signal that another thread waits on.' }
+    ]],
+    ['Tear down', [
+      { n: 'DESTROY_QUEUE', c: 0xC0084B03, f: 'queue_id, pad', d: 'Stops the queue and releases its hardware slot and doorbell.' },
+      { n: 'UNMAP_MEMORY_FROM_GPU', c: 0xC0184B19, f: 'handle, device_ids_array_ptr, n_devices, n_success', d: 'Removes GPU page-table entries.' },
+      { n: 'FREE_MEMORY_OF_GPU', c: 0x40084B17, f: 'handle', d: 'Releases the allocation.' },
+      { n: 'close("/dev/kfd")', pseudo: 1, d: 'Closing the last descriptor, or exiting, destroys the KFD process and everything it still owns.' }
+    ]]
+  ];
+  var btns = [], det = $('#ioctlDetail');
+  function show(it, b) {
+    press(btns, b);
+    var h = '<h5>' + esc(it.n) + '</h5>';
+    if (it.c) {
+      var dir = it.c >>> 30, size = (it.c >>> 16) & 0x3FFF, type = (it.c >>> 8) & 0xFF, nr = it.c & 0xFF;
+      var dn = { 1: '_IOW (to the driver)', 2: '_IOR (from the driver)', 3: '_IOWR (both ways)' }[dir];
+      h += '<dl class="kv"><dt>number</dt><dd><code>' + hx(it.c >>> 0, 8) + '</code></dd><dt>decoded</dt><dd>' + dn + ", type '" + String.fromCharCode(type) + "' (0x" + type.toString(16).toUpperCase() + '), nr ' + hx(nr, 2) + ', ' + size + '-byte struct</dd><dt>fields</dt><dd><code>' + esc(it.f) + '</code></dd></dl>';
+    }
+    det.innerHTML = h + '<p>' + it.d + '</p>';
+  }
+  P.forEach(function (ph) {
+    list.appendChild(el('h5', '', esc(ph[0])));
+    ph[1].forEach(function (it) {
+      var b = el('button', it.pseudo ? 'pseudo' : '', '<span>' + esc(it.n) + '</span>' + (it.c ? '<small>' + hx(it.c >>> 0, 8) + '</small>' : ''));
+      b.type = 'button'; b.setAttribute('aria-pressed', 'false');
+      b.addEventListener('click', function () { show(it, b); });
+      btns.push(b); list.appendChild(b);
+    });
+  });
+  show(P[0][1][1], btns[1]);
+})();
+
+/* ---------- backend selector ---------- */
+(function () {
+  var btns = $$('#w-backend [data-be]').filter(function (b) { return b.tagName === 'BUTTON'; });
+  var panes = $$('#w-backend .be');
+  if (!btns.length) return;
+  function show(key) {
+    btns.forEach(function (b) { b.setAttribute('aria-pressed', b.getAttribute('data-be') === key ? 'true' : 'false'); });
+    panes.forEach(function (p) { p.classList.toggle('cur', p.getAttribute('data-be') === key); });
+  }
+  btns.forEach(function (b) { b.addEventListener('click', function () { show(b.getAttribute('data-be')); }); });
+  show('kmd');
+})();
+
+/* ---------- RPC message inspector ---------- */
+(function () {
+  var sel = $('#msgSel'); if (!sel) return;
+  var GPU = 50148;
+  function H(op, id, payload, result, reply) {
+    var names = ['HANDSHAKE', 'OPEN', 'CLOSE', 'MMAP', 'MUNMAP', 'IOCTL'];
+    return { title: 'RpcHeader', fields: [
+      { n: 'opcode', size: 2, v: op, fmt: 'dec', d: 'RpcOpcode ' + op + ' = RPC_' + names[op] + '. A reply repeats the request\'s opcode.' },
+      { n: 'reserved', size: 2, v: 0, fmt: 'dec', d: 'Must be 0; the server disconnects otherwise.' },
+      { n: 'request_id', size: 4, v: id, fmt: 'dec', d: 'Per-connection counter (example value). The server echoes it in the reply; the client does not check it.' },
+      { n: 'payload_bytes', size: 4, v: payload, fmt: 'dec', d: 'Number of bytes after this header. The total frame is ' + (16 + payload) + ' bytes.' },
+      { n: 'result', size: 4, v: result, fmt: 'dec', d: reply ? 'The reply\'s return code: 0, or a negative Linux errno.' : 'Always 0 in a request.' }
+    ] };
+  }
+  function IOREQ(cmd, argsBytes, name) {
+    return { title: 'RpcIoctlRequest', fields: [
+      { n: 'ioctl_cmd', size: 4, v: cmd, fmt: 'hexonly', d: 'The full 32-bit ioctl number, ' + name + '. The server takes the argument size from its size bits.' },
+      { n: 'args_bytes', size: 4, v: argsBytes, fmt: 'dec', d: 'Argument struct plus inline arrays. The server requires this to match the expected size exactly.' }
+    ] };
+  }
+  var topo = '/run/rocjitsu/rocjitsu_topology_7_Qx3k9Z', drm = '/run/rocjitsu/rocjitsu_drm_7_Lm2pA8';
+  var DOORBELL_OFF = (3n << 62n) | (BigInt(GPU) << 46n);
+  var allocArgs = function (reply) { return { title: 'kfd_ioctl_alloc_memory_of_gpu_args (40 B)', fields: [
+    { n: 'va_addr', size: 8, v: 0x7F3A12400000, d: 'Where the allocation should appear: a CPU range libhsakmt reserved, which becomes the GPU address too.' },
+    { n: 'size', size: 8, v: 0x400000, d: '4 MiB.' },
+    { n: 'handle', size: 8, v: reply ? 5 : 0, fmt: 'dec', d: reply ? 'Output: the KFD handle, used by MAP, UNMAP and FREE.' : 'Output field; 0 in the request.' },
+    { n: 'mmap_offset', size: 8, v: reply ? 0x5000 : 0, d: reply ? 'Output: <code>handle &lt;&lt; 12</code>. libhsakmt will mmap the render node at this offset; the client then reuses the descriptor stored for handle 5.' : 'In/out. Only a USERPTR request puts its CPU address here.' },
+    { n: 'gpu_id', size: 4, v: GPU, fmt: 'dec', d: 'The GPU, as reported in the topology.' },
+    { n: 'flags', size: 4, v: 0xB0000001, fmt: 'hexonly', d: 'Example: VRAM (bit 0) | NO_SUBSTITUTE (28) | PUBLIC (29) | WRITABLE (31).' }
+  ] }; };
+  var evData = function (age, reply) { return { title: 'inline array: kfd_event_data[1] (48 B)', fields: [
+    { n: 'signal_event_data.last_event_age', size: 8, v: age, fmt: 'dec', d: reply ? 'The server writes back the event\'s current age. A newer age than the caller\'s means the event fired.' : 'The age the caller last saw. The wait is satisfied when the event\'s age differs.' },
+    { n: 'rest of the event union', size: 24, v: 0, d: 'Memory- and hardware-exception details share this union with signal data.' },
+    { n: 'kfd_event_data_ext', size: 8, v: 0, d: 'Pointer to an extension structure; unused here.' },
+    { n: 'event_id', size: 4, v: 7, fmt: 'dec', d: 'The event to wait for.' },
+    { n: 'pad', size: 4, v: 0, fmt: 'dec', d: 'Padding.' }
+  ] }; };
+  var waitArgs = function (reply) { return { title: 'kfd_ioctl_wait_events_args (24 B)', fields: [
+    { n: 'events_ptr', size: 8, v: reply ? 0x5591C0A3F030 : 0x7FFD5C2A1E40, d: reply ? 'Still the <em>server\'s</em> rewritten pointer into its receive buffer. The client restores its own value before returning to ROCr.' : 'The client\'s pointer to its event array. Meaningless to the server, which rewrites it to point at the inline copy.' },
+    { n: 'num_events', size: 4, v: 1, fmt: 'dec', d: 'One event, so one 48-byte entry follows.' },
+    { n: 'wait_for_all', size: 4, v: 0, fmt: 'dec', d: '0: return when any listed event fires.' },
+    { n: 'timeout', size: 4, v: 0, fmt: 'dec', d: 'Always 0 over RPC: a non-blocking check. RemoteDriver implements the caller\'s real timeout by re-polling every 5 ms.' },
+    { n: 'wait_result', size: 4, v: 0, fmt: 'dec', d: reply ? 'Output: 0 = complete (1 would mean timeout).' : 'Output field.' }
+  ] }; };
+  var M = [
+    { n: 'HANDSHAKE request', intro: 'The first message on a new connection. It has no payload; the server learns the client\'s PID from the socket (<code>SO_PEERCRED</code>).', segs: [H(0, 0, 0, 0)] },
+    { n: 'HANDSHAKE reply', intro: 'Opens the KFD process and describes the device. The 312-byte <code>gpu_info</code> is partly elided; the two paths are not NUL-terminated.', segs: [
+      H(0, 0, 328 + topo.length + drm.length, 0, 1),
+      { title: 'RpcHandshakeResponse (328 B)', fields: [
+        { n: 'version', size: 4, v: 4, fmt: 'dec', d: 'Protocol version 4. The client fails the open on a mismatch.' },
+        { n: 'gpu_id', size: 4, v: GPU, fmt: 'dec', d: 'The KFD gpu_id of the device (50148 = 0xC3E4 in the lab).' },
+        { n: 'topology_path_len', size: 4, v: topo.length, fmt: 'dec', d: 'Length of the topology path that follows the struct.' },
+        { n: 'drm_path_len', size: 4, v: drm.length, fmt: 'dec', d: 'Length of the DRM path that follows it.' },
+        { n: 'gpu_info.present', size: 4, v: 1, fmt: 'dec', d: 'Start of the 312-byte <code>rj_vm_gpu_info_t</code>, used by the client\'s DRM emulation.' },
+        { n: 'gpu_info.gpu_id', size: 4, v: GPU, fmt: 'dec', d: 'Repeated inside gpu_info.' },
+        { n: 'gpu_info.gfx_target_version', size: 4, v: 90402, fmt: 'dec', d: '90402 means gfx942.' },
+        { n: 'gpu_info.vendor_id', size: 4, v: 0x1002, fmt: 'hexonly', d: 'AMD\'s PCI vendor ID.' },
+        { n: 'gpu_info.device_id', size: 4, v: 0x74A1, fmt: 'hexonly', d: 'MI300X\'s PCI device ID.' },
+        { n: 'gpu_info.family_id', size: 4, v: 146, fmt: 'dec', d: 'amdgpu family ID.' },
+        { n: 'rest of gpu_info', elide: 288, d: 'Identity (unique, location and hive IDs, render minor), geometry (simd_count, waves per SIMD, shader engines, CUs per array, XCCs), memory and cache sizes, SDMA and queue counts, capabilities, firmware versions and the 128-byte marketing name.' }
+      ] },
+      { title: 'paths', fields: [
+        { n: 'topology path', size: topo.length, v: topo, d: 'Directory of the generated sysfs topology on the <em>server\'s</em> filesystem. The client redirects its reads of <code>/sys/devices/virtual/kfd/kfd/topology</code> here, so the directory must be shared.' },
+        { n: 'DRM path', size: drm.length, v: drm, d: 'Directory of the generated <code>/sys/class/drm</code> tree.' }
+      ] }
+    ] },
+    { n: 'IOCTL GET_VERSION request', intro: 'The simplest ioctl: an 8-byte output-only struct, sent anyway, because the whole struct always travels.', segs: [
+      H(5, 1, 16, 0), IOREQ(0x80084B01, 8, '_IOR(\'K\', 0x01, 8 bytes)'),
+      { title: 'kfd_ioctl_get_version_args', fields: [
+        { n: 'major_version', size: 4, v: 0, fmt: 'dec', d: 'Output.' }, { n: 'minor_version', size: 4, v: 0, fmt: 'dec', d: 'Output.' } ] } ] },
+    { n: 'IOCTL GET_VERSION reply', intro: 'The reply carries back only the argument struct.', segs: [
+      H(5, 1, 8, 0, 1),
+      { title: 'kfd_ioctl_get_version_args', fields: [
+        { n: 'major_version', size: 4, v: 1, fmt: 'dec', d: 'KFD interface major version 1.' }, { n: 'minor_version', size: 4, v: 18, fmt: 'dec', d: 'rocjitsu reports 1.18, the version of its vendored KFD header.' } ] } ] },
+    { n: 'IOCTL ALLOC_MEMORY_OF_GPU request', intro: 'A 4 MiB <code>hipMalloc</code>. On the server, SimulatedKfd validates it and calls gem5\'s <code>allocate</code> callback.', segs: [
+      H(5, 12, 48, 0), IOREQ(0xC0284B16, 40, '_IOWR(\'K\', 0x16, 40 bytes)'), allocArgs(false) ] },
+    { n: 'IOCTL ALLOC_MEMORY_OF_GPU reply (v4)', intro: '<b>Attached via SCM_RIGHTS: one descriptor</b>, a duplicate of gem5\'s VRAM shared-memory file. The version-4 prefix says which slice of that file is this allocation.', segs: [
+      H(5, 12, 56, 0, 1),
+      { title: 'RpcSharedBacking (16 B, version 4)', fields: [
+        { n: 'backing.offset', size: 8, v: 0x10108000, d: 'Where the allocation starts in the descriptor\'s file. Here, device address 0x1010_8000 in the exported heap.' },
+        { n: 'backing.size', size: 8, v: 0x400000, d: 'The slice length. The client checks that <code>offset + size</code> fits in the file, and it may never map beyond the slice.' } ] },
+      allocArgs(true) ] },
+    { n: 'IOCTL WAIT_EVENTS request', intro: 'An ioctl with an embedded pointer: the 48-byte event array follows the struct inline.', segs: [
+      H(5, 40, 80, 0), IOREQ(0xC0184B0C, 72, '_IOWR(\'K\', 0x0C, 24 bytes)'), waitArgs(false), evData(3, false) ] },
+    { n: 'IOCTL WAIT_EVENTS reply', intro: 'The mutated struct and array come back; the client copies the array to its original location.', segs: [
+      H(5, 40, 72, 0, 1), waitArgs(true), evData(4, true) ] },
+    { n: 'MMAP request (doorbell page)', intro: 'libhsakmt maps the doorbell page from <code>/dev/kfd</code>. The interposer turns that mmap into an RPC.', segs: [
+      H(3, 27, 32, 0),
+      { title: 'RpcMmapRequest (32 B)', fields: [
+        { n: 'addr', size: 8, v: 0x7F3A0FFFE000, d: 'The address the client wants; the client maps there itself.' },
+        { n: 'length', size: 8, v: 8192, fmt: 'dec', d: 'One doorbell page: 1024 doorbells × 8 bytes.' },
+        { n: 'prot', size: 4, v: 3, fmt: 'dec', d: 'PROT_READ | PROT_WRITE.' },
+        { n: 'flags', size: 4, v: 0x11, fmt: 'hexonly', d: 'MAP_SHARED | MAP_FIXED.' },
+        { n: 'offset', size: 8, v: DOORBELL_OFF, d: 'KFD mmap offset: type DOORBELL (<code>3 &lt;&lt; 62</code>) | gpu_id 50148 in bits 61–46.' } ] } ] },
+    { n: 'MMAP reply', intro: '<b>Attached via SCM_RIGHTS: the process\'s doorbell memfd.</b> The client maps it at <code>addr</code>, and from then on ROCr\'s doorbell stores land in shared memory.', segs: [
+      H(3, 27, 24, 0, 1),
+      { title: 'RpcMmapResponse (24 B)', fields: [
+        { n: 'mapped_addr', size: 8, v: 0x7F81D4A00000, d: 'Where the <em>server</em> mapped it. Informational only.' },
+        { n: 'backing.offset', size: 8, v: 0, fmt: 'dec', d: 'The doorbell memfd is private to this page, so the slice starts at 0.' },
+        { n: 'backing.size', size: 8, v: 8192, fmt: 'dec', d: 'The file\'s size.' } ] } ] },
+    { n: 'MUNMAP request', intro: 'While connected, every munmap in the process is announced to the server.', segs: [
+      H(4, 58, 16, 0),
+      { title: 'RpcMunmapRequest (16 B)', fields: [
+        { n: 'addr', size: 8, v: 0x7F3A12400000, d: 'Start of the range.' }, { n: 'length', size: 8, v: 0x400000, d: 'Length of the range.' } ] } ] },
+    { n: 'MUNMAP reply', intro: 'A bare header with result 0. The client then unmaps locally.', segs: [H(4, 58, 0, 0, 1)] },
+    { n: 'CLOSE request', intro: 'Sent when the last KFD descriptor closes. The client closes its socket immediately, without reading the reply; the server tears the process down either way.', segs: [H(2, 61, 0, 0)] }
+  ];
+  M.forEach(function (m, i) { var o = el('option', '', esc(m.n)); o.value = i; sel.appendChild(o); });
+  var bv = new ByteView($('#msgFields'), $('#msgBytes'), $('#msgDetail'));
+  function load() { var m = M[+sel.value]; var tot = 0; m.segs.forEach(function (s) { s.fields.forEach(function (f) { tot += f.elide || f.size; }); });
+    bv.load(m.segs, '<h5>' + esc(m.n) + ' · ' + tot + ' bytes</h5><p>' + m.intro + '</p><p class="map-note">Select a field or a byte.</p>'); }
+  sel.addEventListener('change', load); sel.value = 5; load();
+})();
+
+/* ---------- steppers ---------- */
+$$('.stepper').forEach(function (w) {
+  var items = $$('.steps > li', w), i = 0, count = $('.count', w), map = $('.journey', w);
+  if (!items.length) return;
+  var prev = $('[data-step="-1"]', w), next = $('[data-step="1"]', w);
+  function render() {
+    items.forEach(function (li, k) { li.classList.toggle('cur', k === i); });
+    count.textContent = 'Step ' + (i + 1) + ' of ' + items.length;
+    prev.disabled = i === 0; next.disabled = i === items.length - 1;
+    if (map) {
+      var lit = (items[i].getAttribute('data-lit') || '').split(/\s+/);
+      $$('.node', map).forEach(function (n) { n.classList.toggle('lit', lit.indexOf(n.getAttribute('data-n')) >= 0); });
+    }
+  }
+  prev.addEventListener('click', function () { if (i > 0) { i--; render(); } });
+  next.addEventListener('click', function () { if (i < items.length - 1) { i++; render(); } });
+  render();
+});
+
+/* ---------- backing slices ---------- */
+(function () {
+  var selBox = $('#slSel'); if (!selBox) return;
+  var BASE = 0x10000000, SPAN = 12 * 1024 * 1024;
+  var A = [
+    { n: 'events page', kind: 'GTT, coherent, uncached', off: 0x10000000, size: 0x8000, cpu: 0x7F3A0F000000, gpu: 0x7F3A0F000000, mt: 'UC', note: 'libhsakmt allocates this 32 KiB page for KFD events. The server writes event ages into it, and the client polls it.' },
+    { n: 'AQL ring', kind: 'GTT', off: 0x10008000, size: 0x100000, cpu: 0x7F3A0F200000, gpu: 0x7F3A0F200000, mt: 'UC', note: 'HIP\'s 16,384-packet ring. ROCr writes packets here with plain stores, and the packet processor DMA-reads them. "GTT" is only a KFD flag in this backend: the storage is still a VRAM slice.' },
+    { n: 'hipMalloc A', kind: 'VRAM', off: 0x10108000, size: 0x400000, cpu: 0x7F3A12400000, gpu: 0x7F3A12400000, mt: 'RW', note: 'The allocation from the ALLOC reply shown above. The same pointer is valid on the host and in the kernel.' },
+    { n: 'hipMalloc B', kind: 'VRAM', off: 0x10508000, size: 0x400000, cpu: 0x7F3A12800000, gpu: 0x7F3A12800000, mt: 'RW', note: 'A second buffer, the next free extent.' },
+    { n: 'USERPTR buffer', kind: 'USERPTR', off: 0x10908000, size: 0x100000, cpu: 0x55D0C3A42000, gpu: 0x7F3A13000000, mt: 'UC', note: 'Existing host memory registered with the GPU. Here the CPU and GPU addresses differ. The client copies the data into the slice and maps the slice over the original buffer, so the application keeps using its own pointer.' }
+  ];
+  var track = el('div', 'slice-track'), bar = $('#slBar');
+  bar.className = 'js-only'; bar.appendChild(track);
+  bar.appendChild(el('div', 'slice-scale', '<span>0x1000_0000</span><span>+4 MiB</span><span>+8 MiB</span><span>+12 MiB</span>'));
+  var bars = A.map(function (a) { var i = el('i'); i.style.left = (100 * (a.off - BASE) / SPAN) + '%'; i.style.width = (100 * a.size / SPAN) + '%'; track.appendChild(i); return i; });
+  var btns = A.map(function (a, k) {
+    var b = el('button', 'btn', esc(a.n)); b.type = 'button'; b.setAttribute('aria-pressed', 'false');
+    b.addEventListener('click', function () { show(k); }); selBox.appendChild(b); return b;
+  });
+  function show(k) {
+    var a = A[k]; press(btns, btns[k]); bars.forEach(function (b, j) { b.className = j === k ? 's' : ''; });
+    var o = $('#slOut'); o.innerHTML = '';
+    [['KFD kind', a.kind], ['application CPU address', group(hx(a.cpu))], ['GPU virtual address', group(hx(a.gpu))], ['slice offset in VRAM file', group(hx(a.off))], ['slice size', a.size >= 0x100000 ? (a.size / 0x100000) + ' MiB' : (a.size / 1024) + ' KiB'], ['device address (PTE target)', group(hx(a.off))], ['PTE memory type', a.mt]]
+      .forEach(function (p) { o.appendChild(el('div', '', '<b style="font-size:15px">' + esc(p[1]) + '</b>' + esc(p[0]))); });
+    $('#slNote').textContent = a.note;
+  }
+  show(2);
+})();
+
+/* ---------- session sequence ---------- */
+(function () {
+  var box = $('#seqList'); if (!box) return;
+  var S = [
+    ['x', 'HANDSHAKE', 'v4, gpu_id, gpu_info, paths', 'The interposer connects to <code>/run/rocjitsu/daemon.sock</code> when ROCr opens <code>/dev/kfd</code>. The server opens a KFD process for the peer PID. The first open also configures the device backend, and gem5 receives <code>open_process</code> and <code>set_apertures</code> on its own thread.'],
+    ['n', 'ROCr reads the topology files from the shared directory: no RPC.'],
+    ['x', 'IOCTL GET_VERSION', '1.18', 'Answered by SimulatedKfd alone; no device callback.'],
+    ['x', 'IOCTL GET_PROCESS_APERTURES_NEW + zeroed array', 'apertures in the array', 'An output array travels inline. The server fills in LDS, scratch and GPUVM apertures for the one GPU node.'],
+    ['x', 'IOCTL ACQUIRE_VM', '0', 'Accepted and ignored: rocjitsu has no separate DRM VM to adopt.'],
+    ['x', 'IOCTL SET_MEMORY_POLICY', '0', 'Recorded by SimulatedKfd.'],
+    ['x', 'IOCTL ALLOC_MEMORY_OF_GPU (GTT, 32 KiB events page)', 'handle + fd + {offset, size}', 'gem5\'s <code>allocate</code> carves a slice from the VRAM heap. The reply carries a duplicate of the VRAM file descriptor and the slice, and the client records them under the handle.'],
+    ['x', 'MMAP (render-node offset = handle << 12)', 'fd + {offset, size}', 'The client maps the slice <code>MAP_SHARED</code> at the address libhsakmt reserved. Any bytes already written there are copied into the slice first.'],
+    ['x', 'IOCTL MAP_MEMORY_TO_GPU + [gpu_id]', 'n_success = 1', 'gem5\'s <code>map</code> writes page-table entries. GTT memory gets the UC memory type.'],
+    ['x', 'IOCTL CREATE_EVENT ×2', 'event ids, slots', 'Memory-fault and hardware-exception events. The first one adopts the events page allocated above.'],
+    ['x', 'IOCTL SET_SCRATCH_BACKING_VA, SET_TRAP_HANDLER', '0', 'Stored per process. The trap-handler code was allocated and mapped the same way as the events page.'],
+    ['x', 'IOCTL ALLOC (VRAM, hipMalloc) → MMAP → MAP', 'fd + slice; mapped RW', 'Each application buffer repeats the ALLOC, MMAP, MAP pattern.'],
+    ['x', 'IOCTL ALLOC (GTT, 1 MiB AQL ring) → MMAP → MAP', 'fd + slice; mapped UC', 'The ring and ROCr\'s queue struct are ordinary allocations.'],
+    ['x', 'IOCTL CREATE_QUEUE (COMPUTE_AQL)', 'queue_id, doorbell_offset', 'gem5\'s <code>create_queue</code> sends MAP_PROCESS on the first queue, writes the MQD and sends MAP_QUEUES on its private PM4 ring, then registers the doorbell with the doorbell bridge.'],
+    ['x', 'IOCTL ALLOC (DOORBELL)', 'mmap_offset = doorbell type', 'A doorbell allocation gets no gem5 storage; it names the process\'s doorbell page.'],
+    ['x', 'MMAP (doorbell offset)', 'doorbell memfd + {0, 8192}', 'The client maps the doorbell page. rocjitsu\'s doorbell monitor starts sampling this queue\'s slot.'],
+    ['n', 'hipLaunchKernel: packet and doorbell stores in shared memory. No RPC. The monitor notices, and gem5 writes BAR2.'],
+    ['x', 'IOCTL WAIT_EVENTS (timeout 0)', 'wait_result = 1 (timeout)', 'Only for interrupt-backed waits. RemoteDriver sleeps 5 ms between checks and never blocks the socket.'],
+    ['x', 'IOCTL WAIT_EVENTS (timeout 0)', 'wait_result = 0', 'The service consumed an interrupt-ring entry and posted the event, so the event\'s age has changed.'],
+    ['x', 'IOCTL DESTROY_QUEUE', '0', 'gem5\'s <code>destroy_queue</code> sends UNMAP_QUEUES and clears the MQD slot.'],
+    ['x', 'MUNMAP ×n', '0', 'Every munmap while connected; the server acknowledges it and the client unmaps locally.'],
+    ['x', 'IOCTL UNMAP_MEMORY_FROM_GPU, FREE_MEMORY_OF_GPU', '0', '<code>unmap</code> clears page-table entries. <code>free</code> runs when the allocation\'s last lease is released and returns the extent to the heap.'],
+    ['x', 'CLOSE', '(not read)', 'The client closes its socket. The server closes the process; gem5 receives <code>close_process</code>, drains, and the runner ends the simulation after the disconnect.']
+  ];
+  var rows = [], det = $('#seqDetail');
+  S.forEach(function (s) {
+    var b;
+    if (s[0] === 'n') { b = el('div', 'seqrow note', esc(s[1])); box.appendChild(b); return; }
+    b = el('button', 'seqrow', '<span class="rq">→ ' + esc(s[1]) + '</span><span class="rp">' + esc(s[2]) + ' ←</span>');
+    b.type = 'button'; b.setAttribute('aria-pressed', 'false');
+    b.addEventListener('click', function () { press(rows, b); det.innerHTML = '<h5>' + esc(s[1]) + '</h5><p><b>Reply:</b> ' + esc(s[2]) + '</p><p>' + s[3] + '</p>'; });
+    rows.push(b); box.appendChild(b);
+  });
+  rows[0].click();
+})();
+
+})();
+</script>
+</body>
+</html>

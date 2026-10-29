@@ -42,6 +42,7 @@
 #include "debug/RubyPort.hh"
 #include "debug/RubyStats.hh"
 #include "gpu-compute/shader.hh"
+#include "mem/abstract_mem.hh"
 #include "mem/packet.hh"
 #include "mem/ruby/common/DataBlock.hh"
 #include "mem/ruby/common/SubBlock.hh"
@@ -51,6 +52,7 @@
 #include "mem/ruby/slicc_interface/RubyRequest.hh"
 #include "mem/ruby/structures/CacheMemory.hh"
 #include "mem/ruby/system/RubySystem.hh"
+#include "mem/simple_mem.hh"
 #include "params/RubyGPUCoalescer.hh"
 
 namespace gem5
@@ -656,6 +658,15 @@ GPUCoalescer::hitCallback(CoalescedRequest* crequest,
                     "%s\n",
                     RubyRequestType_to_string(type));
         }
+
+        // The protocol has already performed the atomic operation on this
+        // line. With a backing store, commit its result for the packet's
+        // bytes here; RubyPort must not re-execute the packet's operation on
+        // memory, which would apply it a second time and return the
+        // post-operation value (see completeHitCallback).
+        if (pkt->isAtomicOp() && m_ruby_system->getAccessBackingStore()) {
+            writeBackingStore(pkt, data);
+        }
     }
     assert(data.numAtomicLogEntries() == 0);
 
@@ -1004,6 +1015,24 @@ GPUCoalescer::atomicCallback(Addr address,
 }
 
 void
+GPUCoalescer::writeBackingStore(PacketPtr pkt, const DataBlock &data)
+{
+    // Write the protocol's bytes for this packet to the same memory that
+    // RubyPort::MemResponsePort::hitCallback would have accessed.
+    Packet write(pkt->req, MemCmd::WriteReq);
+    write.dataStaticConst(
+        data.getData(getOffset(pkt->getAddr()), pkt->getSize()));
+    PacketPtr write_ptr = &write;
+    if (system->isDeviceMemAddr(write_ptr)) {
+        system->getDeviceMemory(write_ptr)->functionalAccess(write_ptr);
+    } else if (system->isMemAddr(write.getAddr())) {
+        m_ruby_system->getPhysMem()->functionalAccess(write_ptr);
+    } else {
+        panic("Packet is in neither device nor system memory!");
+    }
+}
+
+void
 GPUCoalescer::completeHitCallback(std::vector<PacketPtr> & mylist)
 {
     for (auto& pkt : mylist) {
@@ -1025,7 +1054,9 @@ GPUCoalescer::completeHitCallback(std::vector<PacketPtr> & mylist)
                 delete ss;
             }
 
-            port->hitCallback(pkt);
+            // Atomic results were committed to the backing store by
+            // hitCallback(); do not apply the packet's operation again.
+            port->hitCallback(pkt, !pkt->isAtomicOp());
             trySendRetries();
         }
     }

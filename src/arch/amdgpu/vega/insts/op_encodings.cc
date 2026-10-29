@@ -1274,12 +1274,19 @@ Inst_VOP3P_MAI::initOperandInfo()
         srcOps.emplace_back(srcs[opNum], getOperandSize(opNum), true,
                             isScalarReg(srcs[opNum]), isVectorReg(srcs[opNum]),
                             false);
+        if (srcOps.back().isVectorReg() &&
+            (opNum == 2 ? instData.ACC_CD : (extData.ACC & (1 << opNum)))) {
+            srcOps.back().setAccumulator();
+        }
     }
 
     // There is always one dest
     // Needed because can't take addr of bitfield
     int reg = instData.VDST;
     dstOps.emplace_back(reg, getOperandSize(opNum), false, false, true, false);
+    if (instData.ACC_CD) {
+        dstOps.back().setAccumulator();
+    }
     opNum++;
 
     assert(srcOps.size() == numSrcRegOperands());

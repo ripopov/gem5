@@ -1,0 +1,185 @@
+{
+    "loads": 512,
+    "compute_instructions": 4096,
+    "compute_with_pending_global_load": 1792,
+    "compute_with_pending_cu_global_load": 3057,
+    "lds_loads": 3072,
+    "compute_with_pending_lds_load": 553,
+    "unmatched_completions": 0,
+    "unfinished_loads": 0,
+    "unfinished_lds_loads": 0,
+    "examples": [
+        {
+            "compute_wave": [
+                "4",
+                "0",
+                "0"
+            ],
+            "compute_pc": "0x76cc94af99e4",
+            "compute_tick": 14936221000,
+            "load_wave": [
+                "4",
+                "0",
+                "0"
+            ],
+            "load": {
+                "instruction": "global_load_dwordx4 v[2:5], v[0:1], off",
+                "pc": "0x76cc94af999c",
+                "seq": 409,
+                "issue_tick": 14935856000,
+                "complete_tick": 14936562000
+            }
+        },
+        {
+            "compute_wave": [
+                "5",
+                "0",
+                "0"
+            ],
+            "compute_pc": "0x76cc94af99e4",
+            "compute_tick": 14936221000,
+            "load_wave": [
+                "5",
+                "0",
+                "0"
+            ],
+            "load": {
+                "instruction": "global_load_dwordx4 v[2:5], v[0:1], off",
+                "pc": "0x76cc94af999c",
+                "seq": 408,
+                "issue_tick": 14935856000,
+                "complete_tick": 14936405000
+            }
+        },
+        {
+            "compute_wave": [
+                "6",
+                "0",
+                "0"
+            ],
+            "compute_pc": "0x76cc94af99e4",
+            "compute_tick": 14936221000,
+            "load_wave": [
+                "6",
+                "0",
+                "0"
+            ],
+            "load": {
+                "instruction": "global_load_dwordx4 v[2:5], v[0:1], off",
+                "pc": "0x76cc94af999c",
+                "seq": 408,
+                "issue_tick": 14935856000,
+                "complete_tick": 14936291000
+            }
+        },
+        {
+            "compute_wave": [
+                "7",
+                "0",
+                "0"
+            ],
+            "compute_pc": "0x76cc94af99e4",
+            "compute_tick": 14936221000,
+            "load_wave": [
+                "7",
+                "0",
+                "0"
+            ],
+            "load": {
+                "instruction": "global_load_dwordx4 v[2:5], v[0:1], off",
+                "pc": "0x76cc94af999c",
+                "seq": 408,
+                "issue_tick": 14935856000,
+                "complete_tick": 14936253000
+            }
+        },
+        {
+            "compute_wave": [
+                "7",
+                "1",
+                "0"
+            ],
+            "compute_pc": "0x76cc94af99e4",
+            "compute_tick": 14936238000,
+            "load_wave": [
+                "7",
+                "0",
+                "0"
+            ],
+            "load": {
+                "instruction": "global_load_dwordx4 v[2:5], v[0:1], off",
+                "pc": "0x76cc94af999c",
+                "seq": 408,
+                "issue_tick": 14935856000,
+                "complete_tick": 14936253000
+            }
+        },
+        {
+            "compute_wave": [
+                "6",
+                "1",
+                "0"
+            ],
+            "compute_pc": "0x76cc94af99e4",
+            "compute_tick": 14936238000,
+            "load_wave": [
+                "6",
+                "0",
+                "0"
+            ],
+            "load": {
+                "instruction": "global_load_dwordx4 v[2:5], v[0:1], off",
+                "pc": "0x76cc94af999c",
+                "seq": 408,
+                "issue_tick": 14935856000,
+                "complete_tick": 14936291000
+            }
+        },
+        {
+            "compute_wave": [
+                "5",
+                "1",
+                "0"
+            ],
+            "compute_pc": "0x76cc94af99e4",
+            "compute_tick": 14936238000,
+            "load_wave": [
+                "5",
+                "0",
+                "0"
+            ],
+            "load": {
+                "instruction": "global_load_dwordx4 v[2:5], v[0:1], off",
+                "pc": "0x76cc94af999c",
+                "seq": 408,
+                "issue_tick": 14935856000,
+                "complete_tick": 14936405000
+            }
+        },
+        {
+            "compute_wave": [
+                "4",
+                "1",
+                "0"
+            ],
+            "compute_pc": "0x76cc94af99e4",
+            "compute_tick": 14936238000,
+            "load_wave": [
+                "4",
+                "0",
+                "0"
+            ],
+            "load": {
+                "instruction": "global_load_dwordx4 v[2:5], v[0:1], off",
+                "pc": "0x76cc94af999c",
+                "seq": 409,
+                "issue_tick": 14935856000,
+                "complete_tick": 14936562000
+            }
+        }
+    ],
+    "run": "gemm-delivery-trace-128-256-128-1789481410330178799",
+    "binary_sha256":
+        "51d26e35a6ab7f652b95d152f7520d7a6952be68eb2afbf67f2c87fb703f6a87",
+    "model_revision": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a"
+}

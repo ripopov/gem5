@@ -452,6 +452,15 @@ class Inst_VOP3P__V_ACCVGPR_READ : public Inst_VOP3P__1OP
         : Inst_VOP3P__1OP(iFmt, "v_accvgpr_read")
     {}
 
+    void
+    initOperandInfo() override
+    {
+        Inst_VOP3P::initOperandInfo();
+        if (srcOps[0].isVectorReg()) {
+            srcOps[0].setAccumulator();
+        }
+    }
+
     void execute(GPUDynInstPtr gpuDynInst) override;
 };
 
@@ -461,6 +470,13 @@ class Inst_VOP3P__V_ACCVGPR_WRITE : public Inst_VOP3P__1OP
     Inst_VOP3P__V_ACCVGPR_WRITE(InFmt_VOP3P *iFmt)
         : Inst_VOP3P__1OP(iFmt, "v_accvgpr_write")
     {}
+
+    void
+    initOperandInfo() override
+    {
+        Inst_VOP3P::initOperandInfo();
+        dstOps[0].setAccumulator();
+    }
 
     void execute(GPUDynInstPtr gpuDynInst) override;
 };

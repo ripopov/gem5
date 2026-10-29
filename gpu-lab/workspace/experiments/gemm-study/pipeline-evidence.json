@@ -1,0 +1,397 @@
+{
+    "binary_sha256":
+        "cda55cd97785d4066576919fd73e39b4effc7d52fb8453eef69a8bd472a79eac",
+    "shape": [
+        64,
+        128,
+        512
+    ],
+    "workgroups": 8,
+    "waves_per_workgroup": 2,
+    "compute_units": 8,
+    "gpu_clock_period_ticks": 1000,
+    "fix_commit": "7161b7e6c7",
+    "before": {
+        "run": "gemm-small-k512-pipeline-trace-64-128-512-1789476023454748074",
+        "image":
+            "sha256:d762653f613210a27f328b9f3ae773364a2fb4afe979632f4f11e54249db14e5",
+        "analysis": {
+            "loads": 1024,
+            "compute_instructions": 4096,
+            "compute_with_pending_global_load": 0,
+            "compute_with_pending_cu_global_load": 1115,
+            "unmatched_completions": 0,
+            "unfinished_loads": 0,
+            "examples": [
+                {
+                    "compute_wave": [
+                        "7",
+                        "0",
+                        "0"
+                    ],
+                    "compute_pc": "0x7b96e9b19abc",
+                    "compute_tick": 16955278000,
+                    "load_wave": [
+                        "7",
+                        "1",
+                        "0"
+                    ],
+                    "load": {
+                        "instruction":
+                            "global_load_dwordx4 v[2:5], v[0:1], off",
+                        "pc": "0x7b96e9b19a48",
+                        "seq": 197,
+                        "issue_tick": 16949802000,
+                        "complete_tick": 16955504000
+                    }
+                },
+                {
+                    "compute_wave": [
+                        "6",
+                        "0",
+                        "0"
+                    ],
+                    "compute_pc": "0x7b96e9b19abc",
+                    "compute_tick": 16955283000,
+                    "load_wave": [
+                        "6",
+                        "1",
+                        "0"
+                    ],
+                    "load": {
+                        "instruction":
+                            "global_load_dwordx4 v[2:5], v[0:1], off",
+                        "pc": "0x7b96e9b19a48",
+                        "seq": 197,
+                        "issue_tick": 16949802000,
+                        "complete_tick": 16955658000
+                    }
+                },
+                {
+                    "compute_wave": [
+                        "5",
+                        "0",
+                        "0"
+                    ],
+                    "compute_pc": "0x7b96e9b19abc",
+                    "compute_tick": 16955287000,
+                    "load_wave": [
+                        "5",
+                        "1",
+                        "0"
+                    ],
+                    "load": {
+                        "instruction":
+                            "global_load_dwordx4 v[2:5], v[0:1], off",
+                        "pc": "0x7b96e9b19a48",
+                        "seq": 197,
+                        "issue_tick": 16949802000,
+                        "complete_tick": 16955710000
+                    }
+                },
+                {
+                    "compute_wave": [
+                        "4",
+                        "0",
+                        "0"
+                    ],
+                    "compute_pc": "0x7b96e9b19abc",
+                    "compute_tick": 16955294000,
+                    "load_wave": [
+                        "4",
+                        "1",
+                        "0"
+                    ],
+                    "load": {
+                        "instruction":
+                            "global_load_dwordx4 v[2:5], v[0:1], off",
+                        "pc": "0x7b96e9b19a48",
+                        "seq": 198,
+                        "issue_tick": 16949802000,
+                        "complete_tick": 16955761000
+                    }
+                },
+                {
+                    "compute_wave": [
+                        "7",
+                        "0",
+                        "0"
+                    ],
+                    "compute_pc": "0x7b96e9b19ac8",
+                    "compute_tick": 16955309000,
+                    "load_wave": [
+                        "7",
+                        "1",
+                        "0"
+                    ],
+                    "load": {
+                        "instruction":
+                            "global_load_dwordx4 v[2:5], v[0:1], off",
+                        "pc": "0x7b96e9b19a48",
+                        "seq": 197,
+                        "issue_tick": 16949802000,
+                        "complete_tick": 16955504000
+                    }
+                },
+                {
+                    "compute_wave": [
+                        "6",
+                        "0",
+                        "0"
+                    ],
+                    "compute_pc": "0x7b96e9b19ac8",
+                    "compute_tick": 16955314000,
+                    "load_wave": [
+                        "6",
+                        "1",
+                        "0"
+                    ],
+                    "load": {
+                        "instruction":
+                            "global_load_dwordx4 v[2:5], v[0:1], off",
+                        "pc": "0x7b96e9b19a48",
+                        "seq": 197,
+                        "issue_tick": 16949802000,
+                        "complete_tick": 16955658000
+                    }
+                },
+                {
+                    "compute_wave": [
+                        "5",
+                        "0",
+                        "0"
+                    ],
+                    "compute_pc": "0x7b96e9b19ac8",
+                    "compute_tick": 16955318000,
+                    "load_wave": [
+                        "5",
+                        "1",
+                        "0"
+                    ],
+                    "load": {
+                        "instruction":
+                            "global_load_dwordx4 v[2:5], v[0:1], off",
+                        "pc": "0x7b96e9b19a48",
+                        "seq": 197,
+                        "issue_tick": 16949802000,
+                        "complete_tick": 16955710000
+                    }
+                },
+                {
+                    "compute_wave": [
+                        "4",
+                        "0",
+                        "0"
+                    ],
+                    "compute_pc": "0x7b96e9b19ac8",
+                    "compute_tick": 16955325000,
+                    "load_wave": [
+                        "4",
+                        "1",
+                        "0"
+                    ],
+                    "load": {
+                        "instruction":
+                            "global_load_dwordx4 v[2:5], v[0:1], off",
+                        "pc": "0x7b96e9b19a48",
+                        "seq": 198,
+                        "issue_tick": 16949802000,
+                        "complete_tick": 16955761000
+                    }
+                }
+            ]
+        }
+    },
+    "after": {
+        "run":
+            "accumulator-fixed-pipeline-gem5-kmd-20260915T125359Z-838164-4373",
+        "image":
+            "sha256:353c59a866ae4cdd464d519cf8b55d30f9973b11cac5751d9ef7bb3af5b662c5",
+        "analysis": {
+            "loads": 1024,
+            "compute_instructions": 4096,
+            "compute_with_pending_global_load": 1984,
+            "compute_with_pending_cu_global_load": 2824,
+            "unmatched_completions": 0,
+            "unfinished_loads": 0,
+            "examples": [
+                {
+                    "compute_wave": [
+                        "4",
+                        "0",
+                        "0"
+                    ],
+                    "compute_pc": "0x731da1695abc",
+                    "compute_tick": 15146458000,
+                    "load_wave": [
+                        "4",
+                        "0",
+                        "0"
+                    ],
+                    "load": {
+                        "instruction":
+                            "global_load_dwordx4 v[2:5], v[0:1], off",
+                        "pc": "0x731da1695a48",
+                        "seq": 188,
+                        "issue_tick": 15145758000,
+                        "complete_tick": 15146460000
+                    }
+                },
+                {
+                    "compute_wave": [
+                        "4",
+                        "1",
+                        "0"
+                    ],
+                    "compute_pc": "0x731da1695abc",
+                    "compute_tick": 15146458000,
+                    "load_wave": [
+                        "4",
+                        "0",
+                        "0"
+                    ],
+                    "load": {
+                        "instruction":
+                            "global_load_dwordx4 v[2:5], v[0:1], off",
+                        "pc": "0x731da1695a48",
+                        "seq": 188,
+                        "issue_tick": 15145758000,
+                        "complete_tick": 15146460000
+                    }
+                },
+                {
+                    "compute_wave": [
+                        "5",
+                        "0",
+                        "0"
+                    ],
+                    "compute_pc": "0x731da1695abc",
+                    "compute_tick": 15146458000,
+                    "load_wave": [
+                        "5",
+                        "0",
+                        "0"
+                    ],
+                    "load": {
+                        "instruction":
+                            "global_load_dwordx4 v[6:9], v[26:27], off",
+                        "pc": "0x731da1695a50",
+                        "seq": 188,
+                        "issue_tick": 15145762000,
+                        "complete_tick": 15151159000
+                    }
+                },
+                {
+                    "compute_wave": [
+                        "5",
+                        "1",
+                        "0"
+                    ],
+                    "compute_pc": "0x731da1695abc",
+                    "compute_tick": 15146458000,
+                    "load_wave": [
+                        "5",
+                        "0",
+                        "0"
+                    ],
+                    "load": {
+                        "instruction":
+                            "global_load_dwordx4 v[6:9], v[26:27], off",
+                        "pc": "0x731da1695a50",
+                        "seq": 188,
+                        "issue_tick": 15145762000,
+                        "complete_tick": 15151159000
+                    }
+                },
+                {
+                    "compute_wave": [
+                        "6",
+                        "0",
+                        "0"
+                    ],
+                    "compute_pc": "0x731da1695abc",
+                    "compute_tick": 15146458000,
+                    "load_wave": [
+                        "6",
+                        "0",
+                        "0"
+                    ],
+                    "load": {
+                        "instruction":
+                            "global_load_dwordx4 v[6:9], v[26:27], off",
+                        "pc": "0x731da1695a50",
+                        "seq": 188,
+                        "issue_tick": 15145762000,
+                        "complete_tick": 15151155000
+                    }
+                },
+                {
+                    "compute_wave": [
+                        "6",
+                        "1",
+                        "0"
+                    ],
+                    "compute_pc": "0x731da1695abc",
+                    "compute_tick": 15146458000,
+                    "load_wave": [
+                        "6",
+                        "0",
+                        "0"
+                    ],
+                    "load": {
+                        "instruction":
+                            "global_load_dwordx4 v[6:9], v[26:27], off",
+                        "pc": "0x731da1695a50",
+                        "seq": 188,
+                        "issue_tick": 15145762000,
+                        "complete_tick": 15151155000
+                    }
+                },
+                {
+                    "compute_wave": [
+                        "7",
+                        "0",
+                        "0"
+                    ],
+                    "compute_pc": "0x731da1695abc",
+                    "compute_tick": 15146458000,
+                    "load_wave": [
+                        "7",
+                        "0",
+                        "0"
+                    ],
+                    "load": {
+                        "instruction":
+                            "global_load_dwordx4 v[6:9], v[26:27], off",
+                        "pc": "0x731da1695a50",
+                        "seq": 188,
+                        "issue_tick": 15145762000,
+                        "complete_tick": 15151150000
+                    }
+                },
+                {
+                    "compute_wave": [
+                        "7",
+                        "1",
+                        "0"
+                    ],
+                    "compute_pc": "0x731da1695abc",
+                    "compute_tick": 15146458000,
+                    "load_wave": [
+                        "7",
+                        "0",
+                        "0"
+                    ],
+                    "load": {
+                        "instruction":
+                            "global_load_dwordx4 v[6:9], v[26:27], off",
+                        "pc": "0x731da1695a50",
+                        "seq": 188,
+                        "issue_tick": 15145762000,
+                        "complete_tick": 15151150000
+                    }
+                }
+            ]
+        }
+    }
+}

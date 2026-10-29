@@ -1,0 +1,4957 @@
+    [
+        {
+            "name": "delivery-lds",
+            "kind": "reference-lds",
+            "defines": [],
+            "shape": [
+                128,
+                256,
+                128
+            ],
+            "seed": 0,
+            "build_command": [
+                "docker",
+                "run",
+                "--rm",
+                "--network",
+                "none",
+                "--user",
+                "1000:1000",
+                "-e",
+                "HOME=/tmp",
+                "-v",
+                "/home/ripopov/work/gem5/gpu-lab/workspace:/workspace",
+                "-w",
+                "/workspace/work/gemm-study/delivery-lds",
+                "gem5-gpu-hsakmt-sdk:migration",
+                "hipcc",
+                "--offload-arch=gfx942",
+                "-O2",
+                "-std=c++17",
+                "--save-temps=cwd",
+                "/workspace/samples/hip-matmul-lds/main.cpp",
+                "-o",
+                "/workspace/work/apps/gem5-kmd/gemm-delivery-lds"
+            ],
+            "sdk": "gem5-gpu-hsakmt-sdk:migration",
+            "runner": "gem5-gpu-hsakmt-runner:lds-final",
+            "images": [
+                {
+                    "Id":
+                        "sha256:b26e2a19f1a4fa631a547f0bceb73547f2a780945e3e7a98d1e9dfa87670e85f",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                },
+                {
+                    "Id":
+                        "sha256:88e616d8eb228d41e2066c4514bca4423f2f284c3a603b555b76b39ecb87dc4c",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                }
+            ],
+            "model_revision": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "model_sha256":
+                "8ec40d19ec074e7b82bcb71183b513f5fc366602d66b12b2de524d8748d2b110",
+            "gem5_checkout": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "source_sha256": {
+                "samples/hip-matmul-lds/main.cpp":
+                    "9074588e4d4ed1e019d5cf10d91a6ac712f7d0d0fb260125ca60fa570aee44c7",
+                "samples/common/matmul.hh":
+                    "14b4fe65dc78158bb0d3cf734e1503a8d419e63809a61817dfccaf080d2734b0",
+                "samples/common/matmul_mfma.hh":
+                    "55a51be014d2253aa86dba8cf2930c35fe00d7206ae1c890785393b8b62c447c"
+            },
+            "binary_sha256":
+                "a2ebc5fed3908b6c63e1f50d05f9eaec7cf03812f9df1aba81cbbca30d753fde",
+            "resources": {
+                "group_segment_fixed_size": [
+                    20480
+                ],
+                "private_segment_fixed_size": [
+                    0
+                ],
+                "vgpr_count": [
+                    52
+                ],
+                "sgpr_count": [
+                    22
+                ],
+                "vgpr_spill_count": [
+                    0
+                ],
+                "sgpr_spill_count": [
+                    0
+                ],
+                "ds_instructions": 18,
+                "next_free_vgpr": [
+                    129
+                ],
+                "next_free_sgpr": [
+                    96
+                ],
+                "accum_offset": [
+                    36
+                ]
+            },
+            "assembly_sha256":
+                "8292e154c390fbff66f9cd15177a8b515e551e754ddaac39e621f9b472f75418",
+            "repetition": 1,
+            "run_command": [
+                "/home/ripopov/work/gem5/gpu-lab/workspace/scripts/run-app.sh",
+                "--backend",
+                "gem5-kmd",
+                "--run-name",
+                "gemm-delivery-lds",
+                "work/apps/gem5-kmd/gemm-delivery-lds",
+                "--m",
+                "128",
+                "--n",
+                "256",
+                "--k",
+                "128"
+            ],
+            "gem5_args": [],
+            "wall_seconds": 23.296522935997928,
+            "run": "gemm-delivery-lds-128-256-128-1789480319544617064",
+            "returncode": 0,
+            "modeled_cus": 8,
+            "host_seconds": 14.77,
+            "shader_active_ticks": 102797999.0,
+            "gpu_active_cycles": 102797.999,
+            "gpu_active_ms": 0.102797999,
+            "kernels": 1.0,
+            "aql_submitted_and_retired": 4.0,
+            "output": [
+                "MFMA tile=64x64x16 wave_tile=64x16 workers=256 producers=0 lds=1 lookahead=1 pipeline=2 lds_pad=16 swizzle=0 prefetch_lds=2 accumulator_copy=0",
+                "hip_matmul_lds: PASS m=128 n=256 k=128 seed=0 checksum=51380224"
+            ],
+            "completed_wavefronts_per_cu": [
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0
+            ],
+            "whole_run_dram": {
+                "system.gpu_mem_ctrls.dram.dramBytesRead": 1001664.0,
+                "system.gpu_mem_ctrls.dram.dramBytesWritten": 672768.0,
+                "system.gpu_mem_ctrls.dram.peakBW": 16000.0
+            },
+            "counters": {
+                "vALUInsts": 11488.0,
+                "sALUInsts": 4064.0,
+                "globalReads": 512.0,
+                "globalWrites": 512.0,
+                "groupReads": 3072.0,
+                "groupWrites": 768.0,
+                "ldsBankAccesses": 458752.0,
+                "spillReads": 0.0,
+                "spillWrites": 0.0,
+                "numVecOpsExecutedMFMA": 262144.0,
+                "wave_slot_cycles_IBEmpty": 158953.0,
+                "wave_slot_cycles_WaitCnt": 968718.0,
+                "wave_slot_cycles_BarrierWait": 617660.0,
+                "wave_slot_cycles_VgprBusy": 676.0,
+                "wave_slot_cycles_SgprBusy": 2368.0,
+                "wave_slot_cycles_MatrixCore": 98877.0,
+                "wave_slot_cycles_InstrReady": 1375952.0,
+                "extra_bank_serialization": 6144.0
+            }
+        },
+        {
+            "name": "delivery-lds",
+            "kind": "reference-lds",
+            "defines": [],
+            "shape": [
+                128,
+                256,
+                128
+            ],
+            "seed": 0,
+            "build_command": [
+                "docker",
+                "run",
+                "--rm",
+                "--network",
+                "none",
+                "--user",
+                "1000:1000",
+                "-e",
+                "HOME=/tmp",
+                "-v",
+                "/home/ripopov/work/gem5/gpu-lab/workspace:/workspace",
+                "-w",
+                "/workspace/work/gemm-study/delivery-lds",
+                "gem5-gpu-hsakmt-sdk:migration",
+                "hipcc",
+                "--offload-arch=gfx942",
+                "-O2",
+                "-std=c++17",
+                "--save-temps=cwd",
+                "/workspace/samples/hip-matmul-lds/main.cpp",
+                "-o",
+                "/workspace/work/apps/gem5-kmd/gemm-delivery-lds"
+            ],
+            "sdk": "gem5-gpu-hsakmt-sdk:migration",
+            "runner": "gem5-gpu-hsakmt-runner:lds-final",
+            "images": [
+                {
+                    "Id":
+                        "sha256:b26e2a19f1a4fa631a547f0bceb73547f2a780945e3e7a98d1e9dfa87670e85f",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                },
+                {
+                    "Id":
+                        "sha256:88e616d8eb228d41e2066c4514bca4423f2f284c3a603b555b76b39ecb87dc4c",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                }
+            ],
+            "model_revision": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "model_sha256":
+                "8ec40d19ec074e7b82bcb71183b513f5fc366602d66b12b2de524d8748d2b110",
+            "gem5_checkout": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "source_sha256": {
+                "samples/hip-matmul-lds/main.cpp":
+                    "9074588e4d4ed1e019d5cf10d91a6ac712f7d0d0fb260125ca60fa570aee44c7",
+                "samples/common/matmul.hh":
+                    "14b4fe65dc78158bb0d3cf734e1503a8d419e63809a61817dfccaf080d2734b0",
+                "samples/common/matmul_mfma.hh":
+                    "55a51be014d2253aa86dba8cf2930c35fe00d7206ae1c890785393b8b62c447c"
+            },
+            "binary_sha256":
+                "a2ebc5fed3908b6c63e1f50d05f9eaec7cf03812f9df1aba81cbbca30d753fde",
+            "resources": {
+                "group_segment_fixed_size": [
+                    20480
+                ],
+                "private_segment_fixed_size": [
+                    0
+                ],
+                "vgpr_count": [
+                    52
+                ],
+                "sgpr_count": [
+                    22
+                ],
+                "vgpr_spill_count": [
+                    0
+                ],
+                "sgpr_spill_count": [
+                    0
+                ],
+                "ds_instructions": 18,
+                "next_free_vgpr": [
+                    129
+                ],
+                "next_free_sgpr": [
+                    96
+                ],
+                "accum_offset": [
+                    36
+                ]
+            },
+            "assembly_sha256":
+                "8292e154c390fbff66f9cd15177a8b515e551e754ddaac39e621f9b472f75418",
+            "repetition": 2,
+            "run_command": [
+                "/home/ripopov/work/gem5/gpu-lab/workspace/scripts/run-app.sh",
+                "--backend",
+                "gem5-kmd",
+                "--run-name",
+                "gemm-delivery-lds",
+                "work/apps/gem5-kmd/gemm-delivery-lds",
+                "--m",
+                "128",
+                "--n",
+                "256",
+                "--k",
+                "128"
+            ],
+            "gem5_args": [],
+            "wall_seconds": 22.30804557599913,
+            "run": "gemm-delivery-lds-128-256-128-1789480342972224589",
+            "returncode": 0,
+            "modeled_cus": 8,
+            "host_seconds": 13.81,
+            "shader_active_ticks": 103930999.0,
+            "gpu_active_cycles": 103930.999,
+            "gpu_active_ms": 0.103930999,
+            "kernels": 1.0,
+            "aql_submitted_and_retired": 4.0,
+            "output": [
+                "MFMA tile=64x64x16 wave_tile=64x16 workers=256 producers=0 lds=1 lookahead=1 pipeline=2 lds_pad=16 swizzle=0 prefetch_lds=2 accumulator_copy=0",
+                "hip_matmul_lds: PASS m=128 n=256 k=128 seed=0 checksum=51380224"
+            ],
+            "completed_wavefronts_per_cu": [
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0
+            ],
+            "whole_run_dram": {
+                "system.gpu_mem_ctrls.dram.dramBytesRead": 1005312.0,
+                "system.gpu_mem_ctrls.dram.dramBytesWritten": 682368.0,
+                "system.gpu_mem_ctrls.dram.peakBW": 16000.0
+            },
+            "counters": {
+                "vALUInsts": 11488.0,
+                "sALUInsts": 4064.0,
+                "globalReads": 512.0,
+                "globalWrites": 512.0,
+                "groupReads": 3072.0,
+                "groupWrites": 768.0,
+                "ldsBankAccesses": 458752.0,
+                "spillReads": 0.0,
+                "spillWrites": 0.0,
+                "numVecOpsExecutedMFMA": 262144.0,
+                "wave_slot_cycles_IBEmpty": 195132.0,
+                "wave_slot_cycles_WaitCnt": 962246.0,
+                "wave_slot_cycles_BarrierWait": 625542.0,
+                "wave_slot_cycles_VgprBusy": 657.0,
+                "wave_slot_cycles_SgprBusy": 2368.0,
+                "wave_slot_cycles_MatrixCore": 99057.0,
+                "wave_slot_cycles_InstrReady": 1364920.0,
+                "extra_bank_serialization": 6144.0
+            }
+        },
+        {
+            "name": "delivery-lds",
+            "kind": "reference-lds",
+            "defines": [],
+            "shape": [
+                128,
+                256,
+                128
+            ],
+            "seed": 0,
+            "build_command": [
+                "docker",
+                "run",
+                "--rm",
+                "--network",
+                "none",
+                "--user",
+                "1000:1000",
+                "-e",
+                "HOME=/tmp",
+                "-v",
+                "/home/ripopov/work/gem5/gpu-lab/workspace:/workspace",
+                "-w",
+                "/workspace/work/gemm-study/delivery-lds",
+                "gem5-gpu-hsakmt-sdk:migration",
+                "hipcc",
+                "--offload-arch=gfx942",
+                "-O2",
+                "-std=c++17",
+                "--save-temps=cwd",
+                "/workspace/samples/hip-matmul-lds/main.cpp",
+                "-o",
+                "/workspace/work/apps/gem5-kmd/gemm-delivery-lds"
+            ],
+            "sdk": "gem5-gpu-hsakmt-sdk:migration",
+            "runner": "gem5-gpu-hsakmt-runner:lds-final",
+            "images": [
+                {
+                    "Id":
+                        "sha256:b26e2a19f1a4fa631a547f0bceb73547f2a780945e3e7a98d1e9dfa87670e85f",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                },
+                {
+                    "Id":
+                        "sha256:88e616d8eb228d41e2066c4514bca4423f2f284c3a603b555b76b39ecb87dc4c",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                }
+            ],
+            "model_revision": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "model_sha256":
+                "8ec40d19ec074e7b82bcb71183b513f5fc366602d66b12b2de524d8748d2b110",
+            "gem5_checkout": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "source_sha256": {
+                "samples/hip-matmul-lds/main.cpp":
+                    "9074588e4d4ed1e019d5cf10d91a6ac712f7d0d0fb260125ca60fa570aee44c7",
+                "samples/common/matmul.hh":
+                    "14b4fe65dc78158bb0d3cf734e1503a8d419e63809a61817dfccaf080d2734b0",
+                "samples/common/matmul_mfma.hh":
+                    "55a51be014d2253aa86dba8cf2930c35fe00d7206ae1c890785393b8b62c447c"
+            },
+            "binary_sha256":
+                "a2ebc5fed3908b6c63e1f50d05f9eaec7cf03812f9df1aba81cbbca30d753fde",
+            "resources": {
+                "group_segment_fixed_size": [
+                    20480
+                ],
+                "private_segment_fixed_size": [
+                    0
+                ],
+                "vgpr_count": [
+                    52
+                ],
+                "sgpr_count": [
+                    22
+                ],
+                "vgpr_spill_count": [
+                    0
+                ],
+                "sgpr_spill_count": [
+                    0
+                ],
+                "ds_instructions": 18,
+                "next_free_vgpr": [
+                    129
+                ],
+                "next_free_sgpr": [
+                    96
+                ],
+                "accum_offset": [
+                    36
+                ]
+            },
+            "assembly_sha256":
+                "8292e154c390fbff66f9cd15177a8b515e551e754ddaac39e621f9b472f75418",
+            "repetition": 3,
+            "run_command": [
+                "/home/ripopov/work/gem5/gpu-lab/workspace/scripts/run-app.sh",
+                "--backend",
+                "gem5-kmd",
+                "--run-name",
+                "gemm-delivery-lds",
+                "work/apps/gem5-kmd/gemm-delivery-lds",
+                "--m",
+                "128",
+                "--n",
+                "256",
+                "--k",
+                "128"
+            ],
+            "gem5_args": [],
+            "wall_seconds": 22.299878204998095,
+            "run": "gemm-delivery-lds-128-256-128-1789480365410640075",
+            "returncode": 0,
+            "modeled_cus": 8,
+            "host_seconds": 13.85,
+            "shader_active_ticks": 102987999.0,
+            "gpu_active_cycles": 102987.999,
+            "gpu_active_ms": 0.102987999,
+            "kernels": 1.0,
+            "aql_submitted_and_retired": 4.0,
+            "output": [
+                "MFMA tile=64x64x16 wave_tile=64x16 workers=256 producers=0 lds=1 lookahead=1 pipeline=2 lds_pad=16 swizzle=0 prefetch_lds=2 accumulator_copy=0",
+                "hip_matmul_lds: PASS m=128 n=256 k=128 seed=0 checksum=51380224"
+            ],
+            "completed_wavefronts_per_cu": [
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0
+            ],
+            "whole_run_dram": {
+                "system.gpu_mem_ctrls.dram.dramBytesRead": 1006400.0,
+                "system.gpu_mem_ctrls.dram.dramBytesWritten": 678592.0,
+                "system.gpu_mem_ctrls.dram.peakBW": 16000.0
+            },
+            "counters": {
+                "vALUInsts": 11488.0,
+                "sALUInsts": 4064.0,
+                "globalReads": 512.0,
+                "globalWrites": 512.0,
+                "groupReads": 3072.0,
+                "groupWrites": 768.0,
+                "ldsBankAccesses": 458752.0,
+                "spillReads": 0.0,
+                "spillWrites": 0.0,
+                "numVecOpsExecutedMFMA": 262144.0,
+                "wave_slot_cycles_IBEmpty": 176604.0,
+                "wave_slot_cycles_WaitCnt": 959697.0,
+                "wave_slot_cycles_BarrierWait": 628292.0,
+                "wave_slot_cycles_VgprBusy": 657.0,
+                "wave_slot_cycles_SgprBusy": 2368.0,
+                "wave_slot_cycles_MatrixCore": 99472.0,
+                "wave_slot_cycles_InstrReady": 1351193.0,
+                "extra_bank_serialization": 6144.0
+            }
+        },
+        {
+            "name": "delivery-lds",
+            "kind": "reference-lds",
+            "defines": [],
+            "shape": [
+                128,
+                256,
+                128
+            ],
+            "seed": 0,
+            "build_command": [
+                "docker",
+                "run",
+                "--rm",
+                "--network",
+                "none",
+                "--user",
+                "1000:1000",
+                "-e",
+                "HOME=/tmp",
+                "-v",
+                "/home/ripopov/work/gem5/gpu-lab/workspace:/workspace",
+                "-w",
+                "/workspace/work/gemm-study/delivery-lds",
+                "gem5-gpu-hsakmt-sdk:migration",
+                "hipcc",
+                "--offload-arch=gfx942",
+                "-O2",
+                "-std=c++17",
+                "--save-temps=cwd",
+                "/workspace/samples/hip-matmul-lds/main.cpp",
+                "-o",
+                "/workspace/work/apps/gem5-kmd/gemm-delivery-lds"
+            ],
+            "sdk": "gem5-gpu-hsakmt-sdk:migration",
+            "runner": "gem5-gpu-hsakmt-runner:lds-final",
+            "images": [
+                {
+                    "Id":
+                        "sha256:b26e2a19f1a4fa631a547f0bceb73547f2a780945e3e7a98d1e9dfa87670e85f",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                },
+                {
+                    "Id":
+                        "sha256:88e616d8eb228d41e2066c4514bca4423f2f284c3a603b555b76b39ecb87dc4c",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                }
+            ],
+            "model_revision": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "model_sha256":
+                "8ec40d19ec074e7b82bcb71183b513f5fc366602d66b12b2de524d8748d2b110",
+            "gem5_checkout": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "source_sha256": {
+                "samples/hip-matmul-lds/main.cpp":
+                    "9074588e4d4ed1e019d5cf10d91a6ac712f7d0d0fb260125ca60fa570aee44c7",
+                "samples/common/matmul.hh":
+                    "14b4fe65dc78158bb0d3cf734e1503a8d419e63809a61817dfccaf080d2734b0",
+                "samples/common/matmul_mfma.hh":
+                    "55a51be014d2253aa86dba8cf2930c35fe00d7206ae1c890785393b8b62c447c"
+            },
+            "binary_sha256":
+                "a2ebc5fed3908b6c63e1f50d05f9eaec7cf03812f9df1aba81cbbca30d753fde",
+            "resources": {
+                "group_segment_fixed_size": [
+                    20480
+                ],
+                "private_segment_fixed_size": [
+                    0
+                ],
+                "vgpr_count": [
+                    52
+                ],
+                "sgpr_count": [
+                    22
+                ],
+                "vgpr_spill_count": [
+                    0
+                ],
+                "sgpr_spill_count": [
+                    0
+                ],
+                "ds_instructions": 18,
+                "next_free_vgpr": [
+                    129
+                ],
+                "next_free_sgpr": [
+                    96
+                ],
+                "accum_offset": [
+                    36
+                ]
+            },
+            "assembly_sha256":
+                "8292e154c390fbff66f9cd15177a8b515e551e754ddaac39e621f9b472f75418",
+            "repetition": 4,
+            "run_command": [
+                "/home/ripopov/work/gem5/gpu-lab/workspace/scripts/run-app.sh",
+                "--backend",
+                "gem5-kmd",
+                "--run-name",
+                "gemm-delivery-lds",
+                "work/apps/gem5-kmd/gemm-delivery-lds",
+                "--m",
+                "128",
+                "--n",
+                "256",
+                "--k",
+                "128"
+            ],
+            "gem5_args": [],
+            "wall_seconds": 22.83330822700009,
+            "run": "gemm-delivery-lds-128-256-128-1789480387859386383",
+            "returncode": 0,
+            "modeled_cus": 8,
+            "host_seconds": 14.45,
+            "shader_active_ticks": 102073999.0,
+            "gpu_active_cycles": 102073.999,
+            "gpu_active_ms": 0.102073999,
+            "kernels": 1.0,
+            "aql_submitted_and_retired": 4.0,
+            "output": [
+                "MFMA tile=64x64x16 wave_tile=64x16 workers=256 producers=0 lds=1 lookahead=1 pipeline=2 lds_pad=16 swizzle=0 prefetch_lds=2 accumulator_copy=0",
+                "hip_matmul_lds: PASS m=128 n=256 k=128 seed=0 checksum=51380224"
+            ],
+            "completed_wavefronts_per_cu": [
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0
+            ],
+            "whole_run_dram": {
+                "system.gpu_mem_ctrls.dram.dramBytesRead": 1002368.0,
+                "system.gpu_mem_ctrls.dram.dramBytesWritten": 670272.0,
+                "system.gpu_mem_ctrls.dram.peakBW": 16000.0
+            },
+            "counters": {
+                "vALUInsts": 11488.0,
+                "sALUInsts": 4064.0,
+                "globalReads": 512.0,
+                "globalWrites": 512.0,
+                "groupReads": 3072.0,
+                "groupWrites": 768.0,
+                "ldsBankAccesses": 458752.0,
+                "spillReads": 0.0,
+                "spillWrites": 0.0,
+                "numVecOpsExecutedMFMA": 262144.0,
+                "wave_slot_cycles_IBEmpty": 163837.0,
+                "wave_slot_cycles_WaitCnt": 979858.0,
+                "wave_slot_cycles_BarrierWait": 617117.0,
+                "wave_slot_cycles_VgprBusy": 664.0,
+                "wave_slot_cycles_SgprBusy": 2368.0,
+                "wave_slot_cycles_MatrixCore": 99057.0,
+                "wave_slot_cycles_InstrReady": 1339021.0,
+                "extra_bank_serialization": 6144.0
+            }
+        },
+        {
+            "name": "delivery-lds",
+            "kind": "reference-lds",
+            "defines": [],
+            "shape": [
+                128,
+                256,
+                128
+            ],
+            "seed": 0,
+            "build_command": [
+                "docker",
+                "run",
+                "--rm",
+                "--network",
+                "none",
+                "--user",
+                "1000:1000",
+                "-e",
+                "HOME=/tmp",
+                "-v",
+                "/home/ripopov/work/gem5/gpu-lab/workspace:/workspace",
+                "-w",
+                "/workspace/work/gemm-study/delivery-lds",
+                "gem5-gpu-hsakmt-sdk:migration",
+                "hipcc",
+                "--offload-arch=gfx942",
+                "-O2",
+                "-std=c++17",
+                "--save-temps=cwd",
+                "/workspace/samples/hip-matmul-lds/main.cpp",
+                "-o",
+                "/workspace/work/apps/gem5-kmd/gemm-delivery-lds"
+            ],
+            "sdk": "gem5-gpu-hsakmt-sdk:migration",
+            "runner": "gem5-gpu-hsakmt-runner:lds-final",
+            "images": [
+                {
+                    "Id":
+                        "sha256:b26e2a19f1a4fa631a547f0bceb73547f2a780945e3e7a98d1e9dfa87670e85f",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                },
+                {
+                    "Id":
+                        "sha256:88e616d8eb228d41e2066c4514bca4423f2f284c3a603b555b76b39ecb87dc4c",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                }
+            ],
+            "model_revision": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "model_sha256":
+                "8ec40d19ec074e7b82bcb71183b513f5fc366602d66b12b2de524d8748d2b110",
+            "gem5_checkout": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "source_sha256": {
+                "samples/hip-matmul-lds/main.cpp":
+                    "9074588e4d4ed1e019d5cf10d91a6ac712f7d0d0fb260125ca60fa570aee44c7",
+                "samples/common/matmul.hh":
+                    "14b4fe65dc78158bb0d3cf734e1503a8d419e63809a61817dfccaf080d2734b0",
+                "samples/common/matmul_mfma.hh":
+                    "55a51be014d2253aa86dba8cf2930c35fe00d7206ae1c890785393b8b62c447c"
+            },
+            "binary_sha256":
+                "a2ebc5fed3908b6c63e1f50d05f9eaec7cf03812f9df1aba81cbbca30d753fde",
+            "resources": {
+                "group_segment_fixed_size": [
+                    20480
+                ],
+                "private_segment_fixed_size": [
+                    0
+                ],
+                "vgpr_count": [
+                    52
+                ],
+                "sgpr_count": [
+                    22
+                ],
+                "vgpr_spill_count": [
+                    0
+                ],
+                "sgpr_spill_count": [
+                    0
+                ],
+                "ds_instructions": 18,
+                "next_free_vgpr": [
+                    129
+                ],
+                "next_free_sgpr": [
+                    96
+                ],
+                "accum_offset": [
+                    36
+                ]
+            },
+            "assembly_sha256":
+                "8292e154c390fbff66f9cd15177a8b515e551e754ddaac39e621f9b472f75418",
+            "repetition": 5,
+            "run_command": [
+                "/home/ripopov/work/gem5/gpu-lab/workspace/scripts/run-app.sh",
+                "--backend",
+                "gem5-kmd",
+                "--run-name",
+                "gemm-delivery-lds",
+                "work/apps/gem5-kmd/gemm-delivery-lds",
+                "--m",
+                "128",
+                "--n",
+                "256",
+                "--k",
+                "128"
+            ],
+            "gem5_args": [],
+            "wall_seconds": 23.286077861001104,
+            "run": "gemm-delivery-lds-128-256-128-1789480410853039057",
+            "returncode": 0,
+            "modeled_cus": 8,
+            "host_seconds": 14.69,
+            "shader_active_ticks": 103498999.0,
+            "gpu_active_cycles": 103498.999,
+            "gpu_active_ms": 0.103498999,
+            "kernels": 1.0,
+            "aql_submitted_and_retired": 4.0,
+            "output": [
+                "MFMA tile=64x64x16 wave_tile=64x16 workers=256 producers=0 lds=1 lookahead=1 pipeline=2 lds_pad=16 swizzle=0 prefetch_lds=2 accumulator_copy=0",
+                "hip_matmul_lds: PASS m=128 n=256 k=128 seed=0 checksum=51380224"
+            ],
+            "completed_wavefronts_per_cu": [
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0
+            ],
+            "whole_run_dram": {
+                "system.gpu_mem_ctrls.dram.dramBytesRead": 1005632.0,
+                "system.gpu_mem_ctrls.dram.dramBytesWritten": 678464.0,
+                "system.gpu_mem_ctrls.dram.peakBW": 16000.0
+            },
+            "counters": {
+                "vALUInsts": 11488.0,
+                "sALUInsts": 4064.0,
+                "globalReads": 512.0,
+                "globalWrites": 512.0,
+                "groupReads": 3072.0,
+                "groupWrites": 768.0,
+                "ldsBankAccesses": 458752.0,
+                "spillReads": 0.0,
+                "spillWrites": 0.0,
+                "numVecOpsExecutedMFMA": 262144.0,
+                "wave_slot_cycles_IBEmpty": 185797.0,
+                "wave_slot_cycles_WaitCnt": 961001.0,
+                "wave_slot_cycles_BarrierWait": 629080.0,
+                "wave_slot_cycles_VgprBusy": 655.0,
+                "wave_slot_cycles_SgprBusy": 2368.0,
+                "wave_slot_cycles_MatrixCore": 99535.0,
+                "wave_slot_cycles_InstrReady": 1362071.0,
+                "extra_bank_serialization": 6144.0
+            }
+        },
+        {
+            "name": "delivery-lds-seed19",
+            "kind": "reference-lds",
+            "defines": [],
+            "shape": [
+                128,
+                256,
+                128
+            ],
+            "seed": 19,
+            "build_command": [
+                "docker",
+                "run",
+                "--rm",
+                "--network",
+                "none",
+                "--user",
+                "1000:1000",
+                "-e",
+                "HOME=/tmp",
+                "-v",
+                "/home/ripopov/work/gem5/gpu-lab/workspace:/workspace",
+                "-w",
+                "/workspace/work/gemm-study/delivery-lds-seed19",
+                "gem5-gpu-hsakmt-sdk:migration",
+                "hipcc",
+                "--offload-arch=gfx942",
+                "-O2",
+                "-std=c++17",
+                "--save-temps=cwd",
+                "/workspace/samples/hip-matmul-lds/main.cpp",
+                "-o",
+                "/workspace/work/apps/gem5-kmd/gemm-delivery-lds-seed19"
+            ],
+            "sdk": "gem5-gpu-hsakmt-sdk:migration",
+            "runner": "gem5-gpu-hsakmt-runner:lds-final",
+            "images": [
+                {
+                    "Id":
+                        "sha256:b26e2a19f1a4fa631a547f0bceb73547f2a780945e3e7a98d1e9dfa87670e85f",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                },
+                {
+                    "Id":
+                        "sha256:88e616d8eb228d41e2066c4514bca4423f2f284c3a603b555b76b39ecb87dc4c",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                }
+            ],
+            "model_revision": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "model_sha256":
+                "8ec40d19ec074e7b82bcb71183b513f5fc366602d66b12b2de524d8748d2b110",
+            "gem5_checkout": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "source_sha256": {
+                "samples/hip-matmul-lds/main.cpp":
+                    "9074588e4d4ed1e019d5cf10d91a6ac712f7d0d0fb260125ca60fa570aee44c7",
+                "samples/common/matmul.hh":
+                    "14b4fe65dc78158bb0d3cf734e1503a8d419e63809a61817dfccaf080d2734b0",
+                "samples/common/matmul_mfma.hh":
+                    "55a51be014d2253aa86dba8cf2930c35fe00d7206ae1c890785393b8b62c447c"
+            },
+            "binary_sha256":
+                "499f2f4655126dc25f5fa4247d11f3b476efaaf43b13c9908637a25a9a06f67d",
+            "resources": {
+                "group_segment_fixed_size": [
+                    20480
+                ],
+                "private_segment_fixed_size": [
+                    0
+                ],
+                "vgpr_count": [
+                    52
+                ],
+                "sgpr_count": [
+                    22
+                ],
+                "vgpr_spill_count": [
+                    0
+                ],
+                "sgpr_spill_count": [
+                    0
+                ],
+                "ds_instructions": 18,
+                "next_free_vgpr": [
+                    129
+                ],
+                "next_free_sgpr": [
+                    96
+                ],
+                "accum_offset": [
+                    36
+                ]
+            },
+            "assembly_sha256":
+                "a13bacb2dc96c3ae46e64d39b5724165071dadb31e99e04c8df3886e7b82c769",
+            "repetition": 1,
+            "run_command": [
+                "/home/ripopov/work/gem5/gpu-lab/workspace/scripts/run-app.sh",
+                "--backend",
+                "gem5-kmd",
+                "--run-name",
+                "gemm-delivery-lds-seed19",
+                "work/apps/gem5-kmd/gemm-delivery-lds-seed19",
+                "--m",
+                "128",
+                "--n",
+                "256",
+                "--k",
+                "128",
+                "--seed",
+                "19"
+            ],
+            "gem5_args": [],
+            "wall_seconds": 22.21938836100162,
+            "run": "gemm-delivery-lds-seed19-128-256-128-1789481247967002504",
+            "returncode": 0,
+            "modeled_cus": 8,
+            "host_seconds": 13.97,
+            "shader_active_ticks": 102432999.0,
+            "gpu_active_cycles": 102432.999,
+            "gpu_active_ms": 0.10243299900000001,
+            "kernels": 1.0,
+            "aql_submitted_and_retired": 4.0,
+            "output": [
+                "MFMA tile=64x64x16 wave_tile=64x16 workers=256 producers=0 lds=1 lookahead=1 pipeline=2 lds_pad=16 swizzle=0 prefetch_lds=2 accumulator_copy=0",
+                "hip_matmul_lds: PASS m=128 n=256 k=128 seed=19 checksum=-91227"
+            ],
+            "completed_wavefronts_per_cu": [
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0
+            ],
+            "whole_run_dram": {
+                "system.gpu_mem_ctrls.dram.dramBytesRead": 1005696.0,
+                "system.gpu_mem_ctrls.dram.dramBytesWritten": 680896.0,
+                "system.gpu_mem_ctrls.dram.peakBW": 16000.0
+            },
+            "counters": {
+                "vALUInsts": 11488.0,
+                "sALUInsts": 4064.0,
+                "globalReads": 512.0,
+                "globalWrites": 512.0,
+                "groupReads": 3072.0,
+                "groupWrites": 768.0,
+                "ldsBankAccesses": 458752.0,
+                "spillReads": 0.0,
+                "spillWrites": 0.0,
+                "numVecOpsExecutedMFMA": 262144.0,
+                "wave_slot_cycles_IBEmpty": 163242.0,
+                "wave_slot_cycles_WaitCnt": 972565.0,
+                "wave_slot_cycles_BarrierWait": 626753.0,
+                "wave_slot_cycles_VgprBusy": 667.0,
+                "wave_slot_cycles_SgprBusy": 2368.0,
+                "wave_slot_cycles_MatrixCore": 99295.0,
+                "wave_slot_cycles_InstrReady": 1347714.0,
+                "extra_bank_serialization": 6144.0
+            }
+        },
+        {
+            "name": "delivery-naive",
+            "kind": "naive",
+            "defines": [],
+            "shape": [
+                128,
+                256,
+                128
+            ],
+            "seed": 0,
+            "build_command": [
+                "docker",
+                "run",
+                "--rm",
+                "--network",
+                "none",
+                "--user",
+                "1000:1000",
+                "-e",
+                "HOME=/tmp",
+                "-v",
+                "/home/ripopov/work/gem5/gpu-lab/workspace:/workspace",
+                "-w",
+                "/workspace/work/gemm-study/delivery-naive",
+                "gem5-gpu-hsakmt-sdk:migration",
+                "hipcc",
+                "--offload-arch=gfx942",
+                "-O2",
+                "-std=c++17",
+                "--save-temps=cwd",
+                "/workspace/samples/hip-matmul/main.cpp",
+                "-o",
+                "/workspace/work/apps/gem5-kmd/gemm-delivery-naive"
+            ],
+            "sdk": "gem5-gpu-hsakmt-sdk:migration",
+            "runner": "gem5-gpu-hsakmt-runner:lds-final",
+            "images": [
+                {
+                    "Id":
+                        "sha256:b26e2a19f1a4fa631a547f0bceb73547f2a780945e3e7a98d1e9dfa87670e85f",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                },
+                {
+                    "Id":
+                        "sha256:88e616d8eb228d41e2066c4514bca4423f2f284c3a603b555b76b39ecb87dc4c",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                }
+            ],
+            "model_revision": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "model_sha256":
+                "8ec40d19ec074e7b82bcb71183b513f5fc366602d66b12b2de524d8748d2b110",
+            "gem5_checkout": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "source_sha256": {
+                "samples/hip-matmul/main.cpp":
+                    "ff72c488c60c67c3456d3c9aebca0309c94934dcbe7b13983205a4a92dafaea4",
+                "samples/common/matmul.hh":
+                    "14b4fe65dc78158bb0d3cf734e1503a8d419e63809a61817dfccaf080d2734b0",
+                "samples/common/matmul_mfma.hh":
+                    "55a51be014d2253aa86dba8cf2930c35fe00d7206ae1c890785393b8b62c447c"
+            },
+            "binary_sha256":
+                "dd56c65856577292a6dfc4d92fbcd7e4815cf3b64d5a8087a9b709a0fde65492",
+            "resources": {
+                "group_segment_fixed_size": [
+                    0,
+                    0
+                ],
+                "private_segment_fixed_size": [
+                    0,
+                    0
+                ],
+                "vgpr_count": [
+                    10,
+                    10
+                ],
+                "sgpr_count": [
+                    18,
+                    18
+                ],
+                "vgpr_spill_count": [
+                    0,
+                    0
+                ],
+                "sgpr_spill_count": [
+                    0,
+                    0
+                ],
+                "ds_instructions": 0,
+                "next_free_vgpr": [
+                    10,
+                    10
+                ],
+                "next_free_sgpr": [
+                    12,
+                    12
+                ],
+                "accum_offset": [
+                    12,
+                    12
+                ]
+            },
+            "assembly_sha256":
+                "b31ee4b87dde187e0427db10b102425d9817d221dfa9a0a80e5eda3be509ac77",
+            "repetition": 1,
+            "run_command": [
+                "/home/ripopov/work/gem5/gpu-lab/workspace/scripts/run-app.sh",
+                "--backend",
+                "gem5-kmd",
+                "--run-name",
+                "gemm-delivery-naive",
+                "work/apps/gem5-kmd/gemm-delivery-naive",
+                "--m",
+                "128",
+                "--n",
+                "256",
+                "--k",
+                "128"
+            ],
+            "gem5_args": [],
+            "wall_seconds": 54.107768027999555,
+            "run": "gemm-delivery-naive-128-256-128-1789480784571274332",
+            "returncode": 0,
+            "modeled_cus": 8,
+            "host_seconds": 45.74,
+            "shader_active_ticks": 376939999.0,
+            "gpu_active_cycles": 376939.999,
+            "gpu_active_ms": 0.37693999899999997,
+            "kernels": 1.0,
+            "aql_submitted_and_retired": 4.0,
+            "output": [
+                "hip_matmul: PASS m=128 n=256 k=128 layout=row-major-b checksum=51380224"
+            ],
+            "completed_wavefronts_per_cu": [
+                68.0,
+                52.0,
+                52.0,
+                68.0,
+                68.0,
+                68.0,
+                68.0,
+                68.0
+            ],
+            "whole_run_dram": {
+                "system.gpu_mem_ctrls.dram.dramBytesRead": 1003136.0,
+                "system.gpu_mem_ctrls.dram.dramBytesWritten": 668160.0,
+                "system.gpu_mem_ctrls.dram.peakBW": 16000.0
+            },
+            "counters": {
+                "vALUInsts": 400896.0,
+                "sALUInsts": 134656.0,
+                "globalReads": 131072.0,
+                "globalWrites": 512.0,
+                "groupReads": 0.0,
+                "groupWrites": 0.0,
+                "ldsBankAccesses": 0.0,
+                "spillReads": 0.0,
+                "spillWrites": 0.0,
+                "numVecOpsExecutedMFMA": 0.0,
+                "wave_slot_cycles_IBEmpty": 457675.0,
+                "wave_slot_cycles_WaitCnt": 13307073.0,
+                "wave_slot_cycles_BarrierWait": 0.0,
+                "wave_slot_cycles_VgprBusy": 65536.0,
+                "wave_slot_cycles_SgprBusy": 5322.0,
+                "wave_slot_cycles_MatrixCore": 0.0,
+                "wave_slot_cycles_InstrReady": 23122428.0,
+                "extra_bank_serialization": 0
+            }
+        },
+        {
+            "name": "delivery-plain-tiled",
+            "kind": "reference-lds",
+            "defines": [
+                "PIPELINE=0",
+                "PREFETCH_LDS=0"
+            ],
+            "shape": [
+                128,
+                256,
+                128
+            ],
+            "seed": 0,
+            "build_command": [
+                "docker",
+                "run",
+                "--rm",
+                "--network",
+                "none",
+                "--user",
+                "1000:1000",
+                "-e",
+                "HOME=/tmp",
+                "-v",
+                "/home/ripopov/work/gem5/gpu-lab/workspace:/workspace",
+                "-w",
+                "/workspace/work/gemm-study/delivery-plain-tiled",
+                "gem5-gpu-hsakmt-sdk:migration",
+                "hipcc",
+                "--offload-arch=gfx942",
+                "-O2",
+                "-std=c++17",
+                "--save-temps=cwd",
+                "-DPIPELINE=0",
+                "-DPREFETCH_LDS=0",
+                "/workspace/samples/hip-matmul-lds/main.cpp",
+                "-o",
+                "/workspace/work/apps/gem5-kmd/gemm-delivery-plain-tiled"
+            ],
+            "sdk": "gem5-gpu-hsakmt-sdk:migration",
+            "runner": "gem5-gpu-hsakmt-runner:lds-final",
+            "images": [
+                {
+                    "Id":
+                        "sha256:b26e2a19f1a4fa631a547f0bceb73547f2a780945e3e7a98d1e9dfa87670e85f",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                },
+                {
+                    "Id":
+                        "sha256:88e616d8eb228d41e2066c4514bca4423f2f284c3a603b555b76b39ecb87dc4c",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                }
+            ],
+            "model_revision": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "model_sha256":
+                "8ec40d19ec074e7b82bcb71183b513f5fc366602d66b12b2de524d8748d2b110",
+            "gem5_checkout": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "source_sha256": {
+                "samples/hip-matmul-lds/main.cpp":
+                    "9074588e4d4ed1e019d5cf10d91a6ac712f7d0d0fb260125ca60fa570aee44c7",
+                "samples/common/matmul.hh":
+                    "14b4fe65dc78158bb0d3cf734e1503a8d419e63809a61817dfccaf080d2734b0",
+                "samples/common/matmul_mfma.hh":
+                    "55a51be014d2253aa86dba8cf2930c35fe00d7206ae1c890785393b8b62c447c"
+            },
+            "binary_sha256":
+                "e495ecb014b8b6c4e7653183a786636bd2fde987d3f1d48d77468bf9f6448b37",
+            "resources": {
+                "group_segment_fixed_size": [
+                    10240
+                ],
+                "private_segment_fixed_size": [
+                    0
+                ],
+                "vgpr_count": [
+                    44
+                ],
+                "sgpr_count": [
+                    22
+                ],
+                "vgpr_spill_count": [
+                    0
+                ],
+                "sgpr_spill_count": [
+                    0
+                ],
+                "ds_instructions": 18,
+                "next_free_vgpr": [
+                    73
+                ],
+                "next_free_sgpr": [
+                    91
+                ],
+                "accum_offset": [
+                    28
+                ]
+            },
+            "assembly_sha256":
+                "603febdf35720533e9d4bee0e6cdae2adb8ee7bfb79b184e046c3f568a79dfcc",
+            "repetition": 1,
+            "run_command": [
+                "/home/ripopov/work/gem5/gpu-lab/workspace/scripts/run-app.sh",
+                "--backend",
+                "gem5-kmd",
+                "--run-name",
+                "gemm-delivery-plain-tiled",
+                "work/apps/gem5-kmd/gemm-delivery-plain-tiled",
+                "--m",
+                "128",
+                "--n",
+                "256",
+                "--k",
+                "128"
+            ],
+            "gem5_args": [],
+            "wall_seconds": 22.172658718001912,
+            "run": "gemm-delivery-plain-tiled-128-256-128-1789481129790055997",
+            "returncode": 0,
+            "modeled_cus": 8,
+            "host_seconds": 13.73,
+            "shader_active_ticks": 106986999.0,
+            "gpu_active_cycles": 106986.999,
+            "gpu_active_ms": 0.106986999,
+            "kernels": 1.0,
+            "aql_submitted_and_retired": 4.0,
+            "output": [
+                "MFMA tile=64x64x16 wave_tile=64x16 workers=256 producers=0 lds=1 lookahead=1 pipeline=0 lds_pad=16 swizzle=0 prefetch_lds=0 accumulator_copy=0",
+                "hip_matmul_lds: PASS m=128 n=256 k=128 seed=0 checksum=51380224"
+            ],
+            "completed_wavefronts_per_cu": [
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0
+            ],
+            "whole_run_dram": {
+                "system.gpu_mem_ctrls.dram.dramBytesRead": 1003264.0,
+                "system.gpu_mem_ctrls.dram.dramBytesWritten": 730176.0,
+                "system.gpu_mem_ctrls.dram.peakBW": 16000.0
+            },
+            "counters": {
+                "vALUInsts": 9344.0,
+                "sALUInsts": 2080.0,
+                "globalReads": 512.0,
+                "globalWrites": 512.0,
+                "groupReads": 3072.0,
+                "groupWrites": 768.0,
+                "ldsBankAccesses": 458752.0,
+                "spillReads": 0.0,
+                "spillWrites": 0.0,
+                "numVecOpsExecutedMFMA": 262144.0,
+                "wave_slot_cycles_IBEmpty": 153815.0,
+                "wave_slot_cycles_WaitCnt": 1597975.0,
+                "wave_slot_cycles_BarrierWait": 341034.0,
+                "wave_slot_cycles_VgprBusy": 2556.0,
+                "wave_slot_cycles_SgprBusy": 1344.0,
+                "wave_slot_cycles_MatrixCore": 67584.0,
+                "wave_slot_cycles_InstrReady": 1192623.0,
+                "extra_bank_serialization": 6144.0
+            }
+        },
+        {
+            "name": "delivery-producer-trace",
+            "kind": "reference-lds",
+            "defines": [
+                "PRODUCERS=128"
+            ],
+            "shape": [
+                128,
+                256,
+                128
+            ],
+            "seed": 0,
+            "build_command": [
+                "docker",
+                "run",
+                "--rm",
+                "--network",
+                "none",
+                "--user",
+                "1000:1000",
+                "-e",
+                "HOME=/tmp",
+                "-v",
+                "/home/ripopov/work/gem5/gpu-lab/workspace:/workspace",
+                "-w",
+                "/workspace/work/gemm-study/delivery-producer-trace",
+                "gem5-gpu-hsakmt-sdk:migration",
+                "hipcc",
+                "--offload-arch=gfx942",
+                "-O2",
+                "-std=c++17",
+                "--save-temps=cwd",
+                "-DPRODUCERS=128",
+                "/workspace/samples/hip-matmul-lds/main.cpp",
+                "-o",
+                "/workspace/work/apps/gem5-kmd/gemm-delivery-producer-trace"
+            ],
+            "sdk": "gem5-gpu-hsakmt-sdk:migration",
+            "runner": "gem5-gpu-hsakmt-runner:lds-final",
+            "images": [
+                {
+                    "Id":
+                        "sha256:b26e2a19f1a4fa631a547f0bceb73547f2a780945e3e7a98d1e9dfa87670e85f",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                },
+                {
+                    "Id":
+                        "sha256:88e616d8eb228d41e2066c4514bca4423f2f284c3a603b555b76b39ecb87dc4c",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                }
+            ],
+            "model_revision": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "model_sha256":
+                "8ec40d19ec074e7b82bcb71183b513f5fc366602d66b12b2de524d8748d2b110",
+            "gem5_checkout": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "source_sha256": {
+                "samples/hip-matmul-lds/main.cpp":
+                    "9074588e4d4ed1e019d5cf10d91a6ac712f7d0d0fb260125ca60fa570aee44c7",
+                "samples/common/matmul.hh":
+                    "14b4fe65dc78158bb0d3cf734e1503a8d419e63809a61817dfccaf080d2734b0",
+                "samples/common/matmul_mfma.hh":
+                    "55a51be014d2253aa86dba8cf2930c35fe00d7206ae1c890785393b8b62c447c"
+            },
+            "binary_sha256":
+                "b6b839f53a8ef8ca8b87782a6e47f4162f045b82425ed7a92f80f67f4f1afb9b",
+            "resources": {
+                "group_segment_fixed_size": [
+                    20480
+                ],
+                "private_segment_fixed_size": [
+                    0
+                ],
+                "vgpr_count": [
+                    62
+                ],
+                "sgpr_count": [
+                    28
+                ],
+                "vgpr_spill_count": [
+                    0
+                ],
+                "sgpr_spill_count": [
+                    0
+                ],
+                "ds_instructions": 24,
+                "next_free_vgpr": [
+                    81
+                ],
+                "next_free_sgpr": [
+                    96
+                ],
+                "accum_offset": [
+                    64
+                ]
+            },
+            "assembly_sha256":
+                "29195bb3ac8a6091896536d455c5408de9811d7bd4cba935c42ba4914339e841",
+            "repetition": 1,
+            "run_command": [
+                "/home/ripopov/work/gem5/gpu-lab/workspace/scripts/run-app.sh",
+                "--backend",
+                "gem5-kmd",
+                "--run-name",
+                "gemm-delivery-producer-trace",
+                "--gem5-arg=--debug-flags=GPUTrace,GPUMem",
+                "work/apps/gem5-kmd/gemm-delivery-producer-trace",
+                "--m",
+                "128",
+                "--n",
+                "256",
+                "--k",
+                "128"
+            ],
+            "gem5_args": [
+                "--debug-flags=GPUTrace,GPUMem"
+            ],
+            "wall_seconds": 42.458769384000334,
+            "run":
+                "gemm-delivery-producer-trace-128-256-128-1789481453920167443",
+            "returncode": 0,
+            "modeled_cus": 8,
+            "host_seconds": 20.64,
+            "shader_active_ticks": 109812999.0,
+            "gpu_active_cycles": 109812.999,
+            "gpu_active_ms": 0.10981299900000001,
+            "kernels": 1.0,
+            "aql_submitted_and_retired": 4.0,
+            "output": [
+                "MFMA tile=64x64x16 wave_tile=64x16 workers=256 producers=128 lds=1 lookahead=1 pipeline=2 lds_pad=16 swizzle=0 prefetch_lds=2 accumulator_copy=0",
+                "hip_matmul_lds: PASS m=128 n=256 k=128 seed=0 checksum=51380224"
+            ],
+            "completed_wavefronts_per_cu": [
+                6.0,
+                6.0,
+                6.0,
+                6.0,
+                6.0,
+                6.0,
+                6.0,
+                6.0
+            ],
+            "whole_run_dram": {
+                "system.gpu_mem_ctrls.dram.dramBytesRead": 1005888.0,
+                "system.gpu_mem_ctrls.dram.dramBytesWritten": 727616.0,
+                "system.gpu_mem_ctrls.dram.peakBW": 16000.0
+            },
+            "counters": {
+                "vALUInsts": 14736.0,
+                "sALUInsts": 7248.0,
+                "globalReads": 512.0,
+                "globalWrites": 512.0,
+                "groupReads": 3072.0,
+                "groupWrites": 768.0,
+                "ldsBankAccesses": 458752.0,
+                "spillReads": 0.0,
+                "spillWrites": 0.0,
+                "numVecOpsExecutedMFMA": 262144.0,
+                "wave_slot_cycles_IBEmpty": 363338.0,
+                "wave_slot_cycles_WaitCnt": 655870.0,
+                "wave_slot_cycles_BarrierWait": 2048536.0,
+                "wave_slot_cycles_VgprBusy": 709.0,
+                "wave_slot_cycles_SgprBusy": 1520.0,
+                "wave_slot_cycles_MatrixCore": 95079.0,
+                "wave_slot_cycles_InstrReady": 1494010.0,
+                "extra_bank_serialization": 6144.0
+            }
+        },
+        {
+            "name": "delivery-producer128-p1",
+            "kind": "reference-lds",
+            "defines": [
+                "PRODUCERS=128",
+                "PIPELINE=1"
+            ],
+            "shape": [
+                128,
+                256,
+                128
+            ],
+            "seed": 0,
+            "build_command": [
+                "docker",
+                "run",
+                "--rm",
+                "--network",
+                "none",
+                "--user",
+                "1000:1000",
+                "-e",
+                "HOME=/tmp",
+                "-v",
+                "/home/ripopov/work/gem5/gpu-lab/workspace:/workspace",
+                "-w",
+                "/workspace/work/gemm-study/delivery-producer128-p1",
+                "gem5-gpu-hsakmt-sdk:migration",
+                "hipcc",
+                "--offload-arch=gfx942",
+                "-O2",
+                "-std=c++17",
+                "--save-temps=cwd",
+                "-DPRODUCERS=128",
+                "-DPIPELINE=1",
+                "/workspace/samples/hip-matmul-lds/main.cpp",
+                "-o",
+                "/workspace/work/apps/gem5-kmd/gemm-delivery-producer128-p1"
+            ],
+            "sdk": "gem5-gpu-hsakmt-sdk:migration",
+            "runner": "gem5-gpu-hsakmt-runner:lds-final",
+            "images": [
+                {
+                    "Id":
+                        "sha256:b26e2a19f1a4fa631a547f0bceb73547f2a780945e3e7a98d1e9dfa87670e85f",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                },
+                {
+                    "Id":
+                        "sha256:88e616d8eb228d41e2066c4514bca4423f2f284c3a603b555b76b39ecb87dc4c",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                }
+            ],
+            "model_revision": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "model_sha256":
+                "8ec40d19ec074e7b82bcb71183b513f5fc366602d66b12b2de524d8748d2b110",
+            "gem5_checkout": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "source_sha256": {
+                "samples/hip-matmul-lds/main.cpp":
+                    "9074588e4d4ed1e019d5cf10d91a6ac712f7d0d0fb260125ca60fa570aee44c7",
+                "samples/common/matmul.hh":
+                    "14b4fe65dc78158bb0d3cf734e1503a8d419e63809a61817dfccaf080d2734b0",
+                "samples/common/matmul_mfma.hh":
+                    "55a51be014d2253aa86dba8cf2930c35fe00d7206ae1c890785393b8b62c447c"
+            },
+            "binary_sha256":
+                "df295f4c3ad92399046c54fba080b05efaf157c9b71a375ff0492465c27fd268",
+            "resources": {
+                "group_segment_fixed_size": [
+                    10240
+                ],
+                "private_segment_fixed_size": [
+                    0
+                ],
+                "vgpr_count": [
+                    64
+                ],
+                "sgpr_count": [
+                    26
+                ],
+                "vgpr_spill_count": [
+                    0
+                ],
+                "sgpr_spill_count": [
+                    0
+                ],
+                "ds_instructions": 24,
+                "next_free_vgpr": [
+                    64
+                ],
+                "next_free_sgpr": [
+                    20
+                ],
+                "accum_offset": [
+                    64
+                ]
+            },
+            "assembly_sha256":
+                "3a967b6d025f6493f3c74386ecc255f4eaeaf51b4455e520375f161b916e42dd",
+            "repetition": 1,
+            "run_command": [
+                "/home/ripopov/work/gem5/gpu-lab/workspace/scripts/run-app.sh",
+                "--backend",
+                "gem5-kmd",
+                "--run-name",
+                "gemm-delivery-producer128-p1",
+                "work/apps/gem5-kmd/gemm-delivery-producer128-p1",
+                "--m",
+                "128",
+                "--n",
+                "256",
+                "--k",
+                "128"
+            ],
+            "gem5_args": [],
+            "wall_seconds": 22.301763744999334,
+            "run":
+                "gemm-delivery-producer128-p1-128-256-128-1789481200622204792",
+            "returncode": 0,
+            "modeled_cus": 8,
+            "host_seconds": 13.94,
+            "shader_active_ticks": 109106999.0,
+            "gpu_active_cycles": 109106.999,
+            "gpu_active_ms": 0.109106999,
+            "kernels": 1.0,
+            "aql_submitted_and_retired": 4.0,
+            "output": [
+                "MFMA tile=64x64x16 wave_tile=64x16 workers=256 producers=128 lds=1 lookahead=1 pipeline=1 lds_pad=16 swizzle=0 prefetch_lds=2 accumulator_copy=0",
+                "hip_matmul_lds: PASS m=128 n=256 k=128 seed=0 checksum=51380224"
+            ],
+            "completed_wavefronts_per_cu": [
+                6.0,
+                6.0,
+                6.0,
+                6.0,
+                6.0,
+                6.0,
+                6.0,
+                6.0
+            ],
+            "whole_run_dram": {
+                "system.gpu_mem_ctrls.dram.dramBytesRead": 1005440.0,
+                "system.gpu_mem_ctrls.dram.dramBytesWritten": 714944.0,
+                "system.gpu_mem_ctrls.dram.peakBW": 16000.0
+            },
+            "counters": {
+                "vALUInsts": 13792.0,
+                "sALUInsts": 6720.0,
+                "globalReads": 512.0,
+                "globalWrites": 512.0,
+                "groupReads": 3072.0,
+                "groupWrites": 768.0,
+                "ldsBankAccesses": 458752.0,
+                "spillReads": 0.0,
+                "spillWrites": 0.0,
+                "numVecOpsExecutedMFMA": 262144.0,
+                "wave_slot_cycles_IBEmpty": 378338.0,
+                "wave_slot_cycles_WaitCnt": 488095.0,
+                "wave_slot_cycles_BarrierWait": 2218978.0,
+                "wave_slot_cycles_VgprBusy": 579.0,
+                "wave_slot_cycles_SgprBusy": 1200.0,
+                "wave_slot_cycles_MatrixCore": 97024.0,
+                "wave_slot_cycles_InstrReady": 1463542.0,
+                "extra_bank_serialization": 6144.0
+            }
+        },
+        {
+            "name": "delivery-producer128-p2",
+            "kind": "reference-lds",
+            "defines": [
+                "PRODUCERS=128",
+                "PIPELINE=2"
+            ],
+            "shape": [
+                128,
+                256,
+                128
+            ],
+            "seed": 0,
+            "build_command": [
+                "docker",
+                "run",
+                "--rm",
+                "--network",
+                "none",
+                "--user",
+                "1000:1000",
+                "-e",
+                "HOME=/tmp",
+                "-v",
+                "/home/ripopov/work/gem5/gpu-lab/workspace:/workspace",
+                "-w",
+                "/workspace/work/gemm-study/delivery-producer128-p2",
+                "gem5-gpu-hsakmt-sdk:migration",
+                "hipcc",
+                "--offload-arch=gfx942",
+                "-O2",
+                "-std=c++17",
+                "--save-temps=cwd",
+                "-DPRODUCERS=128",
+                "-DPIPELINE=2",
+                "/workspace/samples/hip-matmul-lds/main.cpp",
+                "-o",
+                "/workspace/work/apps/gem5-kmd/gemm-delivery-producer128-p2"
+            ],
+            "sdk": "gem5-gpu-hsakmt-sdk:migration",
+            "runner": "gem5-gpu-hsakmt-runner:lds-final",
+            "images": [
+                {
+                    "Id":
+                        "sha256:b26e2a19f1a4fa631a547f0bceb73547f2a780945e3e7a98d1e9dfa87670e85f",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                },
+                {
+                    "Id":
+                        "sha256:88e616d8eb228d41e2066c4514bca4423f2f284c3a603b555b76b39ecb87dc4c",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                }
+            ],
+            "model_revision": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "model_sha256":
+                "8ec40d19ec074e7b82bcb71183b513f5fc366602d66b12b2de524d8748d2b110",
+            "gem5_checkout": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "source_sha256": {
+                "samples/hip-matmul-lds/main.cpp":
+                    "9074588e4d4ed1e019d5cf10d91a6ac712f7d0d0fb260125ca60fa570aee44c7",
+                "samples/common/matmul.hh":
+                    "14b4fe65dc78158bb0d3cf734e1503a8d419e63809a61817dfccaf080d2734b0",
+                "samples/common/matmul_mfma.hh":
+                    "55a51be014d2253aa86dba8cf2930c35fe00d7206ae1c890785393b8b62c447c"
+            },
+            "binary_sha256":
+                "b0f46037734847513b0bed45503ee759e6635f1c20be2f1b0907d88899dde558",
+            "resources": {
+                "group_segment_fixed_size": [
+                    20480
+                ],
+                "private_segment_fixed_size": [
+                    0
+                ],
+                "vgpr_count": [
+                    62
+                ],
+                "sgpr_count": [
+                    28
+                ],
+                "vgpr_spill_count": [
+                    0
+                ],
+                "sgpr_spill_count": [
+                    0
+                ],
+                "ds_instructions": 24,
+                "next_free_vgpr": [
+                    81
+                ],
+                "next_free_sgpr": [
+                    96
+                ],
+                "accum_offset": [
+                    64
+                ]
+            },
+            "assembly_sha256":
+                "878f5a9e6f7903eb70169bf5a9b32b75cffa7e2d10c57e5dbd5fa046ab431426",
+            "repetition": 1,
+            "run_command": [
+                "/home/ripopov/work/gem5/gpu-lab/workspace/scripts/run-app.sh",
+                "--backend",
+                "gem5-kmd",
+                "--run-name",
+                "gemm-delivery-producer128-p2",
+                "work/apps/gem5-kmd/gemm-delivery-producer128-p2",
+                "--m",
+                "128",
+                "--n",
+                "256",
+                "--k",
+                "128"
+            ],
+            "gem5_args": [],
+            "wall_seconds": 22.252607837999676,
+            "run":
+                "gemm-delivery-producer128-p2-128-256-128-1789481224301282895",
+            "returncode": 0,
+            "modeled_cus": 8,
+            "host_seconds": 13.91,
+            "shader_active_ticks": 109364999.0,
+            "gpu_active_cycles": 109364.999,
+            "gpu_active_ms": 0.109364999,
+            "kernels": 1.0,
+            "aql_submitted_and_retired": 4.0,
+            "output": [
+                "MFMA tile=64x64x16 wave_tile=64x16 workers=256 producers=128 lds=1 lookahead=1 pipeline=2 lds_pad=16 swizzle=0 prefetch_lds=2 accumulator_copy=0",
+                "hip_matmul_lds: PASS m=128 n=256 k=128 seed=0 checksum=51380224"
+            ],
+            "completed_wavefronts_per_cu": [
+                6.0,
+                6.0,
+                6.0,
+                6.0,
+                6.0,
+                6.0,
+                6.0,
+                6.0
+            ],
+            "whole_run_dram": {
+                "system.gpu_mem_ctrls.dram.dramBytesRead": 1008384.0,
+                "system.gpu_mem_ctrls.dram.dramBytesWritten": 712768.0,
+                "system.gpu_mem_ctrls.dram.peakBW": 16000.0
+            },
+            "counters": {
+                "vALUInsts": 14736.0,
+                "sALUInsts": 7248.0,
+                "globalReads": 512.0,
+                "globalWrites": 512.0,
+                "groupReads": 3072.0,
+                "groupWrites": 768.0,
+                "ldsBankAccesses": 458752.0,
+                "spillReads": 0.0,
+                "spillWrites": 0.0,
+                "numVecOpsExecutedMFMA": 262144.0,
+                "wave_slot_cycles_IBEmpty": 370539.0,
+                "wave_slot_cycles_WaitCnt": 660066.0,
+                "wave_slot_cycles_BarrierWait": 2040417.0,
+                "wave_slot_cycles_VgprBusy": 706.0,
+                "wave_slot_cycles_SgprBusy": 1520.0,
+                "wave_slot_cycles_MatrixCore": 95276.0,
+                "wave_slot_cycles_InstrReady": 1478397.0,
+                "extra_bank_serialization": 6144.0
+            }
+        },
+        {
+            "name": "delivery-producer64-p1",
+            "kind": "reference-lds",
+            "defines": [
+                "PRODUCERS=64",
+                "PIPELINE=1"
+            ],
+            "shape": [
+                128,
+                256,
+                128
+            ],
+            "seed": 0,
+            "build_command": [
+                "docker",
+                "run",
+                "--rm",
+                "--network",
+                "none",
+                "--user",
+                "1000:1000",
+                "-e",
+                "HOME=/tmp",
+                "-v",
+                "/home/ripopov/work/gem5/gpu-lab/workspace:/workspace",
+                "-w",
+                "/workspace/work/gemm-study/delivery-producer64-p1",
+                "gem5-gpu-hsakmt-sdk:migration",
+                "hipcc",
+                "--offload-arch=gfx942",
+                "-O2",
+                "-std=c++17",
+                "--save-temps=cwd",
+                "-DPRODUCERS=64",
+                "-DPIPELINE=1",
+                "/workspace/samples/hip-matmul-lds/main.cpp",
+                "-o",
+                "/workspace/work/apps/gem5-kmd/gemm-delivery-producer64-p1"
+            ],
+            "sdk": "gem5-gpu-hsakmt-sdk:migration",
+            "runner": "gem5-gpu-hsakmt-runner:lds-final",
+            "images": [
+                {
+                    "Id":
+                        "sha256:b26e2a19f1a4fa631a547f0bceb73547f2a780945e3e7a98d1e9dfa87670e85f",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                },
+                {
+                    "Id":
+                        "sha256:88e616d8eb228d41e2066c4514bca4423f2f284c3a603b555b76b39ecb87dc4c",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                }
+            ],
+            "model_revision": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "model_sha256":
+                "8ec40d19ec074e7b82bcb71183b513f5fc366602d66b12b2de524d8748d2b110",
+            "gem5_checkout": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "source_sha256": {
+                "samples/hip-matmul-lds/main.cpp":
+                    "9074588e4d4ed1e019d5cf10d91a6ac712f7d0d0fb260125ca60fa570aee44c7",
+                "samples/common/matmul.hh":
+                    "14b4fe65dc78158bb0d3cf734e1503a8d419e63809a61817dfccaf080d2734b0",
+                "samples/common/matmul_mfma.hh":
+                    "55a51be014d2253aa86dba8cf2930c35fe00d7206ae1c890785393b8b62c447c"
+            },
+            "binary_sha256":
+                "2dfc99b98707cbde27c2fbdc554bb2703356e874b113dadb2b2454936a666d80",
+            "resources": {
+                "group_segment_fixed_size": [
+                    10240
+                ],
+                "private_segment_fixed_size": [
+                    0
+                ],
+                "vgpr_count": [
+                    92
+                ],
+                "sgpr_count": [
+                    27
+                ],
+                "vgpr_spill_count": [
+                    0
+                ],
+                "sgpr_spill_count": [
+                    0
+                ],
+                "ds_instructions": 36,
+                "next_free_vgpr": [
+                    92
+                ],
+                "next_free_sgpr": [
+                    21
+                ],
+                "accum_offset": [
+                    92
+                ]
+            },
+            "assembly_sha256":
+                "6355a913d34af7e9a60d7b90fc3797ba0aa1539934d0236dc4457a3c70775074",
+            "repetition": 1,
+            "run_command": [
+                "/home/ripopov/work/gem5/gpu-lab/workspace/scripts/run-app.sh",
+                "--backend",
+                "gem5-kmd",
+                "--run-name",
+                "gemm-delivery-producer64-p1",
+                "work/apps/gem5-kmd/gemm-delivery-producer64-p1",
+                "--m",
+                "128",
+                "--n",
+                "256",
+                "--k",
+                "128"
+            ],
+            "gem5_args": [],
+            "wall_seconds": 22.277255597997282,
+            "run":
+                "gemm-delivery-producer64-p1-128-256-128-1789481153370507289",
+            "returncode": 0,
+            "modeled_cus": 8,
+            "host_seconds": 13.9,
+            "shader_active_ticks": 112225999.0,
+            "gpu_active_cycles": 112225.999,
+            "gpu_active_ms": 0.11222599899999999,
+            "kernels": 1.0,
+            "aql_submitted_and_retired": 4.0,
+            "output": [
+                "MFMA tile=64x64x16 wave_tile=64x16 workers=256 producers=64 lds=1 lookahead=1 pipeline=1 lds_pad=16 swizzle=0 prefetch_lds=2 accumulator_copy=0",
+                "hip_matmul_lds: PASS m=128 n=256 k=128 seed=0 checksum=51380224"
+            ],
+            "completed_wavefronts_per_cu": [
+                5.0,
+                5.0,
+                5.0,
+                5.0,
+                5.0,
+                5.0,
+                5.0,
+                5.0
+            ],
+            "whole_run_dram": {
+                "system.gpu_mem_ctrls.dram.dramBytesRead": 1007296.0,
+                "system.gpu_mem_ctrls.dram.dramBytesWritten": 727936.0,
+                "system.gpu_mem_ctrls.dram.peakBW": 16000.0
+            },
+            "counters": {
+                "vALUInsts": 16776.0,
+                "sALUInsts": 5536.0,
+                "globalReads": 512.0,
+                "globalWrites": 512.0,
+                "groupReads": 3072.0,
+                "groupWrites": 768.0,
+                "ldsBankAccesses": 458752.0,
+                "spillReads": 0.0,
+                "spillWrites": 0.0,
+                "numVecOpsExecutedMFMA": 262144.0,
+                "wave_slot_cycles_IBEmpty": 438179.0,
+                "wave_slot_cycles_WaitCnt": 438519.0,
+                "wave_slot_cycles_BarrierWait": 1983026.0,
+                "wave_slot_cycles_VgprBusy": 575.0,
+                "wave_slot_cycles_SgprBusy": 992.0,
+                "wave_slot_cycles_MatrixCore": 100666.0,
+                "wave_slot_cycles_InstrReady": 1205015.0,
+                "extra_bank_serialization": 6144.0
+            }
+        },
+        {
+            "name": "delivery-producer64-p2",
+            "kind": "reference-lds",
+            "defines": [
+                "PRODUCERS=64",
+                "PIPELINE=2"
+            ],
+            "shape": [
+                128,
+                256,
+                128
+            ],
+            "seed": 0,
+            "build_command": [
+                "docker",
+                "run",
+                "--rm",
+                "--network",
+                "none",
+                "--user",
+                "1000:1000",
+                "-e",
+                "HOME=/tmp",
+                "-v",
+                "/home/ripopov/work/gem5/gpu-lab/workspace:/workspace",
+                "-w",
+                "/workspace/work/gemm-study/delivery-producer64-p2",
+                "gem5-gpu-hsakmt-sdk:migration",
+                "hipcc",
+                "--offload-arch=gfx942",
+                "-O2",
+                "-std=c++17",
+                "--save-temps=cwd",
+                "-DPRODUCERS=64",
+                "-DPIPELINE=2",
+                "/workspace/samples/hip-matmul-lds/main.cpp",
+                "-o",
+                "/workspace/work/apps/gem5-kmd/gemm-delivery-producer64-p2"
+            ],
+            "sdk": "gem5-gpu-hsakmt-sdk:migration",
+            "runner": "gem5-gpu-hsakmt-runner:lds-final",
+            "images": [
+                {
+                    "Id":
+                        "sha256:b26e2a19f1a4fa631a547f0bceb73547f2a780945e3e7a98d1e9dfa87670e85f",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                },
+                {
+                    "Id":
+                        "sha256:88e616d8eb228d41e2066c4514bca4423f2f284c3a603b555b76b39ecb87dc4c",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                }
+            ],
+            "model_revision": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "model_sha256":
+                "8ec40d19ec074e7b82bcb71183b513f5fc366602d66b12b2de524d8748d2b110",
+            "gem5_checkout": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "source_sha256": {
+                "samples/hip-matmul-lds/main.cpp":
+                    "9074588e4d4ed1e019d5cf10d91a6ac712f7d0d0fb260125ca60fa570aee44c7",
+                "samples/common/matmul.hh":
+                    "14b4fe65dc78158bb0d3cf734e1503a8d419e63809a61817dfccaf080d2734b0",
+                "samples/common/matmul_mfma.hh":
+                    "55a51be014d2253aa86dba8cf2930c35fe00d7206ae1c890785393b8b62c447c"
+            },
+            "binary_sha256":
+                "c086e99274796492652eccdad626888ead55a5dc6783641f153a66b5e10858bd",
+            "resources": {
+                "group_segment_fixed_size": [
+                    20480
+                ],
+                "private_segment_fixed_size": [
+                    0
+                ],
+                "vgpr_count": [
+                    99
+                ],
+                "sgpr_count": [
+                    30
+                ],
+                "vgpr_spill_count": [
+                    0
+                ],
+                "sgpr_spill_count": [
+                    0
+                ],
+                "ds_instructions": 36,
+                "next_free_vgpr": [
+                    99
+                ],
+                "next_free_sgpr": [
+                    96
+                ],
+                "accum_offset": [
+                    100
+                ]
+            },
+            "assembly_sha256":
+                "e6929313bedd2248cb147e18ee6d784f11129f79d15fbd0841f08f3fd4620596",
+            "repetition": 1,
+            "run_command": [
+                "/home/ripopov/work/gem5/gpu-lab/workspace/scripts/run-app.sh",
+                "--backend",
+                "gem5-kmd",
+                "--run-name",
+                "gemm-delivery-producer64-p2",
+                "work/apps/gem5-kmd/gemm-delivery-producer64-p2",
+                "--m",
+                "128",
+                "--n",
+                "256",
+                "--k",
+                "128"
+            ],
+            "gem5_args": [],
+            "wall_seconds": 22.19413732799876,
+            "run":
+                "gemm-delivery-producer64-p2-128-256-128-1789481177043656757",
+            "returncode": 0,
+            "modeled_cus": 8,
+            "host_seconds": 13.8,
+            "shader_active_ticks": 111479999.0,
+            "gpu_active_cycles": 111479.999,
+            "gpu_active_ms": 0.111479999,
+            "kernels": 1.0,
+            "aql_submitted_and_retired": 4.0,
+            "output": [
+                "MFMA tile=64x64x16 wave_tile=64x16 workers=256 producers=64 lds=1 lookahead=1 pipeline=2 lds_pad=16 swizzle=0 prefetch_lds=2 accumulator_copy=0",
+                "hip_matmul_lds: PASS m=128 n=256 k=128 seed=0 checksum=51380224"
+            ],
+            "completed_wavefronts_per_cu": [
+                5.0,
+                5.0,
+                5.0,
+                5.0,
+                5.0,
+                5.0,
+                5.0,
+                5.0
+            ],
+            "whole_run_dram": {
+                "system.gpu_mem_ctrls.dram.dramBytesRead": 1007104.0,
+                "system.gpu_mem_ctrls.dram.dramBytesWritten": 750784.0,
+                "system.gpu_mem_ctrls.dram.peakBW": 16000.0
+            },
+            "counters": {
+                "vALUInsts": 16992.0,
+                "sALUInsts": 6064.0,
+                "globalReads": 512.0,
+                "globalWrites": 512.0,
+                "groupReads": 3072.0,
+                "groupWrites": 768.0,
+                "ldsBankAccesses": 458752.0,
+                "spillReads": 0.0,
+                "spillWrites": 0.0,
+                "numVecOpsExecutedMFMA": 262144.0,
+                "wave_slot_cycles_IBEmpty": 384865.0,
+                "wave_slot_cycles_WaitCnt": 480867.0,
+                "wave_slot_cycles_BarrierWait": 1962395.0,
+                "wave_slot_cycles_VgprBusy": 736.0,
+                "wave_slot_cycles_SgprBusy": 1168.0,
+                "wave_slot_cycles_MatrixCore": 94244.0,
+                "wave_slot_cycles_InstrReady": 1217363.0,
+                "extra_bank_serialization": 6144.0
+            }
+        },
+        {
+            "name": "delivery-reg",
+            "kind": "reference-regtiles",
+            "defines": [],
+            "shape": [
+                128,
+                256,
+                128
+            ],
+            "seed": 0,
+            "build_command": [
+                "docker",
+                "run",
+                "--rm",
+                "--network",
+                "none",
+                "--user",
+                "1000:1000",
+                "-e",
+                "HOME=/tmp",
+                "-v",
+                "/home/ripopov/work/gem5/gpu-lab/workspace:/workspace",
+                "-w",
+                "/workspace/work/gemm-study/delivery-reg",
+                "gem5-gpu-hsakmt-sdk:migration",
+                "hipcc",
+                "--offload-arch=gfx942",
+                "-O2",
+                "-std=c++17",
+                "--save-temps=cwd",
+                "/workspace/samples/hip-matmul-regtiles/main.cpp",
+                "-o",
+                "/workspace/work/apps/gem5-kmd/gemm-delivery-reg"
+            ],
+            "sdk": "gem5-gpu-hsakmt-sdk:migration",
+            "runner": "gem5-gpu-hsakmt-runner:lds-final",
+            "images": [
+                {
+                    "Id":
+                        "sha256:b26e2a19f1a4fa631a547f0bceb73547f2a780945e3e7a98d1e9dfa87670e85f",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                },
+                {
+                    "Id":
+                        "sha256:88e616d8eb228d41e2066c4514bca4423f2f284c3a603b555b76b39ecb87dc4c",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                }
+            ],
+            "model_revision": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "model_sha256":
+                "8ec40d19ec074e7b82bcb71183b513f5fc366602d66b12b2de524d8748d2b110",
+            "gem5_checkout": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "source_sha256": {
+                "samples/hip-matmul-regtiles/main.cpp":
+                    "bdd9e8a6c0d36fb217bbb87cfde05db9f0e8b1415b3e2159820e0f5b9bedb44b",
+                "samples/common/matmul.hh":
+                    "14b4fe65dc78158bb0d3cf734e1503a8d419e63809a61817dfccaf080d2734b0",
+                "samples/common/matmul_mfma.hh":
+                    "55a51be014d2253aa86dba8cf2930c35fe00d7206ae1c890785393b8b62c447c"
+            },
+            "binary_sha256":
+                "2d9648f1e4fd89c21fe67759e63b344cbcf8a74a969393339cc2a0b957521c08",
+            "resources": {
+                "group_segment_fixed_size": [
+                    0
+                ],
+                "private_segment_fixed_size": [
+                    0
+                ],
+                "vgpr_count": [
+                    60
+                ],
+                "sgpr_count": [
+                    22
+                ],
+                "vgpr_spill_count": [
+                    0
+                ],
+                "sgpr_spill_count": [
+                    0
+                ],
+                "ds_instructions": 0,
+                "next_free_vgpr": [
+                    60
+                ],
+                "next_free_sgpr": [
+                    16
+                ],
+                "accum_offset": [
+                    44
+                ]
+            },
+            "assembly_sha256":
+                "e0f6cbdeb438c3008f42b99f05888784593f97115a445421141fb7476868e3a4",
+            "repetition": 1,
+            "run_command": [
+                "/home/ripopov/work/gem5/gpu-lab/workspace/scripts/run-app.sh",
+                "--backend",
+                "gem5-kmd",
+                "--run-name",
+                "gemm-delivery-reg",
+                "work/apps/gem5-kmd/gemm-delivery-reg",
+                "--m",
+                "128",
+                "--n",
+                "256",
+                "--k",
+                "128"
+            ],
+            "gem5_args": [],
+            "wall_seconds": 23.18543884600149,
+            "run": "gemm-delivery-reg-128-256-128-1789480665819828966",
+            "returncode": 0,
+            "modeled_cus": 8,
+            "host_seconds": 14.78,
+            "shader_active_ticks": 112054999.0,
+            "gpu_active_cycles": 112054.999,
+            "gpu_active_ms": 0.112054999,
+            "kernels": 1.0,
+            "aql_submitted_and_retired": 4.0,
+            "output": [
+                "MFMA tile=64x64x16 wave_tile=32x32 workers=256 producers=0 lds=0 lookahead=1 pipeline=0 lds_pad=0 swizzle=0 prefetch_lds=0 accumulator_copy=0",
+                "hip_matmul_regtiles: PASS m=128 n=256 k=128 seed=0 checksum=51380224"
+            ],
+            "completed_wavefronts_per_cu": [
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0
+            ],
+            "whole_run_dram": {
+                "system.gpu_mem_ctrls.dram.dramBytesRead": 1023552.0,
+                "system.gpu_mem_ctrls.dram.dramBytesWritten": 734016.0,
+                "system.gpu_mem_ctrls.dram.peakBW": 16000.0
+            },
+            "counters": {
+                "vALUInsts": 21344.0,
+                "sALUInsts": 1184.0,
+                "globalReads": 4096.0,
+                "globalWrites": 512.0,
+                "groupReads": 0.0,
+                "groupWrites": 0.0,
+                "ldsBankAccesses": 0.0,
+                "spillReads": 0.0,
+                "spillWrites": 0.0,
+                "numVecOpsExecutedMFMA": 262144.0,
+                "wave_slot_cycles_IBEmpty": 146015.0,
+                "wave_slot_cycles_WaitCnt": 573587.0,
+                "wave_slot_cycles_BarrierWait": 0.0,
+                "wave_slot_cycles_VgprBusy": 891.0,
+                "wave_slot_cycles_SgprBusy": 416.0,
+                "wave_slot_cycles_MatrixCore": 92577.0,
+                "wave_slot_cycles_InstrReady": 2666202.0,
+                "extra_bank_serialization": 0
+            }
+        },
+        {
+            "name": "delivery-reg",
+            "kind": "reference-regtiles",
+            "defines": [],
+            "shape": [
+                128,
+                256,
+                128
+            ],
+            "seed": 0,
+            "build_command": [
+                "docker",
+                "run",
+                "--rm",
+                "--network",
+                "none",
+                "--user",
+                "1000:1000",
+                "-e",
+                "HOME=/tmp",
+                "-v",
+                "/home/ripopov/work/gem5/gpu-lab/workspace:/workspace",
+                "-w",
+                "/workspace/work/gemm-study/delivery-reg",
+                "gem5-gpu-hsakmt-sdk:migration",
+                "hipcc",
+                "--offload-arch=gfx942",
+                "-O2",
+                "-std=c++17",
+                "--save-temps=cwd",
+                "/workspace/samples/hip-matmul-regtiles/main.cpp",
+                "-o",
+                "/workspace/work/apps/gem5-kmd/gemm-delivery-reg"
+            ],
+            "sdk": "gem5-gpu-hsakmt-sdk:migration",
+            "runner": "gem5-gpu-hsakmt-runner:lds-final",
+            "images": [
+                {
+                    "Id":
+                        "sha256:b26e2a19f1a4fa631a547f0bceb73547f2a780945e3e7a98d1e9dfa87670e85f",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                },
+                {
+                    "Id":
+                        "sha256:88e616d8eb228d41e2066c4514bca4423f2f284c3a603b555b76b39ecb87dc4c",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                }
+            ],
+            "model_revision": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "model_sha256":
+                "8ec40d19ec074e7b82bcb71183b513f5fc366602d66b12b2de524d8748d2b110",
+            "gem5_checkout": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "source_sha256": {
+                "samples/hip-matmul-regtiles/main.cpp":
+                    "bdd9e8a6c0d36fb217bbb87cfde05db9f0e8b1415b3e2159820e0f5b9bedb44b",
+                "samples/common/matmul.hh":
+                    "14b4fe65dc78158bb0d3cf734e1503a8d419e63809a61817dfccaf080d2734b0",
+                "samples/common/matmul_mfma.hh":
+                    "55a51be014d2253aa86dba8cf2930c35fe00d7206ae1c890785393b8b62c447c"
+            },
+            "binary_sha256":
+                "2d9648f1e4fd89c21fe67759e63b344cbcf8a74a969393339cc2a0b957521c08",
+            "resources": {
+                "group_segment_fixed_size": [
+                    0
+                ],
+                "private_segment_fixed_size": [
+                    0
+                ],
+                "vgpr_count": [
+                    60
+                ],
+                "sgpr_count": [
+                    22
+                ],
+                "vgpr_spill_count": [
+                    0
+                ],
+                "sgpr_spill_count": [
+                    0
+                ],
+                "ds_instructions": 0,
+                "next_free_vgpr": [
+                    60
+                ],
+                "next_free_sgpr": [
+                    16
+                ],
+                "accum_offset": [
+                    44
+                ]
+            },
+            "assembly_sha256":
+                "e0f6cbdeb438c3008f42b99f05888784593f97115a445421141fb7476868e3a4",
+            "repetition": 2,
+            "run_command": [
+                "/home/ripopov/work/gem5/gpu-lab/workspace/scripts/run-app.sh",
+                "--backend",
+                "gem5-kmd",
+                "--run-name",
+                "gemm-delivery-reg",
+                "work/apps/gem5-kmd/gemm-delivery-reg",
+                "--m",
+                "128",
+                "--n",
+                "256",
+                "--k",
+                "128"
+            ],
+            "gem5_args": [],
+            "wall_seconds": 23.124761097999,
+            "run": "gemm-delivery-reg-128-256-128-1789480689122412227",
+            "returncode": 0,
+            "modeled_cus": 8,
+            "host_seconds": 14.73,
+            "shader_active_ticks": 110831999.0,
+            "gpu_active_cycles": 110831.999,
+            "gpu_active_ms": 0.110831999,
+            "kernels": 1.0,
+            "aql_submitted_and_retired": 4.0,
+            "output": [
+                "MFMA tile=64x64x16 wave_tile=32x32 workers=256 producers=0 lds=0 lookahead=1 pipeline=0 lds_pad=0 swizzle=0 prefetch_lds=0 accumulator_copy=0",
+                "hip_matmul_regtiles: PASS m=128 n=256 k=128 seed=0 checksum=51380224"
+            ],
+            "completed_wavefronts_per_cu": [
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0
+            ],
+            "whole_run_dram": {
+                "system.gpu_mem_ctrls.dram.dramBytesRead": 1019136.0,
+                "system.gpu_mem_ctrls.dram.dramBytesWritten": 728064.0,
+                "system.gpu_mem_ctrls.dram.peakBW": 16000.0
+            },
+            "counters": {
+                "vALUInsts": 21344.0,
+                "sALUInsts": 1184.0,
+                "globalReads": 4096.0,
+                "globalWrites": 512.0,
+                "groupReads": 0.0,
+                "groupWrites": 0.0,
+                "ldsBankAccesses": 0.0,
+                "spillReads": 0.0,
+                "spillWrites": 0.0,
+                "numVecOpsExecutedMFMA": 262144.0,
+                "wave_slot_cycles_IBEmpty": 156430.0,
+                "wave_slot_cycles_WaitCnt": 595982.0,
+                "wave_slot_cycles_BarrierWait": 0.0,
+                "wave_slot_cycles_VgprBusy": 876.0,
+                "wave_slot_cycles_SgprBusy": 416.0,
+                "wave_slot_cycles_MatrixCore": 93772.0,
+                "wave_slot_cycles_InstrReady": 2600993.0,
+                "extra_bank_serialization": 0
+            }
+        },
+        {
+            "name": "delivery-reg",
+            "kind": "reference-regtiles",
+            "defines": [],
+            "shape": [
+                128,
+                256,
+                128
+            ],
+            "seed": 0,
+            "build_command": [
+                "docker",
+                "run",
+                "--rm",
+                "--network",
+                "none",
+                "--user",
+                "1000:1000",
+                "-e",
+                "HOME=/tmp",
+                "-v",
+                "/home/ripopov/work/gem5/gpu-lab/workspace:/workspace",
+                "-w",
+                "/workspace/work/gemm-study/delivery-reg",
+                "gem5-gpu-hsakmt-sdk:migration",
+                "hipcc",
+                "--offload-arch=gfx942",
+                "-O2",
+                "-std=c++17",
+                "--save-temps=cwd",
+                "/workspace/samples/hip-matmul-regtiles/main.cpp",
+                "-o",
+                "/workspace/work/apps/gem5-kmd/gemm-delivery-reg"
+            ],
+            "sdk": "gem5-gpu-hsakmt-sdk:migration",
+            "runner": "gem5-gpu-hsakmt-runner:lds-final",
+            "images": [
+                {
+                    "Id":
+                        "sha256:b26e2a19f1a4fa631a547f0bceb73547f2a780945e3e7a98d1e9dfa87670e85f",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                },
+                {
+                    "Id":
+                        "sha256:88e616d8eb228d41e2066c4514bca4423f2f284c3a603b555b76b39ecb87dc4c",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                }
+            ],
+            "model_revision": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "model_sha256":
+                "8ec40d19ec074e7b82bcb71183b513f5fc366602d66b12b2de524d8748d2b110",
+            "gem5_checkout": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "source_sha256": {
+                "samples/hip-matmul-regtiles/main.cpp":
+                    "bdd9e8a6c0d36fb217bbb87cfde05db9f0e8b1415b3e2159820e0f5b9bedb44b",
+                "samples/common/matmul.hh":
+                    "14b4fe65dc78158bb0d3cf734e1503a8d419e63809a61817dfccaf080d2734b0",
+                "samples/common/matmul_mfma.hh":
+                    "55a51be014d2253aa86dba8cf2930c35fe00d7206ae1c890785393b8b62c447c"
+            },
+            "binary_sha256":
+                "2d9648f1e4fd89c21fe67759e63b344cbcf8a74a969393339cc2a0b957521c08",
+            "resources": {
+                "group_segment_fixed_size": [
+                    0
+                ],
+                "private_segment_fixed_size": [
+                    0
+                ],
+                "vgpr_count": [
+                    60
+                ],
+                "sgpr_count": [
+                    22
+                ],
+                "vgpr_spill_count": [
+                    0
+                ],
+                "sgpr_spill_count": [
+                    0
+                ],
+                "ds_instructions": 0,
+                "next_free_vgpr": [
+                    60
+                ],
+                "next_free_sgpr": [
+                    16
+                ],
+                "accum_offset": [
+                    44
+                ]
+            },
+            "assembly_sha256":
+                "e0f6cbdeb438c3008f42b99f05888784593f97115a445421141fb7476868e3a4",
+            "repetition": 3,
+            "run_command": [
+                "/home/ripopov/work/gem5/gpu-lab/workspace/scripts/run-app.sh",
+                "--backend",
+                "gem5-kmd",
+                "--run-name",
+                "gemm-delivery-reg",
+                "work/apps/gem5-kmd/gemm-delivery-reg",
+                "--m",
+                "128",
+                "--n",
+                "256",
+                "--k",
+                "128"
+            ],
+            "gem5_args": [],
+            "wall_seconds": 24.131887929001095,
+            "run": "gemm-delivery-reg-128-256-128-1789480712365972169",
+            "returncode": 0,
+            "modeled_cus": 8,
+            "host_seconds": 15.65,
+            "shader_active_ticks": 111872999.0,
+            "gpu_active_cycles": 111872.999,
+            "gpu_active_ms": 0.111872999,
+            "kernels": 1.0,
+            "aql_submitted_and_retired": 4.0,
+            "output": [
+                "MFMA tile=64x64x16 wave_tile=32x32 workers=256 producers=0 lds=0 lookahead=1 pipeline=0 lds_pad=0 swizzle=0 prefetch_lds=0 accumulator_copy=0",
+                "hip_matmul_regtiles: PASS m=128 n=256 k=128 seed=0 checksum=51380224"
+            ],
+            "completed_wavefronts_per_cu": [
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0
+            ],
+            "whole_run_dram": {
+                "system.gpu_mem_ctrls.dram.dramBytesRead": 1019520.0,
+                "system.gpu_mem_ctrls.dram.dramBytesWritten": 726784.0,
+                "system.gpu_mem_ctrls.dram.peakBW": 16000.0
+            },
+            "counters": {
+                "vALUInsts": 21344.0,
+                "sALUInsts": 1184.0,
+                "globalReads": 4096.0,
+                "globalWrites": 512.0,
+                "groupReads": 0.0,
+                "groupWrites": 0.0,
+                "ldsBankAccesses": 0.0,
+                "spillReads": 0.0,
+                "spillWrites": 0.0,
+                "numVecOpsExecutedMFMA": 262144.0,
+                "wave_slot_cycles_IBEmpty": 227064.0,
+                "wave_slot_cycles_WaitCnt": 574565.0,
+                "wave_slot_cycles_BarrierWait": 0.0,
+                "wave_slot_cycles_VgprBusy": 894.0,
+                "wave_slot_cycles_SgprBusy": 416.0,
+                "wave_slot_cycles_MatrixCore": 93806.0,
+                "wave_slot_cycles_InstrReady": 2592225.0,
+                "extra_bank_serialization": 0
+            }
+        },
+        {
+            "name": "delivery-reg",
+            "kind": "reference-regtiles",
+            "defines": [],
+            "shape": [
+                128,
+                256,
+                128
+            ],
+            "seed": 0,
+            "build_command": [
+                "docker",
+                "run",
+                "--rm",
+                "--network",
+                "none",
+                "--user",
+                "1000:1000",
+                "-e",
+                "HOME=/tmp",
+                "-v",
+                "/home/ripopov/work/gem5/gpu-lab/workspace:/workspace",
+                "-w",
+                "/workspace/work/gemm-study/delivery-reg",
+                "gem5-gpu-hsakmt-sdk:migration",
+                "hipcc",
+                "--offload-arch=gfx942",
+                "-O2",
+                "-std=c++17",
+                "--save-temps=cwd",
+                "/workspace/samples/hip-matmul-regtiles/main.cpp",
+                "-o",
+                "/workspace/work/apps/gem5-kmd/gemm-delivery-reg"
+            ],
+            "sdk": "gem5-gpu-hsakmt-sdk:migration",
+            "runner": "gem5-gpu-hsakmt-runner:lds-final",
+            "images": [
+                {
+                    "Id":
+                        "sha256:b26e2a19f1a4fa631a547f0bceb73547f2a780945e3e7a98d1e9dfa87670e85f",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                },
+                {
+                    "Id":
+                        "sha256:88e616d8eb228d41e2066c4514bca4423f2f284c3a603b555b76b39ecb87dc4c",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                }
+            ],
+            "model_revision": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "model_sha256":
+                "8ec40d19ec074e7b82bcb71183b513f5fc366602d66b12b2de524d8748d2b110",
+            "gem5_checkout": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "source_sha256": {
+                "samples/hip-matmul-regtiles/main.cpp":
+                    "bdd9e8a6c0d36fb217bbb87cfde05db9f0e8b1415b3e2159820e0f5b9bedb44b",
+                "samples/common/matmul.hh":
+                    "14b4fe65dc78158bb0d3cf734e1503a8d419e63809a61817dfccaf080d2734b0",
+                "samples/common/matmul_mfma.hh":
+                    "55a51be014d2253aa86dba8cf2930c35fe00d7206ae1c890785393b8b62c447c"
+            },
+            "binary_sha256":
+                "2d9648f1e4fd89c21fe67759e63b344cbcf8a74a969393339cc2a0b957521c08",
+            "resources": {
+                "group_segment_fixed_size": [
+                    0
+                ],
+                "private_segment_fixed_size": [
+                    0
+                ],
+                "vgpr_count": [
+                    60
+                ],
+                "sgpr_count": [
+                    22
+                ],
+                "vgpr_spill_count": [
+                    0
+                ],
+                "sgpr_spill_count": [
+                    0
+                ],
+                "ds_instructions": 0,
+                "next_free_vgpr": [
+                    60
+                ],
+                "next_free_sgpr": [
+                    16
+                ],
+                "accum_offset": [
+                    44
+                ]
+            },
+            "assembly_sha256":
+                "e0f6cbdeb438c3008f42b99f05888784593f97115a445421141fb7476868e3a4",
+            "repetition": 4,
+            "run_command": [
+                "/home/ripopov/work/gem5/gpu-lab/workspace/scripts/run-app.sh",
+                "--backend",
+                "gem5-kmd",
+                "--run-name",
+                "gemm-delivery-reg",
+                "work/apps/gem5-kmd/gemm-delivery-reg",
+                "--m",
+                "128",
+                "--n",
+                "256",
+                "--k",
+                "128"
+            ],
+            "gem5_args": [],
+            "wall_seconds": 23.132428764001816,
+            "run": "gemm-delivery-reg-128-256-128-1789480736639064055",
+            "returncode": 0,
+            "modeled_cus": 8,
+            "host_seconds": 14.75,
+            "shader_active_ticks": 112233999.0,
+            "gpu_active_cycles": 112233.999,
+            "gpu_active_ms": 0.112233999,
+            "kernels": 1.0,
+            "aql_submitted_and_retired": 4.0,
+            "output": [
+                "MFMA tile=64x64x16 wave_tile=32x32 workers=256 producers=0 lds=0 lookahead=1 pipeline=0 lds_pad=0 swizzle=0 prefetch_lds=0 accumulator_copy=0",
+                "hip_matmul_regtiles: PASS m=128 n=256 k=128 seed=0 checksum=51380224"
+            ],
+            "completed_wavefronts_per_cu": [
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0
+            ],
+            "whole_run_dram": {
+                "system.gpu_mem_ctrls.dram.dramBytesRead": 1018624.0,
+                "system.gpu_mem_ctrls.dram.dramBytesWritten": 718720.0,
+                "system.gpu_mem_ctrls.dram.peakBW": 16000.0
+            },
+            "counters": {
+                "vALUInsts": 21344.0,
+                "sALUInsts": 1184.0,
+                "globalReads": 4096.0,
+                "globalWrites": 512.0,
+                "groupReads": 0.0,
+                "groupWrites": 0.0,
+                "ldsBankAccesses": 0.0,
+                "spillReads": 0.0,
+                "spillWrites": 0.0,
+                "numVecOpsExecutedMFMA": 262144.0,
+                "wave_slot_cycles_IBEmpty": 217084.0,
+                "wave_slot_cycles_WaitCnt": 568327.0,
+                "wave_slot_cycles_BarrierWait": 0.0,
+                "wave_slot_cycles_VgprBusy": 883.0,
+                "wave_slot_cycles_SgprBusy": 416.0,
+                "wave_slot_cycles_MatrixCore": 92215.0,
+                "wave_slot_cycles_InstrReady": 2590855.0,
+                "extra_bank_serialization": 0
+            }
+        },
+        {
+            "name": "delivery-reg",
+            "kind": "reference-regtiles",
+            "defines": [],
+            "shape": [
+                128,
+                256,
+                128
+            ],
+            "seed": 0,
+            "build_command": [
+                "docker",
+                "run",
+                "--rm",
+                "--network",
+                "none",
+                "--user",
+                "1000:1000",
+                "-e",
+                "HOME=/tmp",
+                "-v",
+                "/home/ripopov/work/gem5/gpu-lab/workspace:/workspace",
+                "-w",
+                "/workspace/work/gemm-study/delivery-reg",
+                "gem5-gpu-hsakmt-sdk:migration",
+                "hipcc",
+                "--offload-arch=gfx942",
+                "-O2",
+                "-std=c++17",
+                "--save-temps=cwd",
+                "/workspace/samples/hip-matmul-regtiles/main.cpp",
+                "-o",
+                "/workspace/work/apps/gem5-kmd/gemm-delivery-reg"
+            ],
+            "sdk": "gem5-gpu-hsakmt-sdk:migration",
+            "runner": "gem5-gpu-hsakmt-runner:lds-final",
+            "images": [
+                {
+                    "Id":
+                        "sha256:b26e2a19f1a4fa631a547f0bceb73547f2a780945e3e7a98d1e9dfa87670e85f",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                },
+                {
+                    "Id":
+                        "sha256:88e616d8eb228d41e2066c4514bca4423f2f284c3a603b555b76b39ecb87dc4c",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                }
+            ],
+            "model_revision": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "model_sha256":
+                "8ec40d19ec074e7b82bcb71183b513f5fc366602d66b12b2de524d8748d2b110",
+            "gem5_checkout": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "source_sha256": {
+                "samples/hip-matmul-regtiles/main.cpp":
+                    "bdd9e8a6c0d36fb217bbb87cfde05db9f0e8b1415b3e2159820e0f5b9bedb44b",
+                "samples/common/matmul.hh":
+                    "14b4fe65dc78158bb0d3cf734e1503a8d419e63809a61817dfccaf080d2734b0",
+                "samples/common/matmul_mfma.hh":
+                    "55a51be014d2253aa86dba8cf2930c35fe00d7206ae1c890785393b8b62c447c"
+            },
+            "binary_sha256":
+                "2d9648f1e4fd89c21fe67759e63b344cbcf8a74a969393339cc2a0b957521c08",
+            "resources": {
+                "group_segment_fixed_size": [
+                    0
+                ],
+                "private_segment_fixed_size": [
+                    0
+                ],
+                "vgpr_count": [
+                    60
+                ],
+                "sgpr_count": [
+                    22
+                ],
+                "vgpr_spill_count": [
+                    0
+                ],
+                "sgpr_spill_count": [
+                    0
+                ],
+                "ds_instructions": 0,
+                "next_free_vgpr": [
+                    60
+                ],
+                "next_free_sgpr": [
+                    16
+                ],
+                "accum_offset": [
+                    44
+                ]
+            },
+            "assembly_sha256":
+                "e0f6cbdeb438c3008f42b99f05888784593f97115a445421141fb7476868e3a4",
+            "repetition": 5,
+            "run_command": [
+                "/home/ripopov/work/gem5/gpu-lab/workspace/scripts/run-app.sh",
+                "--backend",
+                "gem5-kmd",
+                "--run-name",
+                "gemm-delivery-reg",
+                "work/apps/gem5-kmd/gemm-delivery-reg",
+                "--m",
+                "128",
+                "--n",
+                "256",
+                "--k",
+                "128"
+            ],
+            "gem5_args": [],
+            "wall_seconds": 23.17952766000235,
+            "run": "gemm-delivery-reg-128-256-128-1789480759917524398",
+            "returncode": 0,
+            "modeled_cus": 8,
+            "host_seconds": 14.75,
+            "shader_active_ticks": 113566999.0,
+            "gpu_active_cycles": 113566.999,
+            "gpu_active_ms": 0.113566999,
+            "kernels": 1.0,
+            "aql_submitted_and_retired": 4.0,
+            "output": [
+                "MFMA tile=64x64x16 wave_tile=32x32 workers=256 producers=0 lds=0 lookahead=1 pipeline=0 lds_pad=0 swizzle=0 prefetch_lds=0 accumulator_copy=0",
+                "hip_matmul_regtiles: PASS m=128 n=256 k=128 seed=0 checksum=51380224"
+            ],
+            "completed_wavefronts_per_cu": [
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0
+            ],
+            "whole_run_dram": {
+                "system.gpu_mem_ctrls.dram.dramBytesRead": 1019392.0,
+                "system.gpu_mem_ctrls.dram.dramBytesWritten": 731392.0,
+                "system.gpu_mem_ctrls.dram.peakBW": 16000.0
+            },
+            "counters": {
+                "vALUInsts": 21344.0,
+                "sALUInsts": 1184.0,
+                "globalReads": 4096.0,
+                "globalWrites": 512.0,
+                "groupReads": 0.0,
+                "groupWrites": 0.0,
+                "ldsBankAccesses": 0.0,
+                "spillReads": 0.0,
+                "spillWrites": 0.0,
+                "numVecOpsExecutedMFMA": 262144.0,
+                "wave_slot_cycles_IBEmpty": 203277.0,
+                "wave_slot_cycles_WaitCnt": 602231.0,
+                "wave_slot_cycles_BarrierWait": 0.0,
+                "wave_slot_cycles_VgprBusy": 897.0,
+                "wave_slot_cycles_SgprBusy": 416.0,
+                "wave_slot_cycles_MatrixCore": 93921.0,
+                "wave_slot_cycles_InstrReady": 2624418.0,
+                "extra_bank_serialization": 0
+            }
+        },
+        {
+            "name": "delivery-reg-seed19",
+            "kind": "reference-regtiles",
+            "defines": [],
+            "shape": [
+                128,
+                256,
+                128
+            ],
+            "seed": 19,
+            "build_command": [
+                "docker",
+                "run",
+                "--rm",
+                "--network",
+                "none",
+                "--user",
+                "1000:1000",
+                "-e",
+                "HOME=/tmp",
+                "-v",
+                "/home/ripopov/work/gem5/gpu-lab/workspace:/workspace",
+                "-w",
+                "/workspace/work/gemm-study/delivery-reg-seed19",
+                "gem5-gpu-hsakmt-sdk:migration",
+                "hipcc",
+                "--offload-arch=gfx942",
+                "-O2",
+                "-std=c++17",
+                "--save-temps=cwd",
+                "/workspace/samples/hip-matmul-regtiles/main.cpp",
+                "-o",
+                "/workspace/work/apps/gem5-kmd/gemm-delivery-reg-seed19"
+            ],
+            "sdk": "gem5-gpu-hsakmt-sdk:migration",
+            "runner": "gem5-gpu-hsakmt-runner:lds-final",
+            "images": [
+                {
+                    "Id":
+                        "sha256:b26e2a19f1a4fa631a547f0bceb73547f2a780945e3e7a98d1e9dfa87670e85f",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                },
+                {
+                    "Id":
+                        "sha256:88e616d8eb228d41e2066c4514bca4423f2f284c3a603b555b76b39ecb87dc4c",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                }
+            ],
+            "model_revision": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "model_sha256":
+                "8ec40d19ec074e7b82bcb71183b513f5fc366602d66b12b2de524d8748d2b110",
+            "gem5_checkout": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "source_sha256": {
+                "samples/hip-matmul-regtiles/main.cpp":
+                    "bdd9e8a6c0d36fb217bbb87cfde05db9f0e8b1415b3e2159820e0f5b9bedb44b",
+                "samples/common/matmul.hh":
+                    "14b4fe65dc78158bb0d3cf734e1503a8d419e63809a61817dfccaf080d2734b0",
+                "samples/common/matmul_mfma.hh":
+                    "55a51be014d2253aa86dba8cf2930c35fe00d7206ae1c890785393b8b62c447c"
+            },
+            "binary_sha256":
+                "ede0ec02d683c5b8284615d7bf1de020d96bf305eae46cf8fed48887e70c90d2",
+            "resources": {
+                "group_segment_fixed_size": [
+                    0
+                ],
+                "private_segment_fixed_size": [
+                    0
+                ],
+                "vgpr_count": [
+                    60
+                ],
+                "sgpr_count": [
+                    22
+                ],
+                "vgpr_spill_count": [
+                    0
+                ],
+                "sgpr_spill_count": [
+                    0
+                ],
+                "ds_instructions": 0,
+                "next_free_vgpr": [
+                    60
+                ],
+                "next_free_sgpr": [
+                    16
+                ],
+                "accum_offset": [
+                    44
+                ]
+            },
+            "assembly_sha256":
+                "29403dad6ca7c3c22a1789a025c874b7836f8e107ab17c61a5572005fc4c8025",
+            "repetition": 1,
+            "run_command": [
+                "/home/ripopov/work/gem5/gpu-lab/workspace/scripts/run-app.sh",
+                "--backend",
+                "gem5-kmd",
+                "--run-name",
+                "gemm-delivery-reg-seed19",
+                "work/apps/gem5-kmd/gemm-delivery-reg-seed19",
+                "--m",
+                "128",
+                "--n",
+                "256",
+                "--k",
+                "128",
+                "--seed",
+                "19"
+            ],
+            "gem5_args": [],
+            "wall_seconds": 23.27501231899805,
+            "run": "gemm-delivery-reg-seed19-128-256-128-1789481271533445851",
+            "returncode": 0,
+            "modeled_cus": 8,
+            "host_seconds": 14.96,
+            "shader_active_ticks": 110194999.0,
+            "gpu_active_cycles": 110194.999,
+            "gpu_active_ms": 0.110194999,
+            "kernels": 1.0,
+            "aql_submitted_and_retired": 4.0,
+            "output": [
+                "MFMA tile=64x64x16 wave_tile=32x32 workers=256 producers=0 lds=0 lookahead=1 pipeline=0 lds_pad=0 swizzle=0 prefetch_lds=0 accumulator_copy=0",
+                "hip_matmul_regtiles: PASS m=128 n=256 k=128 seed=19 checksum=-91227"
+            ],
+            "completed_wavefronts_per_cu": [
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0
+            ],
+            "whole_run_dram": {
+                "system.gpu_mem_ctrls.dram.dramBytesRead": 1018816.0,
+                "system.gpu_mem_ctrls.dram.dramBytesWritten": 714112.0,
+                "system.gpu_mem_ctrls.dram.peakBW": 16000.0
+            },
+            "counters": {
+                "vALUInsts": 21344.0,
+                "sALUInsts": 1184.0,
+                "globalReads": 4096.0,
+                "globalWrites": 512.0,
+                "groupReads": 0.0,
+                "groupWrites": 0.0,
+                "ldsBankAccesses": 0.0,
+                "spillReads": 0.0,
+                "spillWrites": 0.0,
+                "numVecOpsExecutedMFMA": 262144.0,
+                "wave_slot_cycles_IBEmpty": 170092.0,
+                "wave_slot_cycles_WaitCnt": 552490.0,
+                "wave_slot_cycles_BarrierWait": 0.0,
+                "wave_slot_cycles_VgprBusy": 876.0,
+                "wave_slot_cycles_SgprBusy": 416.0,
+                "wave_slot_cycles_MatrixCore": 94398.0,
+                "wave_slot_cycles_InstrReady": 2609470.0,
+                "extra_bank_serialization": 0
+            }
+        },
+        {
+            "name": "delivery-single",
+            "kind": "reference-lds",
+            "defines": [
+                "PIPELINE=1",
+                "LDS_PAD=0"
+            ],
+            "shape": [
+                128,
+                256,
+                128
+            ],
+            "seed": 0,
+            "build_command": [
+                "docker",
+                "run",
+                "--rm",
+                "--network",
+                "none",
+                "--user",
+                "1000:1000",
+                "-e",
+                "HOME=/tmp",
+                "-v",
+                "/home/ripopov/work/gem5/gpu-lab/workspace:/workspace",
+                "-w",
+                "/workspace/work/gemm-study/delivery-single",
+                "gem5-gpu-hsakmt-sdk:migration",
+                "hipcc",
+                "--offload-arch=gfx942",
+                "-O2",
+                "-std=c++17",
+                "--save-temps=cwd",
+                "-DPIPELINE=1",
+                "-DLDS_PAD=0",
+                "/workspace/samples/hip-matmul-lds/main.cpp",
+                "-o",
+                "/workspace/work/apps/gem5-kmd/gemm-delivery-single"
+            ],
+            "sdk": "gem5-gpu-hsakmt-sdk:migration",
+            "runner": "gem5-gpu-hsakmt-runner:lds-final",
+            "images": [
+                {
+                    "Id":
+                        "sha256:b26e2a19f1a4fa631a547f0bceb73547f2a780945e3e7a98d1e9dfa87670e85f",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                },
+                {
+                    "Id":
+                        "sha256:88e616d8eb228d41e2066c4514bca4423f2f284c3a603b555b76b39ecb87dc4c",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                }
+            ],
+            "model_revision": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "model_sha256":
+                "8ec40d19ec074e7b82bcb71183b513f5fc366602d66b12b2de524d8748d2b110",
+            "gem5_checkout": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "source_sha256": {
+                "samples/hip-matmul-lds/main.cpp":
+                    "9074588e4d4ed1e019d5cf10d91a6ac712f7d0d0fb260125ca60fa570aee44c7",
+                "samples/common/matmul.hh":
+                    "14b4fe65dc78158bb0d3cf734e1503a8d419e63809a61817dfccaf080d2734b0",
+                "samples/common/matmul_mfma.hh":
+                    "55a51be014d2253aa86dba8cf2930c35fe00d7206ae1c890785393b8b62c447c"
+            },
+            "binary_sha256":
+                "7636b462dde1aeb72f1b3fdf3be1eb63a65808158704a57e77f425ef76326ada",
+            "resources": {
+                "group_segment_fixed_size": [
+                    8192
+                ],
+                "private_segment_fixed_size": [
+                    0
+                ],
+                "vgpr_count": [
+                    48
+                ],
+                "sgpr_count": [
+                    22
+                ],
+                "vgpr_spill_count": [
+                    0
+                ],
+                "sgpr_spill_count": [
+                    0
+                ],
+                "ds_instructions": 18,
+                "next_free_vgpr": [
+                    48
+                ],
+                "next_free_sgpr": [
+                    16
+                ],
+                "accum_offset": [
+                    32
+                ]
+            },
+            "assembly_sha256":
+                "64ae8544b8d6d184aef5600a19676bcd167e2dfc0e584e354c0a0f008bb043f4",
+            "repetition": 1,
+            "run_command": [
+                "/home/ripopov/work/gem5/gpu-lab/workspace/scripts/run-app.sh",
+                "--backend",
+                "gem5-kmd",
+                "--run-name",
+                "gemm-delivery-single",
+                "work/apps/gem5-kmd/gemm-delivery-single",
+                "--m",
+                "128",
+                "--n",
+                "256",
+                "--k",
+                "128"
+            ],
+            "gem5_args": [],
+            "wall_seconds": 23.22801297800106,
+            "run": "gemm-delivery-single-128-256-128-1789480435741945531",
+            "returncode": 0,
+            "modeled_cus": 8,
+            "host_seconds": 14.69,
+            "shader_active_ticks": 102751999.0,
+            "gpu_active_cycles": 102751.999,
+            "gpu_active_ms": 0.102751999,
+            "kernels": 1.0,
+            "aql_submitted_and_retired": 4.0,
+            "output": [
+                "MFMA tile=64x64x16 wave_tile=64x16 workers=256 producers=0 lds=1 lookahead=1 pipeline=1 lds_pad=0 swizzle=0 prefetch_lds=2 accumulator_copy=0",
+                "hip_matmul_lds: PASS m=128 n=256 k=128 seed=0 checksum=51380224"
+            ],
+            "completed_wavefronts_per_cu": [
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0
+            ],
+            "whole_run_dram": {
+                "system.gpu_mem_ctrls.dram.dramBytesRead": 1003904.0,
+                "system.gpu_mem_ctrls.dram.dramBytesWritten": 674048.0,
+                "system.gpu_mem_ctrls.dram.peakBW": 16000.0
+            },
+            "counters": {
+                "vALUInsts": 9312.0,
+                "sALUInsts": 3008.0,
+                "globalReads": 512.0,
+                "globalWrites": 512.0,
+                "groupReads": 3072.0,
+                "groupWrites": 768.0,
+                "ldsBankAccesses": 458752.0,
+                "spillReads": 0.0,
+                "spillWrites": 0.0,
+                "numVecOpsExecutedMFMA": 262144.0,
+                "wave_slot_cycles_IBEmpty": 139986.0,
+                "wave_slot_cycles_WaitCnt": 726165.0,
+                "wave_slot_cycles_BarrierWait": 875566.0,
+                "wave_slot_cycles_VgprBusy": 715.0,
+                "wave_slot_cycles_SgprBusy": 1856.0,
+                "wave_slot_cycles_MatrixCore": 103306.0,
+                "wave_slot_cycles_InstrReady": 1367105.0,
+                "extra_bank_serialization": 16384.00128
+            }
+        },
+        {
+            "name": "delivery-single",
+            "kind": "reference-lds",
+            "defines": [
+                "PIPELINE=1",
+                "LDS_PAD=0"
+            ],
+            "shape": [
+                128,
+                256,
+                128
+            ],
+            "seed": 0,
+            "build_command": [
+                "docker",
+                "run",
+                "--rm",
+                "--network",
+                "none",
+                "--user",
+                "1000:1000",
+                "-e",
+                "HOME=/tmp",
+                "-v",
+                "/home/ripopov/work/gem5/gpu-lab/workspace:/workspace",
+                "-w",
+                "/workspace/work/gemm-study/delivery-single",
+                "gem5-gpu-hsakmt-sdk:migration",
+                "hipcc",
+                "--offload-arch=gfx942",
+                "-O2",
+                "-std=c++17",
+                "--save-temps=cwd",
+                "-DPIPELINE=1",
+                "-DLDS_PAD=0",
+                "/workspace/samples/hip-matmul-lds/main.cpp",
+                "-o",
+                "/workspace/work/apps/gem5-kmd/gemm-delivery-single"
+            ],
+            "sdk": "gem5-gpu-hsakmt-sdk:migration",
+            "runner": "gem5-gpu-hsakmt-runner:lds-final",
+            "images": [
+                {
+                    "Id":
+                        "sha256:b26e2a19f1a4fa631a547f0bceb73547f2a780945e3e7a98d1e9dfa87670e85f",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                },
+                {
+                    "Id":
+                        "sha256:88e616d8eb228d41e2066c4514bca4423f2f284c3a603b555b76b39ecb87dc4c",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                }
+            ],
+            "model_revision": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "model_sha256":
+                "8ec40d19ec074e7b82bcb71183b513f5fc366602d66b12b2de524d8748d2b110",
+            "gem5_checkout": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "source_sha256": {
+                "samples/hip-matmul-lds/main.cpp":
+                    "9074588e4d4ed1e019d5cf10d91a6ac712f7d0d0fb260125ca60fa570aee44c7",
+                "samples/common/matmul.hh":
+                    "14b4fe65dc78158bb0d3cf734e1503a8d419e63809a61817dfccaf080d2734b0",
+                "samples/common/matmul_mfma.hh":
+                    "55a51be014d2253aa86dba8cf2930c35fe00d7206ae1c890785393b8b62c447c"
+            },
+            "binary_sha256":
+                "7636b462dde1aeb72f1b3fdf3be1eb63a65808158704a57e77f425ef76326ada",
+            "resources": {
+                "group_segment_fixed_size": [
+                    8192
+                ],
+                "private_segment_fixed_size": [
+                    0
+                ],
+                "vgpr_count": [
+                    48
+                ],
+                "sgpr_count": [
+                    22
+                ],
+                "vgpr_spill_count": [
+                    0
+                ],
+                "sgpr_spill_count": [
+                    0
+                ],
+                "ds_instructions": 18,
+                "next_free_vgpr": [
+                    48
+                ],
+                "next_free_sgpr": [
+                    16
+                ],
+                "accum_offset": [
+                    32
+                ]
+            },
+            "assembly_sha256":
+                "64ae8544b8d6d184aef5600a19676bcd167e2dfc0e584e354c0a0f008bb043f4",
+            "repetition": 2,
+            "run_command": [
+                "/home/ripopov/work/gem5/gpu-lab/workspace/scripts/run-app.sh",
+                "--backend",
+                "gem5-kmd",
+                "--run-name",
+                "gemm-delivery-single",
+                "work/apps/gem5-kmd/gemm-delivery-single",
+                "--m",
+                "128",
+                "--n",
+                "256",
+                "--k",
+                "128"
+            ],
+            "gem5_args": [],
+            "wall_seconds": 23.603956640999968,
+            "run": "gemm-delivery-single-128-256-128-1789480459103265778",
+            "returncode": 0,
+            "modeled_cus": 8,
+            "host_seconds": 15.03,
+            "shader_active_ticks": 103012999.0,
+            "gpu_active_cycles": 103012.999,
+            "gpu_active_ms": 0.10301299900000001,
+            "kernels": 1.0,
+            "aql_submitted_and_retired": 4.0,
+            "output": [
+                "MFMA tile=64x64x16 wave_tile=64x16 workers=256 producers=0 lds=1 lookahead=1 pipeline=1 lds_pad=0 swizzle=0 prefetch_lds=2 accumulator_copy=0",
+                "hip_matmul_lds: PASS m=128 n=256 k=128 seed=0 checksum=51380224"
+            ],
+            "completed_wavefronts_per_cu": [
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0
+            ],
+            "whole_run_dram": {
+                "system.gpu_mem_ctrls.dram.dramBytesRead": 1002624.0,
+                "system.gpu_mem_ctrls.dram.dramBytesWritten": 680320.0,
+                "system.gpu_mem_ctrls.dram.peakBW": 16000.0
+            },
+            "counters": {
+                "vALUInsts": 9312.0,
+                "sALUInsts": 3008.0,
+                "globalReads": 512.0,
+                "globalWrites": 512.0,
+                "groupReads": 3072.0,
+                "groupWrites": 768.0,
+                "ldsBankAccesses": 458752.0,
+                "spillReads": 0.0,
+                "spillWrites": 0.0,
+                "numVecOpsExecutedMFMA": 262144.0,
+                "wave_slot_cycles_IBEmpty": 162383.0,
+                "wave_slot_cycles_WaitCnt": 721821.0,
+                "wave_slot_cycles_BarrierWait": 865434.0,
+                "wave_slot_cycles_VgprBusy": 710.0,
+                "wave_slot_cycles_SgprBusy": 1856.0,
+                "wave_slot_cycles_MatrixCore": 103042.0,
+                "wave_slot_cycles_InstrReady": 1370938.0,
+                "extra_bank_serialization": 16384.00128
+            }
+        },
+        {
+            "name": "delivery-single",
+            "kind": "reference-lds",
+            "defines": [
+                "PIPELINE=1",
+                "LDS_PAD=0"
+            ],
+            "shape": [
+                128,
+                256,
+                128
+            ],
+            "seed": 0,
+            "build_command": [
+                "docker",
+                "run",
+                "--rm",
+                "--network",
+                "none",
+                "--user",
+                "1000:1000",
+                "-e",
+                "HOME=/tmp",
+                "-v",
+                "/home/ripopov/work/gem5/gpu-lab/workspace:/workspace",
+                "-w",
+                "/workspace/work/gemm-study/delivery-single",
+                "gem5-gpu-hsakmt-sdk:migration",
+                "hipcc",
+                "--offload-arch=gfx942",
+                "-O2",
+                "-std=c++17",
+                "--save-temps=cwd",
+                "-DPIPELINE=1",
+                "-DLDS_PAD=0",
+                "/workspace/samples/hip-matmul-lds/main.cpp",
+                "-o",
+                "/workspace/work/apps/gem5-kmd/gemm-delivery-single"
+            ],
+            "sdk": "gem5-gpu-hsakmt-sdk:migration",
+            "runner": "gem5-gpu-hsakmt-runner:lds-final",
+            "images": [
+                {
+                    "Id":
+                        "sha256:b26e2a19f1a4fa631a547f0bceb73547f2a780945e3e7a98d1e9dfa87670e85f",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                },
+                {
+                    "Id":
+                        "sha256:88e616d8eb228d41e2066c4514bca4423f2f284c3a603b555b76b39ecb87dc4c",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                }
+            ],
+            "model_revision": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "model_sha256":
+                "8ec40d19ec074e7b82bcb71183b513f5fc366602d66b12b2de524d8748d2b110",
+            "gem5_checkout": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "source_sha256": {
+                "samples/hip-matmul-lds/main.cpp":
+                    "9074588e4d4ed1e019d5cf10d91a6ac712f7d0d0fb260125ca60fa570aee44c7",
+                "samples/common/matmul.hh":
+                    "14b4fe65dc78158bb0d3cf734e1503a8d419e63809a61817dfccaf080d2734b0",
+                "samples/common/matmul_mfma.hh":
+                    "55a51be014d2253aa86dba8cf2930c35fe00d7206ae1c890785393b8b62c447c"
+            },
+            "binary_sha256":
+                "7636b462dde1aeb72f1b3fdf3be1eb63a65808158704a57e77f425ef76326ada",
+            "resources": {
+                "group_segment_fixed_size": [
+                    8192
+                ],
+                "private_segment_fixed_size": [
+                    0
+                ],
+                "vgpr_count": [
+                    48
+                ],
+                "sgpr_count": [
+                    22
+                ],
+                "vgpr_spill_count": [
+                    0
+                ],
+                "sgpr_spill_count": [
+                    0
+                ],
+                "ds_instructions": 18,
+                "next_free_vgpr": [
+                    48
+                ],
+                "next_free_sgpr": [
+                    16
+                ],
+                "accum_offset": [
+                    32
+                ]
+            },
+            "assembly_sha256":
+                "64ae8544b8d6d184aef5600a19676bcd167e2dfc0e584e354c0a0f008bb043f4",
+            "repetition": 3,
+            "run_command": [
+                "/home/ripopov/work/gem5/gpu-lab/workspace/scripts/run-app.sh",
+                "--backend",
+                "gem5-kmd",
+                "--run-name",
+                "gemm-delivery-single",
+                "work/apps/gem5-kmd/gemm-delivery-single",
+                "--m",
+                "128",
+                "--n",
+                "256",
+                "--k",
+                "128"
+            ],
+            "gem5_args": [],
+            "wall_seconds": 22.285892693002097,
+            "run": "gemm-delivery-single-128-256-128-1789480482845338374",
+            "returncode": 0,
+            "modeled_cus": 8,
+            "host_seconds": 13.86,
+            "shader_active_ticks": 102996999.0,
+            "gpu_active_cycles": 102996.999,
+            "gpu_active_ms": 0.10299699899999999,
+            "kernels": 1.0,
+            "aql_submitted_and_retired": 4.0,
+            "output": [
+                "MFMA tile=64x64x16 wave_tile=64x16 workers=256 producers=0 lds=1 lookahead=1 pipeline=1 lds_pad=0 swizzle=0 prefetch_lds=2 accumulator_copy=0",
+                "hip_matmul_lds: PASS m=128 n=256 k=128 seed=0 checksum=51380224"
+            ],
+            "completed_wavefronts_per_cu": [
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0
+            ],
+            "whole_run_dram": {
+                "system.gpu_mem_ctrls.dram.dramBytesRead": 1006016.0,
+                "system.gpu_mem_ctrls.dram.dramBytesWritten": 679104.0,
+                "system.gpu_mem_ctrls.dram.peakBW": 16000.0
+            },
+            "counters": {
+                "vALUInsts": 9312.0,
+                "sALUInsts": 3008.0,
+                "globalReads": 512.0,
+                "globalWrites": 512.0,
+                "groupReads": 3072.0,
+                "groupWrites": 768.0,
+                "ldsBankAccesses": 458752.0,
+                "spillReads": 0.0,
+                "spillWrites": 0.0,
+                "numVecOpsExecutedMFMA": 262144.0,
+                "wave_slot_cycles_IBEmpty": 147576.0,
+                "wave_slot_cycles_WaitCnt": 714766.0,
+                "wave_slot_cycles_BarrierWait": 889646.0,
+                "wave_slot_cycles_VgprBusy": 662.0,
+                "wave_slot_cycles_SgprBusy": 1856.0,
+                "wave_slot_cycles_MatrixCore": 103199.0,
+                "wave_slot_cycles_InstrReady": 1367566.0,
+                "extra_bank_serialization": 16384.00128
+            }
+        },
+        {
+            "name": "delivery-single",
+            "kind": "reference-lds",
+            "defines": [
+                "PIPELINE=1",
+                "LDS_PAD=0"
+            ],
+            "shape": [
+                128,
+                256,
+                128
+            ],
+            "seed": 0,
+            "build_command": [
+                "docker",
+                "run",
+                "--rm",
+                "--network",
+                "none",
+                "--user",
+                "1000:1000",
+                "-e",
+                "HOME=/tmp",
+                "-v",
+                "/home/ripopov/work/gem5/gpu-lab/workspace:/workspace",
+                "-w",
+                "/workspace/work/gemm-study/delivery-single",
+                "gem5-gpu-hsakmt-sdk:migration",
+                "hipcc",
+                "--offload-arch=gfx942",
+                "-O2",
+                "-std=c++17",
+                "--save-temps=cwd",
+                "-DPIPELINE=1",
+                "-DLDS_PAD=0",
+                "/workspace/samples/hip-matmul-lds/main.cpp",
+                "-o",
+                "/workspace/work/apps/gem5-kmd/gemm-delivery-single"
+            ],
+            "sdk": "gem5-gpu-hsakmt-sdk:migration",
+            "runner": "gem5-gpu-hsakmt-runner:lds-final",
+            "images": [
+                {
+                    "Id":
+                        "sha256:b26e2a19f1a4fa631a547f0bceb73547f2a780945e3e7a98d1e9dfa87670e85f",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                },
+                {
+                    "Id":
+                        "sha256:88e616d8eb228d41e2066c4514bca4423f2f284c3a603b555b76b39ecb87dc4c",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                }
+            ],
+            "model_revision": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "model_sha256":
+                "8ec40d19ec074e7b82bcb71183b513f5fc366602d66b12b2de524d8748d2b110",
+            "gem5_checkout": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "source_sha256": {
+                "samples/hip-matmul-lds/main.cpp":
+                    "9074588e4d4ed1e019d5cf10d91a6ac712f7d0d0fb260125ca60fa570aee44c7",
+                "samples/common/matmul.hh":
+                    "14b4fe65dc78158bb0d3cf734e1503a8d419e63809a61817dfccaf080d2734b0",
+                "samples/common/matmul_mfma.hh":
+                    "55a51be014d2253aa86dba8cf2930c35fe00d7206ae1c890785393b8b62c447c"
+            },
+            "binary_sha256":
+                "7636b462dde1aeb72f1b3fdf3be1eb63a65808158704a57e77f425ef76326ada",
+            "resources": {
+                "group_segment_fixed_size": [
+                    8192
+                ],
+                "private_segment_fixed_size": [
+                    0
+                ],
+                "vgpr_count": [
+                    48
+                ],
+                "sgpr_count": [
+                    22
+                ],
+                "vgpr_spill_count": [
+                    0
+                ],
+                "sgpr_spill_count": [
+                    0
+                ],
+                "ds_instructions": 18,
+                "next_free_vgpr": [
+                    48
+                ],
+                "next_free_sgpr": [
+                    16
+                ],
+                "accum_offset": [
+                    32
+                ]
+            },
+            "assembly_sha256":
+                "64ae8544b8d6d184aef5600a19676bcd167e2dfc0e584e354c0a0f008bb043f4",
+            "repetition": 4,
+            "run_command": [
+                "/home/ripopov/work/gem5/gpu-lab/workspace/scripts/run-app.sh",
+                "--backend",
+                "gem5-kmd",
+                "--run-name",
+                "gemm-delivery-single",
+                "work/apps/gem5-kmd/gemm-delivery-single",
+                "--m",
+                "128",
+                "--n",
+                "256",
+                "--k",
+                "128"
+            ],
+            "gem5_args": [],
+            "wall_seconds": 22.16866627499985,
+            "run": "gemm-delivery-single-128-256-128-1789480505267386177",
+            "returncode": 0,
+            "modeled_cus": 8,
+            "host_seconds": 13.77,
+            "shader_active_ticks": 103184999.0,
+            "gpu_active_cycles": 103184.999,
+            "gpu_active_ms": 0.103184999,
+            "kernels": 1.0,
+            "aql_submitted_and_retired": 4.0,
+            "output": [
+                "MFMA tile=64x64x16 wave_tile=64x16 workers=256 producers=0 lds=1 lookahead=1 pipeline=1 lds_pad=0 swizzle=0 prefetch_lds=2 accumulator_copy=0",
+                "hip_matmul_lds: PASS m=128 n=256 k=128 seed=0 checksum=51380224"
+            ],
+            "completed_wavefronts_per_cu": [
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0
+            ],
+            "whole_run_dram": {
+                "system.gpu_mem_ctrls.dram.dramBytesRead": 1003072.0,
+                "system.gpu_mem_ctrls.dram.dramBytesWritten": 680384.0,
+                "system.gpu_mem_ctrls.dram.peakBW": 16000.0
+            },
+            "counters": {
+                "vALUInsts": 9312.0,
+                "sALUInsts": 3008.0,
+                "globalReads": 512.0,
+                "globalWrites": 512.0,
+                "groupReads": 3072.0,
+                "groupWrites": 768.0,
+                "ldsBankAccesses": 458752.0,
+                "spillReads": 0.0,
+                "spillWrites": 0.0,
+                "numVecOpsExecutedMFMA": 262144.0,
+                "wave_slot_cycles_IBEmpty": 164268.0,
+                "wave_slot_cycles_WaitCnt": 720829.0,
+                "wave_slot_cycles_BarrierWait": 865434.0,
+                "wave_slot_cycles_VgprBusy": 710.0,
+                "wave_slot_cycles_SgprBusy": 1856.0,
+                "wave_slot_cycles_MatrixCore": 103042.0,
+                "wave_slot_cycles_InstrReady": 1375565.0,
+                "extra_bank_serialization": 16384.00128
+            }
+        },
+        {
+            "name": "delivery-single",
+            "kind": "reference-lds",
+            "defines": [
+                "PIPELINE=1",
+                "LDS_PAD=0"
+            ],
+            "shape": [
+                128,
+                256,
+                128
+            ],
+            "seed": 0,
+            "build_command": [
+                "docker",
+                "run",
+                "--rm",
+                "--network",
+                "none",
+                "--user",
+                "1000:1000",
+                "-e",
+                "HOME=/tmp",
+                "-v",
+                "/home/ripopov/work/gem5/gpu-lab/workspace:/workspace",
+                "-w",
+                "/workspace/work/gemm-study/delivery-single",
+                "gem5-gpu-hsakmt-sdk:migration",
+                "hipcc",
+                "--offload-arch=gfx942",
+                "-O2",
+                "-std=c++17",
+                "--save-temps=cwd",
+                "-DPIPELINE=1",
+                "-DLDS_PAD=0",
+                "/workspace/samples/hip-matmul-lds/main.cpp",
+                "-o",
+                "/workspace/work/apps/gem5-kmd/gemm-delivery-single"
+            ],
+            "sdk": "gem5-gpu-hsakmt-sdk:migration",
+            "runner": "gem5-gpu-hsakmt-runner:lds-final",
+            "images": [
+                {
+                    "Id":
+                        "sha256:b26e2a19f1a4fa631a547f0bceb73547f2a780945e3e7a98d1e9dfa87670e85f",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                },
+                {
+                    "Id":
+                        "sha256:88e616d8eb228d41e2066c4514bca4423f2f284c3a603b555b76b39ecb87dc4c",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                }
+            ],
+            "model_revision": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "model_sha256":
+                "8ec40d19ec074e7b82bcb71183b513f5fc366602d66b12b2de524d8748d2b110",
+            "gem5_checkout": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "source_sha256": {
+                "samples/hip-matmul-lds/main.cpp":
+                    "9074588e4d4ed1e019d5cf10d91a6ac712f7d0d0fb260125ca60fa570aee44c7",
+                "samples/common/matmul.hh":
+                    "14b4fe65dc78158bb0d3cf734e1503a8d419e63809a61817dfccaf080d2734b0",
+                "samples/common/matmul_mfma.hh":
+                    "55a51be014d2253aa86dba8cf2930c35fe00d7206ae1c890785393b8b62c447c"
+            },
+            "binary_sha256":
+                "7636b462dde1aeb72f1b3fdf3be1eb63a65808158704a57e77f425ef76326ada",
+            "resources": {
+                "group_segment_fixed_size": [
+                    8192
+                ],
+                "private_segment_fixed_size": [
+                    0
+                ],
+                "vgpr_count": [
+                    48
+                ],
+                "sgpr_count": [
+                    22
+                ],
+                "vgpr_spill_count": [
+                    0
+                ],
+                "sgpr_spill_count": [
+                    0
+                ],
+                "ds_instructions": 18,
+                "next_free_vgpr": [
+                    48
+                ],
+                "next_free_sgpr": [
+                    16
+                ],
+                "accum_offset": [
+                    32
+                ]
+            },
+            "assembly_sha256":
+                "64ae8544b8d6d184aef5600a19676bcd167e2dfc0e584e354c0a0f008bb043f4",
+            "repetition": 5,
+            "run_command": [
+                "/home/ripopov/work/gem5/gpu-lab/workspace/scripts/run-app.sh",
+                "--backend",
+                "gem5-kmd",
+                "--run-name",
+                "gemm-delivery-single",
+                "work/apps/gem5-kmd/gemm-delivery-single",
+                "--m",
+                "128",
+                "--n",
+                "256",
+                "--k",
+                "128"
+            ],
+            "gem5_args": [],
+            "wall_seconds": 22.223695555996528,
+            "run": "gemm-delivery-single-128-256-128-1789480527596603419",
+            "returncode": 0,
+            "modeled_cus": 8,
+            "host_seconds": 13.75,
+            "shader_active_ticks": 102364999.0,
+            "gpu_active_cycles": 102364.999,
+            "gpu_active_ms": 0.102364999,
+            "kernels": 1.0,
+            "aql_submitted_and_retired": 4.0,
+            "output": [
+                "MFMA tile=64x64x16 wave_tile=64x16 workers=256 producers=0 lds=1 lookahead=1 pipeline=1 lds_pad=0 swizzle=0 prefetch_lds=2 accumulator_copy=0",
+                "hip_matmul_lds: PASS m=128 n=256 k=128 seed=0 checksum=51380224"
+            ],
+            "completed_wavefronts_per_cu": [
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0
+            ],
+            "whole_run_dram": {
+                "system.gpu_mem_ctrls.dram.dramBytesRead": 1004544.0,
+                "system.gpu_mem_ctrls.dram.dramBytesWritten": 679488.0,
+                "system.gpu_mem_ctrls.dram.peakBW": 16000.0
+            },
+            "counters": {
+                "vALUInsts": 9312.0,
+                "sALUInsts": 3008.0,
+                "globalReads": 512.0,
+                "globalWrites": 512.0,
+                "groupReads": 3072.0,
+                "groupWrites": 768.0,
+                "ldsBankAccesses": 458752.0,
+                "spillReads": 0.0,
+                "spillWrites": 0.0,
+                "numVecOpsExecutedMFMA": 262144.0,
+                "wave_slot_cycles_IBEmpty": 140002.0,
+                "wave_slot_cycles_WaitCnt": 730148.0,
+                "wave_slot_cycles_BarrierWait": 881205.0,
+                "wave_slot_cycles_VgprBusy": 709.0,
+                "wave_slot_cycles_SgprBusy": 1856.0,
+                "wave_slot_cycles_MatrixCore": 103338.0,
+                "wave_slot_cycles_InstrReady": 1345409.0,
+                "extra_bank_serialization": 16384.00128
+            }
+        },
+        {
+            "name": "delivery-single-matched",
+            "kind": "reference-lds",
+            "defines": [
+                "PIPELINE=1"
+            ],
+            "shape": [
+                128,
+                256,
+                128
+            ],
+            "seed": 0,
+            "build_command": [
+                "docker",
+                "run",
+                "--rm",
+                "--network",
+                "none",
+                "--user",
+                "1000:1000",
+                "-e",
+                "HOME=/tmp",
+                "-v",
+                "/home/ripopov/work/gem5/gpu-lab/workspace:/workspace",
+                "-w",
+                "/workspace/work/gemm-study/delivery-single-matched",
+                "gem5-gpu-hsakmt-sdk:migration",
+                "hipcc",
+                "--offload-arch=gfx942",
+                "-O2",
+                "-std=c++17",
+                "--save-temps=cwd",
+                "-DPIPELINE=1",
+                "/workspace/samples/hip-matmul-lds/main.cpp",
+                "-o",
+                "/workspace/work/apps/gem5-kmd/gemm-delivery-single-matched"
+            ],
+            "sdk": "gem5-gpu-hsakmt-sdk:migration",
+            "runner": "gem5-gpu-hsakmt-runner:lds-final",
+            "images": [
+                {
+                    "Id":
+                        "sha256:b26e2a19f1a4fa631a547f0bceb73547f2a780945e3e7a98d1e9dfa87670e85f",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                },
+                {
+                    "Id":
+                        "sha256:88e616d8eb228d41e2066c4514bca4423f2f284c3a603b555b76b39ecb87dc4c",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                }
+            ],
+            "model_revision": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "model_sha256":
+                "8ec40d19ec074e7b82bcb71183b513f5fc366602d66b12b2de524d8748d2b110",
+            "gem5_checkout": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "source_sha256": {
+                "samples/hip-matmul-lds/main.cpp":
+                    "9074588e4d4ed1e019d5cf10d91a6ac712f7d0d0fb260125ca60fa570aee44c7",
+                "samples/common/matmul.hh":
+                    "14b4fe65dc78158bb0d3cf734e1503a8d419e63809a61817dfccaf080d2734b0",
+                "samples/common/matmul_mfma.hh":
+                    "55a51be014d2253aa86dba8cf2930c35fe00d7206ae1c890785393b8b62c447c"
+            },
+            "binary_sha256":
+                "65748b61602bc9fdd9aa491d19a475458634f30073d2b06625aaf79d4dbef782",
+            "resources": {
+                "group_segment_fixed_size": [
+                    10240
+                ],
+                "private_segment_fixed_size": [
+                    0
+                ],
+                "vgpr_count": [
+                    48
+                ],
+                "sgpr_count": [
+                    22
+                ],
+                "vgpr_spill_count": [
+                    0
+                ],
+                "sgpr_spill_count": [
+                    0
+                ],
+                "ds_instructions": 18,
+                "next_free_vgpr": [
+                    73
+                ],
+                "next_free_sgpr": [
+                    91
+                ],
+                "accum_offset": [
+                    32
+                ]
+            },
+            "assembly_sha256":
+                "becc4651df5e4a14e01665e718db5d7a21043b4ae029c244e66526bf2d256e52",
+            "repetition": 1,
+            "run_command": [
+                "/home/ripopov/work/gem5/gpu-lab/workspace/scripts/run-app.sh",
+                "--backend",
+                "gem5-kmd",
+                "--run-name",
+                "gemm-delivery-single-matched",
+                "work/apps/gem5-kmd/gemm-delivery-single-matched",
+                "--m",
+                "128",
+                "--n",
+                "256",
+                "--k",
+                "128"
+            ],
+            "gem5_args": [],
+            "wall_seconds": 23.28276907700274,
+            "run":
+                "gemm-delivery-single-matched-128-256-128-1789480551327063753",
+            "returncode": 0,
+            "modeled_cus": 8,
+            "host_seconds": 14.65,
+            "shader_active_ticks": 103473999.0,
+            "gpu_active_cycles": 103473.999,
+            "gpu_active_ms": 0.103473999,
+            "kernels": 1.0,
+            "aql_submitted_and_retired": 4.0,
+            "output": [
+                "MFMA tile=64x64x16 wave_tile=64x16 workers=256 producers=0 lds=1 lookahead=1 pipeline=1 lds_pad=16 swizzle=0 prefetch_lds=2 accumulator_copy=0",
+                "hip_matmul_lds: PASS m=128 n=256 k=128 seed=0 checksum=51380224"
+            ],
+            "completed_wavefronts_per_cu": [
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0
+            ],
+            "whole_run_dram": {
+                "system.gpu_mem_ctrls.dram.dramBytesRead": 1004224.0,
+                "system.gpu_mem_ctrls.dram.dramBytesWritten": 671616.0,
+                "system.gpu_mem_ctrls.dram.peakBW": 16000.0
+            },
+            "counters": {
+                "vALUInsts": 9344.0,
+                "sALUInsts": 3104.0,
+                "globalReads": 512.0,
+                "globalWrites": 512.0,
+                "groupReads": 3072.0,
+                "groupWrites": 768.0,
+                "ldsBankAccesses": 458752.0,
+                "spillReads": 0.0,
+                "spillWrites": 0.0,
+                "numVecOpsExecutedMFMA": 262144.0,
+                "wave_slot_cycles_IBEmpty": 160069.0,
+                "wave_slot_cycles_WaitCnt": 706912.0,
+                "wave_slot_cycles_BarrierWait": 874041.0,
+                "wave_slot_cycles_VgprBusy": 511.0,
+                "wave_slot_cycles_SgprBusy": 1874.0,
+                "wave_slot_cycles_MatrixCore": 101147.0,
+                "wave_slot_cycles_InstrReady": 1390864.0,
+                "extra_bank_serialization": 6144.0
+            }
+        },
+        {
+            "name": "delivery-single-matched",
+            "kind": "reference-lds",
+            "defines": [
+                "PIPELINE=1"
+            ],
+            "shape": [
+                128,
+                256,
+                128
+            ],
+            "seed": 0,
+            "build_command": [
+                "docker",
+                "run",
+                "--rm",
+                "--network",
+                "none",
+                "--user",
+                "1000:1000",
+                "-e",
+                "HOME=/tmp",
+                "-v",
+                "/home/ripopov/work/gem5/gpu-lab/workspace:/workspace",
+                "-w",
+                "/workspace/work/gemm-study/delivery-single-matched",
+                "gem5-gpu-hsakmt-sdk:migration",
+                "hipcc",
+                "--offload-arch=gfx942",
+                "-O2",
+                "-std=c++17",
+                "--save-temps=cwd",
+                "-DPIPELINE=1",
+                "/workspace/samples/hip-matmul-lds/main.cpp",
+                "-o",
+                "/workspace/work/apps/gem5-kmd/gemm-delivery-single-matched"
+            ],
+            "sdk": "gem5-gpu-hsakmt-sdk:migration",
+            "runner": "gem5-gpu-hsakmt-runner:lds-final",
+            "images": [
+                {
+                    "Id":
+                        "sha256:b26e2a19f1a4fa631a547f0bceb73547f2a780945e3e7a98d1e9dfa87670e85f",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                },
+                {
+                    "Id":
+                        "sha256:88e616d8eb228d41e2066c4514bca4423f2f284c3a603b555b76b39ecb87dc4c",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                }
+            ],
+            "model_revision": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "model_sha256":
+                "8ec40d19ec074e7b82bcb71183b513f5fc366602d66b12b2de524d8748d2b110",
+            "gem5_checkout": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "source_sha256": {
+                "samples/hip-matmul-lds/main.cpp":
+                    "9074588e4d4ed1e019d5cf10d91a6ac712f7d0d0fb260125ca60fa570aee44c7",
+                "samples/common/matmul.hh":
+                    "14b4fe65dc78158bb0d3cf734e1503a8d419e63809a61817dfccaf080d2734b0",
+                "samples/common/matmul_mfma.hh":
+                    "55a51be014d2253aa86dba8cf2930c35fe00d7206ae1c890785393b8b62c447c"
+            },
+            "binary_sha256":
+                "65748b61602bc9fdd9aa491d19a475458634f30073d2b06625aaf79d4dbef782",
+            "resources": {
+                "group_segment_fixed_size": [
+                    10240
+                ],
+                "private_segment_fixed_size": [
+                    0
+                ],
+                "vgpr_count": [
+                    48
+                ],
+                "sgpr_count": [
+                    22
+                ],
+                "vgpr_spill_count": [
+                    0
+                ],
+                "sgpr_spill_count": [
+                    0
+                ],
+                "ds_instructions": 18,
+                "next_free_vgpr": [
+                    73
+                ],
+                "next_free_sgpr": [
+                    91
+                ],
+                "accum_offset": [
+                    32
+                ]
+            },
+            "assembly_sha256":
+                "becc4651df5e4a14e01665e718db5d7a21043b4ae029c244e66526bf2d256e52",
+            "repetition": 2,
+            "run_command": [
+                "/home/ripopov/work/gem5/gpu-lab/workspace/scripts/run-app.sh",
+                "--backend",
+                "gem5-kmd",
+                "--run-name",
+                "gemm-delivery-single-matched",
+                "work/apps/gem5-kmd/gemm-delivery-single-matched",
+                "--m",
+                "128",
+                "--n",
+                "256",
+                "--k",
+                "128"
+            ],
+            "gem5_args": [],
+            "wall_seconds": 22.28090048300146,
+            "run":
+                "gemm-delivery-single-matched-128-256-128-1789480574739493387",
+            "returncode": 0,
+            "modeled_cus": 8,
+            "host_seconds": 13.75,
+            "shader_active_ticks": 102995999.0,
+            "gpu_active_cycles": 102995.999,
+            "gpu_active_ms": 0.102995999,
+            "kernels": 1.0,
+            "aql_submitted_and_retired": 4.0,
+            "output": [
+                "MFMA tile=64x64x16 wave_tile=64x16 workers=256 producers=0 lds=1 lookahead=1 pipeline=1 lds_pad=16 swizzle=0 prefetch_lds=2 accumulator_copy=0",
+                "hip_matmul_lds: PASS m=128 n=256 k=128 seed=0 checksum=51380224"
+            ],
+            "completed_wavefronts_per_cu": [
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0
+            ],
+            "whole_run_dram": {
+                "system.gpu_mem_ctrls.dram.dramBytesRead": 1003584.0,
+                "system.gpu_mem_ctrls.dram.dramBytesWritten": 668992.0,
+                "system.gpu_mem_ctrls.dram.peakBW": 16000.0
+            },
+            "counters": {
+                "vALUInsts": 9344.0,
+                "sALUInsts": 3104.0,
+                "globalReads": 512.0,
+                "globalWrites": 512.0,
+                "groupReads": 3072.0,
+                "groupWrites": 768.0,
+                "ldsBankAccesses": 458752.0,
+                "spillReads": 0.0,
+                "spillWrites": 0.0,
+                "numVecOpsExecutedMFMA": 262144.0,
+                "wave_slot_cycles_IBEmpty": 166552.0,
+                "wave_slot_cycles_WaitCnt": 708444.0,
+                "wave_slot_cycles_BarrierWait": 869160.0,
+                "wave_slot_cycles_VgprBusy": 520.0,
+                "wave_slot_cycles_SgprBusy": 1872.0,
+                "wave_slot_cycles_MatrixCore": 101142.0,
+                "wave_slot_cycles_InstrReady": 1376628.0,
+                "extra_bank_serialization": 6144.0
+            }
+        },
+        {
+            "name": "delivery-single-matched",
+            "kind": "reference-lds",
+            "defines": [
+                "PIPELINE=1"
+            ],
+            "shape": [
+                128,
+                256,
+                128
+            ],
+            "seed": 0,
+            "build_command": [
+                "docker",
+                "run",
+                "--rm",
+                "--network",
+                "none",
+                "--user",
+                "1000:1000",
+                "-e",
+                "HOME=/tmp",
+                "-v",
+                "/home/ripopov/work/gem5/gpu-lab/workspace:/workspace",
+                "-w",
+                "/workspace/work/gemm-study/delivery-single-matched",
+                "gem5-gpu-hsakmt-sdk:migration",
+                "hipcc",
+                "--offload-arch=gfx942",
+                "-O2",
+                "-std=c++17",
+                "--save-temps=cwd",
+                "-DPIPELINE=1",
+                "/workspace/samples/hip-matmul-lds/main.cpp",
+                "-o",
+                "/workspace/work/apps/gem5-kmd/gemm-delivery-single-matched"
+            ],
+            "sdk": "gem5-gpu-hsakmt-sdk:migration",
+            "runner": "gem5-gpu-hsakmt-runner:lds-final",
+            "images": [
+                {
+                    "Id":
+                        "sha256:b26e2a19f1a4fa631a547f0bceb73547f2a780945e3e7a98d1e9dfa87670e85f",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                },
+                {
+                    "Id":
+                        "sha256:88e616d8eb228d41e2066c4514bca4423f2f284c3a603b555b76b39ecb87dc4c",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                }
+            ],
+            "model_revision": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "model_sha256":
+                "8ec40d19ec074e7b82bcb71183b513f5fc366602d66b12b2de524d8748d2b110",
+            "gem5_checkout": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "source_sha256": {
+                "samples/hip-matmul-lds/main.cpp":
+                    "9074588e4d4ed1e019d5cf10d91a6ac712f7d0d0fb260125ca60fa570aee44c7",
+                "samples/common/matmul.hh":
+                    "14b4fe65dc78158bb0d3cf734e1503a8d419e63809a61817dfccaf080d2734b0",
+                "samples/common/matmul_mfma.hh":
+                    "55a51be014d2253aa86dba8cf2930c35fe00d7206ae1c890785393b8b62c447c"
+            },
+            "binary_sha256":
+                "65748b61602bc9fdd9aa491d19a475458634f30073d2b06625aaf79d4dbef782",
+            "resources": {
+                "group_segment_fixed_size": [
+                    10240
+                ],
+                "private_segment_fixed_size": [
+                    0
+                ],
+                "vgpr_count": [
+                    48
+                ],
+                "sgpr_count": [
+                    22
+                ],
+                "vgpr_spill_count": [
+                    0
+                ],
+                "sgpr_spill_count": [
+                    0
+                ],
+                "ds_instructions": 18,
+                "next_free_vgpr": [
+                    73
+                ],
+                "next_free_sgpr": [
+                    91
+                ],
+                "accum_offset": [
+                    32
+                ]
+            },
+            "assembly_sha256":
+                "becc4651df5e4a14e01665e718db5d7a21043b4ae029c244e66526bf2d256e52",
+            "repetition": 3,
+            "run_command": [
+                "/home/ripopov/work/gem5/gpu-lab/workspace/scripts/run-app.sh",
+                "--backend",
+                "gem5-kmd",
+                "--run-name",
+                "gemm-delivery-single-matched",
+                "work/apps/gem5-kmd/gemm-delivery-single-matched",
+                "--m",
+                "128",
+                "--n",
+                "256",
+                "--k",
+                "128"
+            ],
+            "gem5_args": [],
+            "wall_seconds": 22.190353334000974,
+            "run":
+                "gemm-delivery-single-matched-128-256-128-1789480597153894769",
+            "returncode": 0,
+            "modeled_cus": 8,
+            "host_seconds": 13.76,
+            "shader_active_ticks": 104628999.0,
+            "gpu_active_cycles": 104628.999,
+            "gpu_active_ms": 0.104628999,
+            "kernels": 1.0,
+            "aql_submitted_and_retired": 4.0,
+            "output": [
+                "MFMA tile=64x64x16 wave_tile=64x16 workers=256 producers=0 lds=1 lookahead=1 pipeline=1 lds_pad=16 swizzle=0 prefetch_lds=2 accumulator_copy=0",
+                "hip_matmul_lds: PASS m=128 n=256 k=128 seed=0 checksum=51380224"
+            ],
+            "completed_wavefronts_per_cu": [
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0
+            ],
+            "whole_run_dram": {
+                "system.gpu_mem_ctrls.dram.dramBytesRead": 1004736.0,
+                "system.gpu_mem_ctrls.dram.dramBytesWritten": 671168.0,
+                "system.gpu_mem_ctrls.dram.peakBW": 16000.0
+            },
+            "counters": {
+                "vALUInsts": 9344.0,
+                "sALUInsts": 3104.0,
+                "globalReads": 512.0,
+                "globalWrites": 512.0,
+                "groupReads": 3072.0,
+                "groupWrites": 768.0,
+                "ldsBankAccesses": 458752.0,
+                "spillReads": 0.0,
+                "spillWrites": 0.0,
+                "numVecOpsExecutedMFMA": 262144.0,
+                "wave_slot_cycles_IBEmpty": 167431.0,
+                "wave_slot_cycles_WaitCnt": 710801.0,
+                "wave_slot_cycles_BarrierWait": 872872.0,
+                "wave_slot_cycles_VgprBusy": 511.0,
+                "wave_slot_cycles_SgprBusy": 1872.0,
+                "wave_slot_cycles_MatrixCore": 101142.0,
+                "wave_slot_cycles_InstrReady": 1420905.0,
+                "extra_bank_serialization": 6144.0
+            }
+        },
+        {
+            "name": "delivery-single-matched",
+            "kind": "reference-lds",
+            "defines": [
+                "PIPELINE=1"
+            ],
+            "shape": [
+                128,
+                256,
+                128
+            ],
+            "seed": 0,
+            "build_command": [
+                "docker",
+                "run",
+                "--rm",
+                "--network",
+                "none",
+                "--user",
+                "1000:1000",
+                "-e",
+                "HOME=/tmp",
+                "-v",
+                "/home/ripopov/work/gem5/gpu-lab/workspace:/workspace",
+                "-w",
+                "/workspace/work/gemm-study/delivery-single-matched",
+                "gem5-gpu-hsakmt-sdk:migration",
+                "hipcc",
+                "--offload-arch=gfx942",
+                "-O2",
+                "-std=c++17",
+                "--save-temps=cwd",
+                "-DPIPELINE=1",
+                "/workspace/samples/hip-matmul-lds/main.cpp",
+                "-o",
+                "/workspace/work/apps/gem5-kmd/gemm-delivery-single-matched"
+            ],
+            "sdk": "gem5-gpu-hsakmt-sdk:migration",
+            "runner": "gem5-gpu-hsakmt-runner:lds-final",
+            "images": [
+                {
+                    "Id":
+                        "sha256:b26e2a19f1a4fa631a547f0bceb73547f2a780945e3e7a98d1e9dfa87670e85f",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                },
+                {
+                    "Id":
+                        "sha256:88e616d8eb228d41e2066c4514bca4423f2f284c3a603b555b76b39ecb87dc4c",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                }
+            ],
+            "model_revision": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "model_sha256":
+                "8ec40d19ec074e7b82bcb71183b513f5fc366602d66b12b2de524d8748d2b110",
+            "gem5_checkout": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "source_sha256": {
+                "samples/hip-matmul-lds/main.cpp":
+                    "9074588e4d4ed1e019d5cf10d91a6ac712f7d0d0fb260125ca60fa570aee44c7",
+                "samples/common/matmul.hh":
+                    "14b4fe65dc78158bb0d3cf734e1503a8d419e63809a61817dfccaf080d2734b0",
+                "samples/common/matmul_mfma.hh":
+                    "55a51be014d2253aa86dba8cf2930c35fe00d7206ae1c890785393b8b62c447c"
+            },
+            "binary_sha256":
+                "65748b61602bc9fdd9aa491d19a475458634f30073d2b06625aaf79d4dbef782",
+            "resources": {
+                "group_segment_fixed_size": [
+                    10240
+                ],
+                "private_segment_fixed_size": [
+                    0
+                ],
+                "vgpr_count": [
+                    48
+                ],
+                "sgpr_count": [
+                    22
+                ],
+                "vgpr_spill_count": [
+                    0
+                ],
+                "sgpr_spill_count": [
+                    0
+                ],
+                "ds_instructions": 18,
+                "next_free_vgpr": [
+                    73
+                ],
+                "next_free_sgpr": [
+                    91
+                ],
+                "accum_offset": [
+                    32
+                ]
+            },
+            "assembly_sha256":
+                "becc4651df5e4a14e01665e718db5d7a21043b4ae029c244e66526bf2d256e52",
+            "repetition": 4,
+            "run_command": [
+                "/home/ripopov/work/gem5/gpu-lab/workspace/scripts/run-app.sh",
+                "--backend",
+                "gem5-kmd",
+                "--run-name",
+                "gemm-delivery-single-matched",
+                "work/apps/gem5-kmd/gemm-delivery-single-matched",
+                "--m",
+                "128",
+                "--n",
+                "256",
+                "--k",
+                "128"
+            ],
+            "gem5_args": [],
+            "wall_seconds": 22.444329914000264,
+            "run":
+                "gemm-delivery-single-matched-128-256-128-1789480619481122494",
+            "returncode": 0,
+            "modeled_cus": 8,
+            "host_seconds": 14.07,
+            "shader_active_ticks": 104248999.0,
+            "gpu_active_cycles": 104248.999,
+            "gpu_active_ms": 0.104248999,
+            "kernels": 1.0,
+            "aql_submitted_and_retired": 4.0,
+            "output": [
+                "MFMA tile=64x64x16 wave_tile=64x16 workers=256 producers=0 lds=1 lookahead=1 pipeline=1 lds_pad=16 swizzle=0 prefetch_lds=2 accumulator_copy=0",
+                "hip_matmul_lds: PASS m=128 n=256 k=128 seed=0 checksum=51380224"
+            ],
+            "completed_wavefronts_per_cu": [
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0
+            ],
+            "whole_run_dram": {
+                "system.gpu_mem_ctrls.dram.dramBytesRead": 1002560.0,
+                "system.gpu_mem_ctrls.dram.dramBytesWritten": 673472.0,
+                "system.gpu_mem_ctrls.dram.peakBW": 16000.0
+            },
+            "counters": {
+                "vALUInsts": 9344.0,
+                "sALUInsts": 3104.0,
+                "globalReads": 512.0,
+                "globalWrites": 512.0,
+                "groupReads": 3072.0,
+                "groupWrites": 768.0,
+                "ldsBankAccesses": 458752.0,
+                "spillReads": 0.0,
+                "spillWrites": 0.0,
+                "numVecOpsExecutedMFMA": 262144.0,
+                "wave_slot_cycles_IBEmpty": 166947.0,
+                "wave_slot_cycles_WaitCnt": 692355.0,
+                "wave_slot_cycles_BarrierWait": 879463.0,
+                "wave_slot_cycles_VgprBusy": 488.0,
+                "wave_slot_cycles_SgprBusy": 1896.0,
+                "wave_slot_cycles_MatrixCore": 101142.0,
+                "wave_slot_cycles_InstrReady": 1418475.0,
+                "extra_bank_serialization": 6144.0
+            }
+        },
+        {
+            "name": "delivery-single-matched",
+            "kind": "reference-lds",
+            "defines": [
+                "PIPELINE=1"
+            ],
+            "shape": [
+                128,
+                256,
+                128
+            ],
+            "seed": 0,
+            "build_command": [
+                "docker",
+                "run",
+                "--rm",
+                "--network",
+                "none",
+                "--user",
+                "1000:1000",
+                "-e",
+                "HOME=/tmp",
+                "-v",
+                "/home/ripopov/work/gem5/gpu-lab/workspace:/workspace",
+                "-w",
+                "/workspace/work/gemm-study/delivery-single-matched",
+                "gem5-gpu-hsakmt-sdk:migration",
+                "hipcc",
+                "--offload-arch=gfx942",
+                "-O2",
+                "-std=c++17",
+                "--save-temps=cwd",
+                "-DPIPELINE=1",
+                "/workspace/samples/hip-matmul-lds/main.cpp",
+                "-o",
+                "/workspace/work/apps/gem5-kmd/gemm-delivery-single-matched"
+            ],
+            "sdk": "gem5-gpu-hsakmt-sdk:migration",
+            "runner": "gem5-gpu-hsakmt-runner:lds-final",
+            "images": [
+                {
+                    "Id":
+                        "sha256:b26e2a19f1a4fa631a547f0bceb73547f2a780945e3e7a98d1e9dfa87670e85f",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                },
+                {
+                    "Id":
+                        "sha256:88e616d8eb228d41e2066c4514bca4423f2f284c3a603b555b76b39ecb87dc4c",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                }
+            ],
+            "model_revision": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "model_sha256":
+                "8ec40d19ec074e7b82bcb71183b513f5fc366602d66b12b2de524d8748d2b110",
+            "gem5_checkout": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "source_sha256": {
+                "samples/hip-matmul-lds/main.cpp":
+                    "9074588e4d4ed1e019d5cf10d91a6ac712f7d0d0fb260125ca60fa570aee44c7",
+                "samples/common/matmul.hh":
+                    "14b4fe65dc78158bb0d3cf734e1503a8d419e63809a61817dfccaf080d2734b0",
+                "samples/common/matmul_mfma.hh":
+                    "55a51be014d2253aa86dba8cf2930c35fe00d7206ae1c890785393b8b62c447c"
+            },
+            "binary_sha256":
+                "65748b61602bc9fdd9aa491d19a475458634f30073d2b06625aaf79d4dbef782",
+            "resources": {
+                "group_segment_fixed_size": [
+                    10240
+                ],
+                "private_segment_fixed_size": [
+                    0
+                ],
+                "vgpr_count": [
+                    48
+                ],
+                "sgpr_count": [
+                    22
+                ],
+                "vgpr_spill_count": [
+                    0
+                ],
+                "sgpr_spill_count": [
+                    0
+                ],
+                "ds_instructions": 18,
+                "next_free_vgpr": [
+                    73
+                ],
+                "next_free_sgpr": [
+                    91
+                ],
+                "accum_offset": [
+                    32
+                ]
+            },
+            "assembly_sha256":
+                "becc4651df5e4a14e01665e718db5d7a21043b4ae029c244e66526bf2d256e52",
+            "repetition": 5,
+            "run_command": [
+                "/home/ripopov/work/gem5/gpu-lab/workspace/scripts/run-app.sh",
+                "--backend",
+                "gem5-kmd",
+                "--run-name",
+                "gemm-delivery-single-matched",
+                "work/apps/gem5-kmd/gemm-delivery-single-matched",
+                "--m",
+                "128",
+                "--n",
+                "256",
+                "--k",
+                "128"
+            ],
+            "gem5_args": [],
+            "wall_seconds": 22.268105805000232,
+            "run":
+                "gemm-delivery-single-matched-128-256-128-1789480642076232047",
+            "returncode": 0,
+            "modeled_cus": 8,
+            "host_seconds": 13.79,
+            "shader_active_ticks": 103904999.0,
+            "gpu_active_cycles": 103904.999,
+            "gpu_active_ms": 0.10390499900000001,
+            "kernels": 1.0,
+            "aql_submitted_and_retired": 4.0,
+            "output": [
+                "MFMA tile=64x64x16 wave_tile=64x16 workers=256 producers=0 lds=1 lookahead=1 pipeline=1 lds_pad=16 swizzle=0 prefetch_lds=2 accumulator_copy=0",
+                "hip_matmul_lds: PASS m=128 n=256 k=128 seed=0 checksum=51380224"
+            ],
+            "completed_wavefronts_per_cu": [
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0
+            ],
+            "whole_run_dram": {
+                "system.gpu_mem_ctrls.dram.dramBytesRead": 1004736.0,
+                "system.gpu_mem_ctrls.dram.dramBytesWritten": 681536.0,
+                "system.gpu_mem_ctrls.dram.peakBW": 16000.0
+            },
+            "counters": {
+                "vALUInsts": 9344.0,
+                "sALUInsts": 3104.0,
+                "globalReads": 512.0,
+                "globalWrites": 512.0,
+                "groupReads": 3072.0,
+                "groupWrites": 768.0,
+                "ldsBankAccesses": 458752.0,
+                "spillReads": 0.0,
+                "spillWrites": 0.0,
+                "numVecOpsExecutedMFMA": 262144.0,
+                "wave_slot_cycles_IBEmpty": 153192.0,
+                "wave_slot_cycles_WaitCnt": 688222.0,
+                "wave_slot_cycles_BarrierWait": 891161.0,
+                "wave_slot_cycles_VgprBusy": 487.0,
+                "wave_slot_cycles_SgprBusy": 1896.0,
+                "wave_slot_cycles_MatrixCore": 101085.0,
+                "wave_slot_cycles_InstrReady": 1416029.0,
+                "extra_bank_serialization": 6144.0
+            }
+        },
+        {
+            "name": "delivery-trace",
+            "kind": "reference-lds",
+            "defines": [],
+            "shape": [
+                128,
+                256,
+                128
+            ],
+            "seed": 0,
+            "build_command": [
+                "docker",
+                "run",
+                "--rm",
+                "--network",
+                "none",
+                "--user",
+                "1000:1000",
+                "-e",
+                "HOME=/tmp",
+                "-v",
+                "/home/ripopov/work/gem5/gpu-lab/workspace:/workspace",
+                "-w",
+                "/workspace/work/gemm-study/delivery-trace",
+                "gem5-gpu-hsakmt-sdk:migration",
+                "hipcc",
+                "--offload-arch=gfx942",
+                "-O2",
+                "-std=c++17",
+                "--save-temps=cwd",
+                "/workspace/samples/hip-matmul-lds/main.cpp",
+                "-o",
+                "/workspace/work/apps/gem5-kmd/gemm-delivery-trace"
+            ],
+            "sdk": "gem5-gpu-hsakmt-sdk:migration",
+            "runner": "gem5-gpu-hsakmt-runner:lds-final",
+            "images": [
+                {
+                    "Id":
+                        "sha256:b26e2a19f1a4fa631a547f0bceb73547f2a780945e3e7a98d1e9dfa87670e85f",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                },
+                {
+                    "Id":
+                        "sha256:88e616d8eb228d41e2066c4514bca4423f2f284c3a603b555b76b39ecb87dc4c",
+                    "Os": "linux",
+                    "Architecture": "amd64"
+                }
+            ],
+            "model_revision": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "model_sha256":
+                "8ec40d19ec074e7b82bcb71183b513f5fc366602d66b12b2de524d8748d2b110",
+            "gem5_checkout": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+            "source_sha256": {
+                "samples/hip-matmul-lds/main.cpp": "9074588e4d4ed1e019d5cf10d91a6ac712f7d0d0fb260125ca60fa570aee44c7",
+                "samples/common/matmul.hh":
+                    "14b4fe65dc78158bb0d3cf734e1503a8d419e63809a61817dfccaf080d2734b0",
+                "samples/common/matmul_mfma.hh":
+                    "55a51be014d2253aa86dba8cf2930c35fe00d7206ae1c890785393b8b62c447c"
+            },
+            "binary_sha256":
+                "51d26e35a6ab7f652b95d152f7520d7a6952be68eb2afbf67f2c87fb703f6a87",
+            "resources": {
+                "group_segment_fixed_size": [
+                    20480
+                ],
+                "private_segment_fixed_size": [
+                    0
+                ],
+                "vgpr_count": [
+                    52
+                ],
+                "sgpr_count": [
+                    22
+                ],
+                "vgpr_spill_count": [
+                    0
+                ],
+                "sgpr_spill_count": [
+                    0
+                ],
+                "ds_instructions": 18,
+                "next_free_vgpr": [
+                    129
+                ],
+                "next_free_sgpr": [
+                    96
+                ],
+                "accum_offset": [
+                    36
+                ]
+            },
+            "assembly_sha256":
+                "1b5b30057a7eeeec3dcb3b6f608fe50e245b4042d66e8ae6215e4b98e6328541",
+            "repetition": 1,
+            "run_command": [
+                "/home/ripopov/work/gem5/gpu-lab/workspace/scripts/run-app.sh",
+                "--backend",
+                "gem5-kmd",
+                "--run-name",
+                "gemm-delivery-trace",
+                "--gem5-arg=--debug-flags=GPUTrace,GPUMem",
+                "work/apps/gem5-kmd/gemm-delivery-trace",
+                "--m",
+                "128",
+                "--n",
+                "256",
+                "--k",
+                "128"
+            ],
+            "gem5_args": [
+                "--debug-flags=GPUTrace,GPUMem"
+            ],
+            "wall_seconds": 40.289279892000195,
+            "run": "gemm-delivery-trace-128-256-128-1789481410330178799",
+            "returncode": 0,
+            "modeled_cus": 8,
+            "host_seconds": 19.89,
+            "shader_active_ticks": 101647999.0,
+            "gpu_active_cycles": 101647.999,
+            "gpu_active_ms": 0.101647999,
+            "kernels": 1.0,
+            "aql_submitted_and_retired": 4.0,
+            "output": [
+                "MFMA tile=64x64x16 wave_tile=64x16 workers=256 producers=0 lds=1 lookahead=1 pipeline=2 lds_pad=16 swizzle=0 prefetch_lds=2 accumulator_copy=0",
+                "hip_matmul_lds: PASS m=128 n=256 k=128 seed=0 checksum=51380224"
+            ],
+            "completed_wavefronts_per_cu": [
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0,
+                4.0
+            ],
+            "whole_run_dram": {
+                "system.gpu_mem_ctrls.dram.dramBytesRead": 1000896.0,
+                "system.gpu_mem_ctrls.dram.dramBytesWritten": 669632.0,
+                "system.gpu_mem_ctrls.dram.peakBW": 16000.0
+            },
+            "counters": {
+                "vALUInsts": 11488.0,
+                "sALUInsts": 4064.0,
+                "globalReads": 512.0,
+                "globalWrites": 512.0,
+                "groupReads": 3072.0,
+                "groupWrites": 768.0,
+                "ldsBankAccesses": 458752.0,
+                "spillReads": 0.0,
+                "spillWrites": 0.0,
+                "numVecOpsExecutedMFMA": 262144.0,
+                "wave_slot_cycles_IBEmpty": 168025.0,
+                "wave_slot_cycles_WaitCnt": 966202.0,
+                "wave_slot_cycles_BarrierWait": 613292.0,
+                "wave_slot_cycles_VgprBusy": 677.0,
+                "wave_slot_cycles_SgprBusy": 2368.0,
+                "wave_slot_cycles_MatrixCore": 98834.0,
+                "wave_slot_cycles_InstrReady": 1339714.0,
+                "extra_bank_serialization": 6144.0
+            }
+        }
+    ]

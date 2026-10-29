@@ -1,0 +1,492 @@
+{
+  "final-coop-s1-w16": {
+    "binary_sha256": "8b6a4bb76c4df68d3cf944bb2857d0215833ef0b57d91fa4422f6388b0a9336a",
+    "defines": [
+      "TILE_M=64",
+      "TILE_N=32",
+      "WAVE_M=64",
+      "WAVE_N=16",
+      "PREFETCH_LDS=2",
+      "LDS_PAD=16",
+      "PRODUCERS=0",
+      "GROUPS=1",
+      "STAGES=1",
+      "WORKGROUPS=16"
+    ],
+    "config_args": [
+      "--reg-alloc-policy=dynamic"
+    ],
+    "runs": [
+      "gemm-final-coop-s1-w16-256-256-128-1789508008739656832",
+      "gemm-final-coop-s1-w16-256-256-128-1789508034516932419",
+      "gemm-final-coop-s1-w16-256-256-128-1789508059800668940",
+      "gemm-final-coop-s1-w16-256-256-128-1789508086256361933",
+      "gemm-final-coop-s1-w16-256-256-128-1789508111540992961"
+    ],
+    "cycles": [
+      320279.99579831935,
+      319521.99579831935,
+      321367.99579831935,
+      326128.99579831935,
+      323267.99579831935
+    ],
+    "median_cycles": 321367.99579831935,
+    "min_cycles": 319521.99579831935,
+    "max_cycles": 326128.99579831935,
+    "median_wall_seconds": 25.212402589000703,
+    "median_host_seconds": 16.65
+  },
+  "final-coop-s1-w8": {
+    "binary_sha256": "982571994d322b247b0a59b7e36e7b530f125997661f15470e26013f4b8bf237",
+    "defines": [
+      "TILE_M=64",
+      "TILE_N=32",
+      "WAVE_M=64",
+      "WAVE_N=16",
+      "PREFETCH_LDS=2",
+      "LDS_PAD=16",
+      "PRODUCERS=0",
+      "GROUPS=1",
+      "STAGES=1",
+      "WORKGROUPS=8"
+    ],
+    "config_args": [
+      "--reg-alloc-policy=dynamic"
+    ],
+    "runs": [
+      "gemm-final-coop-s1-w8-256-256-128-1789507758357993600",
+      "gemm-final-coop-s1-w8-256-256-128-1789507783232469905",
+      "gemm-final-coop-s1-w8-256-256-128-1789507808129764128",
+      "gemm-final-coop-s1-w8-256-256-128-1789507832878174853",
+      "gemm-final-coop-s1-w8-256-256-128-1789507857637196512"
+    ],
+    "cycles": [
+      315957.99579831935,
+      317986.99579831935,
+      317299.99579831935,
+      318629.99579831935,
+      319372.99579831935
+    ],
+    "median_cycles": 317986.99579831935,
+    "min_cycles": 315957.99579831935,
+    "max_cycles": 319372.99579831935,
+    "median_wall_seconds": 24.62439419799921,
+    "median_host_seconds": 16.06
+  },
+  "final-coop-s2-w8": {
+    "binary_sha256": "c44cc6989d6769b011e48d169f28d831cdc62694919cb85f2fdb831b6b6ae69e",
+    "defines": [
+      "TILE_M=64",
+      "TILE_N=32",
+      "WAVE_M=64",
+      "WAVE_N=16",
+      "PREFETCH_LDS=2",
+      "LDS_PAD=16",
+      "PRODUCERS=0",
+      "GROUPS=1",
+      "STAGES=2",
+      "WORKGROUPS=8"
+    ],
+    "config_args": [
+      "--reg-alloc-policy=dynamic"
+    ],
+    "runs": [
+      "gemm-final-coop-s2-w8-256-256-128-1789507883785623511",
+      "gemm-final-coop-s2-w8-256-256-128-1789507908485081230",
+      "gemm-final-coop-s2-w8-256-256-128-1789507932216129077",
+      "gemm-final-coop-s2-w8-256-256-128-1789507956980674722",
+      "gemm-final-coop-s2-w8-256-256-128-1789507981735001360"
+    ],
+    "cycles": [
+      319140.99579831935,
+      316629.99579831935,
+      317487.99579831935,
+      319561.99579831935,
+      315527.99579831935
+    ],
+    "median_cycles": 317487.99579831935,
+    "min_cycles": 315527.99579831935,
+    "max_cycles": 319561.99579831935,
+    "median_wall_seconds": 24.618793410998478,
+    "median_host_seconds": 15.81
+  },
+  "final-naive": {
+    "binary_sha256": "aa679669ad7d7f5de2d45dc995718ccdc7419eba25bc3445bad646cc7ef064e8",
+    "defines": [],
+    "config_args": [
+      "--reg-alloc-policy=dynamic"
+    ],
+    "runs": [
+      "gemm-final-naive-256-256-128-1789507367175065013"
+    ],
+    "cycles": [
+      672599.9978991597
+    ],
+    "median_cycles": 672599.9978991597,
+    "min_cycles": 672599.9978991597,
+    "max_cycles": 672599.9978991597,
+    "median_wall_seconds": 107.26959641899884,
+    "median_host_seconds": 98.45
+  },
+  "final-nonpersist-p1": {
+    "binary_sha256": "e1952ae8d67d30dca40f2e4a4cd702625b0f11eac65f8efda988295e6a9274d8",
+    "defines": [
+      "TILE_M=64",
+      "TILE_N=32",
+      "WAVE_M=64",
+      "WAVE_N=16",
+      "PREFETCH_LDS=2",
+      "LDS_PAD=16",
+      "PERSISTENT=0",
+      "PIPELINE=1"
+    ],
+    "config_args": [
+      "--reg-alloc-policy=dynamic"
+    ],
+    "runs": [
+      "gemm-final-nonpersist-p1-256-256-128-1789505942925972902",
+      "gemm-final-nonpersist-p1-256-256-128-1789505970712164632",
+      "gemm-final-nonpersist-p1-256-256-128-1789505999807803072",
+      "gemm-final-nonpersist-p1-256-256-128-1789506028899398055",
+      "gemm-final-nonpersist-p1-256-256-128-1789506058195568498"
+    ],
+    "cycles": [
+      322885.9978991597,
+      323940.9978991597,
+      320340.9978991597,
+      320916.9978991597,
+      322108.9978991597
+    ],
+    "median_cycles": 322108.9978991597,
+    "min_cycles": 320340.9978991597,
+    "max_cycles": 323940.9978991597,
+    "median_wall_seconds": 28.964845856993634,
+    "median_host_seconds": 19.09
+  },
+  "final-nonpersist-p2": {
+    "binary_sha256": "a92d5e9e1b9a848dce96b53d8e8e4a8e53860b2fa7aa8c33b38e758454d29f08",
+    "defines": [
+      "TILE_M=64",
+      "TILE_N=32",
+      "WAVE_M=64",
+      "WAVE_N=16",
+      "PREFETCH_LDS=2",
+      "LDS_PAD=16",
+      "PERSISTENT=0",
+      "PIPELINE=2"
+    ],
+    "config_args": [
+      "--reg-alloc-policy=dynamic"
+    ],
+    "runs": [
+      "gemm-final-nonpersist-p2-256-256-128-1789506088557479638",
+      "gemm-final-nonpersist-p2-256-256-128-1789506116752540338",
+      "gemm-final-nonpersist-p2-256-256-128-1789506144822516051",
+      "gemm-final-nonpersist-p2-256-256-128-1789506172676018469",
+      "gemm-final-nonpersist-p2-256-256-128-1789506200717997837"
+    ],
+    "cycles": [
+      322826.9978991597,
+      323022.9978991597,
+      321501.9978991597,
+      321897.9978991597,
+      320069.9978991597
+    ],
+    "median_cycles": 321897.9978991597,
+    "min_cycles": 320069.9978991597,
+    "max_cycles": 323022.9978991597,
+    "median_wall_seconds": 27.904875897002057,
+    "median_host_seconds": 19.22
+  },
+  "final-reg-nonpersist-p1": {
+    "binary_sha256": "b3e67269726d0578cbbafb7df34dac7f2394a4d542f8139e30102d2b53904dd3",
+    "defines": [
+      "TILE_M=64",
+      "TILE_N=32",
+      "WAVE_M=32",
+      "WAVE_N=32",
+      "PERSISTENT=0",
+      "PIPELINE=1"
+    ],
+    "config_args": [
+      "--reg-alloc-policy=dynamic"
+    ],
+    "runs": [
+      "gemm-final-reg-nonpersist-p1-256-256-128-1789507195830422146",
+      "gemm-final-reg-nonpersist-p1-256-256-128-1789507229816409527",
+      "gemm-final-reg-nonpersist-p1-256-256-128-1789507263484882131",
+      "gemm-final-reg-nonpersist-p1-256-256-128-1789507297256154746",
+      "gemm-final-reg-nonpersist-p1-256-256-128-1789507331903962469"
+    ],
+    "cycles": [
+      594308.9978991597,
+      593240.9978991597,
+      609984.9978991597,
+      599241.9978991597,
+      593780.9978991597
+    ],
+    "median_cycles": 594308.9978991597,
+    "min_cycles": 593240.9978991597,
+    "max_cycles": 609984.9978991597,
+    "median_wall_seconds": 33.7960402030003,
+    "median_host_seconds": 25.09
+  },
+  "final-reg-persist-p1-w8": {
+    "binary_sha256": "29147d29d88460fd93de1dfc4cadd7f351762217d719fd4671cac35765598854",
+    "defines": [
+      "TILE_M=64",
+      "TILE_N=32",
+      "WAVE_M=32",
+      "WAVE_N=32",
+      "PIPELINE=1",
+      "WORKGROUPS=8"
+    ],
+    "config_args": [
+      "--reg-alloc-policy=dynamic"
+    ],
+    "runs": [
+      "gemm-final-reg-persist-p1-w8-256-256-128-1789507062010080164",
+      "gemm-final-reg-persist-p1-w8-256-256-128-1789507088115360096",
+      "gemm-final-reg-persist-p1-w8-256-256-128-1789507114447839483",
+      "gemm-final-reg-persist-p1-w8-256-256-128-1789507140767955346",
+      "gemm-final-reg-persist-p1-w8-256-256-128-1789507167235787447"
+    ],
+    "cycles": [
+      327650.99579831935,
+      327159.99579831935,
+      324580.99579831935,
+      326811.99579831935,
+      327085.99579831935
+    ],
+    "median_cycles": 327085.99579831935,
+    "min_cycles": 324580.99579831935,
+    "max_cycles": 327650.99579831935,
+    "median_wall_seconds": 26.208419187998516,
+    "median_host_seconds": 17.61
+  },
+  "final-spec-p128-g1-s4-f2-w16": {
+    "binary_sha256": "46dc342905c39a1e720f67d211fc04316619b48c6a3862dcc8f9f65e0d346747",
+    "defines": [
+      "TILE_M=64",
+      "TILE_N=32",
+      "WAVE_M=64",
+      "WAVE_N=16",
+      "PREFETCH_LDS=2",
+      "LDS_PAD=16",
+      "PRODUCERS=128",
+      "GROUPS=1",
+      "STAGES=4",
+      "PREFETCH=2",
+      "WORKGROUPS=16"
+    ],
+    "config_args": [
+      "--reg-alloc-policy=dynamic"
+    ],
+    "runs": [
+      "gemm-final-spec-p128-g1-s4-f2-w16-256-256-128-1789506927925401471",
+      "gemm-final-spec-p128-g1-s4-f2-w16-256-256-128-1789506954442081975",
+      "gemm-final-spec-p128-g1-s4-f2-w16-256-256-128-1789506980348087930",
+      "gemm-final-spec-p128-g1-s4-f2-w16-256-256-128-1789507006773941193",
+      "gemm-final-spec-p128-g1-s4-f2-w16-256-256-128-1789507034262360436"
+    ],
+    "cycles": [
+      295465.99579831935,
+      303408.99579831935,
+      284865.99579831935,
+      289681.99579831935,
+      297251.99579831935
+    ],
+    "median_cycles": 295465.99579831935,
+    "min_cycles": 284865.99579831935,
+    "max_cycles": 303408.99579831935,
+    "median_wall_seconds": 26.309858136999537,
+    "median_host_seconds": 17.78
+  },
+  "final-spec-p128-g1-s4-f2-w8": {
+    "binary_sha256": "27fe8d013702e7939f79f01afcc56cdeff4b5162dd483ef0f77b9949f32d36e5",
+    "defines": [
+      "TILE_M=64",
+      "TILE_N=32",
+      "WAVE_M=64",
+      "WAVE_N=16",
+      "PREFETCH_LDS=2",
+      "LDS_PAD=16",
+      "PRODUCERS=128",
+      "GROUPS=1",
+      "STAGES=4",
+      "PREFETCH=2",
+      "WORKGROUPS=8"
+    ],
+    "config_args": [
+      "--reg-alloc-policy=dynamic"
+    ],
+    "runs": [
+      "gemm-final-spec-p128-g1-s4-f2-w8-256-256-128-1789506653775248881",
+      "gemm-final-spec-p128-g1-s4-f2-w8-256-256-128-1789506680760820168",
+      "gemm-final-spec-p128-g1-s4-f2-w8-256-256-128-1789506707710831273",
+      "gemm-final-spec-p128-g1-s4-f2-w8-256-256-128-1789506734346885852",
+      "gemm-final-spec-p128-g1-s4-f2-w8-256-256-128-1789506761210630358"
+    ],
+    "cycles": [
+      316648.99579831935,
+      311385.99579831935,
+      310955.99579831935,
+      310287.99579831935,
+      324983.99579831935
+    ],
+    "median_cycles": 311385.99579831935,
+    "min_cycles": 310287.99579831935,
+    "max_cycles": 324983.99579831935,
+    "median_wall_seconds": 26.832137762001366,
+    "median_host_seconds": 18.13
+  },
+  "final-spec-p128-g2-s2-f1-w8": {
+    "binary_sha256": "db3622470d63d46024e8e3eb937196fee70d080aab54eaead5f52a2ef919edd0",
+    "defines": [
+      "TILE_M=64",
+      "TILE_N=32",
+      "WAVE_M=64",
+      "WAVE_N=16",
+      "PREFETCH_LDS=2",
+      "LDS_PAD=16",
+      "STAGES=2",
+      "WORKGROUPS=8"
+    ],
+    "config_args": [
+      "--reg-alloc-policy=dynamic"
+    ],
+    "runs": [
+      "gemm-final-coop-s2-w8-256-256-128-1789506230788762047",
+      "gemm-final-coop-s2-w8-256-256-128-1789506258190064505",
+      "gemm-final-coop-s2-w8-256-256-128-1789506285856555769",
+      "gemm-final-coop-s2-w8-256-256-128-1789506313541409024",
+      "gemm-final-coop-s2-w8-256-256-128-1789506342231001286"
+    ],
+    "cycles": [
+      300596.99579831935,
+      302245.99579831935,
+      302536.99579831935,
+      299826.99579831935,
+      300076.99579831935
+    ],
+    "median_cycles": 300596.99579831935,
+    "min_cycles": 299826.99579831935,
+    "max_cycles": 302536.99579831935,
+    "median_wall_seconds": 27.554614934997517,
+    "median_host_seconds": 18.88
+  },
+  "final-spec-p128-g2-s4-f1-w16": {
+    "binary_sha256": "ab2935518b352baf056382054174e4b35b6e53afd751d959a431b0a345d087f3",
+    "defines": [
+      "TILE_M=64",
+      "TILE_N=32",
+      "WAVE_M=64",
+      "WAVE_N=16",
+      "PREFETCH_LDS=2",
+      "LDS_PAD=16",
+      "PRODUCERS=128",
+      "GROUPS=2",
+      "STAGES=4",
+      "PREFETCH=1",
+      "WORKGROUPS=16"
+    ],
+    "config_args": [
+      "--reg-alloc-policy=dynamic"
+    ],
+    "runs": [
+      "gemm-final-spec-p128-g2-s4-f1-w16-256-256-128-1789506789547261372",
+      "gemm-final-spec-p128-g2-s4-f1-w16-256-256-128-1789506816678402051",
+      "gemm-final-spec-p128-g2-s4-f1-w16-256-256-128-1789506843861346322",
+      "gemm-final-spec-p128-g2-s4-f1-w16-256-256-128-1789506871009946130",
+      "gemm-final-spec-p128-g2-s4-f1-w16-256-256-128-1789506898320951492"
+    ],
+    "cycles": [
+      284035.99579831935,
+      285857.99579831935,
+      286117.99579831935,
+      282776.99579831935,
+      294183.99579831935
+    ],
+    "median_cycles": 285857.99579831935,
+    "min_cycles": 282776.99579831935,
+    "max_cycles": 294183.99579831935,
+    "median_wall_seconds": 27.064740135996544,
+    "median_host_seconds": 18.46
+  },
+  "final-spec-p128-g2-s4-f1-w8": {
+    "binary_sha256": "797c00acbc1c744a3e923783a86cbafe45875bf69aacb835a4ab6e9df886053f",
+    "defines": [
+      "TILE_M=64",
+      "TILE_N=32",
+      "WAVE_M=64",
+      "WAVE_N=16",
+      "PREFETCH_LDS=2",
+      "LDS_PAD=16",
+      "PRODUCERS=128",
+      "GROUPS=2",
+      "STAGES=4",
+      "PREFETCH=1",
+      "WORKGROUPS=8"
+    ],
+    "config_args": [
+      "--reg-alloc-policy=dynamic"
+    ],
+    "runs": [
+      "gemm-final-spec-p128-g2-s4-f1-w8-256-256-128-1789506371963316777",
+      "gemm-final-spec-p128-g2-s4-f1-w8-256-256-128-1789506399302214711",
+      "gemm-final-spec-p128-g2-s4-f1-w8-256-256-128-1789506426829977449",
+      "gemm-final-spec-p128-g2-s4-f1-w8-256-256-128-1789506454323987073",
+      "gemm-final-spec-p128-g2-s4-f1-w8-256-256-128-1789506481681308169"
+    ],
+    "cycles": [
+      299155.99579831935,
+      300920.99579831935,
+      304879.99579831935,
+      300263.99579831935,
+      299325.99579831935
+    ],
+    "median_cycles": 300263.99579831935,
+    "min_cycles": 299155.99579831935,
+    "max_cycles": 304879.99579831935,
+    "median_wall_seconds": 27.30928676699841,
+    "median_host_seconds": 18.67
+  },
+  "final-spec-p128-g2-s6-f2-w8": {
+    "binary_sha256": "776cc181077802ff49e8d9dc1b364781aa8a03853324c8931295c9c63dcbf607",
+    "defines": [
+      "TILE_M=64",
+      "TILE_N=32",
+      "WAVE_M=64",
+      "WAVE_N=16",
+      "PREFETCH_LDS=2",
+      "LDS_PAD=16",
+      "PRODUCERS=128",
+      "GROUPS=2",
+      "STAGES=6",
+      "PREFETCH=2",
+      "WORKGROUPS=8"
+    ],
+    "config_args": [
+      "--reg-alloc-policy=dynamic"
+    ],
+    "runs": [
+      "gemm-final-spec-p128-g2-s6-f2-w8-256-256-128-1789506510502432561",
+      "gemm-final-spec-p128-g2-s6-f2-w8-256-256-128-1789506538824349861",
+      "gemm-final-spec-p128-g2-s6-f2-w8-256-256-128-1789506566988542927",
+      "gemm-final-spec-p128-g2-s6-f2-w8-256-256-128-1789506595216368911",
+      "gemm-final-spec-p128-g2-s6-f2-w8-256-256-128-1789506623713804874"
+    ],
+    "cycles": [
+      302799.99579831935,
+      301625.99579831935,
+      303776.99579831935,
+      305627.99579831935,
+      309957.99579831935
+    ],
+    "median_cycles": 303776.99579831935,
+    "min_cycles": 301625.99579831935,
+    "max_cycles": 309957.99579831935,
+    "median_wall_seconds": 28.196543400998053,
+    "median_host_seconds": 19.64
+  }
+}

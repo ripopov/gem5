@@ -1,0 +1,1756 @@
+{
+    "samples": [
+        {
+            "backend": "simdojo",
+            "sample": "hip-vector-add",
+            "run": "hip-vector-add-simdojo-20260915T150742Z-1116951-13365",
+            "exit_status": "application=0"
+        },
+        {
+            "backend": "simdojo",
+            "sample": "hip-matmul",
+            "run": "hip-matmul-simdojo-20260915T150743Z-1117284-16882",
+            "exit_status": "application=0"
+        },
+        {
+            "backend": "simdojo",
+            "sample": "hip-matmul-lds",
+            "run": "hip-matmul-lds-simdojo-20260915T150745Z-1117774-21079",
+            "exit_status": "application=0"
+        },
+        {
+            "backend": "simdojo",
+            "sample": "hip-matmul-regtiles",
+            "run":
+                "hip-matmul-regtiles-simdojo-20260915T150746Z-1118063-30016",
+            "exit_status": "application=0"
+        },
+        {
+            "backend": "simdojo",
+            "sample": "hip-kernel-chain",
+            "run": "hip-kernel-chain-simdojo-20260915T150746Z-1118699-6506",
+            "exit_status": "application=0"
+        },
+        {
+            "backend": "simdojo",
+            "sample": "rainbow-image",
+            "run": "rainbow-image-simdojo-20260915T150747Z-1118997-66",
+            "exit_status": "application=0"
+        },
+        {
+            "backend": "gem5-kmd",
+            "sample": "hip-vector-add",
+            "run": "hip-vector-add-gem5-kmd-20260915T152014Z-1151827-32531",
+            "exit_status": "application=0\ngem5=0\ntimed_out=false",
+            "configuration": {
+                "run":
+                    "hip-vector-add-gem5-kmd-20260915T152014Z-1151827-32531",
+                "cus": 8,
+                "gpu_period_ticks": 476,
+                "vgpr_slots_per_simd": 512,
+                "sgprs_per_simd": 800,
+                "caches": {
+                    "tcp": {
+                        "count": 8,
+                        "bytes_each": 32768
+                    },
+                    "sqc": {
+                        "count": 4,
+                        "bytes_each": 65536
+                    },
+                    "scalar": {
+                        "count": 4,
+                        "bytes_each": 16384
+                    },
+                    "tcc": {
+                        "count": 1,
+                        "bytes_each": 1048576
+                    }
+                },
+                "cu_timing_parameters": {
+                    "coalescer_to_vrf_bus_width": "32",
+                    "dpbypass_pipe_length": "4",
+                    "issue_period": "4",
+                    "mem_req_latency": "50",
+                    "mem_resp_latency": "50",
+                    "memtime_latency": "41",
+                    "mfma_scale": "1.0",
+                    "operand_network_length": "1",
+                    "rfc_pipe_length": "2",
+                    "scalar_mem_req_latency": "50",
+                    "scalar_mem_resp_latency": "0",
+                    "scalar_pipe_length": "1",
+                    "simd_width": "16",
+                    "spbypass_pipe_length": "4",
+                    "srf_scm_bus_latency": "1",
+                    "vrf_gm_bus_latency": "1",
+                    "vrf_lm_bus_latency": "1",
+                    "vrf_to_coalescer_bus_width": "32"
+                },
+                "memory_timing_parameters": {
+                    "system.gpu_mem_ctrls.dram": {
+                        "burst_length": "4",
+                        "device_bus_width": "128",
+                        "tburst": "4000",
+                        "tck": "2000",
+                        "tcl": "15000",
+                        "trcd": "15000",
+                        "trp": "15000",
+                        "clock_period_ticks": 1000
+                    },
+                    "system.ruby.gpu_dir_cntrl0": {
+                        "l3_hit_latency": "20",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "response_latency": "30",
+                        "to_memory_controller_latency": "1",
+                        "clock_period_ticks": 500
+                    },
+                    "system.ruby.gpu_dir_cntrl0.L3CacheMemory": {
+                        "assoc": "16",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "20",
+                        "size": "16777216.0",
+                        "tagaccesslatency": "15"
+                    },
+                    "system.ruby.scalar_cntrl0": {
+                        "issue_latency": "80",
+                        "l2_hit_latency": "18",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "clock_period_ticks": 476
+                    },
+                    "system.ruby.scalar_cntrl0.L1cache": {
+                        "assoc": "8",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "1",
+                        "size": "16384",
+                        "tagaccesslatency": "1"
+                    },
+                    "system.ruby.sqc_cntrl0": {
+                        "issue_latency": "80",
+                        "l2_hit_latency": "18",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "clock_period_ticks": 476
+                    },
+                    "system.ruby.sqc_cntrl0.L1cache": {
+                        "assoc": "8",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "1",
+                        "size": "65536",
+                        "tagaccesslatency": "1"
+                    },
+                    "system.ruby.tcc_cntrl0": {
+                        "glc_atomic_latency": "1",
+                        "l2_request_latency": "120",
+                        "l2_response_latency": "16",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "clock_period_ticks": 476
+                    },
+                    "system.ruby.tcc_cntrl0.L2cache": {
+                        "assoc": "16",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "8",
+                        "size": "1048576.0",
+                        "tagaccesslatency": "2"
+                    },
+                    "system.ruby.tcp_cntrl0": {
+                        "issue_latency": "1",
+                        "l2_hit_latency": "18",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "clock_period_ticks": 476
+                    },
+                    "system.ruby.tcp_cntrl0.L1cache": {
+                        "assoc": "16",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "4",
+                        "size": "32768",
+                        "tagaccesslatency": "4"
+                    }
+                }
+            },
+            "kernels": 4,
+            "submitted": 8,
+            "retired": 8,
+            "kmd_drained": true
+        },
+        {
+            "backend": "gem5-kmd",
+            "sample": "hip-matmul",
+            "run": "hip-matmul-gem5-kmd-20260915T152026Z-1152897-2423",
+            "exit_status": "application=0\ngem5=0\ntimed_out=false",
+            "configuration": {
+                "run": "hip-matmul-gem5-kmd-20260915T152026Z-1152897-2423",
+                "cus": 8,
+                "gpu_period_ticks": 476,
+                "vgpr_slots_per_simd": 512,
+                "sgprs_per_simd": 800,
+                "caches": {
+                    "tcp": {
+                        "count": 8,
+                        "bytes_each": 32768
+                    },
+                    "sqc": {
+                        "count": 4,
+                        "bytes_each": 65536
+                    },
+                    "scalar": {
+                        "count": 4,
+                        "bytes_each": 16384
+                    },
+                    "tcc": {
+                        "count": 1,
+                        "bytes_each": 1048576
+                    }
+                },
+                "cu_timing_parameters": {
+                    "coalescer_to_vrf_bus_width": "32",
+                    "dpbypass_pipe_length": "4",
+                    "issue_period": "4",
+                    "mem_req_latency": "50",
+                    "mem_resp_latency": "50",
+                    "memtime_latency": "41",
+                    "mfma_scale": "1.0",
+                    "operand_network_length": "1",
+                    "rfc_pipe_length": "2",
+                    "scalar_mem_req_latency": "50",
+                    "scalar_mem_resp_latency": "0",
+                    "scalar_pipe_length": "1",
+                    "simd_width": "16",
+                    "spbypass_pipe_length": "4",
+                    "srf_scm_bus_latency": "1",
+                    "vrf_gm_bus_latency": "1",
+                    "vrf_lm_bus_latency": "1",
+                    "vrf_to_coalescer_bus_width": "32"
+                },
+                "memory_timing_parameters": {
+                    "system.gpu_mem_ctrls.dram": {
+                        "burst_length": "4",
+                        "device_bus_width": "128",
+                        "tburst": "4000",
+                        "tck": "2000",
+                        "tcl": "15000",
+                        "trcd": "15000",
+                        "trp": "15000",
+                        "clock_period_ticks": 1000
+                    },
+                    "system.ruby.gpu_dir_cntrl0": {
+                        "l3_hit_latency": "20",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "response_latency": "30",
+                        "to_memory_controller_latency": "1",
+                        "clock_period_ticks": 500
+                    },
+                    "system.ruby.gpu_dir_cntrl0.L3CacheMemory": {
+                        "assoc": "16",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "20",
+                        "size": "16777216.0",
+                        "tagaccesslatency": "15"
+                    },
+                    "system.ruby.scalar_cntrl0": {
+                        "issue_latency": "80",
+                        "l2_hit_latency": "18",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "clock_period_ticks": 476
+                    },
+                    "system.ruby.scalar_cntrl0.L1cache": {
+                        "assoc": "8",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "1",
+                        "size": "16384",
+                        "tagaccesslatency": "1"
+                    },
+                    "system.ruby.sqc_cntrl0": {
+                        "issue_latency": "80",
+                        "l2_hit_latency": "18",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "clock_period_ticks": 476
+                    },
+                    "system.ruby.sqc_cntrl0.L1cache": {
+                        "assoc": "8",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "1",
+                        "size": "65536",
+                        "tagaccesslatency": "1"
+                    },
+                    "system.ruby.tcc_cntrl0": {
+                        "glc_atomic_latency": "1",
+                        "l2_request_latency": "120",
+                        "l2_response_latency": "16",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "clock_period_ticks": 476
+                    },
+                    "system.ruby.tcc_cntrl0.L2cache": {
+                        "assoc": "16",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "8",
+                        "size": "1048576.0",
+                        "tagaccesslatency": "2"
+                    },
+                    "system.ruby.tcp_cntrl0": {
+                        "issue_latency": "1",
+                        "l2_hit_latency": "18",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "clock_period_ticks": 476
+                    },
+                    "system.ruby.tcp_cntrl0.L1cache": {
+                        "assoc": "16",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "4",
+                        "size": "32768",
+                        "tagaccesslatency": "4"
+                    }
+                }
+            },
+            "kernels": 1,
+            "submitted": 4,
+            "retired": 4,
+            "kmd_drained": true
+        },
+        {
+            "backend": "gem5-kmd",
+            "sample": "hip-matmul-lds",
+            "run": "hip-matmul-lds-gem5-kmd-20260915T152122Z-1156756-30629",
+            "exit_status": "application=0\ngem5=0\ntimed_out=false",
+            "configuration": {
+                "run":
+                    "hip-matmul-lds-gem5-kmd-20260915T152122Z-1156756-30629",
+                "cus": 8,
+                "gpu_period_ticks": 476,
+                "vgpr_slots_per_simd": 512,
+                "sgprs_per_simd": 800,
+                "caches": {
+                    "tcp": {
+                        "count": 8,
+                        "bytes_each": 32768
+                    },
+                    "sqc": {
+                        "count": 4,
+                        "bytes_each": 65536
+                    },
+                    "scalar": {
+                        "count": 4,
+                        "bytes_each": 16384
+                    },
+                    "tcc": {
+                        "count": 1,
+                        "bytes_each": 1048576
+                    }
+                },
+                "cu_timing_parameters": {
+                    "coalescer_to_vrf_bus_width": "32",
+                    "dpbypass_pipe_length": "4",
+                    "issue_period": "4",
+                    "mem_req_latency": "50",
+                    "mem_resp_latency": "50",
+                    "memtime_latency": "41",
+                    "mfma_scale": "1.0",
+                    "operand_network_length": "1",
+                    "rfc_pipe_length": "2",
+                    "scalar_mem_req_latency": "50",
+                    "scalar_mem_resp_latency": "0",
+                    "scalar_pipe_length": "1",
+                    "simd_width": "16",
+                    "spbypass_pipe_length": "4",
+                    "srf_scm_bus_latency": "1",
+                    "vrf_gm_bus_latency": "1",
+                    "vrf_lm_bus_latency": "1",
+                    "vrf_to_coalescer_bus_width": "32"
+                },
+                "memory_timing_parameters": {
+                    "system.gpu_mem_ctrls.dram": {
+                        "burst_length": "4",
+                        "device_bus_width": "128",
+                        "tburst": "4000",
+                        "tck": "2000",
+                        "tcl": "15000",
+                        "trcd": "15000",
+                        "trp": "15000",
+                        "clock_period_ticks": 1000
+                    },
+                    "system.ruby.gpu_dir_cntrl0": {
+                        "l3_hit_latency": "20",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "response_latency": "30",
+                        "to_memory_controller_latency": "1",
+                        "clock_period_ticks": 500
+                    },
+                    "system.ruby.gpu_dir_cntrl0.L3CacheMemory": {
+                        "assoc": "16",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "20",
+                        "size": "16777216.0",
+                        "tagaccesslatency": "15"
+                    },
+                    "system.ruby.scalar_cntrl0": {
+                        "issue_latency": "80",
+                        "l2_hit_latency": "18",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "clock_period_ticks": 476
+                    },
+                    "system.ruby.scalar_cntrl0.L1cache": {
+                        "assoc": "8",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "1",
+                        "size": "16384",
+                        "tagaccesslatency": "1"
+                    },
+                    "system.ruby.sqc_cntrl0": {
+                        "issue_latency": "80",
+                        "l2_hit_latency": "18",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "clock_period_ticks": 476
+                    },
+                    "system.ruby.sqc_cntrl0.L1cache": {
+                        "assoc": "8",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "1",
+                        "size": "65536",
+                        "tagaccesslatency": "1"
+                    },
+                    "system.ruby.tcc_cntrl0": {
+                        "glc_atomic_latency": "1",
+                        "l2_request_latency": "120",
+                        "l2_response_latency": "16",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "clock_period_ticks": 476
+                    },
+                    "system.ruby.tcc_cntrl0.L2cache": {
+                        "assoc": "16",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "8",
+                        "size": "1048576.0",
+                        "tagaccesslatency": "2"
+                    },
+                    "system.ruby.tcp_cntrl0": {
+                        "issue_latency": "1",
+                        "l2_hit_latency": "18",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "clock_period_ticks": 476
+                    },
+                    "system.ruby.tcp_cntrl0.L1cache": {
+                        "assoc": "16",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "4",
+                        "size": "32768",
+                        "tagaccesslatency": "4"
+                    }
+                }
+            },
+            "kernels": 1,
+            "submitted": 4,
+            "retired": 4,
+            "kmd_drained": true
+        },
+        {
+            "backend": "gem5-kmd",
+            "sample": "hip-matmul-regtiles",
+            "run":
+                "hip-matmul-regtiles-gem5-kmd-20260915T152146Z-1159620-25497",
+            "exit_status": "application=0\ngem5=0\ntimed_out=false",
+            "configuration": {
+                "run":
+                    "hip-matmul-regtiles-gem5-kmd-20260915T152146Z-1159620-25497",
+                "cus": 8,
+                "gpu_period_ticks": 476,
+                "vgpr_slots_per_simd": 512,
+                "sgprs_per_simd": 800,
+                "caches": {
+                    "tcp": {
+                        "count": 8,
+                        "bytes_each": 32768
+                    },
+                    "sqc": {
+                        "count": 4,
+                        "bytes_each": 65536
+                    },
+                    "scalar": {
+                        "count": 4,
+                        "bytes_each": 16384
+                    },
+                    "tcc": {
+                        "count": 1,
+                        "bytes_each": 1048576
+                    }
+                },
+                "cu_timing_parameters": {
+                    "coalescer_to_vrf_bus_width": "32",
+                    "dpbypass_pipe_length": "4",
+                    "issue_period": "4",
+                    "mem_req_latency": "50",
+                    "mem_resp_latency": "50",
+                    "memtime_latency": "41",
+                    "mfma_scale": "1.0",
+                    "operand_network_length": "1",
+                    "rfc_pipe_length": "2",
+                    "scalar_mem_req_latency": "50",
+                    "scalar_mem_resp_latency": "0",
+                    "scalar_pipe_length": "1",
+                    "simd_width": "16",
+                    "spbypass_pipe_length": "4",
+                    "srf_scm_bus_latency": "1",
+                    "vrf_gm_bus_latency": "1",
+                    "vrf_lm_bus_latency": "1",
+                    "vrf_to_coalescer_bus_width": "32"
+                },
+                "memory_timing_parameters": {
+                    "system.gpu_mem_ctrls.dram": {
+                        "burst_length": "4",
+                        "device_bus_width": "128",
+                        "tburst": "4000",
+                        "tck": "2000",
+                        "tcl": "15000",
+                        "trcd": "15000",
+                        "trp": "15000",
+                        "clock_period_ticks": 1000
+                    },
+                    "system.ruby.gpu_dir_cntrl0": {
+                        "l3_hit_latency": "20",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "response_latency": "30",
+                        "to_memory_controller_latency": "1",
+                        "clock_period_ticks": 500
+                    },
+                    "system.ruby.gpu_dir_cntrl0.L3CacheMemory": {
+                        "assoc": "16",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "20",
+                        "size": "16777216.0",
+                        "tagaccesslatency": "15"
+                    },
+                    "system.ruby.scalar_cntrl0": {
+                        "issue_latency": "80",
+                        "l2_hit_latency": "18",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "clock_period_ticks": 476
+                    },
+                    "system.ruby.scalar_cntrl0.L1cache": {
+                        "assoc": "8",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "1",
+                        "size": "16384",
+                        "tagaccesslatency": "1"
+                    },
+                    "system.ruby.sqc_cntrl0": {
+                        "issue_latency": "80",
+                        "l2_hit_latency": "18",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "clock_period_ticks": 476
+                    },
+                    "system.ruby.sqc_cntrl0.L1cache": {
+                        "assoc": "8",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "1",
+                        "size": "65536",
+                        "tagaccesslatency": "1"
+                    },
+                    "system.ruby.tcc_cntrl0": {
+                        "glc_atomic_latency": "1",
+                        "l2_request_latency": "120",
+                        "l2_response_latency": "16",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "clock_period_ticks": 476
+                    },
+                    "system.ruby.tcc_cntrl0.L2cache": {
+                        "assoc": "16",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "8",
+                        "size": "1048576.0",
+                        "tagaccesslatency": "2"
+                    },
+                    "system.ruby.tcp_cntrl0": {
+                        "issue_latency": "1",
+                        "l2_hit_latency": "18",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "clock_period_ticks": 476
+                    },
+                    "system.ruby.tcp_cntrl0.L1cache": {
+                        "assoc": "16",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "4",
+                        "size": "32768",
+                        "tagaccesslatency": "4"
+                    }
+                }
+            },
+            "kernels": 1,
+            "submitted": 4,
+            "retired": 4,
+            "kmd_drained": true
+        },
+        {
+            "backend": "gem5-kmd",
+            "sample": "hip-kernel-chain",
+            "run": "hip-kernel-chain-gem5-kmd-20260915T152211Z-1161011-30248",
+            "exit_status": "application=0\ngem5=0\ntimed_out=false",
+            "configuration": {
+                "run":
+                    "hip-kernel-chain-gem5-kmd-20260915T152211Z-1161011-30248",
+                "cus": 8,
+                "gpu_period_ticks": 476,
+                "vgpr_slots_per_simd": 512,
+                "sgprs_per_simd": 800,
+                "caches": {
+                    "tcp": {
+                        "count": 8,
+                        "bytes_each": 32768
+                    },
+                    "sqc": {
+                        "count": 4,
+                        "bytes_each": 65536
+                    },
+                    "scalar": {
+                        "count": 4,
+                        "bytes_each": 16384
+                    },
+                    "tcc": {
+                        "count": 1,
+                        "bytes_each": 1048576
+                    }
+                },
+                "cu_timing_parameters": {
+                    "coalescer_to_vrf_bus_width": "32",
+                    "dpbypass_pipe_length": "4",
+                    "issue_period": "4",
+                    "mem_req_latency": "50",
+                    "mem_resp_latency": "50",
+                    "memtime_latency": "41",
+                    "mfma_scale": "1.0",
+                    "operand_network_length": "1",
+                    "rfc_pipe_length": "2",
+                    "scalar_mem_req_latency": "50",
+                    "scalar_mem_resp_latency": "0",
+                    "scalar_pipe_length": "1",
+                    "simd_width": "16",
+                    "spbypass_pipe_length": "4",
+                    "srf_scm_bus_latency": "1",
+                    "vrf_gm_bus_latency": "1",
+                    "vrf_lm_bus_latency": "1",
+                    "vrf_to_coalescer_bus_width": "32"
+                },
+                "memory_timing_parameters": {
+                    "system.gpu_mem_ctrls.dram": {
+                        "burst_length": "4",
+                        "device_bus_width": "128",
+                        "tburst": "4000",
+                        "tck": "2000",
+                        "tcl": "15000",
+                        "trcd": "15000",
+                        "trp": "15000",
+                        "clock_period_ticks": 1000
+                    },
+                    "system.ruby.gpu_dir_cntrl0": {
+                        "l3_hit_latency": "20",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "response_latency": "30",
+                        "to_memory_controller_latency": "1",
+                        "clock_period_ticks": 500
+                    },
+                    "system.ruby.gpu_dir_cntrl0.L3CacheMemory": {
+                        "assoc": "16",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "20",
+                        "size": "16777216.0",
+                        "tagaccesslatency": "15"
+                    },
+                    "system.ruby.scalar_cntrl0": {
+                        "issue_latency": "80",
+                        "l2_hit_latency": "18",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "clock_period_ticks": 476
+                    },
+                    "system.ruby.scalar_cntrl0.L1cache": {
+                        "assoc": "8",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "1",
+                        "size": "16384",
+                        "tagaccesslatency": "1"
+                    },
+                    "system.ruby.sqc_cntrl0": {
+                        "issue_latency": "80",
+                        "l2_hit_latency": "18",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "clock_period_ticks": 476
+                    },
+                    "system.ruby.sqc_cntrl0.L1cache": {
+                        "assoc": "8",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "1",
+                        "size": "65536",
+                        "tagaccesslatency": "1"
+                    },
+                    "system.ruby.tcc_cntrl0": {
+                        "glc_atomic_latency": "1",
+                        "l2_request_latency": "120",
+                        "l2_response_latency": "16",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "clock_period_ticks": 476
+                    },
+                    "system.ruby.tcc_cntrl0.L2cache": {
+                        "assoc": "16",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "8",
+                        "size": "1048576.0",
+                        "tagaccesslatency": "2"
+                    },
+                    "system.ruby.tcp_cntrl0": {
+                        "issue_latency": "1",
+                        "l2_hit_latency": "18",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "clock_period_ticks": 476
+                    },
+                    "system.ruby.tcp_cntrl0.L1cache": {
+                        "assoc": "16",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "4",
+                        "size": "32768",
+                        "tagaccesslatency": "4"
+                    }
+                }
+            },
+            "kernels": 5,
+            "submitted": 10,
+            "retired": 10,
+            "kmd_drained": true
+        },
+        {
+            "backend": "gem5-kmd",
+            "sample": "rainbow-image",
+            "run": "rainbow-image-gem5-kmd-20260915T152222Z-1161979-6406",
+            "exit_status": "application=0\ngem5=0\ntimed_out=false",
+            "configuration": {
+                "run": "rainbow-image-gem5-kmd-20260915T152222Z-1161979-6406",
+                "cus": 8,
+                "gpu_period_ticks": 476,
+                "vgpr_slots_per_simd": 512,
+                "sgprs_per_simd": 800,
+                "caches": {
+                    "tcp": {
+                        "count": 8,
+                        "bytes_each": 32768
+                    },
+                    "sqc": {
+                        "count": 4,
+                        "bytes_each": 65536
+                    },
+                    "scalar": {
+                        "count": 4,
+                        "bytes_each": 16384
+                    },
+                    "tcc": {
+                        "count": 1,
+                        "bytes_each": 1048576
+                    }
+                },
+                "cu_timing_parameters": {
+                    "coalescer_to_vrf_bus_width": "32",
+                    "dpbypass_pipe_length": "4",
+                    "issue_period": "4",
+                    "mem_req_latency": "50",
+                    "mem_resp_latency": "50",
+                    "memtime_latency": "41",
+                    "mfma_scale": "1.0",
+                    "operand_network_length": "1",
+                    "rfc_pipe_length": "2",
+                    "scalar_mem_req_latency": "50",
+                    "scalar_mem_resp_latency": "0",
+                    "scalar_pipe_length": "1",
+                    "simd_width": "16",
+                    "spbypass_pipe_length": "4",
+                    "srf_scm_bus_latency": "1",
+                    "vrf_gm_bus_latency": "1",
+                    "vrf_lm_bus_latency": "1",
+                    "vrf_to_coalescer_bus_width": "32"
+                },
+                "memory_timing_parameters": {
+                    "system.gpu_mem_ctrls.dram": {
+                        "burst_length": "4",
+                        "device_bus_width": "128",
+                        "tburst": "4000",
+                        "tck": "2000",
+                        "tcl": "15000",
+                        "trcd": "15000",
+                        "trp": "15000",
+                        "clock_period_ticks": 1000
+                    },
+                    "system.ruby.gpu_dir_cntrl0": {
+                        "l3_hit_latency": "20",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "response_latency": "30",
+                        "to_memory_controller_latency": "1",
+                        "clock_period_ticks": 500
+                    },
+                    "system.ruby.gpu_dir_cntrl0.L3CacheMemory": {
+                        "assoc": "16",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "20",
+                        "size": "16777216.0",
+                        "tagaccesslatency": "15"
+                    },
+                    "system.ruby.scalar_cntrl0": {
+                        "issue_latency": "80",
+                        "l2_hit_latency": "18",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "clock_period_ticks": 476
+                    },
+                    "system.ruby.scalar_cntrl0.L1cache": {
+                        "assoc": "8",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "1",
+                        "size": "16384",
+                        "tagaccesslatency": "1"
+                    },
+                    "system.ruby.sqc_cntrl0": {
+                        "issue_latency": "80",
+                        "l2_hit_latency": "18",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "clock_period_ticks": 476
+                    },
+                    "system.ruby.sqc_cntrl0.L1cache": {
+                        "assoc": "8",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "1",
+                        "size": "65536",
+                        "tagaccesslatency": "1"
+                    },
+                    "system.ruby.tcc_cntrl0": {
+                        "glc_atomic_latency": "1",
+                        "l2_request_latency": "120",
+                        "l2_response_latency": "16",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "clock_period_ticks": 476
+                    },
+                    "system.ruby.tcc_cntrl0.L2cache": {
+                        "assoc": "16",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "8",
+                        "size": "1048576.0",
+                        "tagaccesslatency": "2"
+                    },
+                    "system.ruby.tcp_cntrl0": {
+                        "issue_latency": "1",
+                        "l2_hit_latency": "18",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "clock_period_ticks": 476
+                    },
+                    "system.ruby.tcp_cntrl0.L1cache": {
+                        "assoc": "16",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "4",
+                        "size": "32768",
+                        "tagaccesslatency": "4"
+                    }
+                }
+            },
+            "kernels": 1,
+            "submitted": 4,
+            "retired": 4,
+            "kmd_drained": true
+        },
+        {
+            "backend": "full-system",
+            "sample": "hip-vector-add",
+            "run": "hip-vector-add-full-system-20260915T152012Z-1151636-15979",
+            "exit_status": "gem5=0",
+            "configuration": {
+                "run":
+                    "hip-vector-add-full-system-20260915T152012Z-1151636-15979",
+                "cus": 8,
+                "gpu_period_ticks": 476,
+                "vgpr_slots_per_simd": 512,
+                "sgprs_per_simd": 800,
+                "caches": {
+                    "tcp": {
+                        "count": 8,
+                        "bytes_each": 32768
+                    },
+                    "sqc": {
+                        "count": 4,
+                        "bytes_each": 65536
+                    },
+                    "scalar": {
+                        "count": 4,
+                        "bytes_each": 16384
+                    },
+                    "tcc": {
+                        "count": 1,
+                        "bytes_each": 1048576
+                    }
+                },
+                "cu_timing_parameters": {
+                    "coalescer_to_vrf_bus_width": "32",
+                    "dpbypass_pipe_length": "4",
+                    "issue_period": "4",
+                    "mem_req_latency": "50",
+                    "mem_resp_latency": "50",
+                    "memtime_latency": "41",
+                    "mfma_scale": "1.0",
+                    "operand_network_length": "1",
+                    "rfc_pipe_length": "2",
+                    "scalar_mem_req_latency": "50",
+                    "scalar_mem_resp_latency": "0",
+                    "scalar_pipe_length": "1",
+                    "simd_width": "16",
+                    "spbypass_pipe_length": "4",
+                    "srf_scm_bus_latency": "1",
+                    "vrf_gm_bus_latency": "1",
+                    "vrf_lm_bus_latency": "1",
+                    "vrf_to_coalescer_bus_width": "32"
+                },
+                "memory_timing_parameters": {
+                    "system.gpu_mem_ctrls.dram": {
+                        "burst_length": "4",
+                        "device_bus_width": "128",
+                        "tburst": "4000",
+                        "tck": "2000",
+                        "tcl": "15000",
+                        "trcd": "15000",
+                        "trp": "15000",
+                        "clock_period_ticks": 1000
+                    },
+                    "system.ruby.gpu_dir_cntrl0": {
+                        "l3_hit_latency": "20",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "response_latency": "30",
+                        "to_memory_controller_latency": "1",
+                        "clock_period_ticks": 500
+                    },
+                    "system.ruby.gpu_dir_cntrl0.L3CacheMemory": {
+                        "assoc": "16",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "20",
+                        "size": "16777216.0",
+                        "tagaccesslatency": "15"
+                    },
+                    "system.ruby.scalar_cntrl0": {
+                        "issue_latency": "80",
+                        "l2_hit_latency": "18",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "clock_period_ticks": 476
+                    },
+                    "system.ruby.scalar_cntrl0.L1cache": {
+                        "assoc": "8",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "1",
+                        "size": "16384",
+                        "tagaccesslatency": "1"
+                    },
+                    "system.ruby.sqc_cntrl0": {
+                        "issue_latency": "80",
+                        "l2_hit_latency": "18",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "clock_period_ticks": 476
+                    },
+                    "system.ruby.sqc_cntrl0.L1cache": {
+                        "assoc": "8",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "1",
+                        "size": "65536",
+                        "tagaccesslatency": "1"
+                    },
+                    "system.ruby.tcc_cntrl0": {
+                        "glc_atomic_latency": "1",
+                        "l2_request_latency": "120",
+                        "l2_response_latency": "16",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "clock_period_ticks": 476
+                    },
+                    "system.ruby.tcc_cntrl0.L2cache": {
+                        "assoc": "16",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "8",
+                        "size": "1048576.0",
+                        "tagaccesslatency": "2"
+                    },
+                    "system.ruby.tcp_cntrl0": {
+                        "issue_latency": "1",
+                        "l2_hit_latency": "18",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "clock_period_ticks": 476
+                    },
+                    "system.ruby.tcp_cntrl0.L1cache": {
+                        "assoc": "16",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "4",
+                        "size": "32768",
+                        "tagaccesslatency": "4"
+                    }
+                }
+            },
+            "kernels": 4,
+            "submitted": 8,
+            "retired": 8
+        },
+        {
+            "backend": "full-system",
+            "sample": "hip-matmul",
+            "run": "hip-matmul-full-system-20260915T152229Z-1162715-2282",
+            "exit_status": "gem5=0",
+            "configuration": {
+                "run": "hip-matmul-full-system-20260915T152229Z-1162715-2282",
+                "cus": 8,
+                "gpu_period_ticks": 476,
+                "vgpr_slots_per_simd": 512,
+                "sgprs_per_simd": 800,
+                "caches": {
+                    "tcp": {
+                        "count": 8,
+                        "bytes_each": 32768
+                    },
+                    "sqc": {
+                        "count": 4,
+                        "bytes_each": 65536
+                    },
+                    "scalar": {
+                        "count": 4,
+                        "bytes_each": 16384
+                    },
+                    "tcc": {
+                        "count": 1,
+                        "bytes_each": 1048576
+                    }
+                },
+                "cu_timing_parameters": {
+                    "coalescer_to_vrf_bus_width": "32",
+                    "dpbypass_pipe_length": "4",
+                    "issue_period": "4",
+                    "mem_req_latency": "50",
+                    "mem_resp_latency": "50",
+                    "memtime_latency": "41",
+                    "mfma_scale": "1.0",
+                    "operand_network_length": "1",
+                    "rfc_pipe_length": "2",
+                    "scalar_mem_req_latency": "50",
+                    "scalar_mem_resp_latency": "0",
+                    "scalar_pipe_length": "1",
+                    "simd_width": "16",
+                    "spbypass_pipe_length": "4",
+                    "srf_scm_bus_latency": "1",
+                    "vrf_gm_bus_latency": "1",
+                    "vrf_lm_bus_latency": "1",
+                    "vrf_to_coalescer_bus_width": "32"
+                },
+                "memory_timing_parameters": {
+                    "system.gpu_mem_ctrls.dram": {
+                        "burst_length": "4",
+                        "device_bus_width": "128",
+                        "tburst": "4000",
+                        "tck": "2000",
+                        "tcl": "15000",
+                        "trcd": "15000",
+                        "trp": "15000",
+                        "clock_period_ticks": 1000
+                    },
+                    "system.ruby.gpu_dir_cntrl0": {
+                        "l3_hit_latency": "20",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "response_latency": "30",
+                        "to_memory_controller_latency": "1",
+                        "clock_period_ticks": 500
+                    },
+                    "system.ruby.gpu_dir_cntrl0.L3CacheMemory": {
+                        "assoc": "16",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "20",
+                        "size": "16777216.0",
+                        "tagaccesslatency": "15"
+                    },
+                    "system.ruby.scalar_cntrl0": {
+                        "issue_latency": "80",
+                        "l2_hit_latency": "18",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "clock_period_ticks": 476
+                    },
+                    "system.ruby.scalar_cntrl0.L1cache": {
+                        "assoc": "8",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "1",
+                        "size": "16384",
+                        "tagaccesslatency": "1"
+                    },
+                    "system.ruby.sqc_cntrl0": {
+                        "issue_latency": "80",
+                        "l2_hit_latency": "18",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "clock_period_ticks": 476
+                    },
+                    "system.ruby.sqc_cntrl0.L1cache": {
+                        "assoc": "8",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "1",
+                        "size": "65536",
+                        "tagaccesslatency": "1"
+                    },
+                    "system.ruby.tcc_cntrl0": {
+                        "glc_atomic_latency": "1",
+                        "l2_request_latency": "120",
+                        "l2_response_latency": "16",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "clock_period_ticks": 476
+                    },
+                    "system.ruby.tcc_cntrl0.L2cache": {
+                        "assoc": "16",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "8",
+                        "size": "1048576.0",
+                        "tagaccesslatency": "2"
+                    },
+                    "system.ruby.tcp_cntrl0": {
+                        "issue_latency": "1",
+                        "l2_hit_latency": "18",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "clock_period_ticks": 476
+                    },
+                    "system.ruby.tcp_cntrl0.L1cache": {
+                        "assoc": "16",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "4",
+                        "size": "32768",
+                        "tagaccesslatency": "4"
+                    }
+                }
+            },
+            "kernels": 1,
+            "submitted": 5,
+            "retired": 5
+        },
+        {
+            "backend": "full-system",
+            "sample": "hip-matmul-lds",
+            "run": "hip-matmul-lds-full-system-20260915T152511Z-1166314-27182",
+            "exit_status": "gem5=0",
+            "configuration": {
+                "run":
+                    "hip-matmul-lds-full-system-20260915T152511Z-1166314-27182",
+                "cus": 8,
+                "gpu_period_ticks": 476,
+                "vgpr_slots_per_simd": 512,
+                "sgprs_per_simd": 800,
+                "caches": {
+                    "tcp": {
+                        "count": 8,
+                        "bytes_each": 32768
+                    },
+                    "sqc": {
+                        "count": 4,
+                        "bytes_each": 65536
+                    },
+                    "scalar": {
+                        "count": 4,
+                        "bytes_each": 16384
+                    },
+                    "tcc": {
+                        "count": 1,
+                        "bytes_each": 1048576
+                    }
+                },
+                "cu_timing_parameters": {
+                    "coalescer_to_vrf_bus_width": "32",
+                    "dpbypass_pipe_length": "4",
+                    "issue_period": "4",
+                    "mem_req_latency": "50",
+                    "mem_resp_latency": "50",
+                    "memtime_latency": "41",
+                    "mfma_scale": "1.0",
+                    "operand_network_length": "1",
+                    "rfc_pipe_length": "2",
+                    "scalar_mem_req_latency": "50",
+                    "scalar_mem_resp_latency": "0",
+                    "scalar_pipe_length": "1",
+                    "simd_width": "16",
+                    "spbypass_pipe_length": "4",
+                    "srf_scm_bus_latency": "1",
+                    "vrf_gm_bus_latency": "1",
+                    "vrf_lm_bus_latency": "1",
+                    "vrf_to_coalescer_bus_width": "32"
+                },
+                "memory_timing_parameters": {
+                    "system.gpu_mem_ctrls.dram": {
+                        "burst_length": "4",
+                        "device_bus_width": "128",
+                        "tburst": "4000",
+                        "tck": "2000",
+                        "tcl": "15000",
+                        "trcd": "15000",
+                        "trp": "15000",
+                        "clock_period_ticks": 1000
+                    },
+                    "system.ruby.gpu_dir_cntrl0": {
+                        "l3_hit_latency": "20",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "response_latency": "30",
+                        "to_memory_controller_latency": "1",
+                        "clock_period_ticks": 500
+                    },
+                    "system.ruby.gpu_dir_cntrl0.L3CacheMemory": {
+                        "assoc": "16",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "20",
+                        "size": "16777216.0",
+                        "tagaccesslatency": "15"
+                    },
+                    "system.ruby.scalar_cntrl0": {
+                        "issue_latency": "80",
+                        "l2_hit_latency": "18",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "clock_period_ticks": 476
+                    },
+                    "system.ruby.scalar_cntrl0.L1cache": {
+                        "assoc": "8",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "1",
+                        "size": "16384",
+                        "tagaccesslatency": "1"
+                    },
+                    "system.ruby.sqc_cntrl0": {
+                        "issue_latency": "80",
+                        "l2_hit_latency": "18",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "clock_period_ticks": 476
+                    },
+                    "system.ruby.sqc_cntrl0.L1cache": {
+                        "assoc": "8",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "1",
+                        "size": "65536",
+                        "tagaccesslatency": "1"
+                    },
+                    "system.ruby.tcc_cntrl0": {
+                        "glc_atomic_latency": "1",
+                        "l2_request_latency": "120",
+                        "l2_response_latency": "16",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "clock_period_ticks": 476
+                    },
+                    "system.ruby.tcc_cntrl0.L2cache": {
+                        "assoc": "16",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "8",
+                        "size": "1048576.0",
+                        "tagaccesslatency": "2"
+                    },
+                    "system.ruby.tcp_cntrl0": {
+                        "issue_latency": "1",
+                        "l2_hit_latency": "18",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "clock_period_ticks": 476
+                    },
+                    "system.ruby.tcp_cntrl0.L1cache": {
+                        "assoc": "16",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "4",
+                        "size": "32768",
+                        "tagaccesslatency": "4"
+                    }
+                }
+            },
+            "kernels": 1,
+            "submitted": 5,
+            "retired": 5
+        },
+        {
+            "backend": "full-system",
+            "sample": "hip-matmul-regtiles",
+            "run":
+                "hip-matmul-regtiles-full-system-20260915T152725Z-1168199-16082",
+            "exit_status": "gem5=0",
+            "configuration": {
+                "run":
+                    "hip-matmul-regtiles-full-system-20260915T152725Z-1168199-16082",
+                "cus": 8,
+                "gpu_period_ticks": 476,
+                "vgpr_slots_per_simd": 512,
+                "sgprs_per_simd": 800,
+                "caches": {
+                    "tcp": {
+                        "count": 8,
+                        "bytes_each": 32768
+                    },
+                    "sqc": {
+                        "count": 4,
+                        "bytes_each": 65536
+                    },
+                    "scalar": {
+                        "count": 4,
+                        "bytes_each": 16384
+                    },
+                    "tcc": {
+                        "count": 1,
+                        "bytes_each": 1048576
+                    }
+                },
+                "cu_timing_parameters": {
+                    "coalescer_to_vrf_bus_width": "32",
+                    "dpbypass_pipe_length": "4",
+                    "issue_period": "4",
+                    "mem_req_latency": "50",
+                    "mem_resp_latency": "50",
+                    "memtime_latency": "41",
+                    "mfma_scale": "1.0",
+                    "operand_network_length": "1",
+                    "rfc_pipe_length": "2",
+                    "scalar_mem_req_latency": "50",
+                    "scalar_mem_resp_latency": "0",
+                    "scalar_pipe_length": "1",
+                    "simd_width": "16",
+                    "spbypass_pipe_length": "4",
+                    "srf_scm_bus_latency": "1",
+                    "vrf_gm_bus_latency": "1",
+                    "vrf_lm_bus_latency": "1",
+                    "vrf_to_coalescer_bus_width": "32"
+                },
+                "memory_timing_parameters": {
+                    "system.gpu_mem_ctrls.dram": {
+                        "burst_length": "4",
+                        "device_bus_width": "128",
+                        "tburst": "4000",
+                        "tck": "2000",
+                        "tcl": "15000",
+                        "trcd": "15000",
+                        "trp": "15000",
+                        "clock_period_ticks": 1000
+                    },
+                    "system.ruby.gpu_dir_cntrl0": {
+                        "l3_hit_latency": "20",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "response_latency": "30",
+                        "to_memory_controller_latency": "1",
+                        "clock_period_ticks": 500
+                    },
+                    "system.ruby.gpu_dir_cntrl0.L3CacheMemory": {
+                        "assoc": "16",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "20",
+                        "size": "16777216.0",
+                        "tagaccesslatency": "15"
+                    },
+                    "system.ruby.scalar_cntrl0": {
+                        "issue_latency": "80",
+                        "l2_hit_latency": "18",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "clock_period_ticks": 476
+                    },
+                    "system.ruby.scalar_cntrl0.L1cache": {
+                        "assoc": "8",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "1",
+                        "size": "16384",
+                        "tagaccesslatency": "1"
+                    },
+                    "system.ruby.sqc_cntrl0": {
+                        "issue_latency": "80",
+                        "l2_hit_latency": "18",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "clock_period_ticks": 476
+                    },
+                    "system.ruby.sqc_cntrl0.L1cache": {
+                        "assoc": "8",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "1",
+                        "size": "65536",
+                        "tagaccesslatency": "1"
+                    },
+                    "system.ruby.tcc_cntrl0": {
+                        "glc_atomic_latency": "1",
+                        "l2_request_latency": "120",
+                        "l2_response_latency": "16",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "clock_period_ticks": 476
+                    },
+                    "system.ruby.tcc_cntrl0.L2cache": {
+                        "assoc": "16",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "8",
+                        "size": "1048576.0",
+                        "tagaccesslatency": "2"
+                    },
+                    "system.ruby.tcp_cntrl0": {
+                        "issue_latency": "1",
+                        "l2_hit_latency": "18",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "clock_period_ticks": 476
+                    },
+                    "system.ruby.tcp_cntrl0.L1cache": {
+                        "assoc": "16",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "4",
+                        "size": "32768",
+                        "tagaccesslatency": "4"
+                    }
+                }
+            },
+            "kernels": 1,
+            "submitted": 5,
+            "retired": 5
+        },
+        {
+            "backend": "full-system",
+            "sample": "hip-kernel-chain",
+            "run":
+                "hip-kernel-chain-full-system-20260915T152939Z-1169702-14092",
+            "exit_status": "gem5=0",
+            "configuration": {
+                "run":
+                    "hip-kernel-chain-full-system-20260915T152939Z-1169702-14092",
+                "cus": 8,
+                "gpu_period_ticks": 476,
+                "vgpr_slots_per_simd": 512,
+                "sgprs_per_simd": 800,
+                "caches": {
+                    "tcp": {
+                        "count": 8,
+                        "bytes_each": 32768
+                    },
+                    "sqc": {
+                        "count": 4,
+                        "bytes_each": 65536
+                    },
+                    "scalar": {
+                        "count": 4,
+                        "bytes_each": 16384
+                    },
+                    "tcc": {
+                        "count": 1,
+                        "bytes_each": 1048576
+                    }
+                },
+                "cu_timing_parameters": {
+                    "coalescer_to_vrf_bus_width": "32",
+                    "dpbypass_pipe_length": "4",
+                    "issue_period": "4",
+                    "mem_req_latency": "50",
+                    "mem_resp_latency": "50",
+                    "memtime_latency": "41",
+                    "mfma_scale": "1.0",
+                    "operand_network_length": "1",
+                    "rfc_pipe_length": "2",
+                    "scalar_mem_req_latency": "50",
+                    "scalar_mem_resp_latency": "0",
+                    "scalar_pipe_length": "1",
+                    "simd_width": "16",
+                    "spbypass_pipe_length": "4",
+                    "srf_scm_bus_latency": "1",
+                    "vrf_gm_bus_latency": "1",
+                    "vrf_lm_bus_latency": "1",
+                    "vrf_to_coalescer_bus_width": "32"
+                },
+                "memory_timing_parameters": {
+                    "system.gpu_mem_ctrls.dram": {
+                        "burst_length": "4",
+                        "device_bus_width": "128",
+                        "tburst": "4000",
+                        "tck": "2000",
+                        "tcl": "15000",
+                        "trcd": "15000",
+                        "trp": "15000",
+                        "clock_period_ticks": 1000
+                    },
+                    "system.ruby.gpu_dir_cntrl0": {
+                        "l3_hit_latency": "20",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "response_latency": "30",
+                        "to_memory_controller_latency": "1",
+                        "clock_period_ticks": 500
+                    },
+                    "system.ruby.gpu_dir_cntrl0.L3CacheMemory": {
+                        "assoc": "16",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "20",
+                        "size": "16777216.0",
+                        "tagaccesslatency": "15"
+                    },
+                    "system.ruby.scalar_cntrl0": {
+                        "issue_latency": "80",
+                        "l2_hit_latency": "18",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "clock_period_ticks": 476
+                    },
+                    "system.ruby.scalar_cntrl0.L1cache": {
+                        "assoc": "8",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "1",
+                        "size": "16384",
+                        "tagaccesslatency": "1"
+                    },
+                    "system.ruby.sqc_cntrl0": {
+                        "issue_latency": "80",
+                        "l2_hit_latency": "18",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "clock_period_ticks": 476
+                    },
+                    "system.ruby.sqc_cntrl0.L1cache": {
+                        "assoc": "8",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "1",
+                        "size": "65536",
+                        "tagaccesslatency": "1"
+                    },
+                    "system.ruby.tcc_cntrl0": {
+                        "glc_atomic_latency": "1",
+                        "l2_request_latency": "120",
+                        "l2_response_latency": "16",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "clock_period_ticks": 476
+                    },
+                    "system.ruby.tcc_cntrl0.L2cache": {
+                        "assoc": "16",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "8",
+                        "size": "1048576.0",
+                        "tagaccesslatency": "2"
+                    },
+                    "system.ruby.tcp_cntrl0": {
+                        "issue_latency": "1",
+                        "l2_hit_latency": "18",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "clock_period_ticks": 476
+                    },
+                    "system.ruby.tcp_cntrl0.L1cache": {
+                        "assoc": "16",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "4",
+                        "size": "32768",
+                        "tagaccesslatency": "4"
+                    }
+                }
+            },
+            "kernels": 5,
+            "submitted": 10,
+            "retired": 10
+        },
+        {
+            "backend": "full-system",
+            "sample": "rainbow-image",
+            "run": "rainbow-image-full-system-20260915T153151Z-1172401-3064",
+            "exit_status": "gem5=0",
+            "configuration": {
+                "run":
+                    "rainbow-image-full-system-20260915T153151Z-1172401-3064",
+                "cus": 8,
+                "gpu_period_ticks": 476,
+                "vgpr_slots_per_simd": 512,
+                "sgprs_per_simd": 800,
+                "caches": {
+                    "tcp": {
+                        "count": 8,
+                        "bytes_each": 32768
+                    },
+                    "sqc": {
+                        "count": 4,
+                        "bytes_each": 65536
+                    },
+                    "scalar": {
+                        "count": 4,
+                        "bytes_each": 16384
+                    },
+                    "tcc": {
+                        "count": 1,
+                        "bytes_each": 1048576
+                    }
+                },
+                "cu_timing_parameters": {
+                    "coalescer_to_vrf_bus_width": "32",
+                    "dpbypass_pipe_length": "4",
+                    "issue_period": "4",
+                    "mem_req_latency": "50",
+                    "mem_resp_latency": "50",
+                    "memtime_latency": "41",
+                    "mfma_scale": "1.0",
+                    "operand_network_length": "1",
+                    "rfc_pipe_length": "2",
+                    "scalar_mem_req_latency": "50",
+                    "scalar_mem_resp_latency": "0",
+                    "scalar_pipe_length": "1",
+                    "simd_width": "16",
+                    "spbypass_pipe_length": "4",
+                    "srf_scm_bus_latency": "1",
+                    "vrf_gm_bus_latency": "1",
+                    "vrf_lm_bus_latency": "1",
+                    "vrf_to_coalescer_bus_width": "32"
+                },
+                "memory_timing_parameters": {
+                    "system.gpu_mem_ctrls.dram": {
+                        "burst_length": "4",
+                        "device_bus_width": "128",
+                        "tburst": "4000",
+                        "tck": "2000",
+                        "tcl": "15000",
+                        "trcd": "15000",
+                        "trp": "15000",
+                        "clock_period_ticks": 1000
+                    },
+                    "system.ruby.gpu_dir_cntrl0": {
+                        "l3_hit_latency": "20",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "response_latency": "30",
+                        "to_memory_controller_latency": "1",
+                        "clock_period_ticks": 500
+                    },
+                    "system.ruby.gpu_dir_cntrl0.L3CacheMemory": {
+                        "assoc": "16",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "20",
+                        "size": "16777216.0",
+                        "tagaccesslatency": "15"
+                    },
+                    "system.ruby.scalar_cntrl0": {
+                        "issue_latency": "80",
+                        "l2_hit_latency": "18",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "clock_period_ticks": 476
+                    },
+                    "system.ruby.scalar_cntrl0.L1cache": {
+                        "assoc": "8",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "1",
+                        "size": "16384",
+                        "tagaccesslatency": "1"
+                    },
+                    "system.ruby.sqc_cntrl0": {
+                        "issue_latency": "80",
+                        "l2_hit_latency": "18",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "clock_period_ticks": 476
+                    },
+                    "system.ruby.sqc_cntrl0.L1cache": {
+                        "assoc": "8",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "1",
+                        "size": "65536",
+                        "tagaccesslatency": "1"
+                    },
+                    "system.ruby.tcc_cntrl0": {
+                        "glc_atomic_latency": "1",
+                        "l2_request_latency": "120",
+                        "l2_response_latency": "16",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "clock_period_ticks": 476
+                    },
+                    "system.ruby.tcc_cntrl0.L2cache": {
+                        "assoc": "16",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "8",
+                        "size": "1048576.0",
+                        "tagaccesslatency": "2"
+                    },
+                    "system.ruby.tcp_cntrl0": {
+                        "issue_latency": "1",
+                        "l2_hit_latency": "18",
+                        "mandatory_queue_latency": "1",
+                        "recycle_latency": "10",
+                        "clock_period_ticks": 476
+                    },
+                    "system.ruby.tcp_cntrl0.L1cache": {
+                        "assoc": "16",
+                        "atomiclatency": "0",
+                        "dataaccesslatency": "4",
+                        "size": "32768",
+                        "tagaccesslatency": "4"
+                    }
+                }
+            },
+            "kernels": 1,
+            "submitted": 5,
+            "retired": 5
+        }
+    ],
+    "source_sha256": {
+        "configs/example/gpufs/amd/MI300X.py":
+            "d157e8b0bb379858e3c8698975af4cd159a821a56417510bb05a0280d3fc50a5",
+        "configs/example/gpufs/mi300.py":
+            "928fae5a067d021c0fdfa75dde1f6447f919de448cfbbfe0fd68494026e84ba2",
+        "configs/example/gpufs/hsakmt_server.py":
+            "cb37dea5f52bd9b3a646de56fd0003bf3ea8cc514072986cb61df18ec503dc75",
+        "configs/example/gpufs/system/amdgpu.py":
+            "e684e8ea7d57f4ac8056035f2370dff7a0f763534090f0655c60b22ce6e62744",
+        "configs/ruby/GPU_VIPER.py":
+            "3a62520e86e67e160a044d697e990a5dc5184b4248ad15491b0356c8686a1f89"
+    },
+    "images": [
+        {
+            "Id":
+                "sha256:b26e2a19f1a4fa631a547f0bceb73547f2a780945e3e7a98d1e9dfa87670e85f",
+            "RepoTags": [
+                "gem5-gpu-hsakmt-sdk:migration"
+            ],
+            "Os": "linux",
+            "Architecture": "amd64"
+        },
+        {
+            "Id":
+                "sha256:95f7a6a0fde53163d2e88011afb22f93dc3b4962e6b08733b650e9ed294bbca2",
+            "RepoTags": [
+                "gem5-gpu-hsakmt-runner:mi300x-8cu"
+            ],
+            "Os": "linux",
+            "Architecture": "amd64"
+        },
+        {
+            "Id":
+                "sha256:63b8416d252c18d183f1d6dcdd9737dbe69612093e9b6ab2378191297ca16ee1",
+            "RepoTags": [
+                "gem5-gpufs-runtime:mi300x-8cu"
+            ],
+            "Os": "linux",
+            "Architecture": "amd64"
+        }
+    ]
+}

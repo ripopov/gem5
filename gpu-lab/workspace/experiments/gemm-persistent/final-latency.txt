@@ -1,0 +1,2 @@
+load n 1537 min 133 median 1678 p90 9184 max 42860 cycles
+store n 1041 min 304 median 2205 p90 14527 max 22628 cycles

@@ -31,9 +31,7 @@
 
 #include "gpu-compute/lds_state.hh"
 
-#include <array>
-#include <cstdio>
-#include <cstdlib>
+#include <algorithm>
 
 #include "gpu-compute/compute_unit.hh"
 #include "gpu-compute/gpu_dyn_inst.hh"
@@ -78,88 +76,6 @@ LdsState::setParent(ComputeUnit *x_parent)
 }
 
 /**
- * derive the gpu mem packet from the packet and then count the bank conflicts
- */
-unsigned
-LdsState::countBankConflicts(PacketPtr packet, unsigned *bankAccesses)
-{
-    Packet::SenderState *baseSenderState = packet->senderState;
-    while (baseSenderState->predecessor) {
-        baseSenderState = baseSenderState->predecessor;
-    }
-    const ComputeUnit::LDSPort::SenderState *senderState =
-        dynamic_cast<ComputeUnit::LDSPort::SenderState *>(baseSenderState);
-
-    fatal_if(!senderState, "did not get the right sort of sender state");
-
-    GPUDynInstPtr gpuDynInst = senderState->getMemInst();
-
-    return countBankConflicts(gpuDynInst, bankAccesses);
-}
-
-// Count the total number of bank conflicts for the local memory packet
-unsigned
-LdsState::countBankConflicts(GPUDynInstPtr gpuDynInst,
-                             unsigned *numBankAccesses)
-{
-    int bank_conflicts = 0;
-    std::vector<int> bank;
-    // the number of LDS banks being touched by the memory instruction
-    int numBanks = std::min(parent->wfSize(), banks);
-    // if the wavefront size is larger than the number of LDS banks, we
-    // need to iterate over all work items to calculate the total
-    // number of bank conflicts
-    int groups =
-        (parent->wfSize() > numBanks) ? (parent->wfSize() / numBanks) : 1;
-    for (int i = 0; i < groups; i++) {
-        // Address Array holding all the work item addresses of an instruction
-        std::vector<Addr> addr_array;
-        addr_array.resize(numBanks, 0);
-        bank.clear();
-        bank.resize(banks, 0);
-        int max_bank = 0;
-
-        // populate the address array for all active work items
-        for (int j = 0; j < numBanks; j++) {
-            if (gpuDynInst->exec_mask[(i * numBanks) + j]) {
-                addr_array[j] = gpuDynInst->addr[(i * numBanks) + j];
-            } else {
-                addr_array[j] = std::numeric_limits<Addr>::max();
-            }
-        }
-
-        if (gpuDynInst->isLoad() || gpuDynInst->isStore()) {
-            // mask identical addresses
-            for (int j = 0; j < numBanks; ++j) {
-                for (int j0 = 0; j0 < j; j0++) {
-                    if (addr_array[j] != std::numeric_limits<Addr>::max() &&
-                        addr_array[j] == addr_array[j0]) {
-                        addr_array[j] = std::numeric_limits<Addr>::max();
-                    }
-                }
-            }
-        }
-        // calculate bank conflicts
-        for (int j = 0; j < numBanks; ++j) {
-            if (addr_array[j] != std::numeric_limits<Addr>::max()) {
-                int bankId = addr_array[j] % banks;
-                bank[bankId]++;
-                max_bank = std::max(max_bank, bank[bankId]);
-                // Count the number of LDS banks accessed.
-                // Since we have masked identical addresses all remaining
-                // accesses will need to be serialized if they access
-                // the same bank (bank conflict).
-                (*numBankAccesses)++;
-            }
-        }
-        bank_conflicts += max_bank;
-    }
-    panic_if(bank_conflicts > parent->wfSize(),
-             "Max bank conflicts should match num of work items per instr");
-    return bank_conflicts;
-}
-
-/**
  * receive the packet from the CU
  */
 bool
@@ -182,24 +98,21 @@ LdsState::getDynInstr(PacketPtr packet)
 bool
 LdsState::processPacket(PacketPtr packet)
 {
-    unsigned bankAccesses = 0;
-    // the number of conflicts this packet will have when accessing the LDS
-    unsigned bankConflicts = countBankConflicts(packet, &bankAccesses);
-    // count the total number of physical LDS bank accessed
-    parent->stats.ldsBankAccesses += bankAccesses;
-    // count the LDS bank conflicts. A number set to 1 indicates one
-    // access per bank maximum so there are no bank conflicts
-    parent->stats.ldsBankConflictDist.sample(bankConflicts - 1);
-
     GPUDynInstPtr dynInst = getDynInstr(packet);
-    // account for the LDS bank conflict overhead
-    int busLength = (dynInst->isLoad())    ? parent->loadBusLength()
-                    : (dynInst->isStore()) ? parent->storeBusLength()
-                                           : parent->loadBusLength();
-    // delay for accessing the LDS
-    Tick processingTime =
-        parent->cyclesToTicks(Cycles(bankConflicts * bankConflictPenalty)) +
-        parent->cyclesToTicks(Cycles(busLength));
+    const auto banksUsed = countLdsBankAccesses(
+        dynInst->addr, dynInst->exec_mask.to_ullong(), dynInst->ldsAccess,
+        banks, dynInst->isLoad() && !dynInst->isAtomic());
+    parent->stats.ldsBankAccesses += banksUsed.accesses;
+    parent->stats.ldsBankConflictDist.sample(banksUsed.conflicts);
+
+    const unsigned busLength = dynInst->isStore() ? parent->storeBusLength()
+                                                  : parent->loadBusLength();
+    // Bank service and the transfer impose baseline throughput bounds.
+    // Only additional serialization pays the configurable conflict penalty;
+    // the instruction's existing latency remains the completion lower bound.
+    const unsigned cycles = std::max(busLength, banksUsed.phases) +
+                            banksUsed.conflicts * bankConflictPenalty;
+    Tick processingTime = parent->cyclesToTicks(Cycles(cycles));
     // choose (delay + last packet in queue) or (now + delay) as the time to
     // return this
     Tick doneAt = earliestReturnTime() + processingTime;

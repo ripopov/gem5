@@ -89,6 +89,8 @@ class Network : public ClockedObject
 
     virtual ~Network();
 
+    void init() override;
+
     static uint32_t getNumberOfVirtualNetworks() { return m_virtual_networks; }
     int getNumNodes() const { return m_nodes; }
 
@@ -161,7 +163,7 @@ class Network : public ClockedObject
     uint32_t m_nodes;
     static uint32_t m_virtual_networks;
     std::vector<std::string> m_vnet_type_names;
-    Topology* m_topology_ptr;
+    Topology* m_topology_ptr = nullptr;
     static uint32_t m_control_msg_size;
     static uint32_t m_data_msg_size;
 
@@ -188,6 +190,8 @@ class Network : public ClockedObject
     RubySystem *m_ruby_system = nullptr;
 
     int MachineType_base_number(const MachineType& obj);
+
+    void rebuildGlobalToLocalMap();
 };
 
 inline std::ostream&

@@ -42,6 +42,7 @@ from typing import Optional
 
 import runfs
 from amd import AmdGPUOptions
+from amd.MI300X import setTeachingDefaults
 from common import (
     GPUTLBOptions,
     Options,
@@ -133,7 +134,7 @@ def runMI300GPUFS(
     GPUTLBOptions.tlb_options(parser)
     addDemoOptions(parser)
 
-    # Parse now so we can override options
+    setTeachingDefaults(parser)
     args = parser.parse_args()
     demo_runscript = ""
 
@@ -175,10 +176,6 @@ def runMI300GPUFS(
     args.gpu_device = "MI300X"
     args.dgpu_mem_size = "16GiB"  # GPU memory size, must be 16GiB currently.
 
-    # See: https://rocm.docs.amd.com/en/latest/conceptual/gpu-arch/mi300.html
-    # Topology for one XCD. Number of CUs is approximately 304 / 8, rounded
-    # up to 40 due to gem5 restriction of 4 CUs per SQC / scalar cache.
-    args.num_compute_units = 40
     args.gpu_topology = "Crossbar"
 
     # Run gem5

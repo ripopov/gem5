@@ -1,0 +1,140 @@
+{
+  "cus": {
+    "0": {
+      "loads": 192,
+      "mfma": 1024,
+      "mfma_with_other_group_store_pending": 128,
+      "mfma_with_same_wave_store_pending": 0,
+      "mfma_with_producer_load_pending": 893,
+      "stores": 130,
+      "first_mfma_tick": 15919634836,
+      "last_mfma_tick": 16024783712,
+      "last_store_tick": 16026337376
+    },
+    "1": {
+      "loads": 192,
+      "mfma": 1024,
+      "mfma_with_other_group_store_pending": 128,
+      "mfma_with_same_wave_store_pending": 0,
+      "mfma_with_producer_load_pending": 874,
+      "stores": 130,
+      "first_mfma_tick": 15919644356,
+      "last_mfma_tick": 16025793784,
+      "last_store_tick": 16027343164
+    },
+    "2": {
+      "loads": 192,
+      "mfma": 1024,
+      "mfma_with_other_group_store_pending": 160,
+      "mfma_with_same_wave_store_pending": 0,
+      "mfma_with_producer_load_pending": 884,
+      "stores": 130,
+      "first_mfma_tick": 15919239756,
+      "last_mfma_tick": 16024916992,
+      "last_store_tick": 16026605840
+    },
+    "3": {
+      "loads": 192,
+      "mfma": 1024,
+      "mfma_with_other_group_store_pending": 160,
+      "mfma_with_same_wave_store_pending": 0,
+      "mfma_with_producer_load_pending": 892,
+      "stores": 130,
+      "first_mfma_tick": 15919247848,
+      "last_mfma_tick": 16025829484,
+      "last_store_tick": 16027376960
+    },
+    "4": {
+      "loads": 192,
+      "mfma": 1024,
+      "mfma_with_other_group_store_pending": 160,
+      "mfma_with_same_wave_store_pending": 0,
+      "mfma_with_producer_load_pending": 886,
+      "stores": 130,
+      "first_mfma_tick": 15919475376,
+      "last_mfma_tick": 16024619968,
+      "last_store_tick": 16025990848
+    },
+    "5": {
+      "loads": 192,
+      "mfma": 1024,
+      "mfma_with_other_group_store_pending": 160,
+      "mfma_with_same_wave_store_pending": 0,
+      "mfma_with_producer_load_pending": 875,
+      "stores": 130,
+      "first_mfma_tick": 15919474900,
+      "last_mfma_tick": 16025997036,
+      "last_store_tick": 16027533564
+    },
+    "6": {
+      "loads": 192,
+      "mfma": 1024,
+      "mfma_with_other_group_store_pending": 143,
+      "mfma_with_same_wave_store_pending": 0,
+      "mfma_with_producer_load_pending": 852,
+      "stores": 130,
+      "first_mfma_tick": 15919276408,
+      "last_mfma_tick": 16024887956,
+      "last_store_tick": 16026471608
+    },
+    "7": {
+      "loads": 192,
+      "mfma": 1024,
+      "mfma_with_other_group_store_pending": 160,
+      "mfma_with_same_wave_store_pending": 0,
+      "mfma_with_producer_load_pending": 877,
+      "stores": 130,
+      "first_mfma_tick": 15919276408,
+      "last_mfma_tick": 16025939440,
+      "last_store_tick": 16027477396
+    }
+  },
+  "roles_per_cu": {
+    "1": [
+      "0",
+      "1",
+      "producer"
+    ],
+    "2": [
+      "0",
+      "1",
+      "producer"
+    ],
+    "3": [
+      "0",
+      "1",
+      "producer"
+    ],
+    "4": [
+      "0",
+      "1",
+      "producer"
+    ],
+    "5": [
+      "0",
+      "1",
+      "producer"
+    ],
+    "6": [
+      "0",
+      "1",
+      "producer"
+    ],
+    "7": [
+      "0",
+      "1",
+      "producer"
+    ]
+  },
+  "unmatched_completions": 0,
+  "unfinished_memory_instructions": 0,
+  "trace_ticks": 153357204,
+  "totals": {
+    "loads": 1536,
+    "mfma": 8192,
+    "mfma_with_other_group_store_pending": 1199,
+    "mfma_with_same_wave_store_pending": 0,
+    "mfma_with_producer_load_pending": 7033,
+    "stores": 1040
+  }
+}

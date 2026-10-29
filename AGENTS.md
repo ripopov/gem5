@@ -1,180 +1,348 @@
-# Repository Guidelines
+# AGENTS.md
 
-## Project Structure & Module Organization
+This repository contains a GPU microarchitecture lab with three explicit
+execution backends: rocjitsu with the simdojo functional simulator, rocjitsu
+attached to gem5's no-guest HSAKMT service, and gem5 GPU full-system simulation.
 
-gem5 is a simulator repository with mixed C++, Python, SCons, and test assets.
-Core simulator code lives in `src/`; public headers are in `include/`.
-Configuration scripts and examples are in `configs/`. Build-system support is
-split between `SConstruct`, `site_scons/`, `build_tools/`, and `build_opts/`.
-System-level, PyUnit, and TestLib assets live under `tests/`; C++ unit tests
-are usually colocated with their source under `src/`. Utility scripts are in
-`util/`, and vendored third-party or integration code is under `ext/`.
+## Project context
 
-## Dependency Policy
+- Active branch focus: `src/dev/hsakmt-service/`.
+- Main assignment document: `gpu-lab/GpuAssignmentRU.adoc`; the committed
+  `gpu-lab/GpuAssignmentRU.pdf` is rendered from it with `asciidoctor-pdf`.
+- Main lab bundle: `gpu-lab/workspace/`
+- Canonical backend names: `simdojo`, `gem5-kmd`, and `full-system`.
+- Provided sample apps live in `gpu-lab/workspace/samples/`; helper scripts
+  live in `gpu-lab/workspace/scripts/`. Lab launcher examples below assume
+  `gpu-lab/workspace/`; commands starting with `make -C src/` assume the
+  repository root.
+- The canonical interactive architecture introduction is
+  [`ROCJITSU-KFD-GEM5.html`](ROCJITSU-KFD-GEM5.html). It explains how the GPU
+  executes work, how a driver and the GPU interact, KFD RPC, and the gem5
+  HSAKMT service.
+- Large/generated lab artifacts such as `work/`, `images/`, `docker/`, `disk/`, `kernel/`, and `verification/` are intentionally ignored.
+- Prefer offline/reproducible workflows; do not add network-dependent steps unless explicitly requested.
 
-The project policy for dependency-support updates is to cover Ubuntu LTS
-releases still in standard support. The oldest supported LTS sets ordinary
-dependency minimums, while dependencies from the newest LTS must also work.
-Non-compiler floors should normally be written as `major.minor+`; compiler
-policy uses GCC and Clang major-version ranges.
+## Docker access from the Codex sandbox
 
-Policy intent is not proof of current coverage. Before claiming a release,
-compiler, or dependency is supported, verify the checks in `SConstruct`, the
-workflow matrices, Docker images and bake targets, and user documentation.
+In this workspace, ordinary sandboxed shell commands cannot access the Docker
+socket. Run `docker`, `docker compose`, and repository scripts that invoke
+Docker with escalated sandbox permissions from the first attempt; do not spend
+an initial probe on an unprivileged invocation. Once escalation is active,
+treat any remaining daemon, image, platform, or container error as a separate
+problem rather than as a sandbox-permission failure.
 
-## Build, Test, and Development Commands
+## Documentation style
 
-- `scons build/ALL/gem5.opt -j <jobs>`: build the optimized gem5 binary with
-  all ISA targets.
-- `scons build/X86/gem5.opt`: build with the `build_opts/X86` configuration;
-  replace `X86` with another configuration name from `build_opts/`.
-- `scons build/ALL/unittests.opt`: build and run C++ GoogleTest unit tests.
-- `cd tests && ./main.py run -j <jobs>`: run the default quick TestLib tests.
-- `cd tests && ../build/ALL/gem5.opt run_pyunit.py`: run Python unit tests
-  after building `build/ALL/gem5.opt`.
-- `cd tests && ./main.py run --length=long`: run longer TestLib suites; use
-  `--length=very-long` only for broad validation.
+Keep `ROCJITSU-KFD-GEM5.html` up to date with the current architecture.
+Any change to execution backends, upstream integration, ownership boundaries,
+C ABI or RPC, memory/queue/event lifecycle, packaging, or supported limitations
+must update the affected explanations and interactive diagrams in the same
+change. Verify claims against the implementation, distinguishing upstream
+capabilities from our fork additions and generic GPU-model fixes from service
+behavior. Do not present illustrative animation as measured simulation data.
 
-## Coding Style & Naming Conventions
+Keep this introduction a single, self-contained HTML/CSS/JavaScript page that
+works offline without external libraries, fonts, or assets. Preserve keyboard
+access, reduced-motion support, and readable content without JavaScript.
+Its KFD RPC message layouts must match `rpc.h` byte for byte. After changing
+it, check desktop and mobile layouts, light and dark themes, every interactive
+figure, the no-JavaScript fallback, and local links. Keep procedures in the
+practical guides and link to them; do not restore the superseded Markdown
+document or the replaced `ROCJITSU_GEM5_BACKEND.html`.
 
-Use 4 spaces, no tabs, no trailing whitespace, and a 79-column line limit.
-C++ style is enforced by `.clang-format` and gem5 hooks; use upper camel case
-for classes, lower camel case for functions and members, snake case for local
-variables and parameters, and all-caps macros. Python is formatted with Black
-and imports are managed by isort using the settings in `pyproject.toml`.
-Install hooks with:
+Write documentation as a continuous explanation for its intended reader, not
+as a collection of locally correct paragraphs.
+
+- Preserve narrative order: introduce the object and motivation first, then
+  the relationships and alternatives, and only then implementation details or
+  instructions. Never refer to options, components, or constraints before the
+  reader has been given the context needed to understand them.
+- Be concise without removing the transitions that make the text readable.
+  After editing, read the whole section in sequence and check that each
+  paragraph follows naturally from the previous one.
+- Apply a strict relevance test to every fact. Keep it only if it helps the
+  reader understand the subject, make a decision, perform the task, interpret
+  a result, or avoid a likely error. Internal class names and implementation
+  details do not belong in conceptual material unless they change one of those
+  outcomes.
+- Separate concepts from procedures. Main assignment documents should explain
+  what is modeled, why it matters, and how the pieces relate. Put command
+  lines, environment setup, exact paths, and troubleshooting procedures in
+  dedicated practical guides and link to them instead of duplicating them.
+- Do not add generic filler, exhaustive enumerations, or precautionary caveats
+  by default. Include a caveat only when it materially changes how a result
+  should be interpreted or what the reader should do, and verify that claim
+  against the implementation when possible.
+- When several workflows lead to the same measured component, distinguish the
+  setup or delivery path from the behavior being measured. Do not imply that
+  the workflows change the measured result without concrete evidence.
+- In student-facing documents, address the reader consistently as “you” rather
+  than describing an abstract “student.”
+
+## Committing changes
+
+This branch uses the `gpu-lab:` commit-message prefix for lab-bundle work
+(scripts, docs, samples). That tag is not in gem5's `MAINTAINERS.yaml`, so the
+`gem5-commit-msg-checker` pre-commit hook rejects it. When committing changes
+scoped to `gpu-lab/` with a `gpu-lab:` prefix, commit with `--no-verify` to
+keep the branch convention consistent with prior commits. Do not use
+`--no-verify` to bypass other hooks (whitespace, formatting, large-file, etc.)
+or to silence failures unrelated to the invalid-tag check.
+
+For commits that touch gem5 source under a tracked path (`src/`, `configs/`,
+`tests/`, etc.), use a valid gem5 tag from `MAINTAINERS.yaml` instead and let
+the hooks run normally.
+
+## Current branch work
+
+In this branch, assume the main implementation work belongs under:
 
 ```sh
-pip install pre-commit
-pre-commit install
+src/dev/hsakmt-service/
 ```
 
-Keep the hooks installed and active so commit-time errors can be fixed locally
-before pushing PR updates to GitHub.
+This directory contains the gem5-side HSAKMT service, embedded rocjitsu KMD
+adapter, GPU-facing work orchestration, and CPU-less platform used by the
+no-OS HSAKMT path. rocjitsu and the pinned ROCr source remain separate under
+`ext/hsakmt-client/rocm-systems`.
 
-## Testing Guidelines
+Keep edits scoped to `src/dev/hsakmt-service/` unless the change truly needs a
+supporting update elsewhere. Common supporting locations are:
 
-gem5 has three major local test layers. C++ GTests are usually `*.test.cc`
-files under `src/` and are built and run through SCons targets such as
-`build/ALL/unittests.opt` or matching `*.test.opt` binaries. Python unittest
-files live under `tests/pyunit` and run through `tests/run_pyunit.py` from the
-`tests` directory. `tests/gem5/pyunit/test_run.py` registers them as a quick
-TestLib suite. Broader regression coverage uses TestLib, whose framework is in
-`ext/testlib` and whose suites are mostly under `tests/gem5`.
+- `configs/example/gpufs/` for wiring the service into GPUFS runs.
+- `src/dev/hsa/` for generic HSA packet-processor behavior.
+- `src/dev/amdgpu/` and `src/gpu-compute/` only for generic GPU-model behavior
+  that would also make sense outside the HSAKMT server.
+- `gpu-lab/` for lab documentation and assignment notes.
+- `ext/hsakmt-client/rocm-systems/emulation/rocjitsu/` for the KFD RPC,
+  reusable server, interposer, and device-backend abstraction.
+- `ext/hsakmt-client/rocm-systems/projects/rocr-runtime/` for pinned ROCr.
 
-TestLib suites are tagged by duration. `quick` is the default and is expected
-for most pull requests. `long` covers heavier daily-style validation and runs
-as part of the `daily-tests.yaml` workflow.
-`very-long` is for tests that may take days and should be reserved for
-release-level or high-risk changes. Use `./main.py list -q --suites` to find
-suites and `./main.py run --uid <SuiteUID> --skip-build` for focused reruns.
-Only use `--skip-build` when the required binaries already exist.
+## Preserve the rocjitsu/service split
 
-## CI Workflows
+Keep the process and build-system boundary between these two trees clean:
 
-GitHub Actions live in `.github/workflows`. `ci-tests.yaml` runs pull request
-checks, including pre-commit, clang-format, unit tests, builds, and quick
-TestLib execution. `daily-tests.yaml` runs long TestLib coverage, extra daily
-tests, unittests, and cache-warming builds. `weekly-tests.yaml` runs quick,
-long, and very-long TestLib suites plus coverage upload. `compiler-tests.yaml`
-validates supported GCC/Clang and dependency-image build configurations.
+- `ext/hsakmt-client/rocm-systems/emulation/rocjitsu/` owns the Linux/ROCr
+  side: the KFD and DRM interposer loaded into the application, KMD RPC codec
+  and transport, `RemoteDriver`, `SimulatedKfd`, events, topology,
+  reusable KMD server, device-backend abstraction, public C embedding API,
+  and rocjitsu tests. It is a standalone CMake project.
+- `src/dev/hsakmt-service/` owns the gem5 side: SimObjects, CPU-less
+  platform responsibilities, the C callback adapter, GPUVM, allocation,
+  queue, doorbell and interrupt orchestration, and service tests. It uses the
+  standard gem5 SCons build. Do not restore a service-local `CMakeLists.txt`
+  or a gem5 copy of rocjitsu's RPC.
 
-## Validation Tiers
+The dependency direction is one way. `ext/hsakmt-client/` must not include
+gem5 headers, link gem5 libraries, consume generated SimObject files, invoke
+SCons, or depend on anything under `src/dev/hsakmt-service/`. The service may
+include rocjitsu's installed `rocjitsu/kmd/server.h` and link the narrowly
+exported `librocjitsu_kmd_server.so`. No C++ type, exception, gem5 header, or
+SimObject crosses that C ABI.
 
-Match validation to the edit. For docs-only changes, run `git diff --check`.
-For Python or SCons files, `python3 -m py_compile <files>` checks syntax only.
-`scons -Q --help` evaluates the top-level `SConstruct` and imported site setup,
-but without a target it does not read build-specific `SConsopts` or
-`SConscript` files, run configure probes, or validate source registration.
-Use a narrow explicit SCons target when those behaviors may be affected. For
-C++ edits, prefer targeted object or unit-test builds before broad binaries.
-For TestLib changes, start with `./main.py list ... -q` to confirm selection,
-then run the narrowest relevant suite; use `--skip-build` only when all
-required binaries already exist.
+The current embedding ABI is version 2 (`librocjitsu_kmd_server.so.2`), and
+KMD RPC is version 4. The C API is an in-process boundary; the Unix socket is
+the inter-process boundary. Reuse upstream KFD policy and daemon transport
+for both backends. `SimdojoDeviceBackend` supplies functional execution;
+`CallbackDeviceBackend` dispatches external-device operations to gem5's
+owner thread. Keep shared-backing slices, allocation leases, and teardown
+semantics explicit. Unsupported external-device operations must fail, not
+silently claim simulated mappings or completions.
 
-## Commit & Pull Request Guidelines
+Keep build and packaging ownership aligned with that boundary:
 
-Develop changes on branches based on `develop`, not `stable`. Commit subjects
-use gem5 component tags from `MAINTAINERS.yaml`, for example
-`tests,base: Add coverage for bit helpers`; keep the subject under 65
-characters and body lines under 72 characters. Preserve blank lines between
-body paragraphs and backtick literal code identifiers, commands, and paths.
-Prefer small, focused commits and include relevant GitHub issue links. Pull
-requests target `gem5/gem5:develop`, should explain the change and validation
-performed, and must pass CI and review before merge.
+- build and test rocjitsu with its CMake project;
+- build the gem5 service and service tests through its `SConscript`;
+- use `src/dev/hsakmt-service/Makefile` only as an orchestration and
+  verification entry point across the two native build systems; and
+- package full rocjitsu and ROCr in the SDK image, but package the server-only
+  KMD library with gem5 in the runner image. Do not put gem5 service binaries
+  or sources into the SDK image.
 
-Before broad or cross-subsystem edits, inspect `MAINTAINERS.yaml` for component
-tags, maintainers, experts, and orphaned status. Use those tags in commit
-subjects and use the ownership information to frame PRs and likely reviewers.
-Follow the user's explicit instructions about committing and pushing; never
-rewrite shared history or disrupt another contributor's work unless explicitly
-directed.
+When changing the public C ABI, KMD RPC, shared backing, or device-backend
+contract, verify the full rocjitsu CTest suite and the SCons service tests,
+then run the end-to-end workload gate below.
 
-New source files should carry an appropriate copyright notice and license
-header. Follow the 3-Clause BSD license in `LICENSE` unless the contributor's
-copyright holder or institutional requirements call for another repository-
-accepted header; do not infer a copyright holder from nearby files.
+Do not put HSAKMT-server policy into shared AMDGPU or GPU compute internals.
+Prefer modeling the missing platform/KFD behavior in `src/dev/hsakmt-service/`
+and drive the GPU through PCI config, BAR MMIO, doorbells, GPUVM page tables,
+DMA, and interrupt-ring handling.
 
-## Release Process
+Never add HSAKMT-service workarounds to the real GPU model code under
+`src/dev/amdgpu/`, `src/gpu-compute/`, or `src/dev/hsa/`. This includes
+service-specific conditionals, bypasses, fake completions, special address or
+requestor handling, injected statistics, and callbacks that short-circuit the
+normal GPU pipeline. The CPU-less platform deliberately lacks the CPU,
+firmware, OS, and kernel-mode driver (KMD) that configure and operate a real
+GPU. `src/dev/hsakmt-service/` must model those missing software/platform
+responsibilities and drive the unmodified GPU model through realistic hardware
+interfaces. If the service cannot yet perform a required operation, extend the
+service or its platform emulation instead of patching the GPU to accommodate
+the service.
 
-The documented gem5 release process targets three releases per year.
-Maintainers announce the release window, create `release-staging-{VERSION}`
-from `develop`, run the full test suite, then merge the staging branch to
-`stable` when ready. The
-stable branch is tagged as `v{YY}.{MAJOR}.{MINOR}.{HOTFIX}`. During staging,
-target normal work at `develop`; submit to staging only for release-critical
-fixes. Hotfixes branch from `stable`, require normal review, merge back to both
-`stable` and `develop`, and receive an incremented hotfix tag.
+A shared GPU-model change is acceptable only when it is independently correct
+for normal GPUFS or another realistic platform and does not encode knowledge of
+the HSAKMT service.
 
-## Agent-Specific Notes
+HSAKMT-service refactorings must also be verified end to end with the service
+sample workloads:
 
-Preserve user constraints. If asked not to compile or run simulations, stay
-with source, logs, artifacts, and metadata. For CI failures, inspect the actual
-failing job logs before assigning cause; SCons configure failures often require
-reading `build/ALL/gem5.build/scons_config.log`, not just the headline error.
+```sh
+make -C src/dev/hsakmt-service verify-sample-workloads
+```
 
-Every new source file should use the copyright holder required by the
-contributor's institution or other obligation. Avoid editing `gem5/ext/` for
-policy or dependency updates; prefer build logic, Dockerfiles, workflows, and
-documentation.
+This gate runs the HIP vector-add, HIP matmul, HIP kernel-chain, and rainbow-image applications
+through `configs/example/gpufs/hsakmt_server.py`, exercising the external ROCr
+runtime, rocjitsu KFD RPC, embedded server, service, and GPU work path
+together. Check that the applications pass, all submitted AQL packets retire,
+no frontend/RPC errors are reported, and no KMD or service resources remain.
+This service-specific flow uses `X86TimingSimpleCPU` and does not require
+`/dev/kvm`; the generic GPUFS sample runner below boots a full Linux guest
+with `X86KvmCPU` and does.
 
-For dependency or compiler-support maintenance, keep `SConstruct`,
-`.github/workflows`, `util/dockerfiles`, and docs aligned with the Ubuntu LTS
-policy above.
+## Docker images
 
-Docker images provide standardized environments for many gem5 tests. Exact
-historical reproduction also requires the workflow revision and the image
-digest used by the failing job because a `:latest` tag can change. Ubuntu
-all-dependency images are the baseline for many CI jobs. To reproduce a
-failure, inspect the relevant workflow and use its image where practical. GPU
-full-system tests use the all-dependencies image and the `ALL` build alongside
-the other TestLib suites.
+Two locally built images cover the current lab workflows. Both are tagged
+`:local`; the launchers do not pull missing images from a registry.
 
-A GPU container alone does not select GPU TestLib suites. Use `--isa=ALL` with
-the appropriate length and always confirm selection with
-`./main.py list ... -q` before an expensive run.
+| Image | Built by | Contains |
+| --- | --- | --- |
+| `gem5-gpu-hsakmt-sdk:local` | `gpu-lab/workspace/dockerfiles/gpu-hsakmt-sdk/build.sh` | HIP 7.1 toolchain, ROCr 1.21 from the pinned submodule, and full rocjitsu |
+| `gem5-gpu-hsakmt-runner:local` | `gpu-lab/workspace/dockerfiles/gpu-hsakmt-runner/build.sh` | `gem5.opt`, the HSAKMT service, `librocjitsu_kmd_server.so`, configs, and launcher |
 
-Do not edit generated build outputs under `build/`. When generated files look
-wrong, change the source generator, SCons rule, SLICC input, or SimObject
-definition that produces them.
+`gpu-lab/workspace/scripts/build-hsakmt-images.sh` builds the pair together and
+checks that both record the current gem5 revision. Override either name with
+`HSAKMT_SDK_IMAGE` and `HSAKMT_RUNNER_IMAGE`, which the Compose topology and
+every launcher script honour:
 
-Common investigation paths: for SCons configure failures, read
-`build/ALL/gem5.build/scons_config.log`; for GitHub Actions, inspect the
-specific failing job rather than only the workflow conclusion; for long test
-failures, use harness metadata such as `results.xml` before estimating rerun
-cost from suite wall time.
+```sh
+HSAKMT_SDK_IMAGE=gem5-gpu-hsakmt-sdk:test \
+  ./scripts/run-sample.sh --backend gem5-kmd hip-vector-add
+```
 
-Useful research sources, in rough order, are the current codebase and commit
-history; GitHub PRs, issues, and Discussions; public archives for
-`gem5-dev@gem5.org` and `gem5-users@gem5.org`; the gem5 website and its linked
-resources; and comments or documentation embedded near the relevant source
-code.
+The two must share a platform; the launcher reads it from each image and fails
+on a mismatch. The build scripts support `linux/amd64` and `linux/arm64`;
+validate the selected platform rather than treating an x86-64 pass as AArch64
+runtime evidence. Note that the launcher resolves platform through the image
+ID rather than the tag, because `docker image inspect` on a buildx manifest
+list reports empty `Os` and `Architecture` fields.
 
-Concrete sources:
-`https://github.com/gem5/gem5`,
-`https://github.com/gem5/gem5/pulls`,
-`https://github.com/gem5/gem5/issues`,
-`https://github.com/orgs/gem5/discussions`,
-`https://www.mail-archive.com/gem5-dev%40gem5.org/`,
-`https://www.mail-archive.com/gem5-users%40gem5.org/`, and
-`https://www.gem5.org/`.
+The SDK image supports the two rocjitsu-based backends. `rocjitsu-run` without
+`--attach` uses simdojo; `rocjitsu-run --attach` connects to the KMD server
+embedded in gem5. The `full-system` backend uses the runner image's gem5
+binary with the packaged GPUFS guest disk, kernel, and ROCm stack; it does not
+start the embedded KMD service. The archived GPUFS runtime remains available
+through `FULL_SYSTEM_IMAGE` for historical runs.
+
+## Running provided samples
+
+The canonical commands and prerequisites for all three backends are in
+`gpu-lab/RunningTheLab.md`. The shared scripts require an explicit `--backend`
+and keep builds separate under `work/apps/<backend>/`. `full-system` requires
+an x86-64 host with `/dev/kvm`; `gem5-kmd` and `simdojo` do not.
+
+Changes to the shared build, launch, or verification scripts must pass all
+three end-to-end sample gates:
+
+```sh
+./scripts/run-all-samples.sh --backend simdojo
+./scripts/run-all-samples.sh --backend gem5-kmd
+./scripts/run-all-samples.sh --backend full-system
+```
+
+Each gate rebuilds and verifies HIP vector-add, HIP matmul, HIP kernel-chain,
+and rainbow-image on the selected backend. Do not use a successful run from one
+backend as evidence for another.
+
+## Building ROCr from `ext/hsakmt-client/rocm-systems`
+
+The active ROCr source is the `ext/hsakmt-client/rocm-systems` submodule, with ROCr under:
+
+```sh
+ext/hsakmt-client/rocm-systems/projects/rocr-runtime
+```
+
+The successful local full ROCr build used LLVM/Clang 22 for host/device compilation and the installed ROCm device bitcode from LLVM 21. The relevant apt packages are:
+
+```sh
+sudo apt install \
+  cmake build-essential pkg-config \
+  libnuma-dev libdrm-dev libelf-dev \
+  libclang-22-dev lld-22 rocm-device-libs-21 \
+  libedit-dev libcurl4-openssl-dev
+```
+
+Configure outside the source tree:
+
+```sh
+cmake -S ext/hsakmt-client/rocm-systems/projects/rocr-runtime \
+  -B /tmp/rocm-systems-rocr-full-build-llvm22-hipdevlib \
+  -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+  -DEXPORT_TO_USER_PACKAGE_REGISTRY=OFF \
+  -DClang_DIR=/usr/lib/llvm-22/lib/cmake/clang \
+  -DLLVM_DIR=/usr/lib/llvm-22/lib/cmake/llvm
+```
+
+Build with `HIP_DEVICE_LIB_PATH` set, otherwise Clang 22 does not find the installed ROCm device libraries:
+
+```sh
+HIP_DEVICE_LIB_PATH=/usr/lib/llvm-21/lib/clang/21/amdgcn/bitcode \
+  cmake --build /tmp/rocm-systems-rocr-full-build-llvm22-hipdevlib -j 20
+```
+
+Expected main artifact:
+
+```sh
+/tmp/rocm-systems-rocr-full-build-llvm22-hipdevlib/rocr/lib/libhsa-runtime64.so
+```
+
+Do not switch this build to LLVM 21 just to match `rocm-device-libs-21`: current ROCr `develop` gfx12 trap-handler assembly failed with LLVM 21 in this environment. The working combination was LLVM/Clang 22 plus `HIP_DEVICE_LIB_PATH` pointing at the LLVM 21 ROCm device bitcode directory.
+
+## rocjitsu-based backends
+
+rocjitsu provides the lab's common application-side execution flow and is
+vendored in the same pinned submodule as ROCr under
+`ext/hsakmt-client/rocm-systems/emulation/rocjitsu`. Its local backend uses the
+simdojo-based functional AMDGPU simulator, which executes the GPU ISA in the
+application’s own process and needs no server, socket, or second container.
+Attach mode uses the same interposed application path with gem5's HSAKMT
+service and timing model.
+
+Upstream already provides simdojo daemon mode and Unix-domain KFD RPC. Our
+fork makes that KFD/server infrastructure reusable with an external device
+and exports the embedding C API; it does not introduce a parallel IPC stack.
+
+Both rocjitsu-based backends use rocjitsu's `/dev/kfd` interposer. Local mode starts
+rocjitsu's simdojo-backed KMD implementation; attach mode connects
+`RemoteDriver` to the existing socket published by gem5. There is no ROCr
+model-mode client or `HSA_MODEL_TOPOLOGY` path in the active integration.
+
+`ROCJITSU_CONFIG` takes a bare filename, resolved against
+`/opt/rocjitsu/share/rocjitsu/configs`, or an absolute path. Use the `_kmd`
+configs: they carry the `drm_render_minor` field the interposer's DRM emulation
+needs. Attach mode gets device identity and topology from the embedded server
+and does not require a simdojo config. Pass `--daemon` as the first argument
+to `rocjitsu-run` to host the simulator in its own process, which multi-process
+workloads such as `torchrun` require.
+
+The gem5-kmd service currently supports one attached process and one
+MI300X/gfx942 GPU. External SVM attributes/migration, queue suspension,
+non-temporal mapping policy, cross-process IPC workloads, and connected
+checkpoints are unsupported. Cold checkpoints precede listener publication
+and external resources. Do not infer these limitations apply to simdojo.
+
+Match the config to the code object. rocjitsu's simulation maturity differs by
+target: gfx950 (CDNA4) is beta, gfx94x (CDNA3) and the RDNA targets are
+experimental. Its cross-ISA translator can bridge a mismatch, but that is a
+separate and less mature path.
+
+Verify a run by its result rather than its exit code. `hip-vector-add` prints a
+checksum equal to 3·n(n−1)/2, so a wrong or skipped kernel is visible in the
+output.
+
+Two constraints apply when changing rocjitsu itself. It is inside a submodule,
+so fixes there need their own commit in `ext/hsakmt-client/rocm-systems` and do
+not travel with a gem5-side commit. And the Dockerfile installs the CLI and
+`librocjitsu.so` into the `bin`/`lib` pair under one prefix because the CLI
+locates its interposer relative to its own binary; splitting them breaks the
+launcher.

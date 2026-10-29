@@ -447,6 +447,12 @@ def define_options(parser):
         "--sqc-size", type=str, default="32KiB", help="SQC cache size"
     )
     parser.add_argument(
+        "--scalar-cache-size",
+        type=str,
+        default=None,
+        help="Scalar cache size (defaults to --sqc-size)",
+    )
+    parser.add_argument(
         "--sqc-assoc", type=int, default=8, help="SQC cache assoc"
     )
     parser.add_argument(
@@ -853,6 +859,8 @@ def construct_scalars(options, system, ruby_system, network):
     for i in range(options.num_scalar_cache):
         scalar_cntrl = SQCCntrl(TCC_select_num_bits=TCC_bits)
         scalar_cntrl.create(options, ruby_system, system)
+        if options.scalar_cache_size is not None:
+            scalar_cntrl.L1cache.size = MemorySize(options.scalar_cache_size)
 
         exec("ruby_system.scalar_cntrl%d = scalar_cntrl" % i)
 

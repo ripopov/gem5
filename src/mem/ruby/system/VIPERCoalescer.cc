@@ -72,15 +72,15 @@ VIPERCoalescer::makeRequest(PacketPtr pkt)
 {
     // VIPER only supports following memory request types
     //    MemSyncReq & INV_L1 : TCP cache invalidation
-    //    ReadReq             : cache read
-    //    WriteReq            : cache write
-    //    AtomicOp            : cache atomic
-    //    Flush               : flush and invalidate cache
-    //
-    // VIPER does not expect MemSyncReq & Release since compute unit
-    // does not specify an equivalent type of memory request.
+    //    MemSyncReq & FLUSH_L2: kernel-end release
+    //    ReadReq              : cache read
+    //    WriteReq             : cache write
+    //    AtomicOp             : cache atomic
+    //    Flush                : flush and invalidate cache
     assert((pkt->cmd == MemCmd::MemSyncReq && pkt->req->isInvL1()) ||
            (pkt->cmd == MemCmd::MemSyncReq && pkt->req->isInvL2()) ||
+           (pkt->cmd == MemCmd::MemSyncReq &&
+            pkt->req->isGL2CacheFlush()) ||
             pkt->cmd == MemCmd::ReadReq ||
             pkt->cmd == MemCmd::WriteReq ||
             pkt->cmd == MemCmd::FlushReq ||
@@ -109,6 +109,14 @@ VIPERCoalescer::makeRequest(PacketPtr pkt)
 
     if (pkt->req->isInvL2()) {
         invTCC(pkt);
+    }
+
+    if (pkt->req->isGL2CacheFlush()) {
+        // VIPER's GPU-side caches are write-through. S_ENDPGM waits for all
+        // older memory operations before issuing this kernel-end release, so
+        // there is no dirty GL2 state left to write back. Complete the
+        // ordering point without sending a line-addressed flush request.
+        ruby_hit_callback(pkt);
     }
 
     return RequestStatus_Issued;

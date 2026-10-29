@@ -92,7 +92,12 @@ class RubyPort : public ClockedObject
                         RubyPort& _port,
                         bool _access_backing_store,
                         PortID id, bool _no_retry_on_stall);
-        void hitCallback(PacketPtr pkt);
+        /**
+         * Complete a request. With access_backing_store the packet is also
+         * applied to physical memory, unless the caller already committed
+         * the protocol's result and clears applyToBackingStore.
+         */
+        void hitCallback(PacketPtr pkt, bool applyToBackingStore = true);
         void evictionCallback(Addr address);
 
       protected:

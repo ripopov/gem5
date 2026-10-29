@@ -66,7 +66,11 @@ SimplePoolManager::printRegion()
 bool
 SimplePoolManager::canAllocate(uint32_t numRegions, uint32_t size)
 {
-    return _reservedGroups == 0;
+    // Regions are only reclaimed once every wave on this SIMD has finished,
+    // so a new dispatch may only use an empty pool, and all of its regions
+    // must fit in it.
+    return _reservedGroups == 0 &&
+           numRegions * minAllocatedElements(size) <= poolSize();
 }
 
 void
@@ -88,7 +92,7 @@ SimplePoolManager::allocateRegion(const uint32_t size,
     uint32_t startIdx = _nxtFreeIdx;
     _nxtFreeIdx += actualSize;
     _regionSize = actualSize;
-    assert(_nxtFreeIdx < poolSize());
+    assert(_nxtFreeIdx <= poolSize());
     *reservedPoolSize = actualSize;
     ++_reservedGroups;
 

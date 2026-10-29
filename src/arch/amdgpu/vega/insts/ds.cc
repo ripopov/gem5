@@ -59,6 +59,7 @@ Inst_DS__DS_ADD_U32::execute(GPUDynInstPtr gpuDynInst)
     Wavefront *wf = gpuDynInst->wavefront();
 
     if (gpuDynInst->exec_mask.none()) {
+        wf->releaseLmResource(gpuDynInst);
         wf->decLGKMInstsIssued();
         wf->untrackLGKMInst(gpuDynInst);
         return;
@@ -74,7 +75,7 @@ Inst_DS__DS_ADD_U32::execute(GPUDynInstPtr gpuDynInst)
     addr.read();
     data.read();
 
-    calcAddr(gpuDynInst, addr);
+    calcAddr<sizeof(VecElemU32)>(gpuDynInst, addr);
 
     for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {
         if (gpuDynInst->exec_mask[lane]) {
@@ -89,11 +90,7 @@ Inst_DS__DS_ADD_U32::execute(GPUDynInstPtr gpuDynInst)
 void
 Inst_DS__DS_ADD_U32::initiateAcc(GPUDynInstPtr gpuDynInst)
 {
-    Addr offset0 = instData.OFFSET0;
-    Addr offset1 = instData.OFFSET1;
-    Addr offset = (offset1 << 8) | offset0;
-
-    initAtomicAccess<VecElemU32>(gpuDynInst, offset);
+    initAtomicAccess<VecElemU32>(gpuDynInst);
 } // initiateAcc
 
 void
@@ -294,6 +291,7 @@ Inst_DS__DS_OR_B32::execute(GPUDynInstPtr gpuDynInst)
     Wavefront *wf = gpuDynInst->wavefront();
 
     if (gpuDynInst->exec_mask.none()) {
+        wf->releaseLmResource(gpuDynInst);
         wf->decLGKMInstsIssued();
         wf->untrackLGKMInst(gpuDynInst);
         return;
@@ -309,7 +307,7 @@ Inst_DS__DS_OR_B32::execute(GPUDynInstPtr gpuDynInst)
     addr.read();
     data.read();
 
-    calcAddr(gpuDynInst, addr);
+    calcAddr<sizeof(VecElemU32)>(gpuDynInst, addr);
 
     for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {
         if (gpuDynInst->exec_mask[lane]) {
@@ -324,11 +322,7 @@ Inst_DS__DS_OR_B32::execute(GPUDynInstPtr gpuDynInst)
 void
 Inst_DS__DS_OR_B32::initiateAcc(GPUDynInstPtr gpuDynInst)
 {
-    Addr offset0 = instData.OFFSET0;
-    Addr offset1 = instData.OFFSET1;
-    Addr offset = (offset1 << 8) | offset0;
-
-    initAtomicAccess<VecElemU32>(gpuDynInst, offset);
+    initAtomicAccess<VecElemU32>(gpuDynInst);
 } // initiateAcc
 
 void
@@ -396,6 +390,7 @@ Inst_DS__DS_WRITE_B32::execute(GPUDynInstPtr gpuDynInst)
     Wavefront *wf = gpuDynInst->wavefront();
 
     if (gpuDynInst->exec_mask.none()) {
+        wf->releaseLmResource(gpuDynInst);
         wf->decLGKMInstsIssued();
         wf->untrackLGKMInst(gpuDynInst);
         return;
@@ -411,7 +406,7 @@ Inst_DS__DS_WRITE_B32::execute(GPUDynInstPtr gpuDynInst)
     addr.read();
     data.read();
 
-    calcAddr(gpuDynInst, addr);
+    calcAddr<sizeof(VecElemU32)>(gpuDynInst, addr);
 
     for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {
         if (gpuDynInst->exec_mask[lane]) {
@@ -426,11 +421,7 @@ Inst_DS__DS_WRITE_B32::execute(GPUDynInstPtr gpuDynInst)
 void
 Inst_DS__DS_WRITE_B32::initiateAcc(GPUDynInstPtr gpuDynInst)
 {
-    Addr offset0 = instData.OFFSET0;
-    Addr offset1 = instData.OFFSET1;
-    Addr offset = (offset1 << 8) | offset0;
-
-    initMemWrite<VecElemU32>(gpuDynInst, offset);
+    initMemWrite<VecElemU32>(gpuDynInst);
 } // initiateAcc
 
 void
@@ -459,6 +450,7 @@ Inst_DS__DS_WRITE2_B32::execute(GPUDynInstPtr gpuDynInst)
     Wavefront *wf = gpuDynInst->wavefront();
 
     if (gpuDynInst->exec_mask.none()) {
+        wf->releaseLmResource(gpuDynInst);
         wf->decLGKMInstsIssued();
         wf->untrackLGKMInst(gpuDynInst);
         return;
@@ -476,7 +468,7 @@ Inst_DS__DS_WRITE2_B32::execute(GPUDynInstPtr gpuDynInst)
     data0.read();
     data1.read();
 
-    calcAddr(gpuDynInst, addr);
+    calcAddr<sizeof(VecElemU32)>(gpuDynInst, addr, 2, 1);
 
     for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {
         if (gpuDynInst->exec_mask[lane]) {
@@ -493,10 +485,7 @@ Inst_DS__DS_WRITE2_B32::execute(GPUDynInstPtr gpuDynInst)
 void
 Inst_DS__DS_WRITE2_B32::initiateAcc(GPUDynInstPtr gpuDynInst)
 {
-    Addr offset0 = instData.OFFSET0 * 4;
-    Addr offset1 = instData.OFFSET1 * 4;
-
-    initDualMemWrite<VecElemU32>(gpuDynInst, offset0, offset1);
+    initDualMemWrite<VecElemU32>(gpuDynInst);
 }
 
 void
@@ -525,6 +514,7 @@ Inst_DS__DS_WRITE2ST64_B32::execute(GPUDynInstPtr gpuDynInst)
     Wavefront *wf = gpuDynInst->wavefront();
 
     if (gpuDynInst->exec_mask.none()) {
+        wf->releaseLmResource(gpuDynInst);
         wf->decLGKMInstsIssued();
         wf->untrackLGKMInst(gpuDynInst);
         return;
@@ -542,7 +532,7 @@ Inst_DS__DS_WRITE2ST64_B32::execute(GPUDynInstPtr gpuDynInst)
     data0.read();
     data1.read();
 
-    calcAddr(gpuDynInst, addr);
+    calcAddr<sizeof(VecElemU32)>(gpuDynInst, addr, 2, 64);
 
     for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {
         if (gpuDynInst->exec_mask[lane]) {
@@ -559,10 +549,7 @@ Inst_DS__DS_WRITE2ST64_B32::execute(GPUDynInstPtr gpuDynInst)
 void
 Inst_DS__DS_WRITE2ST64_B32::initiateAcc(GPUDynInstPtr gpuDynInst)
 {
-    Addr offset0 = instData.OFFSET0 * 4 * 64;
-    Addr offset1 = instData.OFFSET1 * 4 * 64;
-
-    initDualMemWrite<VecElemU32>(gpuDynInst, offset0, offset1);
+    initDualMemWrite<VecElemU32>(gpuDynInst);
 }
 
 void
@@ -711,6 +698,7 @@ Inst_DS__DS_ADD_F32::execute(GPUDynInstPtr gpuDynInst)
     Wavefront *wf = gpuDynInst->wavefront();
 
     if (gpuDynInst->exec_mask.none()) {
+        wf->releaseLmResource(gpuDynInst);
         wf->decLGKMInstsIssued();
         wf->untrackLGKMInst(gpuDynInst);
         return;
@@ -726,7 +714,7 @@ Inst_DS__DS_ADD_F32::execute(GPUDynInstPtr gpuDynInst)
     addr.read();
     data.read();
 
-    calcAddr(gpuDynInst, addr);
+    calcAddr<sizeof(VecElemF32)>(gpuDynInst, addr);
 
     for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {
         if (gpuDynInst->exec_mask[lane]) {
@@ -741,11 +729,7 @@ Inst_DS__DS_ADD_F32::execute(GPUDynInstPtr gpuDynInst)
 void
 Inst_DS__DS_ADD_F32::initiateAcc(GPUDynInstPtr gpuDynInst)
 {
-    Addr offset0 = instData.OFFSET0;
-    Addr offset1 = instData.OFFSET1;
-    Addr offset = (offset1 << 8) | offset0;
-
-    initAtomicAccess<VecElemF32>(gpuDynInst, offset);
+    initAtomicAccess<VecElemF32>(gpuDynInst);
 } // initiateAcc
 
 void
@@ -772,6 +756,7 @@ Inst_DS__DS_WRITE_B8::execute(GPUDynInstPtr gpuDynInst)
     Wavefront *wf = gpuDynInst->wavefront();
 
     if (gpuDynInst->exec_mask.none()) {
+        wf->releaseLmResource(gpuDynInst);
         wf->decLGKMInstsIssued();
         wf->untrackLGKMInst(gpuDynInst);
         return;
@@ -787,7 +772,7 @@ Inst_DS__DS_WRITE_B8::execute(GPUDynInstPtr gpuDynInst)
     addr.read();
     data.read();
 
-    calcAddr(gpuDynInst, addr);
+    calcAddr<sizeof(VecElemU8)>(gpuDynInst, addr);
 
     for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {
         if (gpuDynInst->exec_mask[lane]) {
@@ -802,11 +787,7 @@ Inst_DS__DS_WRITE_B8::execute(GPUDynInstPtr gpuDynInst)
 void
 Inst_DS__DS_WRITE_B8::initiateAcc(GPUDynInstPtr gpuDynInst)
 {
-    Addr offset0 = instData.OFFSET0;
-    Addr offset1 = instData.OFFSET1;
-    Addr offset = (offset1 << 8) | offset0;
-
-    initMemWrite<VecElemU8>(gpuDynInst, offset);
+    initMemWrite<VecElemU8>(gpuDynInst);
 } // initiateAcc
 
 void
@@ -833,6 +814,7 @@ Inst_DS__DS_WRITE_B8_D16_HI::execute(GPUDynInstPtr gpuDynInst)
     Wavefront *wf = gpuDynInst->wavefront();
 
     if (gpuDynInst->exec_mask.none()) {
+        wf->releaseLmResource(gpuDynInst);
         wf->decLGKMInstsIssued();
         wf->untrackLGKMInst(gpuDynInst);
         return;
@@ -848,7 +830,7 @@ Inst_DS__DS_WRITE_B8_D16_HI::execute(GPUDynInstPtr gpuDynInst)
     addr.read();
     data.read();
 
-    calcAddr(gpuDynInst, addr);
+    calcAddr<sizeof(VecElemU8)>(gpuDynInst, addr);
 
     for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {
         if (gpuDynInst->exec_mask[lane]) {
@@ -863,11 +845,7 @@ Inst_DS__DS_WRITE_B8_D16_HI::execute(GPUDynInstPtr gpuDynInst)
 void
 Inst_DS__DS_WRITE_B8_D16_HI::initiateAcc(GPUDynInstPtr gpuDynInst)
 {
-    Addr offset0 = instData.OFFSET0;
-    Addr offset1 = instData.OFFSET1;
-    Addr offset = (offset1 << 8) | offset0;
-
-    initMemWrite<VecElemU8>(gpuDynInst, offset);
+    initMemWrite<VecElemU8>(gpuDynInst);
 } // initiateAcc
 
 void
@@ -894,6 +872,7 @@ Inst_DS__DS_WRITE_B16::execute(GPUDynInstPtr gpuDynInst)
     Wavefront *wf = gpuDynInst->wavefront();
 
     if (gpuDynInst->exec_mask.none()) {
+        wf->releaseLmResource(gpuDynInst);
         wf->decLGKMInstsIssued();
         wf->untrackLGKMInst(gpuDynInst);
         return;
@@ -909,7 +888,7 @@ Inst_DS__DS_WRITE_B16::execute(GPUDynInstPtr gpuDynInst)
     addr.read();
     data.read();
 
-    calcAddr(gpuDynInst, addr);
+    calcAddr<sizeof(VecElemU16)>(gpuDynInst, addr);
 
     for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {
         if (gpuDynInst->exec_mask[lane]) {
@@ -924,11 +903,7 @@ Inst_DS__DS_WRITE_B16::execute(GPUDynInstPtr gpuDynInst)
 void
 Inst_DS__DS_WRITE_B16::initiateAcc(GPUDynInstPtr gpuDynInst)
 {
-    Addr offset0 = instData.OFFSET0;
-    Addr offset1 = instData.OFFSET1;
-    Addr offset = (offset1 << 8) | offset0;
-
-    initMemWrite<VecElemU16>(gpuDynInst, offset);
+    initMemWrite<VecElemU16>(gpuDynInst);
 } // initiateAcc
 
 void
@@ -1019,6 +994,7 @@ Inst_DS__DS_ADD_RTN_U32::execute(GPUDynInstPtr gpuDynInst)
     Wavefront *wf = gpuDynInst->wavefront();
 
     if (gpuDynInst->exec_mask.none()) {
+        wf->releaseLmResource(gpuDynInst);
         wf->decLGKMInstsIssued();
         return;
     }
@@ -1033,7 +1009,7 @@ Inst_DS__DS_ADD_RTN_U32::execute(GPUDynInstPtr gpuDynInst)
     addr.read();
     data.read();
 
-    calcAddr(gpuDynInst, addr);
+    calcAddr<sizeof(VecElemU32)>(gpuDynInst, addr);
 
     for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {
         if (gpuDynInst->exec_mask[lane]) {
@@ -1048,11 +1024,7 @@ Inst_DS__DS_ADD_RTN_U32::execute(GPUDynInstPtr gpuDynInst)
 void
 Inst_DS__DS_ADD_RTN_U32::initiateAcc(GPUDynInstPtr gpuDynInst)
 {
-    Addr offset0 = instData.OFFSET0;
-    Addr offset1 = instData.OFFSET1;
-    Addr offset = (offset1 << 8) | offset0;
-
-    initAtomicAccess<VecElemU32>(gpuDynInst, offset);
+    initAtomicAccess<VecElemU32>(gpuDynInst);
 } // initiateAcc
 
 void
@@ -1381,6 +1353,7 @@ Inst_DS__DS_CMPST_RTN_B32::execute(GPUDynInstPtr gpuDynInst)
     Wavefront *wf = gpuDynInst->wavefront();
 
     if (gpuDynInst->exec_mask.none()) {
+        wf->releaseLmResource(gpuDynInst);
         wf->decLGKMInstsIssued();
         return;
     }
@@ -1397,7 +1370,7 @@ Inst_DS__DS_CMPST_RTN_B32::execute(GPUDynInstPtr gpuDynInst)
     addr.read();
     src.read();
     cmp.read();
-    calcAddr(gpuDynInst, addr);
+    calcAddr<sizeof(VecElemU32)>(gpuDynInst, addr);
 
     for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {
         if (gpuDynInst->exec_mask[lane]) {
@@ -1416,11 +1389,7 @@ Inst_DS__DS_CMPST_RTN_B32::execute(GPUDynInstPtr gpuDynInst)
 void
 Inst_DS__DS_CMPST_RTN_B32::initiateAcc(GPUDynInstPtr gpuDynInst)
 {
-    Addr offset0 = instData.OFFSET0;
-    Addr offset1 = instData.OFFSET1;
-    Addr offset = (offset1 << 8) | offset0;
-
-    initAtomicAccess<VecElemU32>(gpuDynInst, offset);
+    initAtomicAccess<VecElemU32>(gpuDynInst);
 } // initiateAcc
 
 void
@@ -1574,6 +1543,7 @@ Inst_DS__DS_READ_B32::execute(GPUDynInstPtr gpuDynInst)
     Wavefront *wf = gpuDynInst->wavefront();
 
     if (gpuDynInst->exec_mask.none()) {
+        wf->releaseLmResource(gpuDynInst);
         wf->decLGKMInstsIssued();
         wf->untrackLGKMInst(gpuDynInst);
         return;
@@ -1587,7 +1557,7 @@ Inst_DS__DS_READ_B32::execute(GPUDynInstPtr gpuDynInst)
 
     addr.read();
 
-    calcAddr(gpuDynInst, addr);
+    calcAddr<sizeof(VecElemU32)>(gpuDynInst, addr);
 
     gpuDynInst->computeUnit()->localMemoryPipe.issueRequest(gpuDynInst);
 } // execute
@@ -1595,11 +1565,7 @@ Inst_DS__DS_READ_B32::execute(GPUDynInstPtr gpuDynInst)
 void
 Inst_DS__DS_READ_B32::initiateAcc(GPUDynInstPtr gpuDynInst)
 {
-    Addr offset0 = instData.OFFSET0;
-    Addr offset1 = instData.OFFSET1;
-    Addr offset = (offset1 << 8) | offset0;
-
-    initMemRead<VecElemU32>(gpuDynInst, offset);
+    initMemRead<VecElemU32>(gpuDynInst);
 } // initiateAcc
 
 void
@@ -1638,6 +1604,7 @@ Inst_DS__DS_READ2_B32::execute(GPUDynInstPtr gpuDynInst)
     Wavefront *wf = gpuDynInst->wavefront();
 
     if (gpuDynInst->exec_mask.none()) {
+        wf->releaseLmResource(gpuDynInst);
         wf->decLGKMInstsIssued();
         wf->untrackLGKMInst(gpuDynInst);
         return;
@@ -1651,7 +1618,7 @@ Inst_DS__DS_READ2_B32::execute(GPUDynInstPtr gpuDynInst)
 
     addr.read();
 
-    calcAddr(gpuDynInst, addr);
+    calcAddr<sizeof(VecElemU32)>(gpuDynInst, addr, 2, 1);
 
     gpuDynInst->computeUnit()->localMemoryPipe.issueRequest(gpuDynInst);
 } // execute
@@ -1659,10 +1626,7 @@ Inst_DS__DS_READ2_B32::execute(GPUDynInstPtr gpuDynInst)
 void
 Inst_DS__DS_READ2_B32::initiateAcc(GPUDynInstPtr gpuDynInst)
 {
-    Addr offset0 = instData.OFFSET0 * 4;
-    Addr offset1 = instData.OFFSET1 * 4;
-
-    initDualMemRead<VecElemU32>(gpuDynInst, offset0, offset1);
+    initDualMemRead<VecElemU32>(gpuDynInst);
 } // initiateAcc
 
 void
@@ -1705,6 +1669,7 @@ Inst_DS__DS_READ2ST64_B32::execute(GPUDynInstPtr gpuDynInst)
     Wavefront *wf = gpuDynInst->wavefront();
 
     if (gpuDynInst->exec_mask.none()) {
+        wf->releaseLmResource(gpuDynInst);
         wf->decLGKMInstsIssued();
         wf->untrackLGKMInst(gpuDynInst);
         return;
@@ -1718,7 +1683,7 @@ Inst_DS__DS_READ2ST64_B32::execute(GPUDynInstPtr gpuDynInst)
 
     addr.read();
 
-    calcAddr(gpuDynInst, addr);
+    calcAddr<sizeof(VecElemU32)>(gpuDynInst, addr, 2, 64);
 
     gpuDynInst->computeUnit()->localMemoryPipe.issueRequest(gpuDynInst);
 } // execute
@@ -1726,10 +1691,7 @@ Inst_DS__DS_READ2ST64_B32::execute(GPUDynInstPtr gpuDynInst)
 void
 Inst_DS__DS_READ2ST64_B32::initiateAcc(GPUDynInstPtr gpuDynInst)
 {
-    Addr offset0 = (instData.OFFSET0 * 4 * 64);
-    Addr offset1 = (instData.OFFSET1 * 4 * 64);
-
-    initDualMemRead<VecElemU32>(gpuDynInst, offset0, offset1);
+    initDualMemRead<VecElemU32>(gpuDynInst);
 }
 
 void
@@ -1771,6 +1733,7 @@ Inst_DS__DS_READ_I8::execute(GPUDynInstPtr gpuDynInst)
     Wavefront *wf = gpuDynInst->wavefront();
 
     if (gpuDynInst->exec_mask.none()) {
+        wf->releaseLmResource(gpuDynInst);
         wf->decLGKMInstsIssued();
         wf->untrackLGKMInst(gpuDynInst);
         return;
@@ -1784,7 +1747,7 @@ Inst_DS__DS_READ_I8::execute(GPUDynInstPtr gpuDynInst)
 
     addr.read();
 
-    calcAddr(gpuDynInst, addr);
+    calcAddr<sizeof(VecElemI8)>(gpuDynInst, addr);
 
     gpuDynInst->computeUnit()->localMemoryPipe.issueRequest(gpuDynInst);
 } // execute
@@ -1792,11 +1755,7 @@ Inst_DS__DS_READ_I8::execute(GPUDynInstPtr gpuDynInst)
 void
 Inst_DS__DS_READ_I8::initiateAcc(GPUDynInstPtr gpuDynInst)
 {
-    Addr offset0 = instData.OFFSET0;
-    Addr offset1 = instData.OFFSET1;
-    Addr offset = (offset1 << 8) | offset0;
-
-    initMemRead<VecElemI8>(gpuDynInst, offset);
+    initMemRead<VecElemI8>(gpuDynInst);
 } // initiateAcc
 
 void
@@ -1834,6 +1793,7 @@ Inst_DS__DS_READ_U8::execute(GPUDynInstPtr gpuDynInst)
     Wavefront *wf = gpuDynInst->wavefront();
 
     if (gpuDynInst->exec_mask.none()) {
+        wf->releaseLmResource(gpuDynInst);
         wf->decLGKMInstsIssued();
         wf->untrackLGKMInst(gpuDynInst);
         return;
@@ -1847,7 +1807,7 @@ Inst_DS__DS_READ_U8::execute(GPUDynInstPtr gpuDynInst)
 
     addr.read();
 
-    calcAddr(gpuDynInst, addr);
+    calcAddr<sizeof(VecElemU8)>(gpuDynInst, addr);
 
     gpuDynInst->computeUnit()->localMemoryPipe.issueRequest(gpuDynInst);
 } // execute
@@ -1855,11 +1815,7 @@ Inst_DS__DS_READ_U8::execute(GPUDynInstPtr gpuDynInst)
 void
 Inst_DS__DS_READ_U8::initiateAcc(GPUDynInstPtr gpuDynInst)
 {
-    Addr offset0 = instData.OFFSET0;
-    Addr offset1 = instData.OFFSET1;
-    Addr offset = (offset1 << 8) | offset0;
-
-    initMemRead<VecElemU8>(gpuDynInst, offset);
+    initMemRead<VecElemU8>(gpuDynInst);
 } // initiateAcc
 
 void
@@ -1917,6 +1873,7 @@ Inst_DS__DS_READ_U16::execute(GPUDynInstPtr gpuDynInst)
     Wavefront *wf = gpuDynInst->wavefront();
 
     if (gpuDynInst->exec_mask.none()) {
+        wf->releaseLmResource(gpuDynInst);
         wf->decLGKMInstsIssued();
         wf->untrackLGKMInst(gpuDynInst);
         return;
@@ -1930,18 +1887,14 @@ Inst_DS__DS_READ_U16::execute(GPUDynInstPtr gpuDynInst)
 
     addr.read();
 
-    calcAddr(gpuDynInst, addr);
+    calcAddr<sizeof(VecElemU16)>(gpuDynInst, addr);
 
     gpuDynInst->computeUnit()->localMemoryPipe.issueRequest(gpuDynInst);
 } // execute
 void
 Inst_DS__DS_READ_U16::initiateAcc(GPUDynInstPtr gpuDynInst)
 {
-    Addr offset0 = instData.OFFSET0;
-    Addr offset1 = instData.OFFSET1;
-    Addr offset = (offset1 << 8) | offset0;
-
-    initMemRead<VecElemU16>(gpuDynInst, offset);
+    initMemRead<VecElemU16>(gpuDynInst);
 } // initiateAcc
 
 void
@@ -1979,6 +1932,7 @@ Inst_DS__DS_READ_U16_D16::execute(GPUDynInstPtr gpuDynInst)
     Wavefront *wf = gpuDynInst->wavefront();
 
     if (gpuDynInst->exec_mask.none()) {
+        wf->releaseLmResource(gpuDynInst);
         wf->decLGKMInstsIssued();
         wf->untrackLGKMInst(gpuDynInst);
         return;
@@ -1992,18 +1946,14 @@ Inst_DS__DS_READ_U16_D16::execute(GPUDynInstPtr gpuDynInst)
 
     addr.read();
 
-    calcAddr(gpuDynInst, addr);
+    calcAddr<sizeof(VecElemU16)>(gpuDynInst, addr);
 
     gpuDynInst->computeUnit()->localMemoryPipe.issueRequest(gpuDynInst);
 } // execute
 void
 Inst_DS__DS_READ_U16_D16::initiateAcc(GPUDynInstPtr gpuDynInst)
 {
-    Addr offset0 = instData.OFFSET0;
-    Addr offset1 = instData.OFFSET1;
-    Addr offset = (offset1 << 8) | offset0;
-
-    initMemRead<VecElemU16>(gpuDynInst, offset);
+    initMemRead<VecElemU16>(gpuDynInst);
 } // initiateAcc
 
 void
@@ -2042,6 +1992,7 @@ Inst_DS__DS_READ_U16_D16_HI::execute(GPUDynInstPtr gpuDynInst)
     Wavefront *wf = gpuDynInst->wavefront();
 
     if (gpuDynInst->exec_mask.none()) {
+        wf->releaseLmResource(gpuDynInst);
         wf->decLGKMInstsIssued();
         wf->untrackLGKMInst(gpuDynInst);
         return;
@@ -2055,18 +2006,14 @@ Inst_DS__DS_READ_U16_D16_HI::execute(GPUDynInstPtr gpuDynInst)
 
     addr.read();
 
-    calcAddr(gpuDynInst, addr);
+    calcAddr<sizeof(VecElemU16)>(gpuDynInst, addr);
 
     gpuDynInst->computeUnit()->localMemoryPipe.issueRequest(gpuDynInst);
 } // execute
 void
 Inst_DS__DS_READ_U16_D16_HI::initiateAcc(GPUDynInstPtr gpuDynInst)
 {
-    Addr offset0 = instData.OFFSET0;
-    Addr offset1 = instData.OFFSET1;
-    Addr offset = (offset1 << 8) | offset0;
-
-    initMemRead<VecElemU16>(gpuDynInst, offset);
+    initMemRead<VecElemU16>(gpuDynInst);
 } // initiateAcc
 
 void
@@ -2113,6 +2060,7 @@ Inst_DS__DS_SWIZZLE_B32::execute(GPUDynInstPtr gpuDynInst)
     wf->untrackLGKMInst(gpuDynInst);
 
     if (gpuDynInst->exec_mask.none()) {
+        wf->releaseLmResource(gpuDynInst);
         return;
     }
 
@@ -2252,6 +2200,7 @@ Inst_DS__DS_PERMUTE_B32::execute(GPUDynInstPtr gpuDynInst)
     wf->untrackLGKMInst(gpuDynInst);
 
     if (gpuDynInst->exec_mask.none()) {
+        wf->releaseLmResource(gpuDynInst);
         return;
     }
 
@@ -2342,6 +2291,7 @@ Inst_DS__DS_BPERMUTE_B32::execute(GPUDynInstPtr gpuDynInst)
     wf->untrackLGKMInst(gpuDynInst);
 
     if (gpuDynInst->exec_mask.none()) {
+        wf->releaseLmResource(gpuDynInst);
         return;
     }
 
@@ -2429,6 +2379,7 @@ Inst_DS__DS_ADD_U64::execute(GPUDynInstPtr gpuDynInst)
     Wavefront *wf = gpuDynInst->wavefront();
 
     if (gpuDynInst->exec_mask.none()) {
+        wf->releaseLmResource(gpuDynInst);
         wf->decLGKMInstsIssued();
         wf->untrackLGKMInst(gpuDynInst);
         return;
@@ -2444,7 +2395,7 @@ Inst_DS__DS_ADD_U64::execute(GPUDynInstPtr gpuDynInst)
     addr.read();
     data.read();
 
-    calcAddr(gpuDynInst, addr);
+    calcAddr<sizeof(VecElemU64)>(gpuDynInst, addr);
 
     for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {
         if (gpuDynInst->exec_mask[lane]) {
@@ -2459,11 +2410,7 @@ Inst_DS__DS_ADD_U64::execute(GPUDynInstPtr gpuDynInst)
 void
 Inst_DS__DS_ADD_U64::initiateAcc(GPUDynInstPtr gpuDynInst)
 {
-    Addr offset0 = instData.OFFSET0;
-    Addr offset1 = instData.OFFSET1;
-    Addr offset = (offset1 << 8) | offset0;
-
-    initAtomicAccess<VecElemU64>(gpuDynInst, offset);
+    initAtomicAccess<VecElemU64>(gpuDynInst);
 } // initiateAcc
 
 void
@@ -2722,6 +2669,7 @@ Inst_DS__DS_WRITE_B64::execute(GPUDynInstPtr gpuDynInst)
     Wavefront *wf = gpuDynInst->wavefront();
 
     if (gpuDynInst->exec_mask.none()) {
+        wf->releaseLmResource(gpuDynInst);
         wf->decLGKMInstsIssued();
         wf->untrackLGKMInst(gpuDynInst);
         return;
@@ -2737,7 +2685,7 @@ Inst_DS__DS_WRITE_B64::execute(GPUDynInstPtr gpuDynInst)
     addr.read();
     data.read();
 
-    calcAddr(gpuDynInst, addr);
+    calcAddr<sizeof(VecElemU64)>(gpuDynInst, addr);
 
     for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {
         if (gpuDynInst->exec_mask[lane]) {
@@ -2752,11 +2700,7 @@ Inst_DS__DS_WRITE_B64::execute(GPUDynInstPtr gpuDynInst)
 void
 Inst_DS__DS_WRITE_B64::initiateAcc(GPUDynInstPtr gpuDynInst)
 {
-    Addr offset0 = instData.OFFSET0;
-    Addr offset1 = instData.OFFSET1;
-    Addr offset = (offset1 << 8) | offset0;
-
-    initMemWrite<VecElemU64>(gpuDynInst, offset);
+    initMemWrite<VecElemU64>(gpuDynInst);
 } // initiateAcc
 
 void
@@ -2785,6 +2729,7 @@ Inst_DS__DS_WRITE2_B64::execute(GPUDynInstPtr gpuDynInst)
     Wavefront *wf = gpuDynInst->wavefront();
 
     if (gpuDynInst->exec_mask.none()) {
+        wf->releaseLmResource(gpuDynInst);
         wf->decLGKMInstsIssued();
         wf->untrackLGKMInst(gpuDynInst);
         return;
@@ -2802,7 +2747,7 @@ Inst_DS__DS_WRITE2_B64::execute(GPUDynInstPtr gpuDynInst)
     data0.read();
     data1.read();
 
-    calcAddr(gpuDynInst, addr);
+    calcAddr<sizeof(VecElemU64)>(gpuDynInst, addr, 2, 1);
 
     for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {
         if (gpuDynInst->exec_mask[lane]) {
@@ -2819,10 +2764,7 @@ Inst_DS__DS_WRITE2_B64::execute(GPUDynInstPtr gpuDynInst)
 void
 Inst_DS__DS_WRITE2_B64::initiateAcc(GPUDynInstPtr gpuDynInst)
 {
-    Addr offset0 = instData.OFFSET0 * 8;
-    Addr offset1 = instData.OFFSET1 * 8;
-
-    initDualMemWrite<VecElemU64>(gpuDynInst, offset0, offset1);
+    initDualMemWrite<VecElemU64>(gpuDynInst);
 }
 
 void
@@ -2851,6 +2793,7 @@ Inst_DS__DS_WRITE2ST64_B64::execute(GPUDynInstPtr gpuDynInst)
     Wavefront *wf = gpuDynInst->wavefront();
 
     if (gpuDynInst->exec_mask.none()) {
+        wf->releaseLmResource(gpuDynInst);
         wf->decLGKMInstsIssued();
         wf->untrackLGKMInst(gpuDynInst);
         return;
@@ -2868,7 +2811,7 @@ Inst_DS__DS_WRITE2ST64_B64::execute(GPUDynInstPtr gpuDynInst)
     data0.read();
     data1.read();
 
-    calcAddr(gpuDynInst, addr);
+    calcAddr<sizeof(VecElemU64)>(gpuDynInst, addr, 2, 64);
 
     for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {
         if (gpuDynInst->exec_mask[lane]) {
@@ -2885,10 +2828,7 @@ Inst_DS__DS_WRITE2ST64_B64::execute(GPUDynInstPtr gpuDynInst)
 void
 Inst_DS__DS_WRITE2ST64_B64::initiateAcc(GPUDynInstPtr gpuDynInst)
 {
-    Addr offset0 = instData.OFFSET0 * 8 * 64;
-    Addr offset1 = instData.OFFSET1 * 8 * 64;
-
-    initDualMemWrite<VecElemU64>(gpuDynInst, offset0, offset1);
+    initDualMemWrite<VecElemU64>(gpuDynInst);
 }
 
 void
@@ -3417,6 +3357,7 @@ Inst_DS__DS_READ_B64::execute(GPUDynInstPtr gpuDynInst)
     Wavefront *wf = gpuDynInst->wavefront();
 
     if (gpuDynInst->exec_mask.none()) {
+        wf->releaseLmResource(gpuDynInst);
         wf->decLGKMInstsIssued();
         wf->untrackLGKMInst(gpuDynInst);
         return;
@@ -3430,7 +3371,7 @@ Inst_DS__DS_READ_B64::execute(GPUDynInstPtr gpuDynInst)
 
     addr.read();
 
-    calcAddr(gpuDynInst, addr);
+    calcAddr<sizeof(VecElemU64)>(gpuDynInst, addr);
 
     gpuDynInst->computeUnit()->localMemoryPipe.issueRequest(gpuDynInst);
 } // execute
@@ -3438,11 +3379,7 @@ Inst_DS__DS_READ_B64::execute(GPUDynInstPtr gpuDynInst)
 void
 Inst_DS__DS_READ_B64::initiateAcc(GPUDynInstPtr gpuDynInst)
 {
-    Addr offset0 = instData.OFFSET0;
-    Addr offset1 = instData.OFFSET1;
-    Addr offset = (offset1 << 8) | offset0;
-
-    initMemRead<VecElemU64>(gpuDynInst, offset);
+    initMemRead<VecElemU64>(gpuDynInst);
 } // initiateAcc
 
 void
@@ -3481,6 +3418,7 @@ Inst_DS__DS_READ2_B64::execute(GPUDynInstPtr gpuDynInst)
     Wavefront *wf = gpuDynInst->wavefront();
 
     if (gpuDynInst->exec_mask.none()) {
+        wf->releaseLmResource(gpuDynInst);
         wf->decLGKMInstsIssued();
         wf->untrackLGKMInst(gpuDynInst);
         return;
@@ -3494,7 +3432,7 @@ Inst_DS__DS_READ2_B64::execute(GPUDynInstPtr gpuDynInst)
 
     addr.read();
 
-    calcAddr(gpuDynInst, addr);
+    calcAddr<sizeof(VecElemU64)>(gpuDynInst, addr, 2, 1);
 
     gpuDynInst->computeUnit()->localMemoryPipe.issueRequest(gpuDynInst);
 } // execute
@@ -3502,10 +3440,7 @@ Inst_DS__DS_READ2_B64::execute(GPUDynInstPtr gpuDynInst)
 void
 Inst_DS__DS_READ2_B64::initiateAcc(GPUDynInstPtr gpuDynInst)
 {
-    Addr offset0 = instData.OFFSET0 * 8;
-    Addr offset1 = instData.OFFSET1 * 8;
-
-    initDualMemRead<VecElemU64>(gpuDynInst, offset0, offset1);
+    initDualMemRead<VecElemU64>(gpuDynInst);
 } // initiateAcc
 
 void
@@ -3548,6 +3483,7 @@ Inst_DS__DS_READ2ST64_B64::execute(GPUDynInstPtr gpuDynInst)
     Wavefront *wf = gpuDynInst->wavefront();
 
     if (gpuDynInst->exec_mask.none()) {
+        wf->releaseLmResource(gpuDynInst);
         wf->decLGKMInstsIssued();
         wf->untrackLGKMInst(gpuDynInst);
         return;
@@ -3561,7 +3497,7 @@ Inst_DS__DS_READ2ST64_B64::execute(GPUDynInstPtr gpuDynInst)
 
     addr.read();
 
-    calcAddr(gpuDynInst, addr);
+    calcAddr<sizeof(VecElemU64)>(gpuDynInst, addr, 2, 64);
 
     gpuDynInst->computeUnit()->localMemoryPipe.issueRequest(gpuDynInst);
 } // execute
@@ -3569,10 +3505,7 @@ Inst_DS__DS_READ2ST64_B64::execute(GPUDynInstPtr gpuDynInst)
 void
 Inst_DS__DS_READ2ST64_B64::initiateAcc(GPUDynInstPtr gpuDynInst)
 {
-    Addr offset0 = (instData.OFFSET0 * 8 * 64);
-    Addr offset1 = (instData.OFFSET1 * 8 * 64);
-
-    initDualMemRead<VecElemU64>(gpuDynInst, offset0, offset1);
+    initDualMemRead<VecElemU64>(gpuDynInst);
 }
 
 void
@@ -4510,7 +4443,7 @@ Inst_DS__DS_WRITE_B96::execute(GPUDynInstPtr gpuDynInst)
     data1.read();
     data2.read();
 
-    calcAddr(gpuDynInst, addr);
+    calcAddr<12>(gpuDynInst, addr);
 
     for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {
         if (gpuDynInst->exec_mask[lane]) {
@@ -4529,11 +4462,7 @@ Inst_DS__DS_WRITE_B96::execute(GPUDynInstPtr gpuDynInst)
 void
 Inst_DS__DS_WRITE_B96::initiateAcc(GPUDynInstPtr gpuDynInst)
 {
-    Addr offset0 = instData.OFFSET0;
-    Addr offset1 = instData.OFFSET1;
-    Addr offset = (offset1 << 8) | offset0;
-
-    initMemWrite<3>(gpuDynInst, offset);
+    initMemWrite<3>(gpuDynInst);
 } // initiateAcc
 
 void
@@ -4574,7 +4503,7 @@ Inst_DS__DS_WRITE_B128::execute(GPUDynInstPtr gpuDynInst)
     data2.read();
     data3.read();
 
-    calcAddr(gpuDynInst, addr);
+    calcAddr<16>(gpuDynInst, addr);
 
     for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {
         if (gpuDynInst->exec_mask[lane]) {
@@ -4595,11 +4524,7 @@ Inst_DS__DS_WRITE_B128::execute(GPUDynInstPtr gpuDynInst)
 void
 Inst_DS__DS_WRITE_B128::initiateAcc(GPUDynInstPtr gpuDynInst)
 {
-    Addr offset0 = instData.OFFSET0;
-    Addr offset1 = instData.OFFSET1;
-    Addr offset = (offset1 << 8) | offset0;
-
-    initMemWrite<4>(gpuDynInst, offset);
+    initMemWrite<4>(gpuDynInst);
 } // initiateAcc
 
 void
@@ -4631,7 +4556,7 @@ Inst_DS__DS_READ_B96::execute(GPUDynInstPtr gpuDynInst)
 
     addr.read();
 
-    calcAddr(gpuDynInst, addr);
+    calcAddr<12>(gpuDynInst, addr);
 
     gpuDynInst->computeUnit()->localMemoryPipe.issueRequest(gpuDynInst);
 } // execute
@@ -4639,11 +4564,7 @@ Inst_DS__DS_READ_B96::execute(GPUDynInstPtr gpuDynInst)
 void
 Inst_DS__DS_READ_B96::initiateAcc(GPUDynInstPtr gpuDynInst)
 {
-    Addr offset0 = instData.OFFSET0;
-    Addr offset1 = instData.OFFSET1;
-    Addr offset = (offset1 << 8) | offset0;
-
-    initMemRead<3>(gpuDynInst, offset);
+    initMemRead<3>(gpuDynInst);
 }
 
 void
@@ -4694,7 +4615,7 @@ Inst_DS__DS_READ_B128::execute(GPUDynInstPtr gpuDynInst)
 
     addr.read();
 
-    calcAddr(gpuDynInst, addr);
+    calcAddr<16>(gpuDynInst, addr);
 
     gpuDynInst->computeUnit()->localMemoryPipe.issueRequest(gpuDynInst);
 } // execute
@@ -4702,11 +4623,7 @@ Inst_DS__DS_READ_B128::execute(GPUDynInstPtr gpuDynInst)
 void
 Inst_DS__DS_READ_B128::initiateAcc(GPUDynInstPtr gpuDynInst)
 {
-    Addr offset0 = instData.OFFSET0;
-    Addr offset1 = instData.OFFSET1;
-    Addr offset = (offset1 << 8) | offset0;
-
-    initMemRead<4>(gpuDynInst, offset);
+    initMemRead<4>(gpuDynInst);
 } // initiateAcc
 
 void
@@ -4752,6 +4669,7 @@ Inst_DS__DS_READ_B64_TR_B4::execute(GPUDynInstPtr gpuDynInst)
     Wavefront *wf = gpuDynInst->wavefront();
 
     if (gpuDynInst->exec_mask.none()) {
+        wf->releaseLmResource(gpuDynInst);
         wf->decLGKMInstsIssued();
         return;
     }
@@ -4764,7 +4682,7 @@ Inst_DS__DS_READ_B64_TR_B4::execute(GPUDynInstPtr gpuDynInst)
 
     addr.read();
 
-    calcAddr(gpuDynInst, addr);
+    calcAddr<sizeof(VecElemU64)>(gpuDynInst, addr);
 
     gpuDynInst->computeUnit()->localMemoryPipe.issueRequest(gpuDynInst);
 } // execute
@@ -4772,11 +4690,7 @@ Inst_DS__DS_READ_B64_TR_B4::execute(GPUDynInstPtr gpuDynInst)
 void
 Inst_DS__DS_READ_B64_TR_B4::initiateAcc(GPUDynInstPtr gpuDynInst)
 {
-    Addr offset0 = instData.OFFSET0;
-    Addr offset1 = instData.OFFSET1;
-    Addr offset = (offset1 << 8) | offset0;
-
-    initMemRead<VecElemU64>(gpuDynInst, offset);
+    initMemRead<VecElemU64>(gpuDynInst);
 } // initiateAcc
 
 void
@@ -4881,6 +4795,7 @@ Inst_DS__DS_READ_B96_TR_B6::execute(GPUDynInstPtr gpuDynInst)
     Wavefront *wf = gpuDynInst->wavefront();
 
     if (gpuDynInst->exec_mask.none()) {
+        wf->releaseLmResource(gpuDynInst);
         wf->decLGKMInstsIssued();
         return;
     }
@@ -4893,7 +4808,7 @@ Inst_DS__DS_READ_B96_TR_B6::execute(GPUDynInstPtr gpuDynInst)
 
     addr.read();
 
-    calcAddr(gpuDynInst, addr);
+    calcAddr<12>(gpuDynInst, addr);
 
     gpuDynInst->computeUnit()->localMemoryPipe.issueRequest(gpuDynInst);
 } // execute
@@ -4901,11 +4816,7 @@ Inst_DS__DS_READ_B96_TR_B6::execute(GPUDynInstPtr gpuDynInst)
 void
 Inst_DS__DS_READ_B96_TR_B6::initiateAcc(GPUDynInstPtr gpuDynInst)
 {
-    Addr offset0 = instData.OFFSET0;
-    Addr offset1 = instData.OFFSET1;
-    Addr offset = (offset1 << 8) | offset0;
-
-    initMemRead<3>(gpuDynInst, offset);
+    initMemRead<3>(gpuDynInst);
 } // initiateAcc
 
 void
@@ -5029,6 +4940,7 @@ Inst_DS__DS_READ_B64_TR_B8::execute(GPUDynInstPtr gpuDynInst)
     Wavefront *wf = gpuDynInst->wavefront();
 
     if (gpuDynInst->exec_mask.none()) {
+        wf->releaseLmResource(gpuDynInst);
         wf->decLGKMInstsIssued();
         return;
     }
@@ -5041,7 +4953,7 @@ Inst_DS__DS_READ_B64_TR_B8::execute(GPUDynInstPtr gpuDynInst)
 
     addr.read();
 
-    calcAddr(gpuDynInst, addr);
+    calcAddr<sizeof(VecElemU64)>(gpuDynInst, addr);
 
     gpuDynInst->computeUnit()->localMemoryPipe.issueRequest(gpuDynInst);
 } // execute
@@ -5049,11 +4961,7 @@ Inst_DS__DS_READ_B64_TR_B8::execute(GPUDynInstPtr gpuDynInst)
 void
 Inst_DS__DS_READ_B64_TR_B8::initiateAcc(GPUDynInstPtr gpuDynInst)
 {
-    Addr offset0 = instData.OFFSET0;
-    Addr offset1 = instData.OFFSET1;
-    Addr offset = (offset1 << 8) | offset0;
-
-    initMemRead<VecElemU64>(gpuDynInst, offset);
+    initMemRead<VecElemU64>(gpuDynInst);
 } // initiateAcc
 
 void
@@ -5144,6 +5052,7 @@ Inst_DS__DS_READ_B64_TR_B16::execute(GPUDynInstPtr gpuDynInst)
     Wavefront *wf = gpuDynInst->wavefront();
 
     if (gpuDynInst->exec_mask.none()) {
+        wf->releaseLmResource(gpuDynInst);
         wf->decLGKMInstsIssued();
         return;
     }
@@ -5156,7 +5065,7 @@ Inst_DS__DS_READ_B64_TR_B16::execute(GPUDynInstPtr gpuDynInst)
 
     addr.read();
 
-    calcAddr(gpuDynInst, addr);
+    calcAddr<sizeof(VecElemU64)>(gpuDynInst, addr);
 
     gpuDynInst->computeUnit()->localMemoryPipe.issueRequest(gpuDynInst);
 } // execute
@@ -5164,11 +5073,7 @@ Inst_DS__DS_READ_B64_TR_B16::execute(GPUDynInstPtr gpuDynInst)
 void
 Inst_DS__DS_READ_B64_TR_B16::initiateAcc(GPUDynInstPtr gpuDynInst)
 {
-    Addr offset0 = instData.OFFSET0;
-    Addr offset1 = instData.OFFSET1;
-    Addr offset = (offset1 << 8) | offset0;
-
-    initMemRead<VecElemU64>(gpuDynInst, offset);
+    initMemRead<VecElemU64>(gpuDynInst);
 } // initiateAcc
 
 void

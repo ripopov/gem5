@@ -985,13 +985,14 @@ class Inst_DS : public VEGAGPUStaticInst
   protected:
     template <typename T>
     void
-    initMemRead(GPUDynInstPtr gpuDynInst, Addr offset)
+    initMemRead(GPUDynInstPtr gpuDynInst)
     {
         Wavefront *wf = gpuDynInst->wavefront();
 
         for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {
             if (gpuDynInst->exec_mask[lane]) {
-                Addr vaddr = gpuDynInst->addr[lane] + offset;
+                Addr vaddr =
+                    gpuDynInst->addr[lane] + gpuDynInst->ldsAccess.offsets[0];
 
                 (reinterpret_cast<T *>(gpuDynInst->d_data))[lane] =
                     wf->ldsChunk->read<T>(vaddr);
@@ -1001,13 +1002,14 @@ class Inst_DS : public VEGAGPUStaticInst
 
     template <int N>
     void
-    initMemRead(GPUDynInstPtr gpuDynInst, Addr offset)
+    initMemRead(GPUDynInstPtr gpuDynInst)
     {
         Wavefront *wf = gpuDynInst->wavefront();
 
         for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {
             if (gpuDynInst->exec_mask[lane]) {
-                Addr vaddr = gpuDynInst->addr[lane] + offset;
+                Addr vaddr =
+                    gpuDynInst->addr[lane] + gpuDynInst->ldsAccess.offsets[0];
                 for (int i = 0; i < N; ++i) {
                     (reinterpret_cast<VecElemU32 *>(
                         gpuDynInst->d_data))[lane * N + i] =
@@ -1020,14 +1022,16 @@ class Inst_DS : public VEGAGPUStaticInst
 
     template <typename T>
     void
-    initDualMemRead(GPUDynInstPtr gpuDynInst, Addr offset0, Addr offset1)
+    initDualMemRead(GPUDynInstPtr gpuDynInst)
     {
         Wavefront *wf = gpuDynInst->wavefront();
 
         for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {
             if (gpuDynInst->exec_mask[lane]) {
-                Addr vaddr0 = gpuDynInst->addr[lane] + offset0;
-                Addr vaddr1 = gpuDynInst->addr[lane] + offset1;
+                Addr vaddr0 =
+                    gpuDynInst->addr[lane] + gpuDynInst->ldsAccess.offsets[0];
+                Addr vaddr1 =
+                    gpuDynInst->addr[lane] + gpuDynInst->ldsAccess.offsets[1];
 
                 (reinterpret_cast<T *>(gpuDynInst->d_data))[lane * 2] =
                     wf->ldsChunk->read<T>(vaddr0);
@@ -1039,13 +1043,14 @@ class Inst_DS : public VEGAGPUStaticInst
 
     template <typename T>
     void
-    initMemWrite(GPUDynInstPtr gpuDynInst, Addr offset)
+    initMemWrite(GPUDynInstPtr gpuDynInst)
     {
         Wavefront *wf = gpuDynInst->wavefront();
 
         for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {
             if (gpuDynInst->exec_mask[lane]) {
-                Addr vaddr = gpuDynInst->addr[lane] + offset;
+                Addr vaddr =
+                    gpuDynInst->addr[lane] + gpuDynInst->ldsAccess.offsets[0];
                 wf->ldsChunk->write<T>(
                     vaddr, (reinterpret_cast<T *>(gpuDynInst->d_data))[lane]);
             }
@@ -1054,13 +1059,14 @@ class Inst_DS : public VEGAGPUStaticInst
 
     template <int N>
     void
-    initMemWrite(GPUDynInstPtr gpuDynInst, Addr offset)
+    initMemWrite(GPUDynInstPtr gpuDynInst)
     {
         Wavefront *wf = gpuDynInst->wavefront();
 
         for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {
             if (gpuDynInst->exec_mask[lane]) {
-                Addr vaddr = gpuDynInst->addr[lane] + offset;
+                Addr vaddr =
+                    gpuDynInst->addr[lane] + gpuDynInst->ldsAccess.offsets[0];
                 for (int i = 0; i < N; ++i) {
                     wf->ldsChunk->write<VecElemU32>(
                         vaddr + i * sizeof(VecElemU32),
@@ -1073,14 +1079,16 @@ class Inst_DS : public VEGAGPUStaticInst
 
     template <typename T>
     void
-    initDualMemWrite(GPUDynInstPtr gpuDynInst, Addr offset0, Addr offset1)
+    initDualMemWrite(GPUDynInstPtr gpuDynInst)
     {
         Wavefront *wf = gpuDynInst->wavefront();
 
         for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {
             if (gpuDynInst->exec_mask[lane]) {
-                Addr vaddr0 = gpuDynInst->addr[lane] + offset0;
-                Addr vaddr1 = gpuDynInst->addr[lane] + offset1;
+                Addr vaddr0 =
+                    gpuDynInst->addr[lane] + gpuDynInst->ldsAccess.offsets[0];
+                Addr vaddr1 =
+                    gpuDynInst->addr[lane] + gpuDynInst->ldsAccess.offsets[1];
                 wf->ldsChunk->write<T>(
                     vaddr0,
                     (reinterpret_cast<T *>(gpuDynInst->d_data))[lane * 2]);
@@ -1093,13 +1101,14 @@ class Inst_DS : public VEGAGPUStaticInst
 
     template <typename T>
     void
-    initAtomicAccess(GPUDynInstPtr gpuDynInst, Addr offset)
+    initAtomicAccess(GPUDynInstPtr gpuDynInst)
     {
         Wavefront *wf = gpuDynInst->wavefront();
 
         for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {
             if (gpuDynInst->exec_mask[lane]) {
-                Addr vaddr = gpuDynInst->addr[lane] + offset;
+                Addr vaddr =
+                    gpuDynInst->addr[lane] + gpuDynInst->ldsAccess.offsets[0];
 
                 AtomicOpFunctorPtr amo_op = gpuDynInst->makeAtomicOpFunctor<T>(
                     &(reinterpret_cast<T *>(gpuDynInst->a_data))[lane],
@@ -1111,9 +1120,21 @@ class Inst_DS : public VEGAGPUStaticInst
         }
     }
 
+    template <unsigned Bytes>
     void
-    calcAddr(GPUDynInstPtr gpuDynInst, ConstVecOperandU32 &addr)
+    calcAddr(GPUDynInstPtr gpuDynInst, ConstVecOperandU32 &addr,
+             unsigned count = 1, unsigned stride = 1)
     {
+        auto &access = gpuDynInst->ldsAccess;
+        access.bytes = Bytes;
+        access.count = count;
+        access.readB128 = Bytes == 16 && isLoad();
+        if (count == 2) {
+            access.offsets[0] = instData.OFFSET0 * Bytes * stride;
+            access.offsets[1] = instData.OFFSET1 * Bytes * stride;
+        } else {
+            access.offsets[0] = (instData.OFFSET1 << 8) | instData.OFFSET0;
+        }
         Wavefront *wf = gpuDynInst->wavefront();
 
         for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {
@@ -1743,6 +1764,7 @@ class Inst_FLAT : public VEGAGPUStaticInst
             cmp.read();
         }
 
+        gpuDynInst->ldsAccess.bytes = sizeof(LaneT);
         calcAddr(gpuDynInst, extData.ADDR, extData.SADDR, instData.OFFSET);
 
         for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {

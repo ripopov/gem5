@@ -68,43 +68,17 @@ Network::Network(const Params &p)
     m_ruby_system = p.ruby_system;
     m_ruby_system->registerNetwork(this);
 
-    // Populate localNodeVersions with the version of each MachineType in
-    // this network. This will be used to compute a global to local ID.
-    // Do this by looking at the ext_node for each ext_link. There is one
-    // ext_node per ext_link and it points to an AbstractController.
-    // For RubySystems with one network global and local ID are the same.
-    std::unordered_map<MachineType, std::vector<NodeID>> localNodeVersions;
+    // Register every controller connected to this network. There is one
+    // controller in the ext_node of each external link.
     for (auto &it : params().ext_links) {
         AbstractController *cntrl = it->params().ext_node;
-        localNodeVersions[cntrl->getType()].push_back(cntrl->getVersion());
         params().ruby_system->registerMachineID(cntrl->getMachineID(), this);
     }
 
-    // Compute a local ID for each MachineType using the same order as SLICC
-    NodeID local_node_id = 0;
-    for (int i = 0; i < MachineType_base_level(MachineType_NUM); ++i) {
-        MachineType mach = static_cast<MachineType>(i);
-        if (localNodeVersions.count(mach)) {
-            for (auto &ver : localNodeVersions.at(mach)) {
-                // Get the global ID Ruby will pass around
-                NodeID global_node_id = MachineType_base_number(mach) + ver;
-                globalToLocalMap.emplace(global_node_id, local_node_id);
-                ++local_node_id;
-            }
-        }
-    }
-
-    // Total nodes/controllers in network is equal to the local node count
-    // Must make sure this is called after the State Machine constructors
-    m_nodes = local_node_id;
+    rebuildGlobalToLocalMap();
 
     assert(m_nodes != 0);
     assert(m_virtual_networks != 0);
-
-    m_topology_ptr = new Topology(m_nodes, p.routers.size(),
-                                  m_virtual_networks,
-                                  p.ext_links, p.int_links,
-                                  m_ruby_system);
 
     // Allocate to and from queues
     // Queues that are getting messages from protocol
@@ -145,6 +119,28 @@ Network::Network(const Params &p)
     }
 }
 
+void
+Network::init()
+{
+    ClockedObject::init();
+
+    // A RubySystem may contain multiple networks. Constructing the first
+    // network recursively constructs only the controllers referenced by that
+    // network, so the RubySystem's global MachineType counts can still grow
+    // before init(). Rebuild global IDs and construct the topology only after
+    // every SimObject constructor has run.
+    const NodeID expected_nodes = m_nodes;
+    rebuildGlobalToLocalMap();
+    fatal_if(m_nodes != expected_nodes,
+             "%s: controller count changed while rebuilding node IDs",
+             name());
+
+    assert(m_topology_ptr == nullptr);
+    m_topology_ptr = new Topology(
+        m_nodes, params().routers.size(), m_virtual_networks,
+        params().ext_links, params().int_links, m_ruby_system);
+}
+
 Network::~Network()
 {
     for (int node = 0; node < m_nodes; node++) {
@@ -160,6 +156,34 @@ Network::~Network()
     }
 
     delete m_topology_ptr;
+}
+
+void
+Network::rebuildGlobalToLocalMap()
+{
+    globalToLocalMap.clear();
+
+    NodeID local_node_id = 0;
+    for (int i = 0; i < MachineType_base_level(MachineType_NUM); ++i) {
+        const MachineType mach = static_cast<MachineType>(i);
+        for (const auto &link : params().ext_links) {
+            AbstractController *cntrl = link->params().ext_node;
+            if (cntrl->getType() != mach) {
+                continue;
+            }
+
+            const NodeID global_node_id =
+                MachineType_base_number(mach) + cntrl->getVersion();
+            const bool inserted =
+                globalToLocalMap.emplace(global_node_id, local_node_id).second;
+            fatal_if(!inserted, "%s: duplicate global node ID %d",
+                     name(), global_node_id);
+            ++local_node_id;
+        }
+    }
+
+    // Total nodes/controllers in this network is the local node count.
+    m_nodes = local_node_id;
 }
 
 uint32_t

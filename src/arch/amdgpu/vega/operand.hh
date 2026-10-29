@@ -233,8 +233,17 @@ class VecOperand final : public Operand
 
             for (int lane = 0; lane < NumVecElemPerVecReg; ++lane) {
                 if (exec_mask[lane] || _gpuDynInst->ignoreExec()) {
-                    std::memcpy((void *)&reg_file_vgpr[lane],
-                                (void *)&vgpr[lane], sizeof(DataType));
+                    /**
+                     * A sub-dword result (16-bit ALU operations) is
+                     * zero-extended into the whole VGPR on this ISA
+                     * generation; compilers rely on the upper half being
+                     * cleared. SDWA destinations that preserve bits
+                     * compute the full dword with 32-bit operands.
+                     */
+                    VecElemU32 value = 0;
+                    std::memcpy((void *)&value, (void *)&vgpr[lane],
+                                sizeof(DataType));
+                    reg_file_vgpr[lane] = value;
                 }
             }
 

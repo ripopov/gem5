@@ -134,7 +134,13 @@ SDMAEngine::getDeviceAddress(Addr raw_addr)
     // or destination address. We don't know which until it is translated, so
     // we do a dummy functional translation to determine if the address
     // resides in system memory or not.
-    auto tgen = translate(raw_addr, 64);
+    // Classification needs the MMHUB tag. The normal DMA translation strips
+    // it to produce a physical address, which cannot distinguish VRAM from
+    // system memory here.
+    auto tgen = cur_vmid > 0
+                    ? TranslationGenPtr(new AMDGPUVM::UserTranslationGen(
+                          &gpuDevice->getVM(), walker, cur_vmid, raw_addr, 64))
+                    : translate(raw_addr, 64);
     auto addr_range = *(tgen->begin());
     Addr tmp_addr = addr_range.paddr;
     DPRINTF(SDMAEngine, "getDeviceAddress raw_addr %#lx -> %#lx\n", raw_addr,
@@ -171,7 +177,7 @@ SDMAEngine::translate(Addr vaddr, Addr size)
     if (cur_vmid > 0) {
         // Only user translation is available to user queues (vmid > 0)
         return TranslationGenPtr(new AMDGPUVM::UserTranslationGen(
-            &gpuDevice->getVM(), walker, cur_vmid, vaddr, size));
+            &gpuDevice->getVM(), walker, cur_vmid, vaddr, size, true));
     } else if (gpuDevice->getVM().inAGP(vaddr)) {
         // Use AGP translation gen
         return TranslationGenPtr(

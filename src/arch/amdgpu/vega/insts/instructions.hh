@@ -13428,6 +13428,16 @@ class Inst_VOP1__V_ACCVGPR_MOV_B32 : public Inst_VOP1
         }
     } // getOperandSize
 
+    void
+    initOperandInfo() override
+    {
+        Inst_VOP1::initOperandInfo();
+        if (srcOps[0].isVectorReg()) {
+            srcOps[0].setAccumulator();
+        }
+        dstOps[0].setAccumulator();
+    }
+
     void execute(GPUDynInstPtr) override;
 }; // Inst_VOP1__V_ACCVGPR_MOV_B32
 

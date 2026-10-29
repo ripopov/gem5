@@ -39,7 +39,8 @@ namespace gem5
 namespace X86ISA
 {
 
-BareMetalWorkload::BareMetalWorkload(const Params &p) : Workload(p)
+BareMetalWorkload::BareMetalWorkload(const Params &p)
+    : Workload(p), activateBootstrap(p.activate_bootstrap)
 {}
 
 void
@@ -50,7 +51,7 @@ BareMetalWorkload::initState()
     for (auto *tc: system->threads) {
         X86ISA::InitInterrupt(0).invoke(tc);
 
-        if (tc->contextId() == 0) {
+        if (tc->contextId() == 0 && activateBootstrap) {
             PCState pc = tc->pcState().as<PCState>();
             // Don't start in the microcode ROM which would halt this CPU.
             pc.upc(0);

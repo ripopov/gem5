@@ -106,15 +106,15 @@ class OperandInfo
     }
 
     int
-    registerIndex(int numScalarRegs) const
+    registerIndex(int numScalarRegs, int accumOffset) const
     {
-        // Some regs (i.e. VSRC, VDST) are explicitly declared as vectors
-        // as opposed to checking if it's a vector through a function call, so
-        // they don't have an offset applied and can be returned immediately
-        if (isVectorReg() && _opSelectorVal < TheGpuISA::REG_VGPR_MIN) {
-            return _opSelectorVal;
-        }
-        return TheGpuISA::opSelectorToRegIdx(_opSelectorVal, numScalarRegs);
+        // Explicit vector fields already contain a register index; encoded
+        // source selectors also include the VGPR selector base.
+        const int index =
+            isVectorReg() && _opSelectorVal < TheGpuISA::REG_VGPR_MIN
+                ? _opSelectorVal
+                : TheGpuISA::opSelectorToRegIdx(_opSelectorVal, numScalarRegs);
+        return index + (isAccumulator() ? accumOffset : 0);
     }
     bool
     isSrc() const
@@ -140,6 +140,17 @@ class OperandInfo
     isVectorReg() const
     {
         return flags.isSet(VECTOR_REG);
+    }
+    bool
+    isAccumulator() const
+    {
+        return flags.isSet(ACCUMULATOR);
+    }
+    void
+    setAccumulator()
+    {
+        assert(isVectorReg());
+        flags.set(ACCUMULATOR);
     }
     bool
     isVcc() const
@@ -234,7 +245,10 @@ class OperandInfo
         CONSTANT = 0x00000100,
 
         // If the constant is positive or negative
-        POS_CONST = 0x00000200
+        POS_CONST = 0x00000200,
+
+        // Vector register relative to the kernel's accumulator offset.
+        ACCUMULATOR = 0x00000400
     };
 
     Flags flags;

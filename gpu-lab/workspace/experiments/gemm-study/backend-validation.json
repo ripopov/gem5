@@ -1,0 +1,181 @@
+{
+    "samples": [
+        {
+            "backend": "simdojo",
+            "sample": "hip-vector-add",
+            "run": "hip-vector-add-simdojo-20260915T141022Z-1040321-28389",
+            "exit_status": "application=0"
+        },
+        {
+            "backend": "simdojo",
+            "sample": "hip-matmul",
+            "run": "hip-matmul-simdojo-20260915T141022Z-1040787-31175",
+            "exit_status": "application=0"
+        },
+        {
+            "backend": "simdojo",
+            "sample": "hip-matmul-lds",
+            "run": "hip-matmul-lds-simdojo-20260915T141024Z-1041382-10665",
+            "exit_status": "application=0"
+        },
+        {
+            "backend": "simdojo",
+            "sample": "hip-matmul-regtiles",
+            "run":
+                "hip-matmul-regtiles-simdojo-20260915T141025Z-1041749-30789",
+            "exit_status": "application=0"
+        },
+        {
+            "backend": "simdojo",
+            "sample": "hip-kernel-chain",
+            "run": "hip-kernel-chain-simdojo-20260915T141026Z-1042042-20094",
+            "exit_status": "application=0"
+        },
+        {
+            "backend": "simdojo",
+            "sample": "rainbow-image",
+            "run": "rainbow-image-simdojo-20260915T141026Z-1042378-24788",
+            "exit_status": "application=0"
+        },
+        {
+            "backend": "gem5-kmd",
+            "sample": "hip-vector-add",
+            "run": "hip-vector-add-gem5-kmd-20260915T141029Z-1042986-29559",
+            "exit_status": "application=0\ngem5=0\ntimed_out=false",
+            "kernels": 4,
+            "submitted": 8,
+            "retired": 8,
+            "kmd_drained": true
+        },
+        {
+            "backend": "gem5-kmd",
+            "sample": "hip-matmul",
+            "run": "hip-matmul-gem5-kmd-20260915T141039Z-1045124-24617",
+            "exit_status": "application=0\ngem5=0\ntimed_out=false",
+            "kernels": 1,
+            "submitted": 4,
+            "retired": 4,
+            "kmd_drained": true
+        },
+        {
+            "backend": "gem5-kmd",
+            "sample": "hip-matmul-lds",
+            "run": "hip-matmul-lds-gem5-kmd-20260915T141134Z-1049752-8790",
+            "exit_status": "application=0\ngem5=0\ntimed_out=false",
+            "kernels": 1,
+            "submitted": 4,
+            "retired": 4,
+            "kmd_drained": true
+        },
+        {
+            "backend": "gem5-kmd",
+            "sample": "hip-matmul-regtiles",
+            "run":
+                "hip-matmul-regtiles-gem5-kmd-20260915T141156Z-1051092-25191",
+            "exit_status": "application=0\ngem5=0\ntimed_out=false",
+            "kernels": 1,
+            "submitted": 4,
+            "retired": 4,
+            "kmd_drained": true
+        },
+        {
+            "backend": "gem5-kmd",
+            "sample": "hip-kernel-chain",
+            "run": "hip-kernel-chain-gem5-kmd-20260915T141219Z-1052420-14595",
+            "exit_status": "application=0\ngem5=0\ntimed_out=false",
+            "kernels": 5,
+            "submitted": 10,
+            "retired": 10,
+            "kmd_drained": true
+        },
+        {
+            "backend": "gem5-kmd",
+            "sample": "rainbow-image",
+            "run": "rainbow-image-gem5-kmd-20260915T141230Z-1053488-28504",
+            "exit_status": "application=0\ngem5=0\ntimed_out=false",
+            "kernels": 1,
+            "submitted": 4,
+            "retired": 4,
+            "kmd_drained": true
+        },
+        {
+            "backend": "full-system",
+            "sample": "hip-vector-add",
+            "run": "hip-vector-add-full-system-20260915T141034Z-1044281-25849",
+            "exit_status": "gem5=0",
+            "kernels": 4,
+            "submitted": 8,
+            "retired": 8
+        },
+        {
+            "backend": "full-system",
+            "sample": "hip-matmul",
+            "run": "hip-matmul-full-system-20260915T141248Z-1054683-4679",
+            "exit_status": "gem5=0",
+            "kernels": 1,
+            "submitted": 5,
+            "retired": 5
+        },
+        {
+            "backend": "full-system",
+            "sample": "hip-matmul-lds",
+            "run": "hip-matmul-lds-full-system-20260915T141526Z-1062399-8077",
+            "exit_status": "gem5=0",
+            "kernels": 1,
+            "submitted": 5,
+            "retired": 5
+        },
+        {
+            "backend": "full-system",
+            "sample": "hip-matmul-regtiles",
+            "run":
+                "hip-matmul-regtiles-full-system-20260915T141737Z-1066869-18378",
+            "exit_status": "gem5=0",
+            "kernels": 1,
+            "submitted": 5,
+            "retired": 5
+        },
+        {
+            "backend": "full-system",
+            "sample": "hip-kernel-chain",
+            "run":
+                "hip-kernel-chain-full-system-20260915T141950Z-1069074-5905",
+            "exit_status": "gem5=0",
+            "kernels": 5,
+            "submitted": 10,
+            "retired": 10
+        },
+        {
+            "backend": "full-system",
+            "sample": "rainbow-image",
+            "run": "rainbow-image-full-system-20260915T142201Z-1071425-6280",
+            "exit_status": "gem5=0",
+            "kernels": 1,
+            "submitted": 5,
+            "retired": 5
+        }
+    ],
+    "full_system_image": {
+        "Id":
+            "sha256:ed161debb61b94ddc528835205eab86243e2069a38db2fceff03f468587b5c41",
+        "Os": "linux",
+        "Architecture": "amd64"
+    },
+    "model_labels": {
+        "gpu-lab.model-revision": "7161b7e6c73a96ca217c9052d76ab7a78cc9296a",
+        "gpu-lab.model-sha256":
+            "8ec40d19ec074e7b82bcb71183b513f5fc366602d66b12b2de524d8748d2b110",
+        "org.gem5.hsakmt.server.revision":
+            "0f60c73fc960460d8776ab2371b17f3eda510f67",
+        "org.gem5.rocjitsu.kmd-server-abi": "2",
+        "org.gem5.rocjitsu.revision":
+            "559c8911c2d3b89cba88924a8f38c5fb49eb540d",
+        "org.opencontainers.image.created": "2026-07-13T16:06:30.499069+00:00",
+        "org.opencontainers.image.description":
+            "Self-contained gem5 HSAKMT GPU runner",
+        "org.opencontainers.image.licenses": "BSD-3-Clause",
+        "org.opencontainers.image.source": "https://github.com/gem5/gem5",
+        "org.opencontainers.image.title": "ubuntu",
+        "org.opencontainers.image.version": "26.04"
+    }
+}
